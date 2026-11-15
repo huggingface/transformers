@@ -43,7 +43,7 @@ AUTODOC_FILES = [
     "processing_*.py",
     "image_processing_pil_*.py",
     "image_processing_*.py",
-    "feature_extractor_*.py",
+    "feature_extraction_*.py",
 ]
 
 PLACEHOLDER_TO_AUTO_MODULE = {
@@ -65,7 +65,7 @@ UNROLL_KWARGS_CLASSES = {
     "BaseImageProcessor",
     "ProcessorMixin",
 }
-BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs"]
+BASIC_KWARGS_TYPES = ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]
 
 # Short indicator added to unrolled kwargs to distinguish them from regular args
 KWARGS_INDICATOR = ", *kwargs*"
@@ -75,12 +75,18 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "x-clip": "XCLIPConfig",
     "kosmos2": "Kosmos2Config",
     "kosmos2-5": "Kosmos2_5Config",
+    "inkling": "InklingConfig",
+    "inkling2": "Inkling2Config",
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
+    "granite-speech5": "GraniteSpeech5CTCConfig",
+    "nemotron3-5-transcribe": "Nemotron3_5TranscribeConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
+    "radio": "RADIOConfig",
+    "cosmos3-edge": "Cosmos3EdgeConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
@@ -108,14 +114,6 @@ class ImageProcessorArgs:
         "description": """
     Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
     passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-    """,
-        "shape": None,
-    }
-
-    videos = {
-        "description": """
-    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
     """,
         "shape": None,
     }
@@ -279,11 +277,76 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    image_like_kwargs = {
+        "description": """
+    Developer flag for additional image like inputs that will also be preprocessed. Only use this if
+    passing the inputs as kwarg doesn't work. For example, `preprocess(images, masks=masks)` is the
+    preferred option but results in argument priority issues for some models. In those cases
+    `preprocess(images, image_like_inputs={"masks": masks})` can be used instead.
+    """
+    }
+
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
     __kwargs__ = {
         "description": """
     Additional image preprocessing options. Model-specific kwargs are listed above; see the TypedDict class
     for the complete list of supported arguments.
+    """,
+        "shape": None,
+    }
+
+
+# Can inherit as they share common set of kwargs
+class VideoProcessorArgs(ImageProcessorArgs):
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
+    }
+
+    device = {
+        "description": """
+    The device to process the videos on. If unset, the device is inferred from the input videos.
+    """,
+        "shape": None,
+    }
+
+    fps = {
+        "description": """
+    Target frames to sample per second when `do_sample_frames=True`.
+    """,
+        "shape": None,
+    }
+
+    num_frames = {
+        "description": """
+    Maximum number of frames to sample when `do_sample_frames=True`.
+    """,
+        "shape": None,
+    }
+
+    do_sample_frames = {
+        "description": """
+    Whether to sample frames from the video before processing or to process the whole video.
+    """,
+        "shape": None,
+    }
+
+    video_metadata = {
+        "description": """
+    Metadata of the video containing information about total duration, fps and total number of frames. It will be
+    used to sample frames from video or compute timestamps. Don't pass any metadata unless you are trying to decode
+    the video manually before processing
+    """,
+        "shape": None,
+    }
+
+    return_metadata = {
+        "description": """
+    Whether to return video metadata or not. Video metadats is an object containing info about video duration, fps,
+    decoding backend, etc.
     """,
         "shape": None,
     }
@@ -341,6 +404,14 @@ class ProcessorArgs:
     """,
     }
 
+    videos = {
+        "description": """
+    Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+    passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
+    """,
+        "shape": None,
+    }
+
     audio = {
         "description": """
     The audio or batch of audios to be prepared. Each audio can be a NumPy array or PyTorch tensor.
@@ -365,6 +436,28 @@ class ProcessorArgs:
     - `'np'`: Return NumPy `np.ndarray` objects.
     """,
         "shape": None,
+    }
+
+    return_mm_token_type_ids = {
+        "description": """
+    Whether to return multimodal token type ids indicating multimodal placeholder token positions.
+    """,
+        "type": "bool",
+    }
+
+    return_text_replacement_offsets = {
+        "description": """
+    Whether to return character offsets for each multimodal placeholder and its replacement.
+    """,
+        "type": "bool",
+    }
+
+    load_audio_from_video = {
+        "description": """
+    Whether to load the audio track of the input videos. The audio tokens are interleaved with the video tokens
+    if the model supports it.
+    """,
+        "type": "bool",
     }
 
     # Standard tokenizer arguments
@@ -1591,6 +1684,36 @@ class ConfigArgs:
     """,
     }
 
+    do_sample_frames = {
+        "description": """
+    Whether to sample frames from the video before processing or to process the whole video.
+    """,
+    }
+
+    video_metadata = {
+        "description": """
+    Metadata of the video containing information about total duration, fps and total number of frames.
+    """,
+    }
+
+    num_frames = {
+        "description": """
+    Maximum number of frames to sample when `do_sample_frames=True`.
+    """,
+    }
+
+    fps = {
+        "description": """
+    Target frames to sample per second when `do_sample_frames=True`.
+    """,
+    }
+
+    return_metadata = {
+        "description": """
+    Whether to return video metadata or not.
+    """,
+    }
+
     spatial_merge_size = {
         "description": """
         The size of the spatial merge window used to reduce the number of visual tokens by merging neighboring patches.
@@ -1729,6 +1852,18 @@ class ConfigArgs:
     """,
     }
 
+    image_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each image in LLM.
+    """,
+    }
+
+    video_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each video in LLM.
+    """,
+    }
+
     mamba_d_state = state_size
     mamba_num_heads = mamba_n_heads
     mamba_head_dim = mamba_d_head
@@ -1756,6 +1891,8 @@ class ConfigArgs:
     decoder_attention_dropout = attention_dropout
     decoder_dropout = dropout
     encoder_dropout = dropout
+    encoder = encoder_config
+    decoder = decoder_config
 
     route_scale = routed_scaling_factor
     activation_function = hidden_act
@@ -1837,6 +1974,20 @@ class ConfigArgs:
 
 
 class ModelArgs:
+    image_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each image in LLM.
+    """,
+        "shape": "of shape `(num_images, 3)`",
+    }
+
+    video_grid_thw = {
+        "description": """
+    The temporal, height and width of feature shape of each video in LLM.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
+    }
+
     labels = {
         "description": """
     Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1873,7 +2024,7 @@ class ModelArgs:
     into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
     (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
     To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-    into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
+    into a tensor of type `torch.Tensor`. See [`{processor_class}.__call__`] for details.
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
     }
@@ -1938,6 +2089,46 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
+    image_token_pooling = {
+        "description": """
+    Indices into the flattened image patch sequence gathered by each pooled image token, with `-1` marking padding
+    slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_image_tokens, pool_h * pool_w)`",
+    }
+
+    image_grids = {
+        "description": """
+    Per-image `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled token grid. Can be obtained using
+    [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images, 4)`",
+    }
+
+    image_num_crops = {
+        "description": """
+    Number of crops per image, low-resolution view included. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images,)`",
+    }
+
+    video_token_pooling = {
+        "description": """
+    Indices into the flattened video frame-patch sequence gathered by each pooled video token, with `-1` marking
+    padding slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_video_tokens, pool_h * pool_w)`",
+    }
+
+    video_grids = {
+        "description": """
+    Per-video `[num_frames, pooled_h, pooled_w]` token grid. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
+    }
+
     position_ids = {
         "description": """
     Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
@@ -1947,18 +2138,18 @@ class ModelArgs:
         "shape": "of shape `(batch_size, sequence_length)`",
     }
 
-    past_key_values = {
+    cache = {
         "description": """
     Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-    blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+    blocks) that can be used to speed up sequential decoding. This typically consists in the `cache`
     returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
     Only [`~cache_utils.Cache`] instance is allowed as input, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-    If no `past_key_values` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
+    If no `cache` are passed, [`~cache_utils.DynamicCache`] will be initialized by default.
 
     The model will output the same cache format that is fed as input.
 
-    If `past_key_values` are used, the user is expected to input only unprocessed `input_ids` (those that don't
+    If `cache` are used, the user is expected to input only unprocessed `input_ids` (those that don't
     have their past key value states given to this model) of shape `(batch_size, unprocessed_length)` instead of all `input_ids`
     of shape `(batch_size, sequence_length)`.
     """,
@@ -1989,8 +2180,8 @@ class ModelArgs:
     decoder_inputs_embeds = {
         "description": """
     Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-    representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-    input (see `past_key_values`). This is useful if you want more control over how to convert
+    representation. If `cache` is used, optionally only the last `decoder_inputs_embeds` have to be
+    input (see `cache`). This is useful if you want more control over how to convert
     `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
     If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
@@ -2001,8 +2192,8 @@ class ModelArgs:
 
     use_cache = {
         "description": """
-    If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-    `past_key_values`).
+    If set to `True`, `cache` key value states are returned and can be used to speed up decoding (see
+    `cache`).
     """,
         "shape": None,
     }
@@ -2040,6 +2231,27 @@ class ModelArgs:
     Whether to interpolate the pre-trained position encodings.
     """,
         "shape": None,
+    }
+
+    marks = {
+        "description": """
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
+    """,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in `Question.questions_types`.
+    """,
+        "shape": "of shape `(num_questions,)`",
     }
 
     position_embeddings = {
@@ -2082,6 +2294,16 @@ class ModelArgs:
     Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
     `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
     hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+    """,
+        "shape": None,
+    }
+
+    mm_encoder_outputs = {
+        "description": """
+    Dict where keys are supported modalities and values are encoded outputs for that modality. Each encoded output is a tuple
+    that consists of (`pooler_output`, *optional*: `last_hidden_states`, *optional*: `hidden_states`, *optional*: `attentions`)
+    `pooler_output` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+    multimmodal features of the encoder merged into text embeddings.
     """,
         "shape": None,
     }
@@ -2169,6 +2391,133 @@ class ModelArgs:
     }
 
 
+class ModelForArgs:
+    """Task-specific overrides for `ModelArgs`."""
+
+    class ForSequenceClassification:
+        labels = {
+            "description": """
+    Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForTokenClassification:
+        labels = {
+            "description": """
+    Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMultipleChoice:
+        labels = {
+            "description": """
+    Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+    num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+    `input_ids` above)
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMaskedLM:
+        labels = {
+            "description": """
+    Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForCausalLM:
+        labels = {
+            "description": """
+    Labels for computing the causal language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+    The labels are **shifted internally** so that `labels[..., 1:]` are used to predict `logits[..., :-1, :]`.
+    Pass unshifted labels matching `input_ids` (i.e. `labels = input_ids`). Do **not** shift the labels
+    yourself before passing them.
+
+    If the labels are already shifted (for example with sequence parallelism), pass them as the `shift_labels`
+    keyword argument and they are used as is. `labels` must still be passed for the loss to be computed.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForImageClassification:
+        labels = {
+            "description": """
+    Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    ForVideoClassification = ForImageClassification
+
+    class ForSemanticSegmentation:
+        labels = {
+            "description": """
+    Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForDepthEstimation:
+        labels = {
+            "description": """
+    Ground truth depth estimation maps for computing the loss.
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForObjectDetection:
+        labels = {
+            "description": """
+    Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+    following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+    respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+    in the image,)` and the boxes a `torch.Tensor` of shape `(number of bounding boxes in the image, 4)`.
+    """,
+            "shape": "of len `(batch_size,)`",
+            "type": "list[Dict]",
+        }
+
+    ForInstanceSegmentation = ForObjectDetection
+
+
+# Longest first, so that short suffixes don't mask longer ones.
+MODEL_FOR_ARGS_SUFFIXES = sorted(
+    (name for name in vars(ModelForArgs) if name.startswith("For")), key=len, reverse=True
+)
+
+
+class _EmptyArgs:
+    pass
+
+
+def get_model_for_args(class_name: str) -> type:
+    for suffix in MODEL_FOR_ARGS_SUFFIXES:
+        if class_name.endswith(suffix):
+            return getattr(ModelForArgs, suffix)
+    return _EmptyArgs
+
+
 class ModelOutputArgs:
     last_hidden_state = {
         "description": """
@@ -2177,12 +2526,12 @@ class ModelOutputArgs:
         "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
     }
 
-    past_key_values = {
+    cache = {
         "description": """
     It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
     Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+    `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `cache`
     input) to speed up sequential decoding.
     """,
         "shape": None,
@@ -2191,7 +2540,7 @@ class ModelOutputArgs:
 
     hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -2202,7 +2551,7 @@ class ModelOutputArgs:
 
     attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -2221,7 +2570,7 @@ class ModelOutputArgs:
 
     cross_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
@@ -2233,7 +2582,7 @@ class ModelOutputArgs:
 
     decoder_hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
@@ -2244,7 +2593,7 @@ class ModelOutputArgs:
 
     decoder_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
@@ -2263,7 +2612,7 @@ class ModelOutputArgs:
 
     encoder_hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
@@ -2274,7 +2623,7 @@ class ModelOutputArgs:
 
     encoder_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
@@ -2286,7 +2635,7 @@ class ModelOutputArgs:
 
     router_logits = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
     Router logits of the model, useful to compute the auxiliary loss for Mixture of Experts models.
     """,
@@ -2296,7 +2645,7 @@ class ModelOutputArgs:
 
     router_probs = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
     Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
     loss and the z_loss for Mixture of Experts models.
@@ -2468,8 +2817,12 @@ class ClassDocstring:
     The bare {model_name} Decoder outputting raw hidden-states without any specific head on top.
     """
 
+    Encoder = r"""
+    The bare {model_name} Encoder outputting raw hidden-states without any specific head on top.
+    """
+
     TextModel = r"""
-    The bare {model_name} Text Model outputting raw hidden-states without any specific head on to.
+    The bare {model_name} Text Model outputting raw hidden-states without any specific head on top.
     """
 
     ForSequenceClassification = r"""
@@ -2510,8 +2863,15 @@ class ClassDocstring:
     ForImageClassification = r"""
     The {model_name} Model with an image classification head on top e.g. for ImageNet.
     """
+    ForInstanceSegmentation = r"""
+    The {model_name} Model with an instance segmentation head on top e.g. for COCO, LVIS,
+    segmentation.
+    """
     ForSemanticSegmentation = r"""
     The {model_name} Model with a semantic segmentation head on top e.g. for ADE20K, CityScapes.
+    """
+    ForObjectDetection = r"""
+    The {model_name} Model with an object detection head on top.
     """
     ForAudioClassification = r"""
     The {model_name} Model with an audio classification head on top (a linear layer on top of the pooled
@@ -2846,8 +3206,9 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
+        if isinstance(value, dict) and placeholder in ["image_processor_class", "video_processor_class"]:
             value = value.get("torchvision", value.get("pil", None))
+            value = value or placeholder
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
@@ -3275,9 +3636,14 @@ def _process_regular_parameters(
     # Use appropriate args source based on whether it's a processor or not
     if source_args_dict is None:
         if is_processor:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs])
+            source_args_dict = get_args_doc_from_source(
+                [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
+            )
         else:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs])
+            model_for_args = get_model_for_args(class_name)
+            source_args_dict = get_args_doc_from_source(
+                [ModelArgs, model_for_args, ImageProcessorArgs, VideoProcessorArgs]
+            )
 
     missing_args = {}
 
@@ -3413,7 +3779,9 @@ def _is_image_processor_class(func, parent_class):
 
     # Multimodal processors are implemented in processing_*.py modules
     # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
-    return filename.startswith("image_processing_") and filename.endswith(".py")
+    return (
+        filename.startswith("image_processing_") or filename.startswith("video_processing_")
+    ) and filename.endswith(".py")
 
 
 def _is_processor_class(func, parent_class):
@@ -3455,13 +3823,13 @@ def _is_processor_class(func, parent_class):
     filename = os.path.basename(source_file)
 
     # Multimodal processors are implemented in processing_*.py modules
-    # (single-modality processors use image_processing_*, video_processing_*, etc.)self.
+    # (single-modality processors use image_processing_*, video_processing_*, etc.).
     return filename.startswith("processing_") and filename.endswith(".py")
 
 
 # Python < 3.12 fallback: naming heuristics when __orig_bases__ is not set (cpython#103699).
 # Order matters: check ImageProcessorKwargs before ProcessorKwargs.
-_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "ProcessingKwargs", "TextKwargs", "VideosKwargs", "AudioKwargs"})
+_BASIC_KWARGS_NAMES = frozenset({"ImagesKwargs", "VideosKwargs", "ProcessingKwargs", "TextKwargs", "AudioKwargs"})
 _BASIC_KWARGS_CLASSES = None  # Lazy-loaded name -> class mapping
 
 
@@ -3545,6 +3913,7 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
     """
     docstring = ""
     kwargs_summary = ""
+    needs_kwarg_summary = True
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
     if not unroll_kwargs and parent_class is not None:
@@ -3562,9 +3931,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
 
     # Use appropriate args source based on whether it's a processor or not
     if is_processor:
-        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, ProcessorArgs])
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs])
     elif is_image_processor:
-        source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
+        source_args_dict = get_args_doc_from_source([ImageProcessorArgs, VideoProcessorArgs])
     else:
         raise ValueError(
             f"Unrolling kwargs is not supported for {func.__name__} of {parent_class.__name__ if parent_class else 'None'} class"
@@ -3586,7 +3955,9 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         ):
             continue
 
-        if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
+        kwargs_type = _get_base_kwargs_class(kwarg_param.annotation.__args__[0])
+        if kwargs_type.__name__ in BASIC_KWARGS_TYPES:
+            needs_kwarg_summary = False
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
             if kwargs_documentation is not None:
@@ -3610,10 +3981,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                                 actual_type = arg
                                 type_name = getattr(arg, "__name__", None)
                                 break
-
-                    # Skip only if it's one of the basic kwargs types
-                    if type_name in BASIC_KWARGS_TYPES:
-                        continue
 
                     # Otherwise, unroll the custom typed kwargs
                     # Get the nested TypedDict's annotations
@@ -3690,8 +4057,6 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                         # If we can't get annotations, skip this parameter
                         continue
 
-                if documented_kwargs and param_name not in documented_kwargs:
-                    continue
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
                 # Check for default value
@@ -3726,19 +4091,17 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
                     undocumented_parameters.append(
                         f"[ERROR] `{param_name}` is part of {kwarg_param.annotation.__args__[0].__qualname__}, but not documented. Make sure to add it to the docstring of the function in {func.__code__.co_filename}."
                     )
-
-        # Build **kwargs summary line (added after return_tensors in _process_parameters_section)
-        kwargs_annot_cls = kwarg_param.annotation.__args__[0]
-        kwargs_type_name = _get_base_kwargs_class(kwargs_annot_cls).__name__
-        kwargs_info = source_args_dict.get("__kwargs__", {})
-        kwargs_description = kwargs_info.get(
-            "description",
-            "Additional keyword arguments. Model-specific parameters are listed above.",
-        )
-        kwargs_summary = set_min_indent(
-            f"**kwargs ([`{kwargs_type_name}`], *optional*):{kwargs_description}",
-            indent_level + 8,
-        )
+        if needs_kwarg_summary or is_processor:
+            # Build **kwargs summary line if we couldn't unpack them
+            kwargs_info = source_args_dict.get("__kwargs__", {})
+            kwargs_description = kwargs_info.get(
+                "description",
+                "Additional keyword arguments. Model-specific parameters are listed above.",
+            )
+            kwargs_summary = set_min_indent(
+                f"**kwargs ([`{kwargs_type.__name__}`], *optional*):{kwargs_description}",
+                indent_level + 8,
+            )
 
     return docstring, kwargs_summary
 
@@ -3772,7 +4135,7 @@ def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level
         source_args_dict = (
             get_args_doc_from_source(ProcessorArgs)
             if is_processor_call
-            else get_args_doc_from_source(ImageProcessorArgs)
+            else get_args_doc_from_source([ImageProcessorArgs, VideoProcessorArgs])
         )
         return_tensors_info = source_args_dict["return_tensors"]
         param_type = return_tensors_info.get("type", "`str` or [`~utils.TensorType`]")
@@ -3918,7 +4281,7 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
             additional_info = param_info.get("additional_info", "")
 
             # Handle types with unbalanced backticks due to nested parentheses
-            # The parse_docstring function splits types like `tuple(torch.FloatTensor)` incorrectly
+            # The parse_docstring function splits types like `tuple(torch.Tensor)` incorrectly
             # so we need to reconstruct the complete type by grabbing the closing part from additional_info
             if param_type.startswith("`") and not param_type.endswith("`"):
                 # Find the closing backtick in additional_info
@@ -4180,26 +4543,69 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
     from transformers.models import auto as auto_module
 
     is_dataclass = False
-    is_processor = False
-    is_config = False
-    is_image_processor = False
     docstring_init = ""
     docstring_args = ""
-    if "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
+    name = ""
+    pre_block = ""
+
+    # 1) Start from inferring the model name in lower case to format our docstring
+    indent_level = get_indent_level(cls)
+    model_name_lowercase = get_model_name(cls)
+    model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
+    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
+    if model_name_lowercase is not None:
+        try:
+            model_base_class = getattr(
+                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
+                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
+            )[model_name_lowercase]
+        except KeyError:
+            pass
+        except ImportError:
+            # In some environments, certain model classes might not be available. In that case, we can skip this part.
+            pass
+
+    if model_name_lowercase and model_name_lowercase not in getattr(
+        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
+        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
+    ):
+        model_name_lowercase = model_name_lowercase.replace("_", "-")
+
+    # 2) Start building the docstring from the class-type by fetching relevant docs on
+    # each branching or fallback to custom intro if defined
+    if custom_intro is not None:
+        pre_block = equalize_indent(custom_intro, indent_level)
+        pre_block += "\n" if not pre_block.endswith("\n") else ""
+
+    if "PreTrainedModel" in (x.__name__ for x in cls.__mro__) or "GenericFor" in cls.__name__:
+        # The ending suffix of class name defines which intro docstring will be added before listing args
+        # The models we have different types of tasks, so it has to be defined either as `custom_intro` for
+        # rare tasks or in `ClassDocstring`
+        name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
+        name = name[0] if name else ""
+        if not pre_block:
+            pre_block = getattr(ClassDocstring, name) if name else ClassDocstring.PreTrainedModel
+            pre_block = pre_block.format(**{"model_name": model_name_title})
+
         docstring_init = auto_method_docstring(
             cls.__init__, parent_class=cls, custom_args=custom_args, checkpoint=checkpoint
         ).__doc__.replace("Args:", "Parameters:")
     elif "ProcessorMixin" in (x.__name__ for x in cls.__mro__):
-        is_processor = True
+        pre_block = pre_block if pre_block else generate_processor_intro(cls)
+        if pre_block:
+            pre_block = equalize_indent(pre_block, indent_level)
+            pre_block = format_args_docstring(pre_block, model_name_lowercase)
+
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
             custom_args=custom_args,
             checkpoint=checkpoint,
-            source_args_dict=get_args_doc_from_source([ModelArgs, ImageProcessorArgs, ProcessorArgs]),
+            source_args_dict=get_args_doc_from_source(
+                [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
+            ),
         ).__doc__.replace("Args:", "Parameters:")
     elif "ModelOutput" in (x.__name__ for x in cls.__mro__):
-        # We have a data class
         is_dataclass = True
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
@@ -4231,8 +4637,26 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
+    # has to come before checking `BaseImageProcessor in mro` as video classes inherit from image classes
+    elif any("BaseVideoProcessor" in x.__name__ for x in cls.__mro__):
+        pre_block = pre_block if pre_block else r"Constructs a {video_processor_class} video processor."
+        if pre_block:
+            pre_block = equalize_indent(pre_block, indent_level)
+            pre_block = format_args_docstring(pre_block, model_name_lowercase)
+
+        docstring_init = auto_method_docstring(
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            checkpoint=checkpoint,
+            source_args_dict=get_args_doc_from_source(VideoProcessorArgs),
+        ).__doc__
     elif any("BaseImageProcessor" in x.__name__ for x in cls.__mro__):
-        is_image_processor = True
+        pre_block = pre_block if pre_block else r"Constructs a {image_processor_class} image processor."
+        if pre_block:
+            pre_block = equalize_indent(pre_block, indent_level)
+            pre_block = format_args_docstring(pre_block, model_name_lowercase)
+
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
@@ -4241,7 +4665,16 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
         ).__doc__
     elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
-        is_config = True
+        if not pre_block:
+            pre_block = ClassDocstring.Config.format(
+                **{
+                    "model_name": model_name_title,
+                    "model_base_class": model_base_class,
+                    "model_checkpoint": checkpoint,
+                }
+            )
+
+        is_dataclass = True
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
             custom_args = doc_class
@@ -4266,112 +4699,67 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source([ConfigArgs]),
             allowed_params=allowed_params,
         ).__doc__
-
-    indent_level = get_indent_level(cls)
-    model_name_lowercase = get_model_name(cls)
-    model_name_title = " ".join([k.title() for k in model_name_lowercase.split("_")]) if model_name_lowercase else None
-    model_base_class = f"{model_name_title.title()}Model" if model_name_title is not None else None
-    if model_name_lowercase is not None:
-        try:
-            model_base_class = getattr(
-                getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["model_class"][0]),
-                PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
-            )[model_name_lowercase]
-        except KeyError:
-            pass
-        except ImportError:
-            # In some environments, certain model classes might not be available. In that case, we can skip this part.
-            pass
-
-    if model_name_lowercase and model_name_lowercase not in getattr(
-        getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
-        PLACEHOLDER_TO_AUTO_MODULE["config_class"][1],
-    ):
-        model_name_lowercase = model_name_lowercase.replace("_", "-")
-
-    name = re.findall(rf"({'|'.join(ClassDocstring.__dict__.keys())})$", cls.__name__)
-
-    if name == [] and custom_intro is None and not is_dataclass and not is_processor and not is_image_processor:
+    elif custom_intro is None:
         raise ValueError(
-            f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
-            "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
+            f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}, "
+            "Processor, ImageProcessor, VideoProcessor, ModelOutput\n. Add a `custom_intro` to the decorator "
+            "if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_config or is_dataclass or is_processor or is_image_processor:
-        name = name[0] if name else None
-        formatting_kwargs = {"model_name": model_name_title}
-        if name == "Config":
-            formatting_kwargs.update({"model_base_class": model_base_class, "model_checkpoint": checkpoint})
-        if custom_intro is not None:
-            pre_block = equalize_indent(custom_intro, indent_level)
-            if not pre_block.endswith("\n"):
-                pre_block += "\n"
-        elif is_processor:
-            # Generate processor intro dynamically
-            pre_block = generate_processor_intro(cls)
-            if pre_block:
-                pre_block = equalize_indent(pre_block, indent_level)
-                pre_block = format_args_docstring(pre_block, model_name_lowercase)
-        elif is_image_processor:
-            pre_block = r"Constructs a {image_processor_class} image processor."
-            if pre_block:
-                pre_block = equalize_indent(pre_block, indent_level)
-                pre_block = format_args_docstring(pre_block, model_name_lowercase)
-        elif model_name_title is None or name is None:
-            pre_block = ""
-        else:
-            pre_block = getattr(ClassDocstring, name).format(**formatting_kwargs)
-        # Start building the docstring
-        docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
-        if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
-            docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
-        # Add the __init__ docstring
-        if docstring_init:
-            docstring += set_min_indent(f"\n{docstring_init}", indent_level)
-        elif is_dataclass or is_config:
-            # No init function, we have a data class
-            docstring += set_min_indent(f"\n{docstring_args}", indent_level) if docstring_args else "\nArgs:\n"
-            source_args_dict = get_args_doc_from_source(ModelOutputArgs)
-            doc_class = cls.__doc__ if cls.__doc__ else ""
-            documented_kwargs = parse_docstring(doc_class)[0]
-            for param_name, param_type_annotation in [] if _is_python_dataclass(cls) else cls.__annotations__.items():
-                param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
-                # Check for default value
-                param_default = ""
-                param_default = str(getattr(cls, param_name, ""))
-                param_default = f", defaults to `{param_default}`" if param_default != "" else ""
+    # 3) Set the correct indentation
+    docstring = set_min_indent(f"{pre_block}", indent_level) if len(pre_block) else ""
+    if name != "PreTrainedModel" and "PreTrainedModel" in (x.__name__ for x in cls.__mro__):
+        docstring += set_min_indent(f"{ClassDocstring.PreTrainedModel}", indent_level)
 
-                param_type, optional_string, shape_string, additional_info, description, is_documented = (
-                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
-                )
+    # 4) Add the __init__ docstring if it's found, (e.g. for processing or modeling classes). If not add
+    # args docstring for dataclass fields (e.g. config or model output classes)
+    if docstring_init:
+        docstring += set_min_indent(f"\n{docstring_init}", indent_level)
+    elif is_dataclass:
+        docstring += set_min_indent(f"\n{docstring_args}", indent_level) if docstring_args else "\nArgs:\n"
+        source_args_dict = get_args_doc_from_source(ModelOutputArgs)
+        doc_class = cls.__doc__ if cls.__doc__ else ""
+        documented_kwargs = parse_docstring(doc_class)[0]
+        for param_name, param_type_annotation in [] if _is_python_dataclass(cls) else cls.__annotations__.items():
+            param_type, optional = process_type_annotation(param_type_annotation, param_name)
 
-                if is_documented:
-                    # Check if type is missing
-                    if param_type == "":
-                        print(
-                            f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
-                        )
-                    param_type = param_type if "`" in param_type else f"`{param_type}`"
-                    # Format the parameter docstring
-                    if additional_info:
-                        docstring += set_min_indent(
-                            f"{param_name} ({param_type}{additional_info}):{description}",
-                            indent_level + 8,
-                        )
-                    else:
-                        docstring += set_min_indent(
-                            f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
-                            indent_level + 8,
-                        )
-        # TODO (Yoni): Add support for Attributes section in docs
+            # Check for default value
+            param_default = ""
+            param_default = str(getattr(cls, param_name, ""))
+            param_default = f", defaults to `{param_default}`" if param_default != "" else ""
 
-    else:
+            param_type, optional_string, shape_string, additional_info, description, is_documented = (
+                _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
+            )
+
+            if is_documented:
+                # Check if type is missing
+                if param_type == "":
+                    print(
+                        f"[ERROR] {param_name} for {cls.__qualname__} in file {cls.__code__.co_filename} has no type"
+                    )
+                param_type = param_type if "`" in param_type else f"`{param_type}`"
+                # Format the parameter docstring
+                if additional_info:
+                    docstring += set_min_indent(
+                        f"{param_name} ({param_type}{additional_info}):{description}",
+                        indent_level + 8,
+                    )
+                else:
+                    docstring += set_min_indent(
+                        f"{param_name} ({param_type}{shape_string}{optional_string}{param_default}):{description}",
+                        indent_level + 8,
+                    )
+    # TODO (Yoni): Add support for Attributes section in docs
+    # Classes didn't match any of the classes by MRO raise a warning unless there is a `custom_intro`  defined,
+    # we assume that the `custom_intro` already holds the minimal informative docs
+    elif custom_intro is None:
         print(
             f"You used `@auto_class_docstring` decorator on `{cls.__name__}` but this class is not part of the AutoMappings. Remove the decorator"
         )
-    # Assign the dynamically generated docstring to the wrapper class
-    cls.__doc__ = docstring
 
+    # 5) Assign the dynamically generated docstring to the wrapper class
+    cls.__doc__ = docstring
     return cls
 
 
@@ -4441,9 +4829,9 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         Using `custom_args` to define reusable arguments:
         ```python
         VISION_ARGS = r'''
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel values of the input images.
-        image_features (`torch.FloatTensor`, *optional*):
+        image_features (`torch.Tensor`, *optional*):
             Pre-computed image features for efficient processing.
         '''
 
@@ -4455,7 +4843,7 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         Combining `custom_intro` and `custom_args`:
         ```python
         MULTIMODAL_ARGS = r'''
-        vision_features (`torch.FloatTensor`, *optional*):
+        vision_features (`torch.Tensor`, *optional*):
             Pre-extracted vision features from the vision encoder.
         fusion_strategy (`str`, *optional*, defaults to "concat"):
             Strategy for fusing text and vision modalities.
@@ -4477,25 +4865,25 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
 
         Using with ModelOutput classes:
         ```python
-        @dataclass
         @auto_docstring(
             custom_intro="Custom model outputs with additional fields."
         )
+        @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
-            loss (`torch.FloatTensor`, *optional*):
+            loss (`torch.Tensor`, *optional*):
                 The loss of the model.
-            custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
                 A custom output field specific to this model.
             '''
 
             # Standard fields like hidden_states, logits, attentions etc. can be automatically documented
             # However, given that the loss docstring is often different per model, you should document it above
-            loss: Optional[torch.FloatTensor] = None
-            logits: Optional[torch.FloatTensor] = None
-            hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-            attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-            custom_field: Optional[torch.FloatTensor] = None
+            loss: Optional[torch.Tensor] = None
+            logits: Optional[torch.Tensor] = None
+            hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+            attentions: Optional[tuple[torch.Tensor, ...]] = None
+            custom_field: Optional[torch.Tensor] = None
         ```
 
     Args:

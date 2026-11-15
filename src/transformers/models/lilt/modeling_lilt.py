@@ -50,9 +50,7 @@ class LiltTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -112,7 +110,7 @@ class LiltTextEmbeddings(nn.Module):
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         Args:
-        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.:
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
             inputs_embeds: torch.Tensor
         Returns: torch.Tensor
         """
@@ -316,7 +314,7 @@ class LiltAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         layout_inputs: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -384,7 +382,7 @@ class LiltLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         layout_inputs: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
@@ -430,7 +428,7 @@ class LiltEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         layout_inputs: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
@@ -506,7 +504,7 @@ class LiltPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LiltModel(LiltPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: LiltConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -647,7 +645,7 @@ class LiltModel(LiltPreTrainedModel):
 )
 class LiltForSequenceClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -663,10 +661,10 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.Tensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -679,10 +677,6 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -760,7 +754,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
 @auto_docstring
 class LiltForTokenClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -779,10 +773,10 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -795,8 +789,6 @@ class LiltForTokenClassification(LiltPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 
@@ -881,7 +873,7 @@ class LiltClassificationHead(nn.Module):
 @auto_docstring
 class LiltForQuestionAnswering(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -896,10 +888,10 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,

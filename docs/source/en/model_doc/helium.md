@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/2025/01/13/helium.html) by the Kyutai Team.
+Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/blog/2025-01-13-helium) by the Kyutai Team.
 
 Helium-1 preview is a lightweight language model with 2B parameters, targeting edge and mobile devices.
 It supports the following languages: English, French, German, Italian, Portuguese, Spanish.

@@ -22,10 +22,10 @@ transformers_logging.set_verbosity_info()
 def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str, Any]:
     logger.info("Merging configurations")
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         main_config = json.load(f)
 
-    with open(entropy_params_path, "r") as f:
+    with open(entropy_params_path, "r", encoding="utf-8") as f:
         entropy_data = json.load(f)
 
     entropy_model_params = entropy_data.get("entropy_model", {})
@@ -62,6 +62,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "rope_theta": entropy_model_params.get("rope_theta", 10000.0),
         "attn_impl": entropy_model_params.get("attn_impl", "sdpa"),
         "attn_bias_type": entropy_model_params.get("attn_bias_type", "causal"),
+        "sliding_window": entropy_model_params.get("sliding_window"),
         "intermediate_size": patcher_intermediate_size,
     }
 
@@ -154,6 +155,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "patching_threshold": patcher_args.get("threshold", 0.5),
         "patching_threshold_add": patcher_args.get("threshold_add", 0.0),
         "max_patch_length": patcher_args.get("max_patch_length"),
+        "local_attention_window_len": unified_config.get("local_attention_window_len"),
         "patching_batch_size": patcher_args.get("patching_batch_size", 1),
         "patching_device": patcher_args.get("patching_device", "cuda"),
         "monotonicity": patcher_args.get("monotonicity", False),
@@ -292,7 +294,7 @@ def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
     }
 
     tokenizer_path = os.path.join(output_dir, "tokenizer_config.json")
-    with open(tokenizer_path, "w") as f:
+    with open(tokenizer_path, "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f, indent=2)
 
 
@@ -385,7 +387,7 @@ def convert_hf_blt_to_unified(
     os.makedirs(output_dir, exist_ok=True)
 
     config_path = os.path.join(output_dir, config_name)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(unified_config, f, indent=2)
 
     if weights_name.endswith(".bin"):

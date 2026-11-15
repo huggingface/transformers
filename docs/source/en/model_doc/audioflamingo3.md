@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -244,12 +244,14 @@ print(decoded_outputs)
 
 ➡️ Training:
 
+Audio understanding
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
 
 model_id = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(model_id)
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
@@ -280,7 +282,7 @@ conversation = [
         },
         {
             "role": "assistant",
-            "content": [{"type": "text", "text": "The transcription of the audio is 'some transcription of the audio'."}],
+            "content": [{"type": "text", "text": "The reverberation and gentle guitar strumming."}],
         }
 
     ]
@@ -289,12 +291,63 @@ conversation = [
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
-    add_generation_prompt=True,
     return_dict=True,
-    output_labels=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
+```
+
+
+Transcription (ASR)
+```python
+from datasets import Audio, load_dataset
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+
+model_id = "nvidia/audio-flamingo-3-hf"
+NUM_SAMPLES = 2
+
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+conversation = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe the input speech."},
+                {"type": "audio", "audio": sample["audio"]["array"]},
+            ],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": sample["text"]}]},
+    ]
+    for sample in ds.select(range(NUM_SAMPLES))
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
+
+loss = model(**inputs).loss
+print("Loss:", loss.item())
 loss.backward()
 ```
 

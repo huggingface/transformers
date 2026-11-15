@@ -21,13 +21,14 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, process
 from tokenizers.models import Unigram
 from torch import nn
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
@@ -148,24 +149,21 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         )
 
 
-class LasrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class LasrProcessor(ProcessorMixin):
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "longest",
+        "return_attention_mask": True,
+        "return_tensors": "pt",
+    }
+
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
@@ -175,7 +173,7 @@ class LasrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[LasrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -184,10 +182,7 @@ class LasrProcessor(ProcessorMixin):
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
         """
-        audio = make_list_of_audio(audio)
-
         output_kwargs = self._merge_kwargs(
-            LasrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -201,16 +196,11 @@ class LasrProcessor(ProcessorMixin):
                 f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
             )
 
-        if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        model_inputs = super().__call__(audio=audio, text=text, **output_kwargs)
         if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+            model_inputs["labels"] = model_inputs.pop("input_ids")
+            model_inputs.pop("attention_mask", None)
+        return model_inputs
 
     @property
     def model_input_names(self):
@@ -446,7 +436,7 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
     _supports_flex_attn = False
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(module)
+        raise AttributeError("Normal super call")
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = self.config.encoder_config if isinstance(self.config, LasrCTCConfig) else self.config
@@ -493,7 +483,6 @@ class LasrEncoder(LasrPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
@@ -548,7 +537,7 @@ class LasrEncoder(LasrPreTrainedModel):
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -594,6 +583,8 @@ class LasrForCTC(ParakeetForCTC):
         """
         return super().generate(**super_kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LasrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "LasrForCTC",

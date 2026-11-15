@@ -25,7 +25,7 @@ class GPTNeoConfig(PreTrainedConfig):
     r"""
     attention_types (`list`, *optional*, defaults to `[[['global', 'local'], 12]]`):
         The type of attention for each layer in a `List` of the following format `[[["attention_type"],
-        num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
+        num_layers]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
         value of `attention_type` from `["global", "local"]
     window_size (`int`, *optional*, defaults to 256):
         The size of the sliding window for local attention.
@@ -46,7 +46,7 @@ class GPTNeoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gpt_neo"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     vocab_size: int = 50257

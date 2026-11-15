@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import Optional, Union
 
-from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor, build_string_from_input
+from transformers.models.paligemma.processing_paligemma import PaliGemmaProcessor
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -30,20 +30,17 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+class ColPaliProcessor(PaliGemmaProcessor):
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+        "do_convert_rgb": True,
     }
 
-
-class ColPaliProcessor(PaliGemmaProcessor):
     def __init__(
         self,
         image_processor=None,
@@ -71,159 +68,98 @@ class ColPaliProcessor(PaliGemmaProcessor):
         """
         return self.tokenizer.pad_token
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        suffix: TextInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
+        suffix (`str | list[str] | list[list[str]]`, *optional*):
+            The suffix appended to all input texts.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- Labels compatible with training if `suffix` is not None
         """
-        output_kwargs = self._merge_kwargs(
-            ColPaliProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
-
-        return_token_type_ids = True
-
-        if text is None and images is None:
-            raise ValueError("Either text or images must be provided")
         if text is not None and images is not None:
             raise ValueError("Only one of text or images can be processed at a time")
 
-        if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_flat_list_of_images(images)
-            texts_doc = [self.visual_prompt_prefix] * len(images)
-            images = [self.image_processor.process_image(image) for image in images]
+        kwargs["return_token_type_ids"] = True
+        output_kwargs = self._merge_kwargs(
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
 
-            input_strings = [
-                build_string_from_input(
-                    prompt=prompt,
-                    bos_token=self.tokenizer.bos_token,
-                    image_seq_len=self.image_seq_length,
-                    image_token=IMAGE_TOKEN,
-                    num_images=len(image_list) if isinstance(image_list, list) else 1,
-                )
-                for prompt, image_list in zip(texts_doc, images)
-            ]
-            pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+        suffix = self.query_augmentation_token * 10 if suffix is None else suffix
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", suffix)
 
-            # max_length has to account for the image tokens
+        if text is not None:
+            text = [f"{self.tokenizer.bos_token}{self.query_prefix}{sample}{suffix}\n" for sample in text]
             if output_kwargs["text_kwargs"].get("max_length", None) is not None:
                 output_kwargs["text_kwargs"]["max_length"] += self.image_seq_length
 
-            inputs = self.tokenizer(
-                input_strings,
-                return_token_type_ids=return_token_type_ids,
-                **output_kwargs["text_kwargs"],
-            )
+        model_inputs = ProcessorMixin.__call__(images=images, text=text, **output_kwargs)
+        if images is not None:
+            model_inputs["labels"] = model_inputs["input_ids"].masked_fill(model_inputs["token_type_ids"] == 0, -100)
+        return model_inputs
 
-            return_data = {**inputs, "pixel_values": pixel_values}
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        ProcessorMixin.validate_inputs(images=images, text=text)
+        if text is None and images is None:
+            raise ValueError("Either text or images must be provided")
 
-            if return_token_type_ids:
-                labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
-                return_data.update({"labels": labels})
+    def prepare_inputs_layout(self, images=None, text=None, **kwargs):
+        images, text, *_ = ProcessorMixin.prepare_inputs_layout(images=images, text=text, **kwargs)
+        if images is not None:
+            images = make_flat_list_of_images(images)
+            text = [
+                f"{self.image_token}{self.tokenizer.bos_token}{self.visual_prompt_prefix}\n"
+                for _ in range(len(images))
+            ]
+        return images, text, None, None
 
-            return BatchFeature(data=return_data)
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.image_token * self.image_seq_length
 
-        elif text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not (isinstance(text, list) and isinstance(text[0], str)):
-                raise ValueError("Text must be a string or a list of strings")
-
-            if suffix is None:
-                suffix = self.query_augmentation_token * 10
-
-            texts_query: list[str] = []
-            for query in text:
-                query = self.tokenizer.bos_token + self.query_prefix + query + suffix + "\n"
-                texts_query.append(query)
-
-            output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
-
-            batch_query = self.tokenizer(
-                texts_query,
-                return_token_type_ids=return_token_type_ids,
-                **output_kwargs["text_kwargs"],
-            )
-
-            return batch_query
-
+    @auto_docstring(
+        custom_intro="This method forwards the `images` and `kwargs` arguments to ColPaliProcessor's [`~ColPaliProcessor.__call__`]."
+    )
     def process_images(
         self,
         images: ImageInput | None = None,
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
-        """
-        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
-        [`ColPaliProcessor.__call__`].
-
-        This method forwards the `images` and `kwargs` arguments to the image processor.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
         return self.__call__(images=images, **kwargs)
 
+    @auto_docstring(
+        custom_intro="This method forwards the `text` and `kwargs` arguments to ColPaliProcessor's [`~ColPaliProcessor.__call__`]."
+    )
     def process_queries(
         self,
         text: TextInput | list[TextInput],
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
-        """
-        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
-        [`ColPaliProcessor.__call__`].
-
-        This method forwards the `text` and `kwargs` arguments to the tokenizer.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-        """
         return self.__call__(text=text, **kwargs)
 
     def score_retrieval(
@@ -290,6 +226,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         return torch.cat(scores, dim=0)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ColPaliProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "ColPaliProcessor",

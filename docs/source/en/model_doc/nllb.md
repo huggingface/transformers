@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -34,21 +34,7 @@ You can find all the original NLLB checkpoints under the [AI at Meta](https://hu
 > This model was contributed by [Lysandre](https://huggingface.co/lysandre).
 > Click on the NLLB models in the right sidebar for more examples of how to apply NLLB to different translation tasks.
 
-The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-
-pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", device=0)
-pipeline("UN Chief says there is no military solution in Syria")
-```
-
-</hfoption>
-<hfoption id="AutoModel">
+The example below demonstrates how to translate text with the [`AutoModel`] class.
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -65,10 +51,6 @@ translated_tokens = model.generate(
 )
 print(tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 ```
-
-</hfoption>
-</hfoptions>
-
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 8-bits.
@@ -147,6 +129,3 @@ visualizer("UN Chief says there is no military solution in Syria")
 
 [[autodoc]] NllbTokenizer
 
-## NllbTokenizerFast
-
-[[autodoc]] NllbTokenizerFast

@@ -27,7 +27,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
     <video
         style="max-width: 90%; margin: auto;"
         autoplay loop muted playsinline
-        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
+        src="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/video/assisted_generation_gif_1_1080p.mov"
     ></video>
     <figcaption>"التنبؤ بالكلمة التالية لنموذج اللغة (LLM)"</figcaption>
 </figure>

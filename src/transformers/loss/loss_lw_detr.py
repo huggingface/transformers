@@ -16,7 +16,8 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 
-from ..utils import is_scipy_available, is_vision_available
+from ..distributed.utils import _is_torch_distributed_initialized
+from ..utils import is_scipy_available, is_vision_available, logging
 from .loss_for_object_detection import (
     HungarianMatcher,
     _set_aux_loss,
@@ -34,6 +35,9 @@ if is_vision_available():
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+
+logger = logging.get_logger(__name__)
 
 
 class LwDetrHungarianMatcher(HungarianMatcher):
@@ -73,6 +77,10 @@ class LwDetrHungarianMatcher(HungarianMatcher):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
+        # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+        # these predictions only if there are no other valid predictions.
+        max_value = torch.finfo(cost_matrix.dtype).max
+        cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
@@ -265,7 +273,7 @@ class LwDetrImageLoss(nn.Module):
         num_boxes = num_boxes * group_detr
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         world_size = 1
-        if dist.is_available() and dist.is_initialized():
+        if _is_torch_distributed_initialized():
             dist.all_reduce(num_boxes, op=dist.ReduceOp.SUM)
             world_size = dist.get_world_size()
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()

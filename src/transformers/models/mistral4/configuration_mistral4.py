@@ -45,7 +45,7 @@ class Mistral4Config(PreTrainedConfig):
     ```"""
 
     model_type = "mistral4"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -62,6 +62,12 @@ class Mistral4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -75,6 +81,7 @@ class Mistral4Config(PreTrainedConfig):
     num_key_value_heads: int | None = 32
     n_shared_experts: int = 1
     n_routed_experts: int = 128
+    output_router_logits: bool = False
     routed_scaling_factor: float = 1.0
     kv_lora_rank: int = 256
     q_lora_rank: int | None = 1024

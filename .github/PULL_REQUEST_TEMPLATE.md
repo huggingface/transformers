@@ -1,44 +1,16 @@
 # What does this PR do?
 
 <!--
-Congratulations! You've made it this far! You're not quite done yet though.
-
 Once merged, your PR is going to appear in the release notes with the title you set, so make sure it's a great title that fully reflects the extent of your awesome contribution.
 
-Then, please replace this with a description of the change and which issue is fixed (if applicable). Please also include relevant motivation and context. List any dependencies (if any) that are required for this change.
+Then, please replace this with a description of the change. Please also include relevant motivation and context. List any dependencies (if any) that are required for this change. If you're fixing a bug, describe the regression test you added: it should fail without your fix.
+
+If your PR fixes an issue, fill in the issue number below. It must be an issue that's open for contributions (see the link below), or the PR will be closed. If no issue exists, this is a standalone PR: delete the line below and include your evidence here (e.g. a reproducer that fails on `main`, or before/after benchmark numbers). If an issue already exists for the problem, you can't open a standalone PR for it. See https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#contribution-rules
 
 Once you're done, someone will review your PR shortly (see the section "Who can review?" below to tag some potential reviewers). They may suggest changes to make the code even better. If no one reviewed your PR after a week has passed, don't hesitate to post a new comment @-mentioning the same persons---sometimes notifications get lost.
 -->
 
-<!-- Remove if not applicable -->
-
 Fixes # (issue)
-
-## Code Agent Policy
-
-The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
-code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
-**we ask that new users do not submit pure code agent PRs** at this time. 
-You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous "OpenClaw"-like agents
-not to open any PRs or issues for the moment.
-
-PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
-repeatedly or maliciously. 
-
-This is a rapidly-evolving situation that's causing significant shockwaves in the open-source community. As a result, 
-this policy is likely to be updated regularly in the near future. For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
-
-- [ ] I confirm that this is not a pure code agent PR.
-
-## Before submitting
-- [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
-- [ ] Did you read the [contributor guideline](https://huggingface.co/docs/transformers/contributing) and the
-      [Pull Request](https://huggingface.co/docs/transformers/pr_checks) checks?
-- [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
-      to it if that's the case.
-- [ ] Did you make sure to update the documentation with your changes according to the [guidelines](https://github.com/huggingface/transformers/tree/main/docs)?
-- [ ] Did you write any new necessary [tests](https://huggingface.co/docs/transformers/testing)?
-
 
 ## Who can review?
 
@@ -53,10 +25,9 @@ members/contributors who may be interested in your PR.
 Models:
 
 - text models: @ArthurZucker @Cyrilvallez @vasqu
-- vision models: @yonigozlan @molbap
+- vision models: @molbap @guarin
 - audio models: @eustlb @ebezzam @vasqu
 - multimodal models: @zucchini-nlp
-- graph models: @clefourrier
 
 Library:
 
@@ -80,12 +51,11 @@ Integrations:
 
 Devices/Backends:
 
-- AMD ROCm: @ivarflakstad
+- AMD ROCm: @Abdennacer-Badaoui
+- MPS: @isalia20
 - Intel XPU: @IlyasMoutawwakil
-- Ascend NPU: @ivarflakstad 
+- Ascend NPU: @IlyasMoutawwakil 
 
 Documentation: @stevhliu
-
-Research projects are not maintained and should be taken as is.
 
  -->

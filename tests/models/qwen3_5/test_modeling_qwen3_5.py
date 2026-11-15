@@ -38,6 +38,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -69,6 +70,13 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
         super().__init__(parent=parent)
         self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
+        self.rope_parameters = {
+            "rope_type": "default",
+            "rope_theta": 10_000,
+            "mrope_section": [2, 1, 1],
+            "mrope_interleaved": True,
+        }
+        self.head_dim = 32
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -146,10 +154,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
@@ -224,8 +228,8 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         # Reference: prefill, then forward the next token alone with the populated cache.
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         # Under test: prefill, then forward [next_token, *distractors] in one call. The first
@@ -234,8 +238,8 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         multi_input = torch.cat([next_token, distractors], dim=1)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
@@ -255,7 +259,7 @@ class Qwen3_5VisionText2TextModelTester:
             "eos_token_id": 1,
             "pad_token_id": 2,
             "hidden_act": "silu",
-            "head_dim": 8,
+            "head_dim": 32,
             "hidden_size": 32,
             "vocab_size": 99,
             "intermediate_size": 37,
@@ -265,9 +269,13 @@ class Qwen3_5VisionText2TextModelTester:
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
             "num_key_value_heads": 2,
-            "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            "rope_parameters": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [2, 1, 1],
+                "mrope_interleaved": True,
+            },
             "linear_conv_kernel_dim": 2,
             "linear_key_head_dim": 16,
             "linear_value_head_dim": 16,
@@ -311,7 +319,6 @@ class Qwen3_5VisionText2TextModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
         self.rope_parameters = text_config["rope_parameters"]
         self.hidden_act = text_config["hidden_act"]
         self.max_position_embeddings = text_config["max_position_embeddings"]
@@ -459,10 +466,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
     )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
-
-    @unittest.skip("Qwen3.5 hybrid linear-attention cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
         pass
 
     def _get_conv_state_shape(self, batch_size: int, config):
@@ -724,10 +727,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             )
             self.assertIsNotNone(outputs)
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @require_torch
 class Qwen3_5IntegrationTest(unittest.TestCase):
@@ -758,8 +757,8 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_generation(self):
-        expected_text_completion = "My favourite condiment is 100% real.\nThe 100% real is the only one that is"
-        prompt = "My favourite condiment is "
+        expected_text_completion = "My favourite condiment is a little bit of what?\nA. Salt\nB. Sugar\nC. Vinegar\n"
+        prompt = "My favourite condiment is"
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=False)
         model = Qwen3_5ForCausalLM.from_pretrained(self.model_id, device_map="auto")
@@ -782,7 +781,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -828,7 +829,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -874,7 +877,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -915,7 +920,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -955,7 +962,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -967,7 +976,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],

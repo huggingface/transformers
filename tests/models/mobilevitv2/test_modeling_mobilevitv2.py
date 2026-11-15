@@ -20,7 +20,6 @@ from transformers import MobileViTV2Config
 from transformers.testing_utils import (
     Expectations,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -223,11 +222,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="MobileViTV2 does not output attentions")
     def test_attention_outputs(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_model(self):

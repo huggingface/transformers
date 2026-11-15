@@ -294,8 +294,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_resize_embeddings = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -335,10 +333,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
     )
@@ -351,10 +345,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     # Override: Multi-scale deformable attention outputs have different shapes than standard self-attention
@@ -882,8 +872,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     test_resize_embeddings = False
     has_attentions = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -923,10 +911,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
     )
@@ -939,10 +923,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     @unittest.skip(
@@ -1229,8 +1209,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     is_encoder_decoder = True
     test_resize_embeddings = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -1270,10 +1248,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(
         reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
     )
@@ -1286,10 +1260,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     @unittest.skip(reason="DINOv3 RoPE with dynamic interpolation causes torch.compile inductor overflow")
@@ -1608,7 +1578,9 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 def prepare_img():
     from transformers.image_utils import load_image
 
-    url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+    url = url_to_local_path(
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    )
     return load_image(url)
 
 

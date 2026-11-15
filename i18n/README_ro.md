@@ -36,26 +36,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fa.md">فارسی</a> |
-         <b>Română</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <b>Română</b> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -241,13 +241,12 @@ pipeline(
 
 - Această bibliotecă nu este un toolbox de block-uri pentru construirea rețelelor neuronale. Codul din fișierele modelelor nu este refactorizat cu mai multă abstractizare pentru ca cercetătorii să poată utiliza rapid fiecare dintre modele fără să aibă de-a face cu fișiere/abstractizări adiționale.
 - API-ul de antrenare este optimizat pentru utilizarea cu modele PyTorch oferite de Transformers. Pentru loop-uri generice de machine learning, utilizează o bibliotecă precum [Accelerate](https://huggingface.co/docs/accelerate).
-- [Script-urile de exemplu](https://github.com/huggingface/transformers/tree/main/examples) sunt doar *exemple*. S-ar putea ca acestea să nu funcționeze în toate cazurile și va trebui să adaptezi codul pentru ca acestea să funcționeze.
 
 ## 100 de proiecte folosind Transformers
 
 Transformers este mai mult decât un toolkit pentru utilizarea modelelor pre-antrenate, este o comunitate de proiecte construite în jurul acestuia și a Hub-ului Hugging Face. Vrem ca Transformers să ajute developerii, cercetătorii, studenții, profesorii, inginerii și pe toți ceilalți oameni să-și construiască propriile proiecte.
 
-Pentru a sărbători atingerea a 100,000 de stars pentru proiectul Transformers, am vrut să aducem comunitatea în centrul atenției prin pagina [awesome-transformers](./awesome-transformers.md) care este o listă de 100 de proiecte incredibile construite utilizând Transformers.
+Pentru a sărbători atingerea a 100,000 de stars pentru proiectul Transformers, am vrut să aducem comunitatea în centrul atenției prin pagina [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) care este o listă de 100 de proiecte incredibile construite utilizând Transformers.
 
 Dacă deții sau utilizezi un proiect și crezi că ar trebui să facă parte din listă, deschide un PR pentru a-l adăuga!
 

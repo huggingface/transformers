@@ -49,11 +49,10 @@ from .utils import (
     BaseHandler,
     Modality,
     ReasoningText,
+    ToolCall,
     _StreamError,
-    get_reasoning_config,
-    get_tool_call_config,
-    parse_reasoning,
-    parse_tool_calls,
+    build_response_parser,
+    parse_assistant_message,
 )
 
 
@@ -75,7 +74,6 @@ UNUSED_CHAT_COMPLETION_FIELDS = {
     "function_call",
     "functions",
     "logprobs",
-    "max_completion_tokens",
     "metadata",
     "modalities",
     "n",
@@ -155,9 +153,6 @@ class ChatCompletionHandler(BaseHandler):
         if use_cb:
             gen_manager.init_cb(model, gen_config)
 
-        tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
-        reasoning_config = get_reasoning_config(processor, model, inputs["input_ids"])
-
         streaming = body.get("stream")
         if streaming:
             return self._streaming(
@@ -168,8 +163,7 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_config=tool_config,
-                reasoning_config=reasoning_config,
+                tools=body.get("tools"),
             )
         else:
             return await self._non_streaming(
@@ -180,8 +174,7 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
-                tool_config=tool_config,
-                reasoning_config=reasoning_config,
+                tools=body.get("tools"),
             )
 
     # ----- streaming -----
@@ -195,18 +188,17 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        tools=None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
+        response_parser = build_response_parser(processor, model, inputs["input_ids"], tools=tools)
         queue, streamer = gen_manager.generate_streaming(
             model,
             processor,
             inputs,
             gen_config,
             request_id=request_id,
-            tool_config=tool_config,
-            reasoning_config=reasoning_config,
+            response_parser=response_parser,
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
@@ -216,10 +208,12 @@ class ChatCompletionHandler(BaseHandler):
             try:
                 yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
 
+                tool_call_index = 0
+                has_tool_calls = False
                 done = False
                 while not done:
-                    text = await queue.get()
-                    batch = [text]
+                    item = await queue.get()
+                    batch = [item]
                     try:
                         while True:
                             batch.append(queue.get_nowait())
@@ -227,43 +221,38 @@ class ChatCompletionHandler(BaseHandler):
                         pass
 
                     sse_parts: list[str] = []
-                    for text in batch:
-                        if text is None:
+                    for item in batch:
+                        if item is None:
                             done = True
                             break
-                        if isinstance(text, _StreamError):
-                            sse_parts.append(f'data: {{"error": "{text.msg}"}}\n\n')
+                        if isinstance(item, _StreamError):
+                            sse_parts.append(f'data: {{"error": "{item.msg}"}}\n\n')
                             yield "".join(sse_parts)
                             return
-
-                        if isinstance(text, ReasoningText):
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=text))
+                        if isinstance(item, ToolCall):
+                            has_tool_calls = True
+                            sse_parts.append(
+                                self._build_chunk_sse(
+                                    request_id,
+                                    model=model_id,
+                                    tool_calls=[
+                                        ChoiceDeltaToolCall(
+                                            index=tool_call_index,
+                                            type="function",
+                                            id=f"{request_id}_tool_call_{tool_call_index}",
+                                            function={"name": item.name, "arguments": item.arguments},
+                                        )
+                                    ],
+                                )
+                            )
+                            tool_call_index += 1
+                        elif isinstance(item, ReasoningText):
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=item))
                         else:
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=item))
 
                     if sse_parts:
                         yield "".join(sse_parts)
-
-                # Tool calls are parsed after generation completes (not during streaming),
-                # because the full token sequence is needed for reliable parsing.
-                has_tool_calls = False
-                if tool_config:
-                    parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
-                    if parsed:
-                        has_tool_calls = True
-                        for i, tc in enumerate(parsed):
-                            yield self._build_chunk_sse(
-                                request_id,
-                                model=model_id,
-                                tool_calls=[
-                                    ChoiceDeltaToolCall(
-                                        index=i,
-                                        type="function",
-                                        id=f"{request_id}_tool_call_{i}",
-                                        function={"name": tc["name"], "arguments": tc["arguments"]},
-                                    )
-                                ],
-                            )
 
                 hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
                 if has_tool_calls:
@@ -302,8 +291,7 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
-        tool_config: dict | None = None,
-        reasoning_config: dict | None = None,
+        tools=None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         content, input_len, generated_ids = await gen_manager.generate_non_streaming(
@@ -318,22 +306,19 @@ class ChatCompletionHandler(BaseHandler):
             total_tokens=input_len + completion_tokens,
         )
 
+        content, reasoning_content, parsed_tool_calls = parse_assistant_message(
+            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content, tools=tools
+        )
         tool_calls = None
-        if tool_config is not None:
-            parsed = parse_tool_calls(processor, generated_ids, tool_config["schema"])
-            if parsed:
-                tool_calls = [
-                    ChatCompletionMessageToolCall(
-                        id=f"{request_id}_tool_call_{i}",
-                        type="function",
-                        function={"name": tc["name"], "arguments": tc["arguments"]},
-                    )
-                    for i, tc in enumerate(parsed)
-                ]
-
-        reasoning_content = None
-        if reasoning_config is not None:
-            content, reasoning_content = parse_reasoning(processor, generated_ids, content, reasoning_config)
+        if parsed_tool_calls:
+            tool_calls = [
+                ChatCompletionMessageToolCall(
+                    id=f"{request_id}_tool_call_{i}",
+                    type="function",
+                    function={"name": tc.name, "arguments": tc.arguments},
+                )
+                for i, tc in enumerate(parsed_tool_calls)
+            ]
 
         if tool_calls is not None:
             finish_reason = "tool_calls"
@@ -358,11 +343,13 @@ class ChatCompletionHandler(BaseHandler):
     # ----- helpers -----
 
     def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply Chat Completions params (``max_tokens``, ``frequency_penalty``, ``logit_bias``,
-        ``stop``) on top of the base generation config."""
+        """Apply Chat Completions params (``max_completion_tokens``, ``max_tokens``, ``frequency_penalty``,
+        ``logit_bias``, ``stop``) on top of the base generation config."""
         generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
 
-        if body.get("max_tokens") is not None:
+        if body.get("max_completion_tokens") is not None:
+            generation_config.max_new_tokens = int(body["max_completion_tokens"])
+        elif body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
             generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])

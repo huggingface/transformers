@@ -128,7 +128,7 @@ def convert_hf_config(nemo_config, tokenizer, vocab_size, dtype, hf_output_path,
     }
     if nemo_config.kv_channels is not None:
         hf_config["kv_channels"] = nemo_config.kv_channels
-    json.dump(hf_config, open(f"{hf_output_path}/config.json", "w"), indent=2)
+    json.dump(hf_config, open(f"{hf_output_path}/config.json", "w", encoding="utf-8"), indent=2)
 
 
 def convert(input_nemo_file, output_hf_file, precision=None, cpu_only=False) -> None:

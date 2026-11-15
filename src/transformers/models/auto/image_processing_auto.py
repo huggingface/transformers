@@ -32,6 +32,7 @@ from ...utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
+    resolve_revision,
     safe_load_json_file,
 )
 from ...utils.import_utils import is_torchvision_greater_or_equal, requires
@@ -87,7 +88,9 @@ else:
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("donut-swin", {"torchvision": "DonutImageProcessor", "pil": "DonutImageProcessorPil"}),
+            ("dots3_note", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
+            ("embedding_gemma2", {"pil": "Gemma4ImageProcessorPil", "torchvision": "Gemma4ImageProcessor"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             ("exaone4_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
@@ -98,18 +101,26 @@ else:
             ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
+            (
+                "hyperclovax_vision_v2",
+                {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"},
+            ),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
+            ("inkling_mm_model", {"torchvision": "InklingImageProcessor"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("internvl", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("kosmos-2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("kosmos-2.5", {"torchvision": "Kosmos2_5ImageProcessor", "pil": "Kosmos2_5ImageProcessorPil"}),
             ("layoutxlm", {"torchvision": "LayoutLMv2ImageProcessor", "pil": "LayoutLMv2ImageProcessorPil"}),
+            ("lfm3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("lighton_ocr", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("llava_next_video", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("lw_detr", {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"}),
             ("metaclip_2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
+            ("minicpmv4_7", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
             ("mistral3", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
+            ("mistral_large4", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("mlcd", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             (
                 "mm-grounding-dino",
@@ -119,6 +130,7 @@ else:
                 },
             ),
             ("mobilevitv2", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
+            ("muse_spark", {"torchvision": "MuseGlimmerImageProcessor"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("paligemma", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
@@ -135,6 +147,7 @@ else:
             ("qwen3_5_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_omni_moe", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("qwen3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
+            ("qwen4_exp", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("regnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("resnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),
@@ -269,6 +282,14 @@ def get_image_processor_config(
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
     # Load with a priority given to the nested processor config, if available in repo
+    # Resolve the revision once, so that both files below come from the same repository state.
+    revision = resolve_revision(
+        pretrained_model_name_or_path,
+        revision,
+        token=token,
+        local_files_only=local_files_only,
+        cache_dir=cache_dir,
+    )
     resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
         filename=PROCESSOR_NAME,
@@ -302,7 +323,7 @@ def get_image_processor_config(
     # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
-    image_processor_dict = {}
+    image_processor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "image_processor" in processor_dict:
@@ -311,7 +332,7 @@ def get_image_processor_config(
     if resolved_image_processor_file is not None and image_processor_dict is None:
         image_processor_dict = safe_load_json_file(resolved_image_processor_file)
 
-    return image_processor_dict
+    return image_processor_dict or {}
 
 
 def _resolve_backend(backend: str | None, use_fast: bool | None, base_class_name: str | None) -> str:
@@ -422,13 +443,13 @@ def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
             return getattr(val, "__name__", None) == name
         return False
 
-    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
-        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
-            return mapping_dict
-
     for content in IMAGE_PROCESSOR_MAPPING._extra_content.values():
         if any(_value_matches(v, base_class_name) for v in content.values()):
             return content
+
+    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
+        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
+            return mapping_dict
 
     return None
 
@@ -578,6 +599,15 @@ class AutoImageProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
+
         # Resolve the image processor config filename
         if "image_processor_filename" in kwargs:
             image_processor_filename = kwargs.pop("image_processor_filename")
@@ -618,17 +648,21 @@ class AutoImageProcessor:
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
 
-        # If not in image processor config, try the model config (override image_processor_auto_map if trust_remote_code is False)
-        if image_processor_type is None and (image_processor_auto_map is None or trust_remote_code is False):
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    trust_remote_code=trust_remote_code,
-                    **kwargs,
-                )
-            image_processor_type = getattr(config, "image_processor_type", None)
-            if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
-                image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+        # If not in image processor config, try the model config
+        if image_processor_type is None:
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
+
+                image_processor_type = getattr(config, "image_processor_type", None)
+                if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
+                    image_processor_auto_map = config.auto_map["AutoImageProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         # Derive base_class_name from image_processor_type
         is_legacy_fast = False
@@ -730,7 +764,7 @@ class AutoImageProcessor:
             )
 
         # Avoid resetting existing processors if we are passing partial updates
-        if config_class in IMAGE_PROCESSOR_MAPPING._extra_content:
+        if config_class in IMAGE_PROCESSOR_MAPPING:
             existing_mapping = IMAGE_PROCESSOR_MAPPING[config_class]
             existing_mapping.update(image_processor_classes)
             image_processor_classes = existing_mapping

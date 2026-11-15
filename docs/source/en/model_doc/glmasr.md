@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2025-12-24.*
@@ -206,6 +206,54 @@ EXPECTED_OUTPUT = [
     "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the",
 ]
 assert decoded_outputs == EXPECTED_OUTPUT
+```
+
+### Training
+
+GLM-ASR can be trained with the loss outputted by the model. Put the target transcript in the assistant turn and pass `output_labels=True`. Audio and padding positions are masked automatically.
+
+```python
+from datasets import Audio, load_dataset
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
+model_id = "zai-org/GLM-ASR-Nano-2512"
+NUM_SAMPLES = 2
+
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/14")
+model = GlmAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+conversation = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "audio", "audio": sample["audio"]["array"]},
+                {"type": "text", "text": "Please transcribe this audio into text"},
+            ],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": sample["text"]}]},
+    ]
+    for sample in ds.select(range(NUM_SAMPLES))
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
+
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
 ```
 
 ## GlmAsrEncoderConfig

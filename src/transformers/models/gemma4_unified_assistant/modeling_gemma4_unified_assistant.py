@@ -38,11 +38,11 @@ from .configuration_gemma4_unified_assistant import Gemma4UnifiedAssistantConfig
 @dataclass
 class Gemma4UnifiedAssistantOutput(BaseModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     """
 
-    logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
 
 
 class Gemma4UnifiedAssistantMaskedEmbedder(nn.Module):
@@ -59,7 +59,7 @@ class Gemma4UnifiedAssistantMaskedEmbedder(nn.Module):
         self.vocab_size_per_centroid = self.vocab_size // self.num_centroids
 
         self.centroids = nn.Linear(self.hidden_size, self.num_centroids, bias=False)
-        self.register_buffer("token_ordering", torch.empty(self.vocab_size, dtype=torch.long))
+        self.token_ordering = nn.Buffer(torch.empty(self.vocab_size, dtype=torch.long))
 
     def forward(self, hidden_states: torch.Tensor, lm_head_weight: torch.Tensor) -> torch.Tensor:
         batch, seq_len = hidden_states.shape[:2]
@@ -97,7 +97,6 @@ class Gemma4UnifiedAssistantPreTrainedModel(PreTrainedModel):
     config: Gemma4UnifiedAssistantConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -112,7 +111,7 @@ class Gemma4UnifiedAssistantPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_ordering)
 
 
-@auto_docstring(custom_intro="A model for mutli-token prediction-based assisted decoding with Gemma 4.")
+@auto_docstring(custom_intro="A model for multi-token prediction-based assisted decoding with Gemma 4.")
 class Gemma4UnifiedAssistantForCausalLM(Gemma4UnifiedAssistantPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}

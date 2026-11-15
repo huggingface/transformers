@@ -21,7 +21,7 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
 
@@ -129,8 +129,6 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
                 - rows (`int`): Number of patch rows.
                 - columns (`int`): Number of patch columns.
         """
-        requires_backends(self, ["torch"])
-
         # Convert to torch tensor
         image_tensor = torch.from_numpy(image).unsqueeze(0)  # Add batch dimension
 

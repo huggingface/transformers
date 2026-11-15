@@ -33,12 +33,10 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
-
-
-if is_torch_available():
-    import torch
+from ...test_processing_common import url_to_local_path
 
 
 class DeepseekVLHybridModelTester:
@@ -51,6 +49,7 @@ class DeepseekVLHybridModelTester:
         initializer_range=0.02,
         is_training=True,
         use_cache=False,
+        image_token_id=3,
         text_config={
             "num_hidden_layers": 2,
             "vocab_size": 99,
@@ -102,14 +101,14 @@ class DeepseekVLHybridModelTester:
         self.num_attention_heads = text_config["num_attention_heads"]
         self.high_res_image_size = high_res_vision_config["image_size"]
         self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["image_size"] // vision_config["patch_size"]
+        self.num_image_tokens = 16
         self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = self.vocab_size - 1
+        self.image_token_id = image_token_id
 
     def get_config(self):
         return DeepseekVLHybridConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_config.copy(),
+            vision_config=self.vision_config.copy(),
             high_res_vision_config=self.high_res_vision_config,
             image_token_id=self.image_token_id,
         )
@@ -137,6 +136,7 @@ class DeepseekVLHybridModelTester:
             ]
         )
         # fill image_tokens
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         return config, input_ids, attention_mask, pixel_values, high_res_pixel_values
@@ -173,50 +173,6 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def setUp(self):
         self.model_tester = DeepseekVLHybridModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekVLHybridConfig, has_text_modality=False)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["high_res_pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for VLMs.
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["high_res_pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -283,15 +239,13 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 @require_torch
 @require_torch_accelerator
 @slow
-class DeepseekVLHybridIntegrationTest(unittest.TestCase):
+class DeepseekVLHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_id = "deepseek-community/deepseek-vl-7b-chat"
 
     def test_model_text_generation(self):
-        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
-        model.to(torch_device)
+        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(self.model_id, dtype="auto").to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -301,7 +255,9 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "Describe this image."},
                 ],
@@ -322,10 +278,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         )
 
     def test_model_text_generation_batched(self):
-        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
-        model.to(torch_device)
+        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(self.model_id, dtype="auto").to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -336,7 +289,9 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image."},
                     ],
@@ -348,7 +303,9 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                            ),
                         },
                         {"type": "text", "text": "What animal do you see in the image?"},
                     ],
@@ -356,12 +313,18 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
             ],
         ]
         EXPECTED_TEXT = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:\nThe image depicts a fluffy, light brown animal with a white face and black markings around its eyes",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:The image depicts a fluffy, light brown animal with a white face and black markings on its face and",  # fmt: skip
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a large, furry animal that appears to be a type of bear.The ",  # fmt: skip
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding_side="left",
         )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -370,10 +333,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, text)
 
     def test_model_text_generation_with_multi_image(self):
-        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
-        model.to(torch_device)
+        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(self.model_id, dtype="auto").to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -382,11 +342,18 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "What's the difference between"},
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": " and "},
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                 ],
             }

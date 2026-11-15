@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_torch_greater_or_equal
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -35,6 +35,7 @@ _import_structure = {
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
+    "compressed_tensors": ["CompressedTensorsFP8Linear", "replace_with_compressed_tensors_fp8_linear"],
     "deepspeed": [
         "HfDeepSpeedConfig",
         "HfTrainerDeepSpeedConfig",
@@ -49,7 +50,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
-    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
+    "finegrained_fp8": ["FP8Embedding", "FP8Linear", "replace_with_fp8_embedding", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "gemma_quant": [
         "QuantizedEmbedding",
@@ -60,10 +61,7 @@ _import_structure = {
     "ggml": [
         "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
-        "GGUF_TOKENIZER_MAPPING",
         "_gguf_parse_value",
-        "load_dequant_gguf_tensor",
-        "load_gguf",
     ],
     "higgs": [
         "HiggsLinear",
@@ -80,6 +78,7 @@ _import_structure = {
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
+        "use_kernel_func_from_hub_with_fallback",
         "use_kernelized_func",
     ],
     "integration_utils": [
@@ -138,8 +137,6 @@ _import_structure = {
     "mxfp4": [
         "Mxfp4GptOssExperts",
         "convert_moe_packed_tensors",
-        "dequantize",
-        "load_and_swizzle_mxfp4",
         "quantize_to_mxfp4",
         "replace_with_mxfp4_linear",
         "swizzle_mxfp4",
@@ -149,6 +146,7 @@ _import_structure = {
         "deactivate_neftune",
         "neftune_post_forward_hook",
     ],
+    "nvfp4": ["NVFP4Linear", "NVFP4Quantize", "replace_with_nvfp4_linear"],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "sinq": ["SinqDeserialize", "SinqQuantize"],
@@ -168,19 +166,12 @@ else:
     ]
 
 _import_structure["tensor_parallel"] = [
-    "shard_and_distribute_module",
     "ALL_PARALLEL_STYLES",
-    "translate_to_torch_parallel_style",
+    "shard_and_distribute_module",
 ]
-try:
-    if not is_torch_greater_or_equal("2.5"):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["flex_attention"] = [
-        "make_flex_block_causal_mask",
-    ]
+_import_structure["flex_attention"] = [
+    "make_flex_block_causal_mask",
+]
 
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
@@ -201,6 +192,7 @@ if TYPE_CHECKING:
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
+    from .compressed_tensors import CompressedTensorsFP8Linear, replace_with_compressed_tensors_fp8_linear
     from .deepspeed import (
         HfDeepSpeedConfig,
         HfTrainerDeepSpeedConfig,
@@ -215,7 +207,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
-    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
+    from .finegrained_fp8 import FP8Embedding, FP8Linear, replace_with_fp8_embedding, replace_with_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .gemma_quant import (
         QuantizedEmbedding,
@@ -226,10 +218,7 @@ if TYPE_CHECKING:
     from .ggml import (
         GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
-        GGUF_TOKENIZER_MAPPING,
         _gguf_parse_value,
-        load_dequant_gguf_tensor,
-        load_gguf,
     )
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
@@ -241,6 +230,7 @@ if TYPE_CHECKING:
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
+        use_kernel_func_from_hub_with_fallback,
         use_kernelized_func,
     )
     from .integration_utils import (
@@ -298,13 +288,12 @@ if TYPE_CHECKING:
     )
     from .mxfp4 import (
         Mxfp4GptOssExperts,
-        dequantize,
-        load_and_swizzle_mxfp4,
         quantize_to_mxfp4,
         replace_with_mxfp4_linear,
         swizzle_mxfp4,
     )
     from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
+    from .nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .sinq import SinqDeserialize, SinqQuantize
@@ -319,19 +308,8 @@ if TYPE_CHECKING:
     else:
         from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
-    from .tensor_parallel import (
-        ALL_PARALLEL_STYLES,
-        shard_and_distribute_module,
-        translate_to_torch_parallel_style,
-    )
-
-    try:
-        if not is_torch_greater_or_equal("2.5"):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .flex_attention import make_flex_block_causal_mask
+    from .flex_attention import make_flex_block_causal_mask
+    from .tensor_parallel import ALL_PARALLEL_STYLES, shard_and_distribute_module
 else:
     import sys
 

@@ -22,7 +22,10 @@ import torch.nn as nn
 from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -48,25 +51,25 @@ logger = logging.get_logger(__name__)
 @dataclass
 class UniSpeechForPreTrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when model is in train mode, `torch.Tensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
         paper](https://huggingface.co/papers/2006.11477).
-    projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+    projected_states (`torch.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
         projected quantized states.
-    projected_quantized_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
+    projected_quantized_states (`torch.Tensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Quantized extracted feature vectors projected to *config.proj_codevector_dim* representing the positive
         target vectors for contrastive loss.
-    codevector_perplexity (`torch.FloatTensor` of shape `(1,)`):
+    codevector_perplexity (`torch.Tensor` of shape `(1,)`):
         The perplexity of the codevector distribution, used to measure the diversity of the codebook.
     """
 
-    loss: torch.FloatTensor | None = None
-    projected_states: torch.FloatTensor | None = None
-    projected_quantized_states: torch.FloatTensor | None = None
-    codevector_perplexity: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    projected_states: torch.Tensor | None = None
+    projected_quantized_states: torch.Tensor | None = None
+    codevector_perplexity: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class UniSpeechPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -116,7 +119,7 @@ class UniSpeechGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
             perplexity = self._compute_perplexity(codevector_soft_dist)
         else:
             # take argmax in non-differentiable way
-            # comptute hard codevector distribution (one hot)
+            # compute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(dim=-1)
             codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
@@ -144,10 +147,15 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [UniSpeechEncoderLayer, UniSpeechEncoderLayerStableLayerNorm],  # noqa: F821
+        "attentions": OutputRecorder(UniSpeechAttention, index=1, layer_name="encoder"),  # noqa: F821
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechGumbelVectorQuantizer):
             init.normal_(module.weight_proj.weight, mean=0.0, std=1)
@@ -164,20 +172,14 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
             k = math.sqrt(1 / module.projection.in_features)
             init.uniform_(module.projection.weight, a=-k, b=k)
             init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, UniSpeechModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -234,27 +236,21 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeech")
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        mask_time_indices: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UniSpeechBaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
 
@@ -270,21 +266,14 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = encoder_outputs[0]
-
-        if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
+        hidden_states = encoder_outputs.last_hidden_state
 
         return UniSpeechBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -324,9 +313,9 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
     @staticmethod
     def compute_contrastive_logits(
-        target_features: torch.FloatTensor,
-        negative_features: torch.FloatTensor,
-        predicted_features: torch.FloatTensor,
+        target_features: torch.Tensor,
+        negative_features: torch.Tensor,
+        predicted_features: torch.Tensor,
         temperature: int = 1,
     ):
         """
@@ -342,15 +331,13 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         logits = logits / temperature
         return logits
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UniSpeechForPreTrainingOutput:
         r"""
         Example:
@@ -363,31 +350,28 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         >>> model = UniSpeechForPreTraining.from_pretrained("microsoft/unispeech-large-1500h-cv")
         >>> # TODO: Add full pretraining example
         ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         outputs = self.unispeech(
             input_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-        transformer_features = outputs[0]
+        transformer_features = outputs.last_hidden_state
 
         # quantize all (unmasked) extracted features and project to final vq dim
-        extract_features = self.dropout_features(outputs[1])
+        extract_features = self.dropout_features(outputs.extract_features)
         quantized_features, codevector_perplexity = self.quantizer(extract_features)
 
         # project quantized features twice
         quantized_features = self.project_q(quantized_features.to(self.project_q.weight.dtype))
         quantized_features = self.project_hid(quantized_features)
 
-        prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
-            self.config.replace_prob
+        prob_replace_matrix = torch.full(
+            (transformer_features.size(0), transformer_features.size(1)),
+            self.config.replace_prob,
+            device=transformer_features.device,
         )
         prob_replace_matrix = prob_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
+        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool()
         sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
         sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
         logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (
@@ -400,10 +384,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
         # TODO(PVP) - add negative sampling & loss computation
         loss = None
-        if not return_dict:
-            if loss is not None:
-                return (loss, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
 
         return UniSpeechForPreTrainingOutput(
             loss=loss,

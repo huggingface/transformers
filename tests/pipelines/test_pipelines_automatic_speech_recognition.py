@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 from datasets import Audio, load_dataset
-from huggingface_hub import AutomaticSpeechRecognitionOutput, hf_hub_download, snapshot_download
+from huggingface_hub import AutomaticSpeechRecognitionOutput, hf_hub_download
 
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
@@ -27,20 +28,23 @@ from transformers import (
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
     AutoTokenizer,
+    ParakeetEncoderConfig,
+    ParakeetForTDT,
+    ParakeetTDTConfig,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
-from transformers.pipelines.automatic_speech_recognition import chunk_iter
+from transformers.pipelines.automatic_speech_recognition import _to_mono, chunk_iter
 from transformers.testing_utils import (
     Expectations,
     compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
-    require_pyctcdecode,
+    require_librosa,
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
@@ -183,6 +187,46 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
     @require_torch
+    def test_multichannel_mono_conversion(self):
+        # The pipeline reads audio as `(channels, samples)`, which is what torchcodec
+        # returns. A 2-channel waveform is averaged down to mono.
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/s2t-small-mustc-en-fr-st",
+            tokenizer="facebook/s2t-small-mustc-en-fr-st",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        expected = speech_recognizer(waveform)
+
+        channels_first = np.stack([waveform, waveform], axis=0)  # (2, samples)
+        self.assertEqual(speech_recognizer(channels_first), expected)
+        # a single channel expressed as 2-D collapses to the same thing
+        self.assertEqual(speech_recognizer(waveform[None, :]), expected)
+
+    def test_multichannel_ambiguous_layout_raises(self):
+        # `soundfile.read`, `librosa.load(mono=False)` and `scipy.io.wavfile.read` all
+        # return channels-last `(samples, channels)`. Averaging axis 0 on that layout
+        # averages across time, so a 34,000-sample waveform silently became 2 samples
+        # and was transcribed as silence. The shape alone cannot tell that apart from
+        # genuine `(channels, samples)` audio, so refuse instead of guessing. See #47886.
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+
+        channels_last = np.stack([waveform, waveform], axis=-1)  # (samples, 2)
+        with self.assertRaisesRegex(ValueError, "channels-last"):
+            _to_mono(channels_last)
+
+        surround = np.stack([waveform] * 6, axis=0)  # (6, samples)
+        with self.assertRaisesRegex(ValueError, "downmix it to mono yourself"):
+            _to_mono(surround)
+
+        with self.assertRaisesRegex(ValueError, "3 dimensions"):
+            _to_mono(waveform[None, None, :])
+
+    def test_mono_passthrough(self):
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        self.assertIs(_to_mono(waveform), waveform)
+
+    @require_torch
     def test_small_model_pt_fp16(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -255,70 +299,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform, generate_kwargs={"num_beams": 2})
         self.assertEqual(output, {"text": "あл † γ ت ב オ 束 泣 足"})
-
-    @slow
-    @require_torch
-    @require_pyctcdecode
-    def test_large_model_pt_with_lm(self):
-        filename = hf_hub_download("Narsil/asr_dummy", filename="4.flac", repo_type="dataset")
-
-        speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model="patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm",
-        )
-        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
-
-        output = speech_recognizer(filename)
-        self.assertEqual(
-            output,
-            {"text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumaje"},
-        )
-
-        # Override back to pure CTC
-        speech_recognizer.type = "ctc"
-        output = speech_recognizer(filename)
-        # plumajre != plumaje
-        self.assertEqual(
-            output,
-            {
-                "text": (
-                    "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
-                )
-            },
-        )
-
-        speech_recognizer.type = "ctc_with_lm"
-        # Simple test with CTC with LM, chunking + timestamps
-        output = speech_recognizer(filename, chunk_length_s=2.0, return_timestamps="word")
-        self.assertEqual(
-            output,
-            {
-                "text": (
-                    "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajcri"
-                ),
-                "chunks": [
-                    {"text": "y", "timestamp": (0.52, 0.54)},
-                    {"text": "en", "timestamp": (0.6, 0.68)},
-                    {"text": "las", "timestamp": (0.74, 0.84)},
-                    {"text": "ramas", "timestamp": (0.94, 1.24)},
-                    {"text": "medio", "timestamp": (1.32, 1.52)},
-                    {"text": "sumergidas", "timestamp": (1.56, 2.22)},
-                    {"text": "revoloteaban", "timestamp": (2.36, 3.0)},
-                    {"text": "algunos", "timestamp": (3.06, 3.38)},
-                    {"text": "pájaros", "timestamp": (3.46, 3.86)},
-                    {"text": "de", "timestamp": (3.92, 4.0)},
-                    {"text": "quimérico", "timestamp": (4.08, 4.6)},
-                    {"text": "y", "timestamp": (4.66, 4.68)},
-                    {"text": "legendario", "timestamp": (4.74, 5.26)},
-                    {"text": "plumajcri", "timestamp": (5.34, 5.74)},
-                ],
-            },
-        )
-        # CTC + LM models cannot use return_timestamps="char"
-        with self.assertRaisesRegex(
-            ValueError, "^CTC with LM can only predict word level timestamps, set `return_timestamps='word'`$"
-        ):
-            _ = speech_recognizer(filename, return_timestamps="char")
 
     @require_torch
     @unittest.skip("TODO (joao, eustache): this test is failing, find the breaking PR and fix the cause or the test")
@@ -526,6 +506,52 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             ],
         )
         # fmt: on
+
+    @require_torch
+    def test_whisper_generation_parameters_passed_as_kwargs(self):
+        # Whisper's `generate()` takes `temperature` as an argument and ignores the one in a `generation_config`
+        speech_recognizer = pipeline(task="automatic-speech-recognition", model="openai/whisper-tiny")
+        model = speech_recognizer.model
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(waveform, generate_kwargs={"temperature": 0.8, "max_new_tokens": 2})
+        generate_kwargs = generate.call_args.kwargs
+        self.assertNotIn("generation_config", generate_kwargs)
+        self.assertEqual(generate_kwargs["temperature"], 0.8)
+
+    @require_torch
+    @require_librosa
+    def test_transducer_generation_parameters_passed_at_creation(self):
+        # Transducers get the generation parameters passed at creation, but not the pipeline's (seq2seq) defaults
+        tokenizer = AutoTokenizer.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/parakeet-tdt-0.6b-v3")
+        encoder = ParakeetEncoderConfig(
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=32,
+            subsampling_conv_channels=8,
+            num_mel_bins=feature_extractor.feature_size,
+        )
+        config = ParakeetTDTConfig(
+            vocab_size=len(tokenizer) + 1,
+            decoder_hidden_size=16,
+            encoder_config=encoder.to_dict(),
+            blank_token_id=len(tokenizer),
+        )
+        model = ParakeetForTDT(config)
+        model.generation_config.decoder_start_token_id = config.blank_token_id
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            max_new_tokens=3,
+        )
+        with patch.object(model, "generate", wraps=model.generate) as generate:
+            _ = speech_recognizer(np.zeros(16000, dtype=np.float32))
+        self.assertEqual(generate.call_args.kwargs["max_new_tokens"], 3)
+        self.assertNotIn("num_beams", generate.call_args.kwargs)
 
     @require_torch
     def test_return_timestamps_in_init(self):
@@ -1326,81 +1352,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    @require_pyctcdecode
-    def test_chunking_fast_with_lm(self):
-        speech_recognizer = pipeline(
-            model="hf-internal-testing/processor_with_lm",
-            chunk_length_s=10.0,
-        )
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]["array"]
-
-        n_repeats = 2
-        audio_tiled = np.tile(audio, n_repeats)
-        # Batch_size = 1
-        output1 = speech_recognizer([audio_tiled], batch_size=1)
-        self.assertEqual(output1, [{"text": ANY(str)}])
-        self.assertEqual(output1[0]["text"][:6], "<s> <s")
-
-        # batch_size = 2
-        output2 = speech_recognizer([audio_tiled], batch_size=2)
-        self.assertEqual(output2, [{"text": ANY(str)}])
-        self.assertEqual(output2[0]["text"][:6], "<s> <s")
-
-        # TODO There is an offby one error because of the ratio.
-        # Maybe logits get affected by the padding on this random
-        # model is more likely. Add some masking ?
-        # self.assertEqual(output1, output2)
-
-    @require_torch
-    @require_pyctcdecode
-    def test_with_lm_fast(self):
-        speech_recognizer = pipeline(
-            model="hf-internal-testing/processor_with_lm",
-        )
-        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]["array"]
-
-        n_repeats = 2
-        audio_tiled = np.tile(audio, n_repeats)
-
-        output = speech_recognizer([audio_tiled], batch_size=2)
-        self.assertEqual(output, [{"text": ANY(str)}])
-        self.assertEqual(output[0]["text"][:6], "<s> <s")
-
-        # Making sure the argument are passed to the decoder
-        # Since no change happens in the result, check the error comes from
-        # the `decode_beams` function.
-        with self.assertRaises(TypeError) as e:
-            output = speech_recognizer([audio_tiled], decoder_kwargs={"num_beams": 2})
-            self.assertContains(e.msg, "TypeError: decode_beams() got an unexpected keyword argument 'num_beams'")
-        output = speech_recognizer([audio_tiled], decoder_kwargs={"beam_width": 2})
-
-    @require_torch
-    @require_pyctcdecode
-    def test_with_local_lm_fast(self):
-        local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
-        speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model=local_dir,
-        )
-        self.assertEqual(speech_recognizer.type, "ctc_with_lm")
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]["array"]
-
-        n_repeats = 2
-        audio_tiled = np.tile(audio, n_repeats)
-
-        output = speech_recognizer([audio_tiled], batch_size=2)
-
-        self.assertEqual(output, [{"text": ANY(str)}])
-        self.assertEqual(output[0]["text"][:6], "<s> <s")
-
-    @require_torch
     @slow
     def test_whisper_prompted(self):
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
@@ -1607,24 +1558,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
         ):
             _ = speech_recognizer(audio, return_timestamps=True)
-
-    @require_torch
-    @slow
-    def test_chunking_with_lm(self):
-        speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model="patrickvonplaten/wav2vec2-base-100h-with-lm",
-            chunk_length_s=10.0,
-        )
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]["array"]
-
-        n_repeats = 10
-        audio = np.tile(audio, n_repeats)
-        output = speech_recognizer([audio], batch_size=2)
-        expected_text = "A MAN SAID TO THE UNIVERSE SIR I EXIST " * n_repeats
-        expected = [{"text": expected_text.strip()}]
-        self.assertEqual(output, expected)
 
     @require_torch
     def test_chunk_iterator(self):

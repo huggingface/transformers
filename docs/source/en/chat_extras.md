@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -140,6 +140,8 @@ You can also manually call the low-level functions that convert Python functions
 for chat template authors who need to access the JSON schema to render the tool definitions.
 
 The [`~PreTrainedTokenizerBase.apply_chat_template`] method uses the [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) function to convert Python callables to a JSON schema. This includes methods: `self` and `cls` are treated as implicit receiver arguments and are ignored.
+
+Type hints can be basic types like `int`, `float`, `str` and `bool`, `Literal` or `Enum` classes (which both become an `enum` of the allowed values), and `list`, `tuple`, `dict` and `Union` types containing those. Other classes, like dataclasses or Pydantic models, raise an error when they're used as an argument type, because there's no way to know what JSON they expect. If your tool needs one of those, write its JSON schema by hand and pass that instead. Return types are more relaxed, since the model never has to generate them: if the return type hint can't be converted, it's just left out of the schema.
 
 ```py
 from transformers.utils import get_json_schema

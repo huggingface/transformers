@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -27,7 +27,7 @@ Install the FBGEMM_GPU package with the command below to ensure you have the lat
 pip install --upgrade accelerate fbgemm-gpu torch
 ```
 
-If you're having installation issues, try installing the [nightly release](https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries:~:text=found%20here.-,Install%20the%20FBGEMM_GPU%20Package,-Install%20through%20PyTorch).
+If you're having installation issues, try installing the [nightly release](https://docs.pytorch.org/FBGEMM/fbgemm_gpu/development/InstallationInstructions.html#fbgemm-gpu-install-libraries).
 
 Create a [`FbgemmFp8Config`] and pass it to [`~PreTrainedModel.from_pretrained`] to quantize a model to fp8.
 
@@ -47,7 +47,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
 
 ```py
 quant_path = "/path/to/save/quantized/model"
-model.save_pretrained(quant_path)
+quantized_model.save_pretrained(quant_path)
 model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
 ```
 

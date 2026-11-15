@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was contributed to Hugging Face Transformers on 2026-01-13.*
@@ -22,7 +22,7 @@ limitations under the License.
 
 ## Overview
 
-GLM-Image is an image generation model adopts a hybrid autoregressive + diffusion decoder architecture, effectively pushing the upper bound of visual fidelity and fine-grained details. In general image generation quality, it aligns with industry-standard LDM-based approaches, while demonstrating significant advantages in knowledge-intensive image generation scenarios.
+GLM-Image is an image generation model that adopts a hybrid autoregressive + diffusion decoder architecture, effectively pushing the upper bound of visual fidelity and fine-grained details. In general image generation quality, it aligns with industry-standard LDM-based approaches, while demonstrating significant advantages in knowledge-intensive image generation scenarios.
 
 Model architecture: a hybrid autoregressive + diffusion decoder design、
 
@@ -49,12 +49,14 @@ Using GLM-Image with image input to generate vision token for DIT using.
 
 ```python
 
+import torch
+
 from transformers import AutoProcessor, GlmImageForConditionalGeneration
 
 
 model = GlmImageForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
-    device_map="cuda:0"
+    device_map=torch.accelerator.current_accelerator()
 )
 processor = AutoProcessor.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/processor",

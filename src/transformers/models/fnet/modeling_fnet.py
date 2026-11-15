@@ -95,13 +95,9 @@ class FNetEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.token_type_ids = nn.Buffer(torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -149,11 +145,9 @@ class FNetBasicFourierTransform(nn.Module):
             self.fourier_transform = partial(torch.fft.fftn, dim=(1, 2))
         elif config.max_position_embeddings <= 4096:
             if is_scipy_available():
-                self.register_buffer(
-                    "dft_mat_hidden", torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64)
-                )
-                self.register_buffer(
-                    "dft_mat_seq", torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64)
+                self.dft_mat_hidden = nn.Buffer(torch.tensor(linalg.dft(config.hidden_size), dtype=torch.complex64))
+                self.dft_mat_seq = nn.Buffer(
+                    torch.tensor(linalg.dft(config.tpu_short_seq_length), dtype=torch.complex64)
                 )
                 self.fourier_transform = partial(
                     two_dim_matmul, matrix_dim_one=self.dft_mat_seq, matrix_dim_two=self.dft_mat_hidden
@@ -387,20 +381,20 @@ class FNetPreTrainedModel(PreTrainedModel):
 @dataclass
 class FNetForPreTrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         Total loss as the sum of the masked language modeling loss and the next sequence prediction
         (classification) loss.
-    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    prediction_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+    seq_relationship_logits (`torch.Tensor` of shape `(batch_size, 2)`):
         Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
         before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    prediction_logits: torch.FloatTensor | None = None
-    seq_relationship_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    prediction_logits: torch.Tensor | None = None
+    seq_relationship_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -412,7 +406,7 @@ class FNetModel(FNetPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: FNetConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -440,7 +434,7 @@ class FNetModel(FNetPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
@@ -518,7 +512,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
         "cls.predictions.decoder.weight": "fnet.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -612,7 +606,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
         "cls.predictions.decoder.weight": "fnet.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -640,12 +634,6 @@ class FNetForMaskedLM(FNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.fnet(
@@ -678,7 +666,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
     """
 )
 class FNetForNextSentencePrediction(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -761,7 +749,7 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
     """
 )
 class FNetForSequenceClassification(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.fnet = FNetModel(config)
@@ -784,12 +772,6 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.fnet(
@@ -836,7 +818,7 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForMultipleChoice(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -879,14 +861,10 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -929,7 +907,7 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForTokenClassification(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -953,10 +931,6 @@ class FNetForTokenClassification(FNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.fnet(
@@ -988,7 +962,7 @@ class FNetForTokenClassification(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForQuestionAnswering(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

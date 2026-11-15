@@ -19,7 +19,7 @@ Aplică `@capture_outputs` pe metoda `forward()` a modelului de bază. Atașeaz�
 
 ## Mapează câmpurile de ieșire la submodule
 
-`@capture_outputs` trebuie să știe ce submodul produce ce ieșire. Declară un dicționar `_can_record_outputs` la nivel de clasă pe subclasa ta `PreTrainedModel`. Fiecare cheie este un nume de câmp de ieșire (`"hidden_states"`, `"attentions"`, `"cross_attentions"`), iar fiecare valoare este o clasă de modul sau o instanță `OutputRecorder`.
+`@capture_outputs` trebuie să știe ce submodul produce ce ieșire. Declară un dicționar `_can_record_outputs` la nivel de clasă pe subclasa ta `PreTrainedModel`. Fiecare cheie este un nume de câmp de ieșire (`"hidden_states"`, `"attentions"`, `"cross_attentions"`), iar fiecare valoare este o clasă de modul, un șir cu numele clasei, o instanță `OutputRecorder` sau o listă cu acestea pentru a înregistra mai multe tipuri de module sub aceeași cheie.
 
 ## Control detaliat cu OutputRecorder
 
@@ -59,7 +59,7 @@ class MyModel(MyPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache = None,
+        cache: Cache = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
 
@@ -72,7 +72,7 @@ class MyModel(MyPreTrainedModel):
         # hidden_states/attentions/cross_attentions.
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values
+            cache=cache
         )
 ```
 

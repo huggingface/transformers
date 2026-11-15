@@ -264,14 +264,14 @@ NLP कार्यों के लिए [`pipeline`] का उपयोग �
 
 [`pipeline`] एक से अधिक तौर-तरीकों का समर्थन करती है। उदाहरण के लिए, एक दृश्य प्रश्न उत्तर (VQA) कार्य पाठ और छवि को जोड़ता है। अपनी पसंद के किसी भी छवि लिंक और छवि के बारे में कोई प्रश्न पूछने के लिए स्वतंत्र महसूस करें। छवि एक URL या छवि का स्थानीय पथ हो सकती है।
 
-उदाहरण के लिए, यदि आप इस [invoice image](https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png) का उपयोग करते हैं:
+उदाहरण के लिए, यदि आप इस [invoice image](https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png) का उपयोग करते हैं:
 
 ```py
 >>> from transformers import pipeline
 
 >>> vqa = pipeline(model="impira/layoutlm-document-qa")
 >>> output = vqa(
-...     image="https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png",
+...     image="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png",
 ...     question="What is the invoice number?",
 ... )
 >>> output[0]["score"] = round(output[0]["score"], 3)

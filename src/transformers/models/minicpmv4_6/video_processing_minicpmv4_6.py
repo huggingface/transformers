@@ -27,8 +27,8 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, validate_kwargs
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torch_available, logging
-from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
     VideoMetadata,
@@ -80,10 +80,7 @@ class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
     use_image_id: bool
 
 
-@add_start_docstrings(
-    "Constructs a MiniCPM-V 4.6 video processor.",
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-)
+@auto_docstring
 class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     do_resize = True
@@ -124,8 +121,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             stack_frames (`int`, *optional*):
                 Sub-frames per second to stack. Value of `1` disables stacking.
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            list[int]: Indices to sample video frames.
         """
         if metadata is None or metadata.duration is None or metadata.fps is None:
             raise ValueError(
@@ -221,15 +217,17 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
         height, width = video_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
-        # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
-        best_height = ensure_divide(height, patch_size * 4)
-        best_width = ensure_divide(width, patch_size * 4)
+        # "4x" merges one 2×2 block, "16x" merges twice (ViT insert merger + downsample MLP)
+        merge_factor = 2 if downsample_mode == "4x" else 4
+        best_height = ensure_divide(height, patch_size * merge_factor)
+        best_width = ensure_divide(width, patch_size * merge_factor)
         return best_height, best_width
 
     def get_refine_size(
@@ -239,6 +237,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
         height, width = video_size
         grid_y, grid_x = grid
@@ -249,6 +248,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             video_size=(refine_height / grid_y, refine_width / grid_x),
             scale_resolution=scale_resolution,
             patch_size=patch_size,
+            downsample_mode=downsample_mode,
             allow_upscale=allow_upscale,
         )
         return best_height * grid_y, best_width * grid_x
@@ -274,10 +274,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             for num_rows in range(1, num_slices + 1):
                 if num_slices % num_rows == 0:
                     num_cols = num_slices // num_rows
-                    error = abs(log_ratio - math.log(num_rows / num_cols))
+                    error = abs(log_ratio - math.log(num_cols / num_rows))
                     if error < min_error:
-                        best_grid = [num_cols, num_rows]
+                        best_grid = [num_rows, num_cols]
                         min_error = error
+                    elif error == min_error and num_rows > best_grid[0]:
+                        best_grid = [num_rows, num_cols]
         return best_grid
 
     def reshape_by_patch(self, videos: "torch.Tensor", patch_size: int) -> "torch.Tensor":
@@ -294,9 +296,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
         return patches
 
-    @add_start_docstrings(
-        BASE_VIDEO_PROCESSOR_DOCSTRING,
-    )
+    @auto_docstring
     def preprocess(
         self,
         videos: VideoInput,
@@ -354,6 +354,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         max_slice_nums: int,
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str = "16x",
     ):
         num_frames = video.shape[1]
         video_size = video.shape[-2:]
@@ -364,7 +365,11 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
         # Always resize the source
         new_height, new_width = self.find_best_resize(
-            video_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+            video_size,
+            scale_resolution,
+            patch_size,
+            downsample_mode=downsample_mode,
+            allow_upscale=(best_grid is None),
         )
         source_videos = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
 
@@ -372,7 +377,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         patches = [source_videos]
         if best_grid is not None:
             refine_height, refine_width = self.get_refine_size(
-                video_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                video_size,
+                best_grid,
+                scale_resolution,
+                patch_size,
+                downsample_mode=downsample_mode,
+                allow_upscale=True,
             )
             grid_y, grid_x = best_grid
             patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
@@ -407,7 +417,6 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool,
         do_resize: bool,
         resample,
         do_rescale: bool,
@@ -422,7 +431,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         stack_frames: int,
         max_num_frames: int,
         video_metadata: list[VideoMetadata],
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None,
+        downsample_mode: str = "16x",
         **kwargs,
     ) -> BatchFeature:
         # Stage 1 — Build an ordered list of visual units.
@@ -432,8 +442,6 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         visual_units: list[torch.Tensor] = []
         num_frames_per_video: list[int] = []
         for video, metadata in zip(videos, video_metadata):
-            if do_convert_rgb:
-                video = self.convert_to_rgb(video)
             units_before = len(visual_units)
             if stack_frames > 1:
                 duration = metadata.duration
@@ -482,7 +490,11 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             num_frames_per_video.append(len(visual_units) - units_before)
 
         # Stage 2 — Resize, split, normalise and reshape each unit independently.
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        # Consume `visual_units` (not `videos`): with `stack_frames > 1` the sampled frames
+        # have already been combined into per-second composite canvases, and those canvases
+        # differ in height from main frames. `group_videos_by_shape` keys on
+        # `(num_frames, height, width)`, so both kinds are grouped and resized separately.
+        grouped_videos, grouped_videos_index = group_videos_by_shape(visual_units)
         resized_videos_grouped = {}
         videos_grids = {}
         processed_num_patches_per_frame = {}
@@ -496,6 +508,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                     max_slice_nums=max_slice_nums,
                     scale_resolution=scale_resolution,
                     patch_size=patch_size,
+                    downsample_mode=downsample_mode,
                 )
             else:
                 stacked_videos = [[video] for video in stacked_videos]

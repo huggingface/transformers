@@ -24,7 +24,13 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...audio_utils import conv1d_output_length
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring
+from ...processing_utils import Unpack
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+)
 from ..auto import AutoModel
 from .configuration_xcodec import XcodecConfig
 
@@ -35,12 +41,12 @@ class XcodecOutput(ModelOutput):
     Args:
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
             Discrete code indices computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`, *optional*)
+        audio_values (`torch.Tensor` of shape `(batch_size, channels, num_samples)`, *optional*)
             Decoded audio values obtained using the decoder part of Xcodec.
     """
 
     audio_codes: torch.LongTensor | None = None
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 @dataclass
@@ -58,11 +64,11 @@ class XcodecEncoderOutput(ModelOutput):
 class XcodecDecoderOutput(ModelOutput):
     """
     Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
+        audio_values (`torch.Tensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
             Decoded audio values obtained using the decoder part of Xcodec.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class XcodecResidualUnit(nn.Module):
@@ -219,10 +225,10 @@ class XcodecEuclideanCodebook(nn.Module):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
-        self.register_buffer("inited", torch.Tensor([True]))
-        self.register_buffer("cluster_size", torch.zeros(config.codebook_size))
-        self.register_buffer("embed", embed)
-        self.register_buffer("embed_avg", embed.clone())
+        self.inited = nn.Buffer(torch.Tensor([True]))
+        self.cluster_size = nn.Buffer(torch.zeros(config.codebook_size))
+        self.embed = nn.Buffer(embed)
+        self.embed_avg = nn.Buffer(embed.clone())
 
     # Copied from transformers.models.encodec.modeling_encodec.EncodecEuclideanCodebook.quantize
     def quantize(self, hidden_states):
@@ -293,7 +299,7 @@ class XcodecResidualVectorQuantization(nn.Module):
     def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
         """
         Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
-        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
+        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidean distance.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
         residual = embeddings
@@ -308,7 +314,7 @@ class XcodecResidualVectorQuantization(nn.Module):
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to their quantized representation."""
-        quantized_out = torch.tensor(0.0, device=codes.device)
+        quantized_out = torch.full((), 0.0, device=codes.device)
         for i, indices in enumerate(codes):
             quantizer = self.quantizers[i]
             quantized = quantizer.decode(indices)
@@ -323,7 +329,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     models.
     """
 
-    config_class = XcodecConfig
+    config: XcodecConfig
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
     input_modalities = "audio"
@@ -437,7 +443,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
 
 @auto_docstring(custom_intro="""The Xcodec neural audio codec model.""")
 class XcodecModel(XcodecPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XcodecConfig):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2
@@ -470,7 +476,7 @@ class XcodecModel(XcodecPreTrainedModel):
         if hasattr(decoder, "tanh") and isinstance(decoder.tanh, nn.Tanh):
             decoder.tanh = nn.Identity()
 
-    def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
+    def _extract_semantic_features(self, input_values: torch.Tensor) -> torch.Tensor:
         input_values = input_values[:, 0, :]
         input_values = F.pad(input_values, (self.pad, self.pad))
         with torch.no_grad():
@@ -488,7 +494,7 @@ class XcodecModel(XcodecPreTrainedModel):
         return_dict: bool | None = None,
     ) -> torch.Tensor | XcodecEncoderOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, num_samples)`):
             Float values of the input audio waveform.
         bandwidth (`float`, *optional*):
             The target bandwidth in (kbps) supports only values in `config.target_bandwidths`.
@@ -561,15 +567,16 @@ class XcodecModel(XcodecPreTrainedModel):
         return XcodecDecoderOutput(audio_values)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         input_values: torch.Tensor,
         audio_codes: torch.Tensor | None = None,
         bandwidth: float | None = None,
-        return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor] | XcodecOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, num_samples)`):
             The raw float values of the input audio waveform.
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
             Discrete code indices computed using `model.encode`.
@@ -577,8 +584,6 @@ class XcodecModel(XcodecPreTrainedModel):
             Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
         bandwidth (`float`, *optional*):
             Target bandwidth in kbps. Must be one of `config.target_bandwidths`. Defaults to the highest available bandwidth.
-        return_dict (`bool`, *optional*):
-            Whether to return a [`XcodecOutput`] instead of a plain tuple.
 
         Returns:
             `XcodecOutput` or tuple `(audio_codes, audio_values)`:
@@ -606,16 +611,12 @@ class XcodecModel(XcodecPreTrainedModel):
         >>> audio_values = outputs.audio_values
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         length = input_values.shape[-1]
 
         if audio_codes is None:
             audio_codes = self.encode(input_values, bandwidth, return_dict=False)
 
-        audio_values = self.decode(audio_codes, return_dict=return_dict)[0][..., :length]
-
-        if not return_dict:
-            return (audio_codes, audio_values)
+        audio_values = self.decode(audio_codes, return_dict=True)[0][..., :length]
 
         return XcodecOutput(audio_codes=audio_codes, audio_values=audio_values)
 

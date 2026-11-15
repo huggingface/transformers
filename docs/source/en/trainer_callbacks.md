@@ -84,7 +84,7 @@ trainer = Trainer(
 
 ## Built-in callbacks
 
-Transformers includes several built-in callbacks that are active by default. Additional [integrated callbacks](./main_classes/callback#available-callbacks) log to platforms like [Trackio](https://huggingface.co/docs/trackio/en/index).
+Transformers includes several built-in callbacks that are active by default. Additional [integrated callbacks](./main_classes/callback) log to platforms like [Trackio](https://huggingface.co/docs/trackio/en/index).
 
 ### DefaultFlowCallback
 
@@ -94,7 +94,7 @@ Overriding this callback is the main way to customize *when* logging, evaluation
 
 ### ProgressCallback and PrinterCallback
 
-[`Trainer`] automatically picks between these two callbacks based on the [disable_tqdm](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.TrainingArguments.disable_tqdm) field in [`TrainingArguments`].
+[`Trainer`] automatically picks between these two callbacks based on the [`~TrainingArguments#disable_tqdm`] field in [`TrainingArguments`].
 
 - [`ProgressCallback`] is used by default. It displays a tqdm progress bar during training and a separate bar during evaluation or prediction, and prints the latest metrics on each `on_log` event. During distributed training, it only runs on the main process to avoid duplicate output.
 - [`PrinterCallback`] is used when `disable_tqdm=True`. It prints the log dictionary to stdout on every `on_log` event with no progress bar.
@@ -129,5 +129,5 @@ trainer = Trainer(
 
 ## Next steps
 
-- See all available [integrated callbacks](./main_classes/callback#available-callbacks) for logging to experiment trackers.
+- See all available [integrated callbacks](./main_classes/callback) for logging to experiment trackers.
 - The [Subclassing Trainer methods](./trainer_customize) guide covers overriding [`Trainer`] methods when you need to change what the training loop computes.

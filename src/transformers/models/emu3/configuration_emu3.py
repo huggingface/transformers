@@ -94,7 +94,7 @@ class Emu3TextConfig(PreTrainedConfig):
 
     model_type = "emu3_text_model"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     vocab_size: int = 184622
@@ -127,8 +127,11 @@ class Emu3Config(PreTrainedConfig):
     """
 
     model_type = "emu3"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"text_config": Emu3TextConfig, "vq_config": Emu3VQVAEConfig}
+    keys_to_ignore_at_inference = ["cache"]
+    sub_configs_defaults = {
+        "vq_config": Emu3VQVAEConfig,
+        "text_config": Emu3TextConfig,
+    }
 
     vq_config: dict | Emu3VQVAEConfig | None = None
     text_config: dict | Emu3TextConfig | None = None
@@ -136,16 +139,6 @@ class Emu3Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.vq_config is None:
-            self.vq_config = Emu3VQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = Emu3VQVAEConfig(**self.vq_config)
-
-        if self.text_config is None:
-            self.text_config = Emu3TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Emu3TextConfig(**self.text_config)
-
         self.image_token_id = self.vocabulary_map.get("<image>") if self.vocabulary_map is not None else None
         super().__post_init__(**kwargs)
 

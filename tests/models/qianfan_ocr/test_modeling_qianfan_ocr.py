@@ -20,10 +20,8 @@ import pytest
 from transformers import (
     AutoProcessor,
     QianfanOCRConfig,
-    QianfanOCRVisionConfig,
     is_torch_available,
 )
-from transformers.models.qwen3 import Qwen3Config
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -33,7 +31,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -47,8 +44,7 @@ if is_torch_available():
 class QianfanOCRVisionText2TextModelTester(VLMModelTester):
     base_model_class = QianfanOCRModel
     config_class = QianfanOCRConfig
-    text_config_class = Qwen3Config
-    vision_config_class = QianfanOCRVisionConfig
+
     conditional_generation_class = QianfanOCRForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -70,7 +66,7 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("vision_hidden_act", "quick_gelu")
         kwargs.setdefault("drop_path_rate", 0.0)
         kwargs.setdefault("use_absolute_position_embeddings", True)
-        kwargs.setdefault("image_seq_length", 16)
+        kwargs.setdefault("num_image_tokens", 16)
         kwargs.setdefault("bos_token_id", 3)
         kwargs.setdefault("eos_token_id", 4)
         kwargs.setdefault("pad_token_id", 5)
@@ -79,47 +75,10 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("rope_theta", 10000)
         super().__init__(parent, **kwargs)
 
-        # image_seq_length overrides the VLMModelTester default num_image_tokens-based seq_length
-        self.seq_length = 7 + self.image_seq_length
-
-    def get_vision_config(self):
-        return self.vision_config_class(
-            hidden_size=self.vision_hidden_size,
-            intermediate_size=self.vision_intermediate_size,
-            num_hidden_layers=self.vision_num_hidden_layers,
-            num_attention_heads=self.vision_num_attention_heads,
-            hidden_act=self.vision_hidden_act,
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            num_channels=self.num_channels,
-            use_absolute_position_embeddings=self.use_absolute_position_embeddings,
-            drop_path_rate=self.drop_path_rate,
-        )
-
-    def get_config(self):
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            image_seq_length=self.image_seq_length,
-            vision_feature_layer=self.vision_feature_layer,
-            pad_token_id=self.pad_token_id,
-        )
-
-    def create_pixel_values(self):
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-
-    def place_image_tokens(self, input_ids, config):
-        input_ids = input_ids.clone()
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, : self.image_seq_length] = self.image_token_id
-        return input_ids
-
 
 @require_torch
 class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = QianfanOCRVisionText2TextModelTester
-    test_torch_exportable = False
 
     def test_reverse_loading_mapping(self):
         # Conversion happens only for the `ConditionalGeneration` model, not the base model
@@ -141,10 +100,6 @@ class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    @unittest.skip("DataParallel is a deprecated legacy API and not officially supported")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @slow
 @require_torch_accelerator
@@ -155,7 +110,9 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
         self.model_checkpoint = "bairongz/QianfanOCR"
-        self.image_url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -189,7 +146,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", (8, 6)): torch.tensor([10.1250, 15.8125, 13.0625, 12.3125,  9.4375]),
+                ("cuda", (8, 6)): torch.tensor([10.1875, 15.8125, 13.1875, 12.375, 9.625]),
                 ("cuda", (8, 9)): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
                 ("xpu", None): torch.tensor([10.1875, 15.8750, 13.1875, 12.3750,  9.6250]),
             }
@@ -224,7 +181,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. They",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }
@@ -303,7 +260,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. The",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }

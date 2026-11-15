@@ -15,9 +15,10 @@
 Handler for the /v1/audio/transcriptions endpoint.
 """
 
-import io
+import base64
 from typing import TYPE_CHECKING
 
+from ...audio_utils import load_audio
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
@@ -92,10 +93,8 @@ class TranscriptionHandler:
         Returns:
             `JSONResponse | StreamingResponse`: Transcription result or SSE stream.
         """
-        from transformers.utils.import_utils import is_librosa_available, is_multipart_available
+        from transformers.utils.import_utils import is_multipart_available
 
-        if not is_librosa_available():
-            raise ImportError("Missing librosa dependency for audio transcription. Install with `pip install librosa`")
         if not is_multipart_available():
             raise ImportError(
                 "Missing python-multipart dependency for file uploads. Install with `pip install python-multipart`"
@@ -129,10 +128,8 @@ class TranscriptionHandler:
         file_bytes: bytes, audio_processor: "ProcessorMixin", audio_model: "PreTrainedModel"
     ) -> dict:
         """Load audio bytes and convert to model inputs."""
-        import librosa
-
         sampling_rate = audio_processor.feature_extractor.sampling_rate
-        audio_array, _ = librosa.load(io.BytesIO(file_bytes), sr=sampling_rate, mono=True)
+        audio_array = load_audio(base64.b64encode(file_bytes).decode("ascii"), sampling_rate=sampling_rate)
         audio_inputs = audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt").to(
             audio_model.device
         )
@@ -169,7 +166,7 @@ class TranscriptionHandler:
         tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)
+        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue)
         gen_kwargs = {**audio_inputs, "streamer": streamer}
 
         def _run():

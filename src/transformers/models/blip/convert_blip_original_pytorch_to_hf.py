@@ -16,8 +16,8 @@ import argparse
 import re
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub.utils import httpx
 
 # git clone https://github.com/salesforce/BLIP.git
 from models.blip import blip_decoder

@@ -15,6 +15,7 @@
 import inspect
 import json
 import os
+import sys
 import tempfile
 import warnings
 from copy import deepcopy
@@ -23,6 +24,7 @@ import numpy as np
 import pytest
 
 from transformers import AutoVideoProcessor
+from transformers.processing_utils import VideosKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -54,7 +56,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors=
         video = [Image.fromarray(frame) for frame in video]
     elif return_tensors == "torch":
         # Torch images are typically in channels first format
-        video = torch.tensor(video).permute(0, 3, 1, 2)
+        video = torch.from_numpy(np.array(video)).permute(0, 3, 1, 2)
     elif return_tensors == "np":
         # Numpy images are typically in channels last format
         video = np.array(video)
@@ -254,6 +256,14 @@ class VideoProcessingTestMixin:
                 self.assertEqual(encoding[self.input_name].dtype, torch.float16)
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
+    def assert_expected_videos_shape(self, encoded_videos, expected_output_video_shape, num_videos):
+        """Asserts that a batch of `num_videos` videos was encoded to the expected shape.
+
+        Videos are stacked on a leading `num_videos` axis by default. Models that instead concatenate the
+        frames of every video along a single axis override this.
+        """
+        self.assertEqual(tuple(encoded_videos.shape), (num_videos, *expected_output_video_shape))
+
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
             # Initialize video_processing
@@ -267,13 +277,13 @@ class VideoProcessingTestMixin:
             # Test not batched input
             encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+            self.assert_expected_videos_shape(encoded_videos, expected_output_video_shape, 1)
 
             # Test batched
             encoded_videos = video_processing(video_inputs, return_tensors="pt")[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(
-                tuple(encoded_videos.shape), (self.video_processor_tester.batch_size, *expected_output_video_shape)
+            self.assert_expected_videos_shape(
+                encoded_videos, expected_output_video_shape, self.video_processor_tester.batch_size
             )
 
     def test_call_numpy(self):
@@ -290,13 +300,13 @@ class VideoProcessingTestMixin:
             # Test not batched input
             encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+            self.assert_expected_videos_shape(encoded_videos, expected_output_video_shape, 1)
 
             # Test batched
             encoded_videos = video_processing(video_inputs, return_tensors="pt")[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
-            self.assertEqual(
-                tuple(encoded_videos.shape), (self.video_processor_tester.batch_size, *expected_output_video_shape)
+            self.assert_expected_videos_shape(
+                encoded_videos, expected_output_video_shape, self.video_processor_tester.batch_size
             )
 
     def test_call_pytorch(self):
@@ -314,14 +324,13 @@ class VideoProcessingTestMixin:
             # Test not batched input
             encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+            self.assert_expected_videos_shape(encoded_videos, expected_output_video_shape, 1)
 
             # Test batched
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             encoded_videos = video_processing(video_inputs, return_tensors="pt")[self.input_name]
-            self.assertEqual(
-                tuple(encoded_videos.shape),
-                (self.video_processor_tester.batch_size, *expected_output_video_shape),
+            self.assert_expected_videos_shape(
+                encoded_videos, expected_output_video_shape, self.video_processor_tester.batch_size
             )
 
     def test_call_sample_frames(self):
@@ -396,14 +405,13 @@ class VideoProcessingTestMixin:
             video_inputs = [list(video) for video in video_inputs]
             encoded_videos = video_processing(video_inputs[0], return_tensors="pt")[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
-            self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+            self.assert_expected_videos_shape(encoded_videos, expected_output_video_shape, 1)
 
             # Test batched
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             encoded_videos = video_processing(video_inputs, return_tensors="pt")[self.input_name]
-            self.assertEqual(
-                tuple(encoded_videos.shape),
-                (self.video_processor_tester.batch_size, *expected_output_video_shape),
+            self.assert_expected_videos_shape(
+                encoded_videos, expected_output_video_shape, self.video_processor_tester.batch_size
             )
 
     def test_call_numpy_4_channels(self):
@@ -521,3 +529,15 @@ class VideoProcessingTestMixin:
         # check that the modified attributes of the first instance are not affected by the second instance
         self.assertEqual(video_processor_1.size, modified_copied_size_1)
         self.assertEqual(video_processor_1.image_mean, modified_copied_image_mean_1)
+
+    def test_valid_kwargs_set(self):
+        """Check that valid_kwargs is set to the correct class."""
+        for video_processing_class in self.video_processor_list:
+            processor = video_processing_class(**self.video_processor_dict)
+            processor_module = sys.modules[processor.__class__.__module__]
+            # Kwargs are either called <Model>VideoProcessorInitKwargs or <Model>VideoProcessorKwargs
+            expected_kwargs_class = vars(processor_module).get(
+                f"{processor.__class__.__name__}InitKwargs",
+                vars(processor_module).get(f"{processor.__class__.__name__}Kwargs", VideosKwargs),
+            )
+            self.assertIs(processor.valid_kwargs, expected_kwargs_class)

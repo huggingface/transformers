@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # XLM-RoBERTa-XL
 
-[XLM-RoBERTa-XL](https://huggingface.co/papers/2105.00572) is a 3.5B parameter multilingual masked language model pretrained on 100 languages. It shows that by scaling model capacity, multilingual models demonstrates strong performance on high-resource languages and can even zero-shot low-resource languages.
+[XLM-RoBERTa-XL](https://huggingface.co/papers/2105.00572) is a 3.5B parameter multilingual masked language model pretrained on 100 languages. It shows that by scaling model capacity, multilingual models demonstrate strong performance on high-resource languages and can even zero-shot low-resource languages.
 
 You can find all the original XLM-RoBERTa-XL checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=xlm) organization.
 

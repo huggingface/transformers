@@ -41,7 +41,7 @@ class OlmoeConfig(PreTrainedConfig):
     """
 
     model_type = "olmoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_local_experts": "num_experts"}
 
     # Default tensor parallel plan for base model `Olmoe`
@@ -53,6 +53,11 @@ class OlmoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 50304

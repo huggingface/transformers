@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import tempfile
 import unittest
 
@@ -23,10 +24,11 @@ from transformers.testing_utils import (
     require_flash_linear_attention,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
+from transformers.utils import is_flash_linear_attention_available
 
 
 if is_torch_available():
@@ -36,6 +38,10 @@ if is_torch_available():
         DynamicCache,
         Qwen3NextForCausalLM,
         Qwen3NextModel,
+    )
+    from transformers.models.qwen3_next.modeling_qwen3_next import (
+        torch_chunk_gated_delta_rule,
+        torch_recurrent_gated_delta_rule,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -64,6 +70,22 @@ class Qwen3NextModelTester(CausalLMModelTester):
         self.linear_num_key_heads = 4
         self.linear_num_value_heads = 8
 
+    def get_gated_delta_rule_inputs(
+        self, batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=False
+    ):
+        query = torch.randn(
+            batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=requires_grad
+        )
+        key = torch.randn(
+            batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=requires_grad
+        )
+        value = torch.randn(
+            batch_size, seq_length, num_v_heads, v_head_dim, device=torch_device, requires_grad=requires_grad
+        )
+        g = -torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)  # log-decays, must be <= 0
+        beta = torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)
+        return query, key, value, g, beta
+
 
 @require_torch
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
@@ -84,10 +106,6 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         head_v_dim = config.linear_value_head_dim
 
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
-
-    @unittest.skip("Qwen3-Next hybrid linear-attention cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
-        pass
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."
@@ -161,8 +179,8 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         # Reference: prefill, then forward the next token alone with the populated cache.
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         # Under test: prefill, then forward [next_token, *distractors] in one call. The first
@@ -171,8 +189,8 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         multi_input = torch.cat([next_token, distractors], dim=1)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
@@ -249,15 +267,11 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
             enable_kernels,
         )
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_can_use_device_map(self):
         """
-        Test that this model can be dispatched on multiple gpus. It's not obvious as the Cache is not standard,
-        ant each layer need to use the correct device on which it reside (i.e. it needs to be lazy initialized).
+        Test that this model can be dispatched on multiple accelerators. It's not obvious as the Cache is not standard,
+        and each layer need to use the correct device on which it reside (i.e. it needs to be lazy initialized).
         """
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -287,6 +301,77 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 # This should not crash
                 _ = model.generate(**inputs_dict, max_new_tokens=5, min_new_tokens=5)
+
+    # seq_length 3 fits in one padded chunk, 12 spans exactly 3 chunks, 13 spans 4 chunks with padding
+    @parameterized.expand(itertools.product([3, 12, 13], [False, True]))
+    def test_gdn_chunked_matches_recurrent(self, seq_length: int, with_initial_state: bool):
+        """Ensures that the GDN implementation matches the recurrent one. This does not test if the GDN implementation
+        is still correct, for this check PR #47625 or https://gist.github.com/remi-or/40397649f763f2dd38f8f7e453f08cb3
+        """
+        torch.manual_seed(0)
+        batch_size, num_heads, k_head_dim, v_head_dim = 2, 3, 8, 16
+        query, key, value, g, beta = self.model_tester.get_gated_delta_rule_inputs(
+            batch_size, seq_length, num_heads, num_heads, k_head_dim, v_head_dim
+        )
+        initial_state = None
+        if with_initial_state:
+            initial_state = torch.randn(batch_size, num_heads, k_head_dim, v_head_dim, device=torch_device)
+
+        # `g` and `beta` by keyword: FLA's fused recurrent kernel takes `gk` and `gv` between them
+        chunk_out, chunk_state = torch_chunk_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g,
+            beta=beta,
+            chunk_size=4,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        recurrent_out, recurrent_state = torch_recurrent_gated_delta_rule(
+            query,
+            key,
+            value,
+            g=g,
+            beta=beta,
+            initial_state=initial_state,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+        )
+        # FLA's chunked kernel runs its dot products in TF32 (largest gap measured on a B200: 1.5e-3), the torch path in fp32
+        atol, rtol = (5e-3, 5e-3) if is_flash_linear_attention_available() else (1e-5, 1e-4)
+        torch.testing.assert_close(chunk_out, recurrent_out, rtol=rtol, atol=atol)
+        torch.testing.assert_close(chunk_state, recurrent_state, rtol=rtol, atol=atol)
+
+    @parameterized.expand([("chunked", True), ("recurrent", False)])
+    def test_gdn_grouped_value_heads_match_repeated_query_key(self, name: str, chunked: bool):
+        """Passing fewer query/key heads than value heads (grouped value attention, as in Qwen3.5 checkpoints) must
+        match repeating each query/key head over its group of value heads, for the torch path and FLA kernels alike."""
+        torch.manual_seed(0)
+        batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim = 2, 13, 2, 6, 8, 16
+        group_size = num_v_heads // num_k_heads
+        query, key, value, g, beta = self.model_tester.get_gated_delta_rule_inputs(
+            batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=True
+        )
+        gated_delta_rule = torch_chunk_gated_delta_rule if chunked else torch_recurrent_gated_delta_rule
+        # By keyword: FLA's fused recurrent kernel takes `gk` and `gv` between `g` and `beta`
+        kwargs = {"g": g, "beta": beta, "output_final_state": True, "use_qk_l2norm_in_kernel": True}
+
+        grouped_out, grouped_state = gated_delta_rule(query, key, value, **kwargs)
+        repeated_out, repeated_state = gated_delta_rule(
+            query.repeat_interleave(group_size, dim=2), key.repeat_interleave(group_size, dim=2), value, **kwargs
+        )
+        torch.testing.assert_close(grouped_out, repeated_out, rtol=1e-4, atol=1e-5)
+        torch.testing.assert_close(grouped_state, repeated_state, rtol=1e-4, atol=1e-5)
+
+        # FLA's fused recurrent kernel is forward-only; training goes through the chunked kernel
+        if chunked:
+            grad_out = torch.randn_like(grouped_out)
+            grouped_grads = torch.autograd.grad(grouped_out, (query, key, value), grad_out)
+            repeated_grads = torch.autograd.grad(repeated_out, (query, key, value), grad_out)
+            for grouped_grad, repeated_grad in zip(grouped_grads, repeated_grads):
+                torch.testing.assert_close(grouped_grad, repeated_grad, rtol=1e-4, atol=1e-5)
 
 
 @slow

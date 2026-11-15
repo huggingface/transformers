@@ -18,14 +18,15 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask
+from ...integrations import use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
-from ..bamba.modeling_bamba import apply_mask_to_padding_states
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -36,17 +37,8 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from .configuration_lfm2 import Lfm2Config
-
-
-if is_causal_conv1d_available():
-    from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
-else:
-    causal_conv1d_fn, causal_conv1d_update = None, None
-
-
-kernel_modules = (causal_conv1d_fn, causal_conv1d_update)
-is_fast_path_available = all(kernel_modules)
 
 
 logger = logging.get_logger(__name__)
@@ -92,12 +84,13 @@ class Lfm2Attention(LlamaAttention):
         del self.o_proj
         del self.attention_dropout
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -110,8 +103,8 @@ class Lfm2Attention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -132,6 +125,7 @@ class Lfm2Attention(LlamaAttention):
         return output, attn_weights
 
 
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
 class Lfm2ShortConv(nn.Module):
     def __init__(
         self,
@@ -141,119 +135,70 @@ class Lfm2ShortConv(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.L_cache = config.conv_L_cache
+        self.conv_kernel_size = config.conv_L_cache
         self.bias = config.conv_bias
 
         self.conv = nn.Conv1d(
             in_channels=config.hidden_size,
             out_channels=config.hidden_size,
-            kernel_size=self.L_cache,
+            kernel_size=self.conv_kernel_size,
             groups=config.hidden_size,
             bias=self.bias,
-            padding=self.L_cache - 1,
+            padding=self.conv_kernel_size - 1,
         )
         self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
 
-    def cuda_kernels_forward(
-        self,
-        x: torch.Tensor,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-    ):
-        x = apply_mask_to_padding_states(x, attention_mask)
-        BCx = self.in_proj(x).transpose(-1, -2)
-        B, C, x = BCx.chunk(3, dim=-2)
+        self.layer_type = config.layer_types[layer_idx]
 
-        Bx = B * x
-
-        conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_out = causal_conv1d_update(
-                Bx.squeeze(-1),
-                past_key_values.layers[self.layer_idx].conv_states,
-                conv_weights,
-                self.conv.bias,
-                None,
-            )
-            conv_out = conv_out.unsqueeze(-1)
-        else:
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
-
-            # `seq_idx` resets conv state at packed-sample boundaries; None = previous behaviour.
-            conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None, seq_idx=seq_idx)
-
-        y = C * conv_out
-        y = self.out_proj(y.transpose(-1, -2).contiguous())
-        return y
-
-    def slow_forward(
-        self,
-        x: torch.Tensor,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-    ):
-        seqlen = x.shape[1]
-
-        x = apply_mask_to_padding_states(x, attention_mask)
-        BCx = self.in_proj(x).transpose(-1, -2)
-        B, C, x = BCx.chunk(3, dim=-2)
-
-        Bx = B * x
-
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx):
-            conv_state = past_key_values.update_conv_state(Bx, self.layer_idx)
-            conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
-            if self.bias:
-                conv_out += self.conv.bias
-
-            conv_out = conv_out.unsqueeze(-1)
-        elif seq_idx is not None and x.shape[0] == 1:
-            # Per-segment conv so the receptive field cannot cross packed-sample boundaries.
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
-            si = seq_idx[0]
-            change = (si[1:] != si[:-1]).nonzero(as_tuple=True)[0] + 1
-            bounds = torch.cat([change.new_zeros(1), change, change.new_full((1,), si.numel())]).tolist()
-            parts = []
-            for i in range(len(bounds) - 1):
-                s, e = bounds[i], bounds[i + 1]
-                if e > s:
-                    parts.append(self.conv(Bx[:, :, s:e])[..., : e - s])
-            conv_out = torch.cat(parts, dim=-1)
-        else:
-            if past_key_values is not None:
-                conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                conv_state = past_key_values.update_conv_state(conv_state, self.layer_idx)
-
-            conv_out = self.conv(Bx)[..., :seqlen]
-
-        y = C * conv_out
-        y = y.transpose(-1, -2).contiguous()
-        y = self.out_proj(y)
-        return y
-
+    @force_accelerate_hooks("conv")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
+        **kwargs,
     ):
-        if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
-        return self.slow_forward(hidden_states, past_key_values, attention_mask, seq_idx=seq_idx)
+        seq_len = hidden_states.shape[1]
+
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        BCx = self.in_proj(hidden_states).transpose(-1, -2)
+        B, C, x = BCx.chunk(3, dim=-2)
+        hidden_states = B * x
+
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
+
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
+            )
+        else:
+            if cache is not None:
+                hidden_states = cache.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
+
+            # Drop the additional previous states
+            if cache is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        y = C * hidden_states
+        y = y.transpose(-1, -2).contiguous()
+        y = self.out_proj(y)
+        return y
 
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Lfm2Config, layer_idx: int):
         super().__init__()
-        self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
 
         if self.is_attention_layer:
             self.self_attn = Lfm2Attention(config, layer_idx)
@@ -263,13 +208,14 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         self.operator_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.ffn_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -279,15 +225,15 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 position_embeddings=position_embeddings,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
         else:
             hidden_states = self.conv(
                 hidden_states=self.operator_norm(hidden_states),
-                past_key_values=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
-                seq_idx=kwargs.get("seq_idx"),
+                **kwargs,
             )
         hidden_states = hidden_states + residual
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
@@ -296,7 +242,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False
+    pass
 
 
 class Lfm2Model(LlamaModel):
@@ -305,13 +251,14 @@ class Lfm2Model(LlamaModel):
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -321,36 +268,38 @@ class Lfm2Model(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        # Skip masking for decoding stage. We check shape here to be compile-friendly
-        linear_attention = attention_mask if inputs_embeds.shape[1] != 1 else None
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+            }
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "conv": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = causal_mask if self.config.layer_types[i] == "full_attention" else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -358,7 +307,7 @@ class Lfm2Model(LlamaModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

@@ -20,10 +20,8 @@ from transformers import (
     GlmAsrConfig,
     GlmAsrForConditionalGeneration,
     GlmAsrModel,
-    LlamaConfig,
     is_torch_available,
 )
-from transformers.models.glmasr.configuration_glmasr import GlmAsrEncoderConfig
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -32,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...alm_tester import ALMModelTest, ALMModelTester
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -42,15 +41,14 @@ class GlmAsrModelTester(ALMModelTester):
     config_class = GlmAsrConfig
     base_model_class = GlmAsrModel
     conditional_generation_class = GlmAsrForConditionalGeneration
-    text_config_class = LlamaConfig
-    audio_config_class = GlmAsrEncoderConfig
+
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         # Deterministic full-length mask: the base default randomizes lengths in [1, feat_seq_length],
         # and short samples collapse to 0 audio tokens after conv2 (s=2) + merge_factor=4, breaking
         # test_mismatching_num_audio_tokens (a 0-contribution sample makes "duplicate audio" a no-op).
@@ -101,7 +99,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+                        ),
                     },
                     {"type": "text", "text": "Please transcribe this audio into text"},
                 ],
@@ -117,7 +117,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(model.device, dtype=model.dtype)
 
         inputs_transcription = self.processor.apply_transcription_request(
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
         ).to(model.device, dtype=model.dtype)
 
         for key in inputs:
@@ -142,7 +142,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3"
+                        ),
                     },
                     {"type": "text", "text": "Please transcribe this audio into text"},
                 ],
@@ -158,7 +160,7 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).to(model.device, dtype=model.dtype)
 
         inputs_transcription = self.processor.apply_transcription_request(
-            "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3",
         ).to(model.device, dtype=model.dtype)
 
         for key in inputs:
@@ -184,7 +186,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
+                            ),
                         },
                         {"type": "text", "text": "Please transcribe this audio into text"},
                     ],
@@ -196,7 +200,9 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "audio",
-                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3"
+                            ),
                         },
                         {"type": "text", "text": "Please transcribe this audio into text"},
                     ],
@@ -214,8 +220,8 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs_transcription = self.processor.apply_transcription_request(
             [
-                "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
-                "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+                "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama2.mp3",
             ],
         ).to(model.device, dtype=model.dtype)
 

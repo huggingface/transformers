@@ -19,7 +19,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="google/gpt_bigcode")
+@auto_docstring(checkpoint="bigcode/gpt_bigcode-santacoder")
 @strict
 class GPTBigCodeConfig(PreTrainedConfig):
     r"""
@@ -48,7 +48,7 @@ class GPTBigCodeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gpt_bigcode"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",

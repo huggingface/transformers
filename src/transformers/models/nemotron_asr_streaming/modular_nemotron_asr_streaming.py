@@ -21,14 +21,12 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache, DynamicCache
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -37,7 +35,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
@@ -54,7 +53,6 @@ from ..parakeet.modeling_parakeet import (
     ParakeetRNNTJointNetwork,
     ParakeetRNNTOutput,
 )
-from ..parakeet.processing_parakeet import ParakeetProcessor
 from ..voxtral_realtime.modeling_voxtral_realtime import (
     VoxtralRealtimeCausalConv1d,
     VoxtralRealtimeConv1dCacheLayer,
@@ -134,10 +132,6 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
 @strict
 class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     r"""
-    This is the NemotronAsrStreaming transducer configuration. The RNN-T (RNN Transducer) joint network emits token
-    logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding the encoder
-    frame pointer advances by exactly one frame on each blank emission.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`). The joint network projects both
         encoder and decoder outputs to this size (NeMo's `joint_hidden`, which all known checkpoints set equal
@@ -174,235 +168,65 @@ class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     blank_token_id: int = 1024
 
 
-class NemotronAsrStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_attention_mask": True,
-            "subsampling_factor": 8,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
+    r"""
+    Constructs a NemotronAsrStreaming feature extractor.
 
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-# Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
-# cache-aware streaming FastConformer checkpoint. The first entry is the default.
-DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
+    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
+    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
+    Args:
+        feature_size (`int`, *optional*, defaults to 80):
+            The feature dimension of the extracted features.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        hop_length (`int`, *optional*, defaults to 160):
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
+        n_fft (`int`, *optional*, defaults to 512):
+            Size of the Fourier transform.
+        win_length (`int`, *optional*, defaults to 400):
+            The window length for the STFT computation.
+        preemphasis (`float`, *optional*, defaults to 0.97):
+            A preemphasis filter coefficient. 0.0 means no preemphasis filter.
+        padding_value (`float`, *optional*, defaults to 0.0):
+            Padding value used to pad the audio. Should correspond to silences.
+        mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+            Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+            precision (`"bfloat16"` for Nemotron 3.5 Transcribe): the filter bank and the window are then rounded to
+            that dtype when the features are computed, so the log-mel features match the original front-end; the
+            spectrogram itself is always computed in float32.
+    """
 
-@auto_docstring
-class NemotronAsrStreamingProcessor(ParakeetProcessor):
     def __init__(
         self,
-        feature_extractor,
-        tokenizer,
-        blank_token="<blank>",
-        decoder_type=None,
-        supported_num_lookahead_tokens=None,
-        default_num_lookahead_tokens=None,
+        feature_size=80,
+        sampling_rate=16000,
+        hop_length=160,
+        n_fft=512,
+        win_length=400,
+        preemphasis=0.97,
+        padding_value=0.0,
+        mel_filters_dtype="float32",
+        **kwargs,
     ):
-        r"""
-        blank_token (`str`, *optional*, defaults to `"<blank>"`):
-            Blank token for RNN-T decoding.
-        decoder_type (`str`, *optional*):
-            Decoding/timestamp emission mode (e.g. `"ctc"`, `"rnnt"`, `"tdt"`). If `None` (older checkpoints)
-            the decoder type is inferred automatically for backward compatibility.
-        supported_num_lookahead_tokens (`list[int]`, *optional*):
-            Right attention contexts (lookaheads, in subsampled encoder frames) the model was trained with.
-            The processor is the single source of truth for this set: [`~NemotronAsrStreamingProcessor.set_num_lookahead_tokens`]
-            validates against it. Defaults to the NeMo cache-aware set `[13, 6, 1, 0]`.
-        default_num_lookahead_tokens (`int`, *optional*):
-            The right context used to size streaming chunks and emitted by [`~NemotronAsrStreamingProcessor.__call__`];
-            change it with [`~NemotronAsrStreamingProcessor.set_num_lookahead_tokens`]. Defaults to the first entry of
-            `supported_num_lookahead_tokens`.
-        """
-        self.supported_num_lookahead_tokens = (
-            supported_num_lookahead_tokens
-            if supported_num_lookahead_tokens is not None
-            else DEFAULT_NUM_LOOKAHEAD_TOKENS
-        )
-        self.default_num_lookahead_tokens = (
-            default_num_lookahead_tokens
-            if default_num_lookahead_tokens is not None
-            else self.supported_num_lookahead_tokens[0]
-        )
-        super().__init__(feature_extractor, tokenizer, blank_token=blank_token, decoder_type=decoder_type)
-
-    def set_num_lookahead_tokens(self, num_lookahead_tokens: int):
-        """
-        Select the right attention context (lookahead, in subsampled encoder frames) used for streaming.
-
-        Sets `default_num_lookahead_tokens`, so every derived streaming property
-        (`num_mel_frames_first_audio_chunk`, `num_mel_frames_per_audio_chunk`, `num_samples_first_audio_chunk`,
-        `num_samples_per_audio_chunk`) re-derives from the new value. `num_lookahead_tokens` must be one of
-        `supported_num_lookahead_tokens`.
-
-        Pass the same `num_lookahead_tokens` to `model.generate` so the attention right context used in the
-        forward matches the chunk sizes produced here; otherwise streaming `generate` raises.
-        """
-        if num_lookahead_tokens not in self.supported_num_lookahead_tokens:
-            raise ValueError(
-                f"`num_lookahead_tokens={num_lookahead_tokens}` is not supported by this model. Supported "
-                f"values: {list(self.supported_num_lookahead_tokens)}."
-            )
-        self.default_num_lookahead_tokens = num_lookahead_tokens
-
-    @property
-    def _subsampling_factor(self) -> int:
-        output_kwargs = self._merge_kwargs(
-            NemotronAsrStreamingProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
-        )
-        return output_kwargs["audio_kwargs"]["subsampling_factor"]
-
-    @property
-    def _encoder_frame_ms(self) -> float:
-        """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
-        return (
-            self._subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
-        )
-
-    @property
-    def streaming_latency_ms(self) -> int:
-        """
-        Streaming latency (ms) of the currently-selected right attention context
-        (`default_num_lookahead_tokens`, settable via [`~NemotronAsrStreamingProcessor.set_num_lookahead_tokens`]).
-
-        The model emits a chunk only once its last frame has its full lookahead, so the delay of a right
-        context `r` is `(r + 1)` encoder frames, i.e. `(r + 1) * encoder_frame_ms`.
-        """
-        return round((self.default_num_lookahead_tokens + 1) * self._encoder_frame_ms)
-
-    @property
-    def supported_streaming_latencies_ms(self) -> dict[int, int]:
-        """
-        Mapping from each supported right attention context (`supported_num_lookahead_tokens`) to its streaming
-        latency in milliseconds (`(num_lookahead_tokens + 1) * encoder_frame_ms`).
-        """
-        frame_ms = self._encoder_frame_ms
-        return {right: round((right + 1) * frame_ms) for right in self.supported_num_lookahead_tokens}
-
-    @property
-    def num_mel_frames_first_audio_chunk(self) -> int:
-        """
-        Number of mel frames the first cache-aware streaming chunk must carry, for the model's
-        `default_num_lookahead_tokens`: `1 + subsampling_factor * num_lookahead_tokens`.
-        """
-        return 1 + self._subsampling_factor * self.default_num_lookahead_tokens
-
-    @property
-    def num_mel_frames_per_audio_chunk(self) -> int:
-        """
-        Number of mel frames each subsequent cache-aware streaming chunk must carry, for the model's
-        `default_num_lookahead_tokens`: `subsampling_factor * (num_lookahead_tokens + 1)`.
-        """
-        return self._subsampling_factor * (self.default_num_lookahead_tokens + 1)
-
-    @property
-    def num_samples_first_audio_chunk(self) -> int:
-        """
-        Number of raw audio samples to feed the processor (with `is_first_audio_chunk=True`, i.e. `center=True`)
-        so it returns exactly `num_mel_frames_first_audio_chunk` frames.
-        """
-        return (
-            self.num_mel_frames_first_audio_chunk - 1
-        ) * self.feature_extractor.hop_length + self.feature_extractor.win_length // 2
-
-    @property
-    def num_samples_per_audio_chunk(self) -> int:
-        """
-        Number of raw audio samples to feed the processor (with `is_first_audio_chunk=False`, i.e. `center=False`)
-        so it returns exactly `num_mel_frames_per_audio_chunk` frames.
-        """
-        return (
-            self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
-        )
-
-    @auto_docstring
-    def __call__(
-        self,
-        audio: AudioInput,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        sampling_rate: int | None = None,
-        is_streaming: bool = False,
-        is_first_audio_chunk: bool | None = True,
-        **kwargs: Unpack[NemotronAsrStreamingProcessorKwargs],
-    ):
-        r"""
-        sampling_rate (`int`, *optional*):
-            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
-            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
-            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
-            issued and the default sampling rate will be assumed.
-        is_streaming (`bool`, *optional*, defaults to `False`):
-            Whether to process audio in streaming mode. When `True`, audio can be passed in chunks, using
-            `is_first_audio_chunk` to distinguish the first chunk from subsequent ones.
-        is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
-            Whether the current audio is the first chunk of a streaming session. The feature extractor uses
-            `center=True` for the first chunk (and for offline use) and `center=False` for subsequent chunks,
-            so that the per-chunk STFT reproduces, frame-for-frame, a single full-utterance pass. Must be
-            `True` when `is_streaming=False`.
-
-        Returns:
-            [`BatchFeature`]: the feature-extractor (and optional tokenizer) outputs, augmented with:
-
-            - **num_lookahead_tokens** -- The right attention context (lookahead, in subsampled encoder frames),
-              i.e. `default_num_lookahead_tokens` (set via [`~NemotronAsrStreamingProcessor.set_num_lookahead_tokens`]).
-              Pass it to the model/encoder forward (or `generate`); it plays the role of Voxtral Realtime's
-              `num_delay_tokens`.
-        """
-        if not is_streaming and not is_first_audio_chunk:
-            raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
-
-        audio = make_list_of_audio(audio)
-
-        output_kwargs = self._merge_kwargs(
-            NemotronAsrStreamingProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            hop_length=hop_length,
+            n_fft=n_fft,
+            win_length=win_length,
+            preemphasis=preemphasis,
+            padding_value=padding_value,
             **kwargs,
         )
+        self.mel_filters_dtype = mel_filters_dtype
 
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
-            )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
-
-        if audio is not None:
-            # `center=True` for the first/offline chunk, `center=False` for subsequent streaming chunks.
-            inputs = self.feature_extractor(audio, center=bool(is_first_audio_chunk), **output_kwargs["audio_kwargs"])
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        # The right attention context (akin to Voxtral Realtime's `num_delay_tokens`), selected via
-        # `set_num_lookahead_tokens`; pass it to the model/encoder forward or `generate`.
-        inputs["num_lookahead_tokens"] = self.default_num_lookahead_tokens
-
-        if text is None:
-            return inputs
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            # Prepend blank token to labels to form decoder_input_ids.
-            # The RNN-T decoder expects [blank, label_0, ..., label_{U-1}] as input,
-            if isinstance(text, str):
-                text = [text]
-            decoder_text = [self.blank_token + t for t in text]
-            decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
-            inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
-            return inputs
-
-
-class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        dtype = getattr(torch, self.mel_filters_dtype)
+        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -418,7 +242,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        mel_filters = self.mel_filters.to(device).to(dtype).float()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
@@ -440,6 +264,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
         center: bool = True,
+        is_last_audio_chunk: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -479,6 +304,10 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
                 subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
                 reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
                 would have produced for those frames.
+            is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+                Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio
+                is then zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the
+                whole utterance reaches past the audio at most, so that this frame is kept rather than dropped.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -545,15 +374,21 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
+        audio_lengths = padded_inputs.audio_lengths
+        if is_last_audio_chunk and not center:
+            # the last frame a `center=True` pass counts reaches up to `n_fft // 2 - hop` past the audio; padded
+            # after the preemphasis, which would otherwise turn the first zero into `-preemphasis * audio[-1]`
+            num_padding = self.n_fft // 2 - self.hop_length
+            input_features = torch.nn.functional.pad(input_features, (0, num_padding))
+            audio_lengths = audio_lengths + num_padding
+
         input_features = self._torch_extract_fbank_features(input_features, device, center=center)
         if center:
             # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
-            features_lengths = torch.floor_divide(
-                padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-            )
+            features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
         else:
             # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
-            features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
+            features_lengths = torch.floor_divide(audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # NemotronAsrStreaming never normalizes the mel features
@@ -706,14 +541,14 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    past_key_values (`Cache`, *optional*):
+    cache (`Cache`, *optional*):
         Updated attention K/V sliding-window cache from the encoder. Pass to the next chunk call.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
         Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
     """
 
     attention_mask: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None
 
 
@@ -730,23 +565,14 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositio
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 
@@ -803,16 +629,17 @@ class NemotronAsrStreamingEncoderConvolutionModule(FastSpeech2ConformerConvoluti
 class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
     """
     Multi-head attention with relative positional encoding.
-    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `cache`.
     See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
     """
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -823,8 +650,8 @@ class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         total_key_length = key_states.shape[2]
 
@@ -958,13 +785,14 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
         super().__init__(config, layer_idx)
         self.conv = NemotronAsrStreamingEncoderConvolutionModule(config, layer_idx=layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         all_masked_rows: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -977,7 +805,7 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
             hidden_states=normalized_hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = hidden_states + attn_output
@@ -998,6 +826,8 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
 @auto_docstring
 class NemotronAsrStreamingPreTrainedModel(ParakeetPreTrainedModel):
     config: NemotronAsrStreamingConfig
+    # flex attention is incompatible as this model uses a float attention mask (relative position bias) across the board
+    _supports_flex_attn = False
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)
@@ -1043,13 +873,13 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
@@ -1057,11 +887,11 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        output_attention_mask (`bool`, *optional*, defaults to `True`):
-            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
-        past_key_values (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             Sliding-window K/V cache (`DynamicCache` built from `config.sliding_window`) for cache-aware
             streaming attention.
+        output_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
         padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
             Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
         num_lookahead_tokens (`int`, *optional*):
@@ -1089,8 +919,8 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         ```
         """
         if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache(config=self.config)
+            if cache is None:
+                cache = DynamicCache(config=self.config)
 
             if padding_cache is None:
                 padding_cache = NemotronAsrStreamingEncoderCausalConvPaddingCache()
@@ -1100,7 +930,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
 
         seq_length = inputs_embeds.shape[1]
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1112,7 +942,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=output_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
             and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
         )
@@ -1124,9 +954,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
             else:
                 all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
 
-        cached_frames = (
-            past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
-        )
+        cached_frames = cache.get_mask_sizes(seq_length, 0)[0] - seq_length if cache is not None else 0
         position_embeddings = self.encode_positions(inputs_embeds, cached_frames=cached_frames)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
@@ -1139,7 +967,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -1150,7 +978,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
                     attention_mask=attention_mask,
                     all_masked_rows=all_masked_rows,
                     position_embeddings=position_embeddings,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     padding_cache=padding_cache,
                     use_cache=use_cache,
                     **kwargs,
@@ -1159,7 +987,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         return NemotronAsrStreamingEncoderModelOutput(
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
-            past_key_values=past_key_values,
+            cache=cache,
             padding_cache=padding_cache,
         )
 
@@ -1180,7 +1008,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
 @dataclass
 class NemotronAsrStreamingRNNTOutput(ParakeetRNNTOutput):
     r"""
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
@@ -1188,7 +1016,7 @@ class NemotronAsrStreamingRNNTOutput(ParakeetRNNTOutput):
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None
 
 
@@ -1249,9 +1077,8 @@ class NemotronAsrStreamingForRNNT(
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "nvidia/nemotron-speech-streaming-en-0.6b"
-        >>> revision = "refs/pr/17"
-        >>> processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-        >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id, revision=revision)
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -1289,7 +1116,7 @@ class NemotronAsrStreamingForRNNT(
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
         )
 
@@ -1298,7 +1125,6 @@ __all__ = [
     "NemotronAsrStreamingConfig",
     "NemotronAsrStreamingEncoderConfig",
     "NemotronAsrStreamingFeatureExtractor",
-    "NemotronAsrStreamingProcessor",
     "NemotronAsrStreamingEncoderModelOutput",
     "NemotronAsrStreamingRNNTOutput",
     "NemotronAsrStreamingForRNNT",

@@ -19,14 +19,14 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..bamba.configuration_bamba import BambaConfig
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -48,15 +48,17 @@ logger = logging.get_logger(__name__)
 
 
 class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+    """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
+    opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
+    instead of a ``(cos, sin)`` tuple."""
 
-    def forward(  # FIME: @ARTHUR this forward is also classic: attention nope
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,  # None or rope embeddings
+        cache: Cache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -70,13 +72,12 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -87,20 +88,18 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
             scaling=self.scaling,
             **kwargs,
         )
-
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
 class GraniteMoeHybridMambaLayer(BambaMixer):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
-        super().__init__(BambaConfig(config), layer_idx)
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int, initialize_mixer_weights: bool = True):
+        super().__init__(config, layer_idx, initialize_mixer_weights)
 
 
 class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
-    def __init__(self, hidden_size, eps=1e-6):
-        super().__init__(hidden_size, eps)
+    pass
 
 
 class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
@@ -124,11 +123,11 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.self_attn = None
         self.mamba = None
 
-        if config.layers_block_type[layer_idx] == "mamba":
+        if config.layers_block_type[layer_idx] == "linear_attention":
             self.mamba = GraniteMoeHybridMambaLayer(config, layer_idx)
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
-        self.layer_type = config.layers_block_type[layer_idx]
+        self.block_type = config.layers_block_type[layer_idx]
 
         # Allow non-MoE (dense)
         self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
@@ -137,22 +136,23 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
         if self.mamba is not None:
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
-                cache_params=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -160,7 +160,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -208,13 +208,14 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -226,25 +227,27 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask_mapping = {}
-        for layer_type in set(self.config.layers_block_type):
-            if "mamba" in layer_type:
-                causal_mask_mapping[layer_type] = self._update_mamba_mask(attention_mask, past_key_values)
-            else:
-                causal_mask_mapping[layer_type] = create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=attention_mask,
-                    past_key_values=past_key_values,
-                )
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache": cache,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         # embed positions
         hidden_states = inputs_embeds
@@ -256,7 +259,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layers_block_type[i]],
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -265,21 +268,8 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
 
 
 class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
@@ -293,11 +283,6 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
 
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python

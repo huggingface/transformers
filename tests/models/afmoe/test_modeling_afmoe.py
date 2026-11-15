@@ -117,10 +117,6 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Afmoe  applies key/query norm which doesn't work with packing")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
     @unittest.skip("Afmoe has moe, output can be different")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
@@ -191,13 +187,3 @@ class AfmoeIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(dynamic_text, static_text)
-
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs,
-            max_new_tokens=num_tokens_to_generate,
-            do_sample=False,
-            cache_implementation="static",
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(dynamic_text, static_compiled_text)

@@ -49,7 +49,7 @@ class EfficientLoFTRModelTester:
         image_width=6,  # need to be a multiple of `stage_stride[0] * stage_stride[1]`
         image_height=4,  # need to be a multiple of `stage_stride[0] * stage_stride[1]`
         stage_num_blocks: list[int] = [1, 1],
-        out_features: list[int] = [16, 16],  # need to be >= 2 to make `config.fine_fusion_dims > 0`
+        out_features: list[int] = [16, 128],  # need to be >= 2 to make `config.fine_fusion_dims > 0`
         stage_stride: list[int] = [2, 1],
         q_aggregation_kernel_size: int = 1,
         kv_aggregation_kernel_size: int = 1,
@@ -57,7 +57,7 @@ class EfficientLoFTRModelTester:
         kv_aggregation_stride: int = 1,
         num_attention_layers: int = 2,
         num_attention_heads: int = 8,
-        hidden_size: int = 16,
+        hidden_size: int = 128,
         coarse_matching_threshold: float = 0.0,
         fine_kernel_size: int = 2,
         coarse_matching_border_removal: int = 0,
@@ -179,6 +179,10 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="EfficientLoFTR does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("Uses rope for backbone vision features which are fixed shape, no support for rope scaling")
+    def test_model_rope_scaling_frequencies(self):
         pass
 
     def test_model(self):

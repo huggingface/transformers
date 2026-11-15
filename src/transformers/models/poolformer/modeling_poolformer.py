@@ -250,7 +250,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PoolFormerModel(PoolFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PoolFormerConfig):
         super().__init__(config)
         self.config = config
 
@@ -269,7 +269,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
@@ -314,7 +314,7 @@ class PoolFormerFinalPooler(nn.Module):
     """
 )
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PoolFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.poolformer = PoolFormerModel(config)
@@ -338,18 +338,12 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.poolformer(

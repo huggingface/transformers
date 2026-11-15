@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -240,7 +240,7 @@ register_patch_mapping(
 )
 
 register_checkpoint_conversion_mapping(
-    model_type="llama",
+    model_type_or_class_name="llama",
     mapping=[
         WeightConverter(
             source_patterns=["q_proj", "k_proj", "v_proj"],
@@ -359,7 +359,7 @@ class FusedQKVAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -374,8 +374,8 @@ class FusedQKVAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx)
 
         attn_output, attn_weights = sdpa_attention_forward(
             self,
@@ -405,7 +405,7 @@ register_patch_mapping(
 # - Override the original conversion mapping for qwen2_moe which concatenated the experts into a single parameter format.
 # - Concatenate the q_proj, k_proj, v_proj weights/biases into a single qkv_proj weight/bias for the new fused attention module.
 register_checkpoint_conversion_mapping(
-    model_type="qwen2_moe",
+    model_type_or_class_name="qwen2_moe",
     mapping=[
         WeightConverter(
             source_patterns=["q_proj", "k_proj", "v_proj"],

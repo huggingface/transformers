@@ -28,11 +28,9 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
-from ...utils.import_utils import requires
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class UVDocImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_resize = True
@@ -108,7 +106,7 @@ class UVDocImageProcessor(TorchvisionBackend):
                           and BGR channel order (suitable for OpenCV visualization)
         """
         image_list = list(original_images)
-        scale = torch.tensor(float(scale), device=prediction.device)
+        scale = torch.full((), float(scale), device=prediction.device)
         results = []
 
         for i, original_image in enumerate(image_list):

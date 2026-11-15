@@ -30,7 +30,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
+@auto_docstring(checkpoint="allenai/OLMo-2-1124-7B")
 @strict
 class Olmo2Config(PreTrainedConfig):
     r"""
@@ -51,7 +51,7 @@ class Olmo2Config(PreTrainedConfig):
     """
 
     model_type = "olmo2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k

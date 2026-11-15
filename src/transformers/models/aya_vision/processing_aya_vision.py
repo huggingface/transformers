@@ -15,24 +15,18 @@
 
 from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "padding": True,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
-    valid_processor_kwargs = AyaVisionProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+        "padding": True,
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
 
     def __init__(
         self,
@@ -99,7 +93,7 @@ class AyaVisionProcessor(ProcessorMixin):
             ]
         )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         num_patches = image_inputs["num_patches"][image_idx]
         img_patches_per_tile = (self.img_size // self.patch_size) ** 2
         img_string = f"{self.start_of_img_token}"
@@ -144,8 +138,7 @@ class AyaVisionProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = AyaVisionProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -165,5 +158,7 @@ class AyaVisionProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_patches"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"AyaVisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["AyaVisionProcessor"]

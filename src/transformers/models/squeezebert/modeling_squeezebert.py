@@ -55,9 +55,7 @@ class SqueezeBertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -418,7 +416,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class SqueezeBertModel(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.embeddings = SqueezeBertEmbeddings(config)
@@ -441,7 +439,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -508,7 +506,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         "cls.predictions.decoder.weight": "transformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
@@ -538,12 +536,6 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
@@ -584,7 +576,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     """
 )
 class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -610,12 +602,6 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
@@ -671,7 +657,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
@@ -716,14 +702,10 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where *num_choices* is the size of the second dimension of the input tensors. (see
-            *input_ids* above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -774,7 +756,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -799,10 +781,6 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
@@ -840,7 +818,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

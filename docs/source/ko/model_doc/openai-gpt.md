@@ -40,7 +40,7 @@ OpenAI GPT 모델은 Alec Radford, Karthik Narasimhan, Tim Salimans, Ilya Sutske
 ## 사용 팁 [[usage-tips]]
 
 - GPT는 절대 위치 임베딩을 사용하는 모델이므로 입력을 일반적으로 왼쪽보다는 오른쪽에 패딩하는 것이 권장됩니다.
-- GPT는 인과 언어 모델링(Causal Language Modeling, CLM) 목표로 학습되었기 때문에 시퀀스에서 다음 토큰을 예측하는 데 강력한 성능을 보여줍니다. 이를 활용하면 *run_generation.py* 예제 스크립트에서 볼 수 있듯이 GPT-2는 구문적으로 일관된 텍스트를 생성할 수 있습니다.
+- GPT는 인과 언어 모델링(Causal Language Modeling, CLM) 목표로 학습되었기 때문에 시퀀스에서 다음 토큰을 예측하는 데 강력한 성능을 보여줍니다. 이를 활용하면 GPT-2는 구문적으로 일관된 텍스트를 생성할 수 있습니다.
 
 참고:
 
@@ -72,8 +72,8 @@ OpenAI GPT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤�
 - [좋아하는 아티스트의 스타일로 가사를 생성하도록 GPT2를 미세 조정하는 방법](https://colab.research.google.com/github/AlekseyKorshuk/huggingartists/blob/master/huggingartists-demo.ipynb)에 대한 노트북. 🌎
 - [좋아하는 트위터 사용자의 스타일로 트윗을 생성하도록 GPT2를 미세 조정하는 방법](https://colab.research.google.com/github/borisdayma/huggingtweets/blob/master/huggingtweets-demo.ipynb)에 대한 노트북. 🌎
 - 🤗 Hugging Face 코스의 [인과 언어 모델링](https://huggingface.co/course/en/chapter7/6?fw=pt#training-a-causal-language-model-from-scratch) 장.
-- [`OpenAIGPTLMHeadModel`]은 [인과 언어 모델링 예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling), [텍스트 생성 예제 스크립트](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-generation/run_generation.py) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에 의해 지원됩니다.
-- [`TFOpenAIGPTLMHeadModel`]은 [인과 언어 모델링 예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) 및 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에 의해 지원됩니다.
+- [`OpenAIGPTLMHeadModel`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에 의해 지원됩니다.
+- [`TFOpenAIGPTLMHeadModel`]은 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에 의해 지원됩니다.
 - 추가 자료: [인과 언어 모델링 과제 가이드](../tasks/language_modeling)
 
 <PipelineTag pipeline="token-classification"/>

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -279,7 +279,7 @@ conversation = [
             },
             {
                 "type": "audio",
-                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"
             },
             {
                 "type": "text",
@@ -287,7 +287,7 @@ conversation = [
             },
             {
                 "type": "audio",
-                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac"
             },
         ]
     },
@@ -530,7 +530,6 @@ conversation2 = [
 
 inputs = processor.apply_chat_template(
     [conversation1, conversation2],
-    add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
     sampling_rate=24000,

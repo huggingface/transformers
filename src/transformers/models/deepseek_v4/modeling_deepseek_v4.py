@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -34,10 +33,11 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
 
@@ -57,7 +57,8 @@ class DeepseekV4RMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
+        return (self.weight * hidden_states).to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -88,9 +89,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     when building the per-type inv_freq buffers.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: DeepseekV4Config):
+    def __init__(self, config: DeepseekV4Config, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -106,27 +105,20 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, layer_type=layer_type)
-            self.register_buffer(f"{layer_type}_inv_freq", inv_freq, persistent=False)
-            self.register_buffer(f"{layer_type}_original_inv_freq", inv_freq.clone(), persistent=False)
+            inv_freq, attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: DeepseekV4Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
+        config: DeepseekV4Config, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
             layer_type (`str`, *optional*):
                 The current layer type if the model has different RoPE parameters per type.
                 Should not be used unless `config.layer_types is not None`
@@ -143,10 +135,8 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
 
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -158,13 +148,9 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         # the doubled dim and `rotate_half` is local and obvious.
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            cos = freqs.cos() * attention_scaling
-            sin = freqs.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * attention_scaling
+        sin = freqs.sin() * attention_scaling
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -191,10 +177,10 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         `position_ids` so prefill -> decode -> prefill stays consistent.
     """
 
-    layer_type = "heavily_compressed_attention"
+    _layer_type = "heavily_compressed_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
-        super().__init__(config)
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
+        super().__init__(sliding_window=config.sliding_window)
         self.compress_rate = config.compress_rates["heavily_compressed_attention"]
         self.buffer_kv: dict[str, torch.Tensor | None] = {"compressor": None}
         self.buffer_gate: dict[str, torch.Tensor | None] = {"compressor": None}
@@ -251,6 +237,20 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.buffer_kv, self.buffer_gate, self.compressed_kv):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
+    def reset(self) -> None:
+        super().reset()
+        # Dropped rather than zeroed, as they grow by concatenation, like the main states
+        for name in self.compressed_kv:
+            self.buffer_kv[name] = self.buffer_gate[name] = self.compressed_kv[name] = None
+            self.entry_count[name] = 0
+
 
 class DeepseekV4CSACache(DeepseekV4HCACache):
     r"""Cache layer for CSA blocks (paper §2.3.1). Extends :class:`DeepseekV4HCACache`
@@ -271,9 +271,9 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
     again. That's what `overlap_kv[name]` / `overlap_gate[name]` persist.
     """
 
-    layer_type = "compressed_sparse_attention"
+    _layer_type = "compressed_sparse_attention"
 
-    def __init__(self, config: "DeepseekV4Config"):
+    def __init__(self, config: "DeepseekV4Config", **kwargs):
         super().__init__(config)
         self.compress_rate = config.compress_rates["compressed_sparse_attention"]
         self.buffer_kv["indexer"] = None
@@ -298,6 +298,18 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.overlap_kv, self.overlap_gate):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
+    def reset(self) -> None:
+        super().reset()
+        for name in self.overlap_kv:
+            self.overlap_kv[name] = self.overlap_gate[name] = None
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -374,7 +386,7 @@ class DeepseekV4HCACompressor(nn.Module):
     `T = entry_count["compressor"]`), so the attention can attend over the
     full long-range history.
 
-    When `past_key_values is None` runs in stateless single-shot mode: compress
+    When `cache is None` runs in stateless single-shot mode: compress
     every complete window from `hidden_states` and discard the remainder
     (instead of caching it).
     """
@@ -391,16 +403,17 @@ class DeepseekV4HCACompressor(nn.Module):
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         layer_idx: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, _, _ = hidden_states.shape
-        cache_layer: DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4HCACache = cache.layers[layer_idx] if cache is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         if cache_layer is None:
@@ -504,18 +517,17 @@ class DeepseekV4Indexer(nn.Module):
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.scorer = DeepseekV4IndexerScorer(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         layer_idx: int,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache | None = (
-            past_key_values.layers[layer_idx] if past_key_values is not None else None
-        )
+        cache_layer: DeepseekV4CSACache | None = cache.layers[layer_idx] if cache is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -573,7 +585,7 @@ class DeepseekV4Indexer(nn.Module):
         # to compressed key at position 4, because it compressed info for states at position
         # 12 to 16. Thus we need to make sure that top_k does not land in that range.
         # Picks that still point past `causal_threshold` (early queries with too few ready
-        # blocks) are replaced with a `-1` sentinel that the compresser treats as invalid.
+        # blocks) are replaced with a `-1` sentinel that the compressor treats as invalid.
         if compressed_len > 0:
             causal_threshold = (position_ids + 1) // self.compress_rate  # [B, S]
             entry_indices = torch.arange(compressed_len, device=index_scores.device)
@@ -620,18 +632,17 @@ class DeepseekV4CSACompressor(nn.Module):
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.indexer = DeepseekV4Indexer(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         layer_idx: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache | None = (
-            past_key_values.layers[layer_idx] if past_key_values is not None else None
-        )
+        cache_layer: DeepseekV4CSACache | None = cache.layers[layer_idx] if cache is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -690,7 +701,7 @@ class DeepseekV4CSACompressor(nn.Module):
         # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
         # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
         # to drop them from the per-query block mask afterwards.
-        top_k_indices = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
+        top_k_indices = self.indexer(hidden_states, q_residual, position_ids, cache, layer_idx)  # [B, S, k]
         compressed_len = compressed_kv.shape[2]
         valid = top_k_indices >= 0  # [B, S, k]
         # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
@@ -798,13 +809,14 @@ class DeepseekV4Attention(nn.Module):
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]] | tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -821,14 +833,12 @@ class DeepseekV4Attention(nn.Module):
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(*hidden_shape).transpose(1, 2)
         kv = apply_rotary_pos_emb(kv, cos, sin)
 
-        if past_key_values is not None:  # sliding where K==V
-            kv = past_key_values.update(kv, kv, self.layer_idx)[0]
+        if cache is not None:  # sliding where K==V
+            kv = cache.update(kv, kv, self.layer_idx, kwargs=kwargs)[0]
 
         block_bias = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
-            compressed_kv, block_bias = self.compressor(
-                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
-            )
+            compressed_kv, block_bias = self.compressor(hidden_states, q_residual, position_ids, cache, self.layer_idx)
             kv = torch.cat([kv, compressed_kv], dim=2)
 
         # The compressor path concatenates extra entries onto the KV axis after the
@@ -875,79 +885,114 @@ class DeepseekV4Attention(nn.Module):
 
 class DeepseekV4HyperConnection(nn.Module):
     r"""
-    Manifold-Constrained Hyper-Connections
-    (mHC) (Xie et al., 2026) to strengthen the conventional residual connections between adjacent
-    Transformer blocks
+    A module to implement manifold-constrained Hyper-Connections (mHC) (Xie et al., 2026) which strengthens the
+    conventional residual connections between adjacent Transformer blocks.
 
-    Owns the learned (`fn`, `base`, `scale`)
-    parameters that turn the incoming `hc_mult` residual streams into collapse / expand
-    weights. The decoder layer instantiates two of these (one for the attention site,
-    one for the mlp site).
+    When using mHC, each token is projected onto `hc_mult` streams, so the shape of decoder layer inputs changes from
+    [batch_size, sequence_length, hidden_size] to [batch_size, sequence_length, hc_mult, hidden_size].
+    To keep the same input shape for attention or MLP blocks, the streams are collapsed into one upon entering a block,
+    and expanded back into `hc_mult` streams upon exiting. There is also a weighted residual connection between the
+    input and output streams.
+    The weights used for collapsing (pre), expanding (post) and mixing (comb) are computed from the `hc_mult` input
+    streams through a learned projection (plus Sinkhorn-Knopp algorithm for the comb weight).
 
-    ASCII shape guide — `B` = batch, `S` = seq, `H` = hc_mult, `D` = hidden_size::
+    The diagram below shows the flow of the mHC streams (B = batch_size, S = seq_length, N = hc_mult, D = hidden_size):
 
-              hidden_streams        flatten(2)        RMSNorm-rescale + F.linear(fn)
-         [B, S, H, D]  ──────────►  [B, S, H*D]  ─────────────────────────────────►
-                                                             mix-logits
-                                                             [B, S, (2+H)*H]
-                                                                    │
-                            ┌───────────────────────────────────────┴──────────────────────────────┐
-                            ▼                          ▼                                           ▼
-                        pre logits                post logits                               comb logits
-                        [B, S, H]                 [B, S, H]                                 [B, S, H, H]
-                        × scale[0]                × scale[1]                                × scale[2]
-                        + base[:H]                + base[H:2H]                              + base[2H:]
-                        σ() + eps                 2·σ()                                     softmax(-1) + eps
-                        │                         │                                         │
-                        pre                       post                                      Sinkhorn(iters)
-                        (stream collapse weights) (block-output placement, range [0, 2])    row/col normalise
-                                                                                            │
-                                                                                            comb
-                                                                                            (stream mixer)
+                                                  ┌───────────────────┐
+                             N input streams  ────│ FLATTEN + PROJECT |────> (pre, post, comb) weights
+                              [B, S, N, D]        └───────────────────┘      ([B, S, N],  [B, S, N],  [B, S, N, N])
+                                  │ │ │
+               ╭──────────────────┴─┼─┼──────────────────╮
+               │ ╭──────────────────┴─┼────────────────╮ │
+               │ │ ╭──────────────────┴──────────────╮ │ │
+               │ │ │                                 │ │ │
+        ┌─────────────────┐                          │ │ │
+        │ COLLAPSE (pre)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+                 │                                   │ │ │
+            Block input                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                     ┌─────────────┐
+        │   ATTN or MLP   │                     │  MIX (comb) │
+        └─────────────────┘                     └─────────────┘
+                 │                                   │ │ │
+           Block output                              │ │ │
+             [B, S, D]                               │ │ │
+                 │                                   │ │ │
+        ┌─────────────────┐                          │ │ │
+        │  EXPAND (post)  │                          │ │ │
+        └─────────────────┘                          │ │ │
+               │ │ │                                 │ │ │
+        N expanded streams                    N residual streams
+           [B, S, N, D]                          [B, S, N, D]
+               │ │ │                                 │ │ │
+               │ │ ╰───────────┌─────────┐───────────╯ │ │
+               │ ╰─────────────│   ADD   │─────────────╯ │
+               ╰───────────────└─────────┘───────────────╯
+                                  │ │ │
+                                  ▼ ▼ ▼
+                            N output streams
+                              [B, S, N, D]
     """
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.hc_mult = config.hc_mult
+        self.hc_mult = config.hc_mult  # number of streams, referred as N below
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
-        mix = (2 + self.hc_mult) * self.hc_mult
-        self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(mix))
-        # 3 = number of outputs from the mHC mapping: `pre` (input projection
-        # weights), `post` (sublayer output projection weights), `comb` (the
-        # H×H residual combine matrix that gets Sinkhorn-projected onto the
-        # doubly-stochastic manifold). Each output gets its own learned scale.
+        # The mHC projects the N inputs streams into 3 weights: pre (size: N), post (size: N) and comb (size: N*N)
+        # Hence the output size of the projection is 2 * N + N * N = (2 + N) * N.
+        concatenated_weights_size = (2 + self.hc_mult) * self.hc_mult
+        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
+        # The mHC produces 3 outputs, each with their own scale parameter (the "pre", "post" and "comb" weights)
         self.scale = nn.Parameter(torch.empty(3))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        r"""
-        Compute `pre`, `post`, `comb` from the mHC mapping (paper §2.2 eq. 8).
-        `comb` is projected onto the doubly-stochastic manifold via Sinkhorn-
-        Knopp: starting from the sigmoid-positive matrix, alternate row and
-        column normalisation for `hc_sinkhorn_iters` steps. `pre` then collapses
-        the `hc_mult` parallel streams into a single sequence (input projection
-        into the sublayer); `post` and `comb` are returned for the caller to
-        apply on the sublayer output.
         """
+        Computes the weights used to mix in the `hc_mult` streams with the input and output of the next layer, which can
+        be an attention or a MLP layer. This is done through three weights:
+
+        - pre: used to collapse the `hc_mult` input streams into one, creating an input tensor for the next layer
+        - post: used to expand the output of the next layer back into `hc_mult` streams
+        - comb: used to mix the `hc_mult` input streams with the `hc_mult` output streams
+
+        All weights are returned except "pre", which is consumed here.
+        """
+        batch_size, seq_len = hidden_streams.shape[:2]
         hc = self.hc_mult
-        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
-        pre_w, post_w, comb_w = F.linear(flat, self.fn.float()).split([hc, hc, hc * hc], dim=-1)
+
+        # Flatten and norm the hidden streams
+        flattened = hidden_streams.view(batch_size, seq_len, -1).float()
+        flattened = self.input_norm(flattened)
+        # Mix the streams together to infer the weight coefficients
+        flattened = F.linear(flattened, self.fn.float())
+        # Split the weight coefficients
+        pre_w, post_w, comb_w = flattened.split([hc, hc, hc * hc], dim=-1)
         pre_b, post_b, comb_b = self.base.split([hc, hc, hc * hc])
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
 
+        comb_w = comb_w.view(*comb_w.shape[:-1], hc, hc)  # these are matrix weights, unlike pre or post
+        comb_b = comb_b.view(hc, hc)
+
+        # All weights are computed with a one layer perceptron. For pre and post, this is it.
         pre = torch.sigmoid(pre_w * pre_scale + pre_b) + self.hc_eps
         post = 2 * torch.sigmoid(post_w * post_scale + post_b)
-        comb_logits = comb_w.view(*comb_w.shape[:-1], hc, hc) * comb_scale + comb_b.view(hc, hc)
-        comb = torch.softmax(comb_logits, dim=-1) + self.hc_eps
+        comb = torch.softmax(comb_w * comb_scale + comb_b, dim=-1) + self.hc_eps
+
+        # The comb weight is a bit different: it dictates how the input streams (In) are added to the output streams
+        # (Out) in this way: Mixed = In @ Comb + Out. To make sure the norm of "Mixed" does not blow up, we constrain
+        # the comb weight to be doubly-stochastic (ie. its rows and columns must sum to 1) with a few iterations of the
+        # Sinkhorn-Knopp algorithm, which iteratively normalizes the rows and columns to sum to 1.
         comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
         for _ in range(self.hc_sinkhorn_iters - 1):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        # Collapse the `hc_mult` parallel streams down to a single sequence using
-        # the `pre` weights: one weighted sum across the stream axis, ready for
-        # the sublayer (attn / MLP).
+
+        # Since "pre" is meant to be used with the input streams (available here as `hidden_streams`), we collapse the
+        # streams here and return `collapsed` tensor, which will be the input for the next attention or MLP block.
         collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
         return post, comb, collapsed
 
@@ -1008,7 +1053,7 @@ class DeepseekV4Experts(nn.Module):
     ) -> torch.Tensor:
         final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts).permute(2, 1, 0)
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]
@@ -1039,7 +1084,7 @@ class DeepseekV4TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -1068,7 +1113,7 @@ class DeepseekV4HashRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer("tid2eid", torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
+        self.tid2eid = nn.Buffer(torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True)
 
     def forward(
         self, hidden_states: torch.Tensor, input_ids: torch.Tensor
@@ -1159,7 +1204,7 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     # V4 ships eager-only. The non-eager backends are off for the following reasons:
     #
     #   * FlashAttention 2 / 3 cap the head dim at 256; V4's `head_dim=512`
@@ -1193,7 +1238,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "hidden_states": DeepseekV4DecoderLayer,
         "attentions": DeepseekV4Attention,
     }
-    config_class = DeepseekV4Config
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
@@ -1283,25 +1327,25 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        return_cache = past_key_values if use_cache else None
-        if past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         if position_ids is None:
-            past_seen = past_key_values.get_seq_length()
+            past_seen = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
             # `generate()` may pass a per-layer-type mask dict already built by
@@ -1314,7 +1358,7 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
@@ -1330,12 +1374,12 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 position_ids=position_ids,
                 attention_mask=causal_mask,
                 input_ids=input_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(self.hc_head(hidden_states))
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=return_cache)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 def load_balancing_loss_func(
@@ -1370,51 +1414,41 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    if isinstance(gate_logits, tuple):
-        compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
 
-    routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
 
-    _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
 
-    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-
-    if attention_mask is None:
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.mean(routing_weights, dim=0)
-    else:
-        batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
-        expert_attention_mask = (
-            attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
-            .reshape(-1, top_k, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
-
-        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
-        router_per_expert_attention_mask = (
-            attention_mask[None, :, :, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
-            .reshape(-1, num_experts)
-            .to(compute_device)
-        )
-
-        # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -1425,8 +1459,9 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__(config)
         self.model = DeepseekV4Model(config)
         self.vocab_size = config.vocab_size
@@ -1440,13 +1475,14 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
@@ -1454,11 +1490,6 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1485,7 +1516,7 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
@@ -1493,9 +1524,8 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1516,7 +1546,7 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

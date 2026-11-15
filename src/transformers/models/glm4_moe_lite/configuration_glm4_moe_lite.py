@@ -50,7 +50,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm4_moe_lite"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
@@ -68,6 +68,12 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "head_dim": "qk_rope_head_dim",
@@ -82,6 +88,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     num_key_value_heads: int = 20
     n_shared_experts: int = 1
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     routed_scaling_factor: float = 1.8
     kv_lora_rank: int = 512
     q_lora_rank: int | None = 768

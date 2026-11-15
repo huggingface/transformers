@@ -162,7 +162,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"transformer\.decoder\.layers\.(\d+)\.norm3\.":                       r"detr_decoder.layers.\1.mlp_layer_norm.",
 
     # ===========================================================================
-    # ot Product Scoring
+    # dot Product Scoring
     # ===========================================================================
     r"dot_prod_scoring\.prompt_mlp\.layers\.0\.":                          r"dot_product_scoring.text_mlp.layer1.",
     r"dot_prod_scoring\.prompt_mlp\.layers\.1\.":                          r"dot_product_scoring.text_mlp.layer2.",
@@ -232,7 +232,7 @@ def adapt_internal_ckpt(ov_sd):
     # Replace values instead of keys, and remove any isinstance checks
     sam2_sd = {k: v.replace("backbone.vision_backbone.trunk", "image_encoder.trunk") for k, v in ov_sd.items()}
     sam2_sd = {k: v.replace("backbone.vision_backbone.convs", "image_encoder.neck.convs") for k, v in sam2_sd.items()}
-    # rename components to be consitent with paper and public release
+    # rename components to be consistent with paper and public release
     sam2_sd = {k: v.replace("transformer.encoder", "memory_attention") for k, v in sam2_sd.items()}
     sam2_sd = {k: v.replace("maskmem_backbone", "memory_encoder") for k, v in sam2_sd.items()}
     sam2_sd = {

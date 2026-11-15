@@ -86,7 +86,7 @@ class TrainerAcceleratorConfigTest(TestCasePlus):
         # and the accelerator is initialized respectively
         with tempfile.TemporaryDirectory() as tmp_dir:
             path_file = Path(tmp_dir) / "accelerator_config.json"
-            with open(path_file, "w") as f:
+            with open(path_file, "w", encoding="utf-8") as f:
                 accelerator_config = {
                     "split_batches": True,
                     "dispatch_batches": True,

@@ -276,7 +276,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
     """
 )
 class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UperNetConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -301,10 +301,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         **kwargs,
     ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, UperNetForSemanticSegmentation

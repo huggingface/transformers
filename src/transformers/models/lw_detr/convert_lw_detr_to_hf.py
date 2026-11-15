@@ -21,9 +21,9 @@ import os
 import re
 from io import BytesIO
 
-import httpx
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 from torchvision import transforms
 
@@ -439,7 +439,6 @@ def convert_lw_detr_checkpoint(
 
     # Create model and load weights
     print("Creating model and loading weights...")
-    model = LwDetrForObjectDetection(lw_detr_config)
 
     # Handle different checkpoint formats
     if "state_dict" in checkpoint:
@@ -467,11 +466,13 @@ def convert_lw_detr_checkpoint(
                 converted_state_dict[key] = state_dict[key]
 
     # Load state dict
-    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False)
-    if missing_keys:
-        print(f"Missing keys: {missing_keys}")
-    if unexpected_keys:
-        print(f"Unexpected keys: {unexpected_keys}")
+    model, loading_info = LwDetrForObjectDetection.from_pretrained(
+        None, config=lw_detr_config, state_dict=converted_state_dict, output_loading_info=True
+    )
+    if loading_info["missing_keys"]:
+        print(f"Missing keys: {loading_info['missing_keys']}")
+    if loading_info["unexpected_keys"]:
+        print(f"Unexpected keys: {loading_info['unexpected_keys']}")
 
     # Save model
     print("Saving model...")

@@ -99,7 +99,6 @@ print(f"The predicted token is: {predicted_token}")
 ## BartTokenizerFast
 
 [[autodoc]] BartTokenizerFast
-    - all
 
 ## BartModel
 

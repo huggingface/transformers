@@ -17,6 +17,8 @@ Generic utilities
 
 from __future__ import annotations
 
+import functools
+import importlib
 import inspect
 import json
 import os
@@ -35,12 +37,14 @@ from typing import TYPE_CHECKING, Any, TypedDict, TypeVar
 import numpy as np
 
 from ..utils import logging
-from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
+from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, is_tracing, resolve_internal_import
 
 
 if TYPE_CHECKING:
     import torch
     from torch import nn
+
+    from ..configuration_utils import PreTrainedConfig
 
 
 # Generic class or function
@@ -77,6 +81,7 @@ def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
         _model_output_flatten,
         partial(_model_output_unflatten, output_type=output_type),
         serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+        flatten_with_keys_fn=torch_pytree._dict_flatten_with_keys,
     )
     _registered_model_output_types.add(output_type)
 
@@ -263,10 +268,10 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+    config=None, requested_attention_implementation: str | None = None, version: int | list[int] | None = None
 ) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for specific versions of
     flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
@@ -293,17 +298,49 @@ def is_flash_attention_requested(
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
-        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+        if isinstance(version, int):
+            version = [version]
+        return any(re.match(r".*flash.*" + str(v), checked_attention_implementation) is not None for v in version)
+
     # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
 
+def get_max_seqlen(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    kwarg_name: str = "max_seqlen",
+) -> int | None:
+    """Get the maximum packed sequence length, or pop it from `kwargs` if precomputed.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
+        kwargs: optional caller kwargs containing a precomputed maximum sequence length.
+        kwarg_name: key used to pop the precomputed value from `kwargs`.
+
+    Returns:
+        Maximum packed sequence length as a Python integer, or `None` when Flash Attention is not requested
+        and no precomputed value is provided.
+    """
+    if kwargs is not None and (max_seqlen := kwargs.pop(kwarg_name, None)) is not None:
+        return max_seqlen
+    if not is_flash_attention_requested(config):
+        return None
+    return (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+
+
 def split_attention_implementation(implementation: str | None) -> tuple[bool, str | None]:
     """
-    Split the optional `paged|` prefix from an attention implementation string.
-
-    Note that `None` means using the default attention implementation, which is either torch's native `sdpa` or `eager` (if `sdpa` is not implemented for that model).
+    Deprecated because the "paged|" prefix is no longer needed for flash or SDPA. This used to split the optional
+    `paged|` prefix from an attention implementation string.
     """
+    warnings.warn(
+        "split_attention_implementation is deprecated as the 'paged|' prefix is no longer needed for flash or SDPA.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if implementation is None:
         return False, None
 
@@ -380,7 +417,56 @@ def safe_load_json_file(json_file: str):
     return config_dict
 
 
-class ModelOutput(OrderedDict):
+def _rename_kwargs_for_bc(kwargs: dict) -> dict:
+    """Rename `past_key_values`/`cache_params` to `cache` in-place inside `kwargs`, and raise appropriate errors/warnings."""
+    log_warning = False
+    if "past_key_values" in kwargs:
+        if "cache" not in kwargs:
+            kwargs["cache"] = kwargs.pop("past_key_values")
+            log_warning = True
+        else:
+            raise ValueError("You cannot specify both `cache` and `past_key_values`. use `cache` only.")
+    elif "cache_params" in kwargs:
+        if "cache" not in kwargs:
+            kwargs["cache"] = kwargs.pop("cache_params")
+            log_warning = True
+        else:
+            raise ValueError("You cannot specify both `cache` and `cache_params`. use `cache` only.")
+
+    if log_warning and not is_tracing():
+        logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+
+
+class _BCCacheNameMeta(type):
+    """
+    This meta class is only here to allow BC on all __init__ of ModelOutput subclasses. Indeed, since the subclasses
+    are all @dataclasses, we need this to avoid a TypeError if trying to __init__ with the old names, i.e. `past_key_values`
+    and `cache_params`. This is a bit convoluted due to how dataclasses work and add the __init__ methods, but it's the
+    only way to allow BC while keeping compile compatibility as well.
+    """
+
+    def __setattr__(cls, name, value):
+        """
+        The @dataclass calls setattr on the class where it's used to add an __init__ method with all the fields (and only
+        the declared fields). Se we override setattr to also allow the fields `past_key_values`/`cache_params` and rename
+        them to `cache`, for BC on all the remote code most notably. Indeed, every remote code model usually does
+        `return OutputClass(past_key_values=past_key_values,...)` which would crash without this.
+        """
+        if name == "__init__":
+            init = value
+
+            # Wrap with the kwarg name change
+            @functools.wraps(init)
+            def __init__(self, *args, **kwargs):
+                _rename_kwargs_for_bc(kwargs)
+                init(self, *args, **kwargs)
+
+            # Replace the value with the wrapped function
+            value = __init__
+        super().__setattr__(name, value)
+
+
+class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
     """
     Base class for all model outputs as dataclass. Has a `__getitem__` that allows indexing by integer or slice (like a
     tuple) or strings (like a dictionary) that will ignore the `None` attributes. Otherwise behaves like a regular
@@ -489,18 +575,44 @@ class ModelOutput(OrderedDict):
     def __getitem__(self, k):
         if isinstance(k, str):
             inner_dict = dict(self.items())
+            # Handle BC
+            k = self._replace_old_cache_name(k)
             return inner_dict[k]
         else:
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
+        # Handle BC
+        name = self._replace_old_cache_name(name)
         field_names = {field.name for field in fields(self)}
         if name in field_names and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
             super().__setitem__(name, value)
         super().__setattr__(name, value)
 
+    @property
+    def past_key_values(self):
+        """
+        This property is used for BC of output.past_key_values. Indeed, dynamo cannot trace the class if we override
+        `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
+        """
+        if not is_tracing():
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+        return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
+
+    @property
+    def cache_params(self):
+        """
+        This property is used for BC of output.cache_params. Indeed, dynamo cannot trace the class if we override
+        `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
+        """
+        if not is_tracing():
+            logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+        return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
+
     def __setitem__(self, key, value):
+        # Handle BC
+        key = self._replace_old_cache_name(key)
         # Will raise a KeyException if needed
         super().__setitem__(key, value)
         # Don't call self.__setattr__ to avoid recursion errors
@@ -518,6 +630,23 @@ class ModelOutput(OrderedDict):
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
         return tuple(self[k] for k in self.keys())
+
+    def __contains__(self, key):
+        # Handle BC
+        return super().__contains__(self._replace_old_cache_name(key))
+
+    def get(self, key, default=None):
+        # Handle BC
+        return super().get(self._replace_old_cache_name(key), default)
+
+    def _replace_old_cache_name(self, key: str) -> str:
+        """Handle BC key rename from old `past_key_values`/`cache_params` to the newer `cache`, with warning if needed."""
+        # For BC
+        if key in ("past_key_values", "cache_params"):
+            if not is_tracing():
+                logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
+            return "cache"
+        return key
 
 
 def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], list[str]]:
@@ -707,11 +836,11 @@ def torch_float(x):
     Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
     """
     if not _is_torch_available:
-        return int(x)
+        return float(x)
 
     import torch
 
-    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else float(x)
 
 
 def filter_out_non_signature_kwargs(extra: list | None = None):
@@ -855,13 +984,13 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
 
     # pretrained_model_path is a file
     if is_file and pretrained_model_path.endswith(".json"):
-        with open(pretrained_model_path) as f:
+        with open(pretrained_model_path, encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
     # pretrained_model_path is a directory with a config.json
     if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
-        with open(os.path.join(pretrained_model_path, "config.json")) as f:
+        with open(os.path.join(pretrained_model_path, "config.json"), encoding="utf-8") as f:
             config_dict = json.load(f)
         return is_timm_config_dict(config_dict)
 
@@ -914,6 +1043,11 @@ def can_return_tuple(func):
 
 _KNOWN_MODALITIES = ("image", "video", "audio")
 
+# Flash-attention varlen kwargs the outer (text) forward broadcasts to every submodule. They belong to the
+# language model, not a modality encoder, and their names collide with the vision/audio encoders' own
+# `cu_seqlens`/`max_seqlen`, so `accepts_precomputed_kwargs` drops them when they arrive unprefixed.
+_FLASH_VARLEN_KWARGS = ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k")
+
 
 def accepts_precomputed_kwargs(modality: str):
     """
@@ -956,6 +1090,10 @@ def accepts_precomputed_kwargs(modality: str):
                     continue
                 if k.startswith(prefix) and k not in existing_params:
                     translated[k.removeprefix(prefix)] = v
+                elif k in _FLASH_VARLEN_KWARGS and k not in existing_params:
+                    # Unprefixed text flash-attention varlen kwargs — don't let them leak into this
+                    # modality encoder, where they'd duplicate/clash with its own `cu_seqlens`.
+                    continue
                 else:
                     translated[k] = v
             return func(*args, **translated)
@@ -1150,5 +1288,29 @@ def retry(
                     delay = min(delay * 2, max_delay)
 
         return wrapper
+
+    return decorator
+
+
+def maybe_replace_from_package(source_package: str, func_name: str):
+    """
+    This decorator will try to replace the decorated function with `func_name` imported from `package`, if it's available. If not,
+    simply use the decorated function.
+    Useful to define explicit torch fallback functions, while still using an optimized implementations from auxiliary package (e.g.
+    `causal_conv1d`) if available.
+    """
+
+    def decorator(torch_func: Callable) -> Callable:
+        try:
+            module = importlib.import_module(source_package)
+            function = resolve_internal_import(module, func_name)
+        except Exception:
+            function = torch_func
+        # `resolve_internal_import` may succeed, but return None
+        finally:
+            if function is None:
+                function = torch_func
+
+        return function
 
     return decorator

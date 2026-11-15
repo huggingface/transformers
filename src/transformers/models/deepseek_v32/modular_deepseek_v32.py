@@ -29,14 +29,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
@@ -55,7 +58,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V3.2-Exp")
 @strict
-class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
+class DeepseekV32Config(Glm4MoeLiteConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
@@ -99,7 +102,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 129280
     hidden_size: int = 7168
@@ -137,7 +140,6 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_n_heads: int = 64
     mlp_bias: bool = False
-    num_experts: int = 256
     head_dim: int = 64
     first_k_dense_replace: int = 3
     pretraining_tp = AttributeError()
@@ -155,8 +157,11 @@ class DeepseekV32Config(Glm4MoeLiteConfig, RotaryEmbeddingConfigMixin):
             self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
-        super().__post_init__(**kwargs)
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
+        # BC: re-route `num_experts` to `n_routed_experts`
+        if (num_experts := kwargs.get("num_experts")) is not None:
+            self.n_routed_experts = num_experts
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
@@ -177,7 +182,7 @@ class DeepseekV32Indexer(nn.Module):
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
+    `cache.update_indexer()`.
     """
 
     def __init__(self, config: "DeepseekV32Config", layer_idx: int):
@@ -199,14 +204,15 @@ class DeepseekV32Indexer(nn.Module):
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,  # Kept for BC
+        cache: Cache | None = None,
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -224,7 +230,7 @@ class DeepseekV32Indexer(nn.Module):
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            past_key_values: Cache object containing the indexer key cache for this layer.
+            cache: Cache object containing the indexer key cache for this layer.
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
@@ -244,8 +250,8 @@ class DeepseekV32Indexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-        if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
+        if cache is not None:
+            k = cache.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
@@ -255,18 +261,16 @@ class DeepseekV32Indexer(nn.Module):
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+        if attention_mask.dtype == torch.bool:
+            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
         else:
-            key_positions = torch.arange(index_scores.shape[-1], device=index_scores.device)
-            causal = key_positions[None, None, :] > position_ids[:, :, None]  # [B, S, T]
-            index_scores = index_scores.masked_fill(causal, float("-inf"))
+            index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class DeepseekV32Attention(DeepseekV3Attention):
+class DeepseekV32Attention(AXK1Attention):
     """
     DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
     Qlora rank formulation is dropped as it is never used in released models.
@@ -276,43 +280,47 @@ class DeepseekV32Attention(DeepseekV3Attention):
         super().__init__(config, layer_idx)
         self.indexer = DeepseekV32Indexer(config, layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor,
+        cache: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
         q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
         q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
-        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
+
+        # Cache read / write is performed while latent KV is still compressed
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
-        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        key_states, value_states = self.expand_kv(k_pass, k_rot)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
-        indexer_mask = attention_mask[:, 0, :, :] if attention_mask is not None else None
         topk_indices = self.indexer(
-            hidden_states, q_resid, position_embeddings, indexer_mask, position_ids, past_key_values=past_key_values
+            hidden_states,
+            q_resid,
+            position_embeddings,
+            attention_mask[:, 0, :, :],
+            position_ids,  # Kept for BC
+            cache=cache,
         )  # [B, S, topk]
 
         sparse_indices = None
@@ -323,11 +331,11 @@ class DeepseekV32Attention(DeepseekV3Attention):
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
             )  # [B, 1, S, T]; True = masked
-            if attention_mask is None:
-                key_positions = torch.arange(key_states.shape[2], device=hidden_states.device)
-                index_mask = index_mask | (key_positions[None, None, None, :] > position_ids[:, None, :, None])
-                attention_mask = hidden_states.new_zeros((batch_size, 1, seq_length, key_states.shape[2]))
-            attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
+
+            if attention_mask.dtype == torch.bool:
+                attention_mask = attention_mask & ~index_mask
+            else:
+                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
         else:
             sparse_indices = topk_indices
 
@@ -365,7 +373,62 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class DeepseekV32Model(DeepseekV3Model):
-    pass
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
+            }
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping["indexed_attention"],
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                cache=cache,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            cache=cache,
+        )
 
 
 class DeepseekV32ForCausalLM(DeepseekV3ForCausalLM):

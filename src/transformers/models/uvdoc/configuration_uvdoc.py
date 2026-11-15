@@ -23,8 +23,8 @@ from collections.abc import Sequence
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import BackboneConfigMixin
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -124,22 +124,19 @@ class UVDocConfig(PreTrainedConfig):
     """
 
     model_type = "uvdoc"
-    sub_configs = {"backbone_config": AutoConfig}
-    backbone_config: dict | PreTrainedConfig | None = None
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="uvdoc_backbone",
+        ),
+    }
 
+    backbone_config: dict | PreTrainedConfig | None = None
     hidden_act: str = "prelu"
     padding_mode: str = "reflect"
     kernel_size: int = 5
     bridge_connector: list[int] | tuple[int, ...] = (128, 128)
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="uvdoc_backbone",
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["UVDocBackboneConfig", "UVDocConfig"]

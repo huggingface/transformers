@@ -9,14 +9,13 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 *This model was published in HF papers on 2021-04-18 and contributed to Hugging Face Transformers on 2021-11-03.*
 
 # LayoutXLM
-
 
 ## Overview
 
@@ -82,10 +81,6 @@ As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer t
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## LayoutXLMTokenizerFast
-
-[[autodoc]] LayoutXLMTokenizerFast
-    - __call__
 
 ## LayoutXLMProcessor
 

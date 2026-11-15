@@ -82,7 +82,7 @@ def load_original_state_dict(model_id):
     return original_state_dict
 
 
-# used only for llava-interlave
+# used only for llava-interleave
 # for ex: Qwen/Qwen1.5-0.5B-Chat google/siglip-so400m-patch14-384 lmms-lab/llava-next-interleave-qwen-0.5b
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}

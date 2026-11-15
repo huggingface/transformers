@@ -38,7 +38,6 @@ from ...utils import (
     auto_docstring,
     is_scipy_available,
     logging,
-    requires_backends,
 )
 
 
@@ -206,7 +205,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarr
 
 
 def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
-    """DARK post-pocessing. Implemented by unbiased_data_processing.
+    """DARK post-processing. Implemented by unbiased_data_processing.
 
     Paper references:
     - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
@@ -490,7 +489,6 @@ class VitPoseImageProcessor(TorchvisionBackend):
             `list[list[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, "torch")
         batch_size, num_keypoints, _, _ = outputs.heatmaps.shape
         if target_sizes is not None and batch_size != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")

@@ -53,7 +53,6 @@ class DebertaV2SelfOutput(nn.Module):
         return hidden_states
 
 
-@torch.jit.script
 def make_log_bucket_position(relative_pos, bucket_size: int, max_position: int):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -101,27 +100,22 @@ def build_relative_position(query_layer, key_layer, bucket_size: int = -1, max_p
     return rel_pos_ids
 
 
-@torch.jit.script
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
-@torch.jit.script
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
-@torch.jit.script
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-@torch.jit.script
 def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
-@torch.jit.script
 def build_rpos(query_layer, key_layer, relative_pos, position_buckets: int, max_relative_positions: int):
     if key_layer.size(-2) != query_layer.size(-2):
         return build_relative_position(
@@ -201,7 +195,7 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
@@ -213,14 +207,14 @@ class DisentangledSelfAttention(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`torch.FloatTensor`, *optional*):
+            query_states (`torch.Tensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
                 values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (`torch.FloatTensor`):
+            rel_embeddings (`torch.Tensor`):
                 The embedding of relative distances. It's a tensor of shape [\\(2 \\times
                 \\text{max_relative_positions}\\), *hidden_size*].
 
@@ -513,9 +507,7 @@ class DebertaV2Embeddings(nn.Module):
         self.config = config
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, mask=None, inputs_embeds=None):
         if input_ids is not None:
@@ -702,7 +694,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaModel with Deberta->DebertaV2
 class DebertaV2Model(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         self.embeddings = DebertaV2Embeddings(config)
@@ -893,16 +885,14 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     }
     _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaV2Model(config)
         if self.legacy:
             self.cls = LegacyDebertaV2OnlyMLMHead(config)
         else:
-            self._tied_weights_keys = {
-                "lm_predictions.lm_head.weight": "deberta.embeddings.word_embeddings.weight",
-            }
+            self._tied_weights_keys = {}
             self.lm_predictions = DebertaV2OnlyMLMHead(config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -936,13 +926,6 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
-
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
@@ -1009,7 +992,7 @@ class ContextPooler(nn.Module):
     """
 )
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1048,12 +1031,6 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
@@ -1119,7 +1096,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForTokenClassification with Deberta->DebertaV2
 class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1144,10 +1121,6 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
@@ -1182,7 +1155,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1260,7 +1233,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1297,12 +1270,6 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MultipleChoiceModelOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

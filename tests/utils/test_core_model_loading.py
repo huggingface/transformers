@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
+from torch.distributed.tensor.placement_types import Shard
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -28,22 +29,30 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     Conv3dToLinear,
+    ConversionOps,
     ErnieFuseAndSplitTextVisionExperts,
+    GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Split,
+    SplitModulelist,
+    VisionFuseAndPermuteForRope,
+    VisionUnfuseAndPermuteForRope,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
+    spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
+from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -169,6 +178,13 @@ class TestWeightGlobMatching(unittest.TestCase):
         renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
+    def test_reverse_keeps_escaped_dots_in_capturing_group(self):
+        renaming = WeightRenaming(source_patterns=r"\.moe\.(experts\.|gate\.)", target_patterns=r"\.mlp\.\1")
+        reverse = renaming.reverse_transform()
+        self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
+        # the group keeps its escapes: `gate\.` matches `gate.` only, so `gateX` stays as is
+        self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
+
 
 class DummyParamModule(nn.Module):
     def __init__(self, shape):
@@ -177,11 +193,18 @@ class DummyParamModule(nn.Module):
 
 
 class DummySelfAttn(nn.Module):
+    def __init__(self, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__()
+        q_shape, k_shape, v_shape = attention_shapes
+        self.q_proj = DummyParamModule(q_shape)
+        self.k_proj = DummyParamModule(k_shape)
+        self.v_proj = DummyParamModule(v_shape)
+
+
+class DummySelfAttnMerged(nn.Module):
     def __init__(self):
         super().__init__()
-        self.q_proj = DummyParamModule((1, 2))
-        self.k_proj = DummyParamModule((1, 2))
-        self.v_proj = DummyParamModule((1, 2))
+        self.qkv_proj = DummyParamModule((3, 2))
 
 
 class DummyExperts(nn.Module):
@@ -192,24 +215,53 @@ class DummyExperts(nn.Module):
 
 
 class DummyLayer(nn.Module):
+    def __init__(self, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__()
+        self.self_attn = DummySelfAttn(attention_shapes)
+        self.experts = DummyExperts()
+        if add_extra_moe:
+            self.extra_experts = DummyExperts()
+
+
+class DummyLayerMerged(nn.Module):
     def __init__(self, add_extra_moe=False):
         super().__init__()
-        self.self_attn = DummySelfAttn()
+        self.self_attn = DummySelfAttnMerged()
         self.experts = DummyExperts()
         if add_extra_moe:
             self.extra_experts = DummyExperts()
 
 
 class DummyTopModel(nn.Module):
+    def __init__(self, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [DummyLayer(add_extra_moe, attention_shapes), DummyLayer(add_extra_moe, attention_shapes)]
+        )
+
+
+class DummyTopModelMerged(nn.Module):
     def __init__(self, add_extra_moe=False):
         super().__init__()
-        self.layers = nn.ModuleList([DummyLayer(add_extra_moe), DummyLayer(add_extra_moe)])
+        self.layers = nn.ModuleList([DummyLayerMerged(add_extra_moe), DummyLayerMerged(add_extra_moe)])
 
 
 class DummyMLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.down_proj = DummyParamModule((2, 2))
+
+
+class DummyModelWithNorm(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__(config)
+        self.model = DummyTopModel(add_extra_moe, attention_shapes)
+        self.norm1 = nn.LayerNorm(16)
+        self.norm2 = nn.LayerNorm(16)
+        self.post_init()
 
 
 class DummyRoot(PreTrainedModel):
@@ -224,7 +276,110 @@ class DummyRoot(PreTrainedModel):
         self.post_init()
 
 
+class DummyRootMerged(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False, with_mlp=True):
+        super().__init__(config)
+        self.model = DummyTopModelMerged(add_extra_moe)
+        if with_mlp:
+            self.mlp = DummyMLP()
+        self.post_init()
+
+
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
+        """Integration test: FSDP-sharded expert loading + WeightConverter.
+
+        The problem: Mixtral has 8 experts. The checkpoint stores them separately::
+
+            experts.0.w1.weight  (2x2)
+            experts.0.w3.weight  (2x2)
+            experts.1.w1.weight  (2x2)
+            experts.1.w3.weight  (2x2)
+
+        The model stores them packed into one tensor::
+
+            experts.gate_up_proj.weight  (2, 4, 2)
+                                          ^  ^  ^
+                                          |  |  +-- features
+                                          |  +-- w1 (2) + w3 (2) concatenated
+                                          +-- num_experts
+
+        With FSDP2, params become DTensors and FSDP can shard the same
+        dimension as TP or EP (e.g. expert axis 0). On a 2D (fsdp, tp) mesh
+        the loader must compose both placements either: [Shard(d), Shard(d)] for contiguous double-shard,
+        or [_StridedShard(d), Shard(d)] for fused weights.DtensorShardOperation handles this; the legacy TP path did not.
+
+        What the test checks::
+
+            checkpoint files              shard_tensor              rank 0 gets
+            ----------------              ------------              -----------
+            experts.0.w1  [[0,1],[2,3]]   idx=0 -> kept            [[0,1],[2,3]]
+            experts.1.w1  [[10,11],...]   idx=1 -> None (not owned)
+            experts.0.w3  [[4,5],[6,7]]   idx=0 -> kept            [[4,5],[6,7]]
+            experts.1.w3  [[14,15],...]   idx=1 -> None (not owned)
+
+        WeightConverter then combines only the kept tensors::
+
+            MergeModulelist(dim=0): stack owned experts  -> shape (1, 2, 2) each
+            Concatenate(dim=1):     cat w1 + w3 along dim 1
+
+            gate_up_proj = [[[0,1],[2,3],[4,5],[6,7]]]   shape (1, 4, 2)
+                              ~~~~~~~~~~  ~~~~~~~~~~
+                                  w1          w3
+
+        The key point: DtensorShardOperation.shard_tensor(tensor_idx=1) returns
+        None for rank 0, so the converter never even processes expert 1's data.
+        This saves memory during loading.
+        """
+        shard_op = _make_dtensor_shard_op(
+            FakeMesh(shape=(2,), rank=0),
+            [Shard(0)],
+            param_shape=(2, 4, 2),
+            local_shape=(1, 4, 2),
+        )
+        converter = WeightConverter(
+            ["experts.*.w1.weight", "experts.*.w3.weight"],
+            "experts.gate_up_proj.weight",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+                torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w1.weight",
+                "experts.*.w1.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+                torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w3.weight",
+                "experts.*.w3.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
+
+        self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
+        torch.testing.assert_close(
+            converted["model.layers.0.experts.gate_up_proj.weight"],
+            torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
+        )
+
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot(PreTrainedConfig())
 
@@ -277,7 +432,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             state_dict,
             load_config,
-            tp_plan=None,
         )
 
         self.assertEqual(
@@ -394,7 +548,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             state_dict,
             load_config,
-            tp_plan=None,
         )
         self.assertTrue(len(loading_info.missing_keys) == 0)
         self.assertTrue(len(loading_info.unexpected_keys) == 0)
@@ -494,7 +647,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             )
         ]
         load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config)
 
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -530,6 +683,49 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             context={"quantization_config": quantizer.quantization_config},
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
+    def test_fp8_ue8m0_quantize_dequantize_round_trip(self):
+        # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
+        # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
+        # disagrees with the scale the weight was divided by (a silent per-block error up to an octave).
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
+
+        if not hasattr(torch, "float8_e8m0fnu"):
+            self.skipTest("ue8m0 storage requires torch.float8_e8m0fnu")
+
+        quantizer = SimpleNamespace(
+            quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="ue8m0")
+        )
+        torch.manual_seed(0)
+        weight = torch.randn(128, 128, dtype=torch.float32)
+
+        quantized = Fp8Quantize(quantizer)._quantize_one("layer.weight", weight)
+        recovered = Fp8Dequantize(quantizer)._dequantize_one(
+            quantized["layer.weight"], quantized["layer.weight_scale_inv"], output_dtype=torch.float32
+        )
+        rel_err = ((recovered - weight).abs().sum() / weight.abs().sum()).item()
+        self.assertLess(rel_err, 5e-2)  # fp8 round-trip is ~2e-2; a scale mismatch inflates it past 0.2
+
+    def test_fp8_float_scale_fmt_quantization_unchanged(self):
+        # The ue8m0 reordering must leave the default scale_fmt="float" path bit-identical to the
+        # original single-division formula (scales = _FP8_MAX / max_abs). Any divergence only shows
+        # on rare fp32-ULP block maxima, so scan many random 128x128 blocks rather than one.
+        from transformers.integrations.finegrained_fp8 import _FP8_DTYPE, _FP8_MAX, _FP8_MIN, Fp8Quantize
+
+        quantizer = Fp8Quantize(
+            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
+        )
+        for seed in range(100):
+            torch.manual_seed(seed)
+            weight = torch.randn(128, 128, dtype=torch.float32)
+            out = quantizer._quantize_one("layer.weight", weight)
+            scales = _FP8_MAX / weight.abs().amax()
+            ref_q = torch.clamp(weight * scales, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+            ref_inv = (1.0 / scales).to(torch.float32).reshape(1, 1)
+            self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
+            self.assertTrue(
+                torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"
+            )
 
     def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
         """scope_prefix gates a WeightRenaming to keys under one submodel only —
@@ -572,7 +768,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         # Sibling and parent keys must be unmatched.
@@ -617,7 +812,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -663,7 +857,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -704,7 +897,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=[scoped_rename]),
-            tp_plan=None,
         )
         self.assertEqual(loading_info.missing_keys, set())
         self.assertEqual(loading_info.unexpected_keys, set())
@@ -776,7 +968,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             model,
             checkpoint,
             LoadStateDictConfig(weight_mapping=weight_mapping),
-            tp_plan=None,
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -852,7 +1043,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
 
         self.assertEqual(loading_info.missing_keys, set())
@@ -975,7 +1166,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Use the mapping to load
         loading_info, _ = convert_and_load_state_dict_in_model(
-            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
         )
         self.assertTrue(len(loading_info.missing_keys) == 0)
         self.assertTrue(len(loading_info.unexpected_keys) == 0)
@@ -988,8 +1179,309 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
+    def test_qkv_chunk_rope_permute_vision_config(self):
+        n_heads = 2
+        head_dim = 8
+
+        class RopeProjector(nn.Module):
+            def __init__(self, in_dim, out_dim):
+                super().__init__()
+                self.weight = nn.Parameter(torch.zeros(out_dim, in_dim))
+
+        class RopeSelfAttn(nn.Module):
+            def __init__(self, fused_qkv: bool = False):
+                super().__init__()
+                if fused_qkv:
+                    self.qkv_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim * 3)
+                else:
+                    self.q_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+                    self.k_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+                    self.v_proj = RopeProjector(n_heads * head_dim, n_heads * head_dim)
+
+        class RopeLayer(nn.Module):
+            def __init__(self, fused_qkv: bool = False):
+                super().__init__()
+                self.self_attn = RopeSelfAttn(fused_qkv=fused_qkv)
+
+        class RopeModel(PreTrainedModel):
+            base_model_prefix = "model"
+
+            def __init__(self, config, fused_qkv: bool = False):
+                super().__init__(config)
+                self.layers = nn.ModuleList([RopeLayer(fused_qkv=fused_qkv)])
+                self.post_init()
+
+        vision_config = PreTrainedConfig(hidden_size=16, head_dim=8, num_attention_heads=2)
+        config = PreTrainedConfig(vision_config=vision_config)
+        model = RopeModel(config)
+        model_fused = RopeModel(config, fused_qkv=True)
+
+        qkv_weight = torch.randn(3 * vision_config.hidden_size, vision_config.hidden_size, dtype=torch.float32)
+
+        q_proj, k_proj, v_proj = torch.chunk(qkv_weight, 3, dim=0)
+
+        q_proj = q_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        q_proj = q_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        k_proj = k_proj.view(
+            vision_config.num_attention_heads, vision_config.head_dim // 2, 2, vision_config.hidden_size
+        )
+        k_proj = k_proj.transpose(1, 2).reshape(vision_config.hidden_size, vision_config.hidden_size)
+
+        state_dict_fused = {"model.layers.0.self_attn.qkv_proj.weight": qkv_weight.clone()}
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[VisionUnfuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"])],
+            )
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict_fused, load_config)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model_state = model.state_dict()
+        torch.testing.assert_close(model_state["layers.0.self_attn.q_proj.weight"], q_proj)
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], k_proj)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], v_proj)
+
+        # Now test if the revert conversion works
+        state_dict_unfused = {
+            "model.layers.0.self_attn.q_proj.weight": q_proj.clone(),
+            "model.layers.0.self_attn.k_proj.weight": k_proj.clone(),
+            "model.layers.0.self_attn.v_proj.weight": v_proj.clone(),
+        }
+        weight_mapping = [
+            WeightConverter(
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                "self_attn.qkv_proj.weight",
+                operations=[
+                    VisionFuseAndPermuteForRope(dim=0, permute_layer_names=["q_proj", "k_proj"], inverse=True)
+                ],
+            )
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model_fused, state_dict_unfused, load_config)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model_state = model_fused.state_dict()
+        torch.testing.assert_close(model_state["layers.0.self_attn.qkv_proj.weight"], qkv_weight)
+
+    def test_split_to_target_parameter_sizes(self):
+        model = DummyModelWithNorm(PreTrainedConfig(), attention_shapes=((4, 2), (2, 2), (2, 2)))
+        fused = torch.arange(16.0).reshape(8, 2)
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Split(dim=0)],
+            )
+        ]
+        state_dict = {f"model.layers.{index}.self_attn.qkv_proj.weight": fused.clone() for index in range(2)}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+        model_state = model.state_dict()
+        for index in range(2):
+            prefix = f"model.layers.{index}.self_attn"
+            torch.testing.assert_close(model_state[f"{prefix}.q_proj.weight"], fused[:4])
+            torch.testing.assert_close(model_state[f"{prefix}.k_proj.weight"], fused[4:6])
+            torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], fused[6:])
+
+        reversed_state_dict = revert_weight_conversion(model, model_state)
+        reversed_qkv = {key: value for key, value in reversed_state_dict.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(reversed_qkv, state_dict))
+
+    def test_reverse_renames_the_converter_outputs_many_to_one(self):
+        """Test that Converter and Renaming work well together even if they are applied on the same subkey during reverse conversion,
+        in the case of a many-to-one conversion during reverse conversion."""
+        # The renaming writes the name the converter reads, so the save must convert before it renames back
+        model = DummyRoot(PreTrainedConfig(), with_mlp=False)
+
+        # Mapping with both Renaming and Converter applied to the same subkey, i.e. part of the Converter patterns use the
+        # result of the Renaming
+        weight_mapping = [
+            WeightRenaming(r"\.attention\.", ".self_attn."),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ]
+
+        state_dict = {
+            f"model.layers.{index}.attention.qkv_proj.weight": torch.arange(6.0).reshape(3, 2) + index
+            for index in range(2)
+        }
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        saved = revert_weight_conversion(model, model.state_dict())
+        saved_qkv = {key: value for key, value in saved.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
+
+    def test_quantize_on_load_receives_the_checkpoint_dtype(self):
+        # Casting to the int8 storage before quantizing would zero the weight
+        class QuantizeOp(ConversionOps):
+            def convert(self, input_dict, full_layer_name=None, **kwargs):
+                tensor = next(iter(input_dict.values()))[0]
+                received.append(tensor.dtype)
+                return {full_layer_name: (tensor * 10).round().to(torch.int8)}
+
+        class OnTheFlyQuantizer:
+            pre_quantized = False
+
+            def param_needs_quantization(self, model, param_name):
+                return param_name.endswith("down_proj.weight")
+
+            def get_quantize_ops(self):
+                return QuantizeOp()
+
+        received = []
+        model = DummyRoot(PreTrainedConfig(), with_mlp=True)
+        model.mlp.down_proj.weight = nn.Parameter(torch.zeros(2, 2, dtype=torch.int8), requires_grad=False)
+        state_dict = {"mlp.down_proj.weight": torch.full((2, 2), 0.5)}
+
+        convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(hf_quantizer=OnTheFlyQuantizer(), dtype=torch.float32)
+        )
+
+        self.assertEqual(received, [torch.float32])
+        self.assertTrue(torch.equal(model.mlp.down_proj.weight, torch.full((2, 2), 5, dtype=torch.int8)))
+
+    def test_split_modulelist_squeezes_only_the_split_dim(self):
+        # One column of block scales per expert keeps its size-1 dim
+        scales = torch.arange(4.0).reshape(2, 2, 1)
+        split = SplitModulelist(dim=0).convert({"experts.scale": scales}, ["experts.scale"], ["experts.*.scale"])
+        self.assertEqual(split["experts.0.scale"].shape, (2, 1))
+        self.assertEqual(split["experts.1.scale"].shape, (2, 1))
+
+    def test_many_to_many_requires_an_operation_that_supports_it(self):
+        with self.assertRaises(ValueError):
+            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
+        WeightConverter(["a", "b"], ["c", "d"], operations=[ErnieFuseAndSplitTextVisionExperts()])
+
+    def test_copy_keeps_force_cpu(self):
+        converter = WeightConverter("a", "b", operations=[Concatenate(dim=0)], force_cpu=True)
+        self.assertTrue(converter.copy("c", "d", operations=converter.operations).force_cpu)
+
+    def test_reverse_renames_the_converter_outputs_one_to_many(self):
+        """Test that Converter and Renaming work well together even if they are applied on the same subkey during reverse conversion,
+        in the case of a one-to-many conversion during reverse conversion."""
+        # The renaming writes the name the converter reads, so the save must convert before it renames back
+        model = DummyRootMerged(PreTrainedConfig(), with_mlp=False)
+
+        # Mapping with both Renaming and Converter applied to the same subkey, i.e. part of the Converter patterns use the
+        # result of the Renaming
+        weight_mapping = [
+            WeightRenaming(r"\.attention\.", ".self_attn."),
+            WeightConverter(
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                "self_attn.qkv_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ]
+        state_dict = {
+            "model.layers.0.attention.q_proj.weight": torch.arange(2.0).reshape(1, 2),
+            "model.layers.0.attention.k_proj.weight": torch.arange(2.0, 4.0).reshape(1, 2),
+            "model.layers.0.attention.v_proj.weight": torch.arange(4.0, 6.0).reshape(1, 2),
+            "model.layers.1.attention.q_proj.weight": torch.arange(2.0).reshape(1, 2) + 10,
+            "model.layers.1.attention.k_proj.weight": torch.arange(2.0, 4.0).reshape(1, 2) + 10,
+            "model.layers.1.attention.v_proj.weight": torch.arange(4.0, 6.0).reshape(1, 2) + 10,
+        }
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        saved = revert_weight_conversion(model, model.state_dict())
+        saved_qkv = {
+            key: value for key, value in saved.items() if any(x in key for x in ["q_proj", "k_proj", "v_proj"])
+        }
+        self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
+
 
 class TestConversionMapping(unittest.TestCase):
+    def test_group_weight_rename(self):
+        model = DummyModelWithNorm(PreTrainedConfig())
+
+        bad_serialized_checkpoints = {
+            k.replace("norm1", "norm0").replace("norm2", "norm1"): v.clone() for k, v in model.state_dict().items()
+        }
+        weight_mapping = [
+            GroupWeightRename(
+                source_patterns=[r"norm0", r"norm1"],
+                target_patterns=[r"norm1", r"norm2"],
+            )
+        ]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
     def test_conv3d_linear_conversion_ops(self):
         weight_name = "patch_embed.proj.weight"
         kernel_size = (2, 2, 2)
@@ -1058,7 +1550,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1080,7 +1571,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1117,7 +1607,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1139,7 +1628,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1177,7 +1665,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1199,7 +1686,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1236,7 +1722,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             bad_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues
@@ -1258,7 +1743,6 @@ class TestConversionMapping(unittest.TestCase):
             model,
             good_serialized_checkpoints,
             LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
-            tp_plan=None,
         )
 
         # Assert we can load without issues

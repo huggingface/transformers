@@ -1,6 +1,6 @@
 # Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao,
 # Michael Mahoney, Kurt Keutzer - UC Berkeley) and The HuggingFace Inc. team.
-# Copyright (c) 20121, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -69,9 +69,7 @@ class IBertEmbeddings(nn.Module):
         )
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -97,15 +95,13 @@ class IBertEmbeddings(nn.Module):
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, cache_length=0):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(
-                    input_ids, self.padding_idx, past_key_values_length
-                ).to(input_ids.device)
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, cache_length).to(
+                    input_ids.device
+                )
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
@@ -585,7 +581,8 @@ class IBertPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (QuantLinear, nn.Linear)):
+        super()._init_weights(module)
+        if isinstance(module, QuantLinear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -594,7 +591,7 @@ class IBertPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.fc_scaling_factor)
             if getattr(module, "bias_integer", None) is not None:
                 init.zeros_(module.bias_integer)
-        elif isinstance(module, (QuantEmbedding, nn.Embedding)):
+        elif isinstance(module, QuantEmbedding):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
@@ -602,9 +599,7 @@ class IBertPreTrainedModel(PreTrainedModel):
             if getattr(module, "weight_scaling_factor", None) is not None:
                 init.zeros_(module.weight_scaling_factor)
                 init.zeros_(module.weight_integer)
-        elif isinstance(module, (IntLayerNorm, nn.LayerNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+        elif isinstance(module, IntLayerNorm):
             if getattr(module, "shift", None) is not None:
                 init.zeros_(module.shift)
         elif isinstance(module, IBertLMHead):
@@ -631,7 +626,7 @@ class IBertModel(IBertPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: IBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -658,15 +653,15 @@ class IBertModel(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.FloatTensor]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -734,7 +729,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
 
         self.ibert = IBertModel(config, add_pooling_layer=False)
@@ -754,22 +749,16 @@ class IBertForMaskedLM(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> MaskedLMOutput | tuple[torch.FloatTensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
+    ) -> MaskedLMOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -831,7 +820,7 @@ class IBertLMHead(nn.Module):
     """
 )
 class IBertForSequenceClassification(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -845,22 +834,16 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+    ) -> SequenceClassifierOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -912,7 +895,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForMultipleChoice(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
 
         self.ibert = IBertModel(config)
@@ -927,15 +910,15 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> MultipleChoiceModelOutput | tuple[torch.FloatTensor]:
+    ) -> MultipleChoiceModelOutput | tuple[torch.Tensor]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -952,16 +935,12 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1014,7 +993,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForTokenClassification(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1029,20 +1008,16 @@ class IBertForTokenClassification(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> TokenClassifierOutput | tuple[torch.FloatTensor]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
+    ) -> TokenClassifierOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -1099,7 +1074,7 @@ class IBertClassificationHead(nn.Module):
 
 @auto_docstring
 class IBertForQuestionAnswering(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1113,17 +1088,17 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> QuestionAnsweringModelOutput | tuple[torch.FloatTensor]:
+    ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -1174,7 +1149,7 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         )
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+def create_position_ids_from_input_ids(input_ids, padding_idx, cache_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's *utils.make_positions*.
@@ -1187,7 +1162,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + cache_length) * mask
     return incremental_indices.long() + padding_idx
 
 

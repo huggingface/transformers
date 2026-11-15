@@ -28,7 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -51,14 +51,14 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     r"""
-    last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+    intermediate_activations (`tuple(torch.Tensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: torch.FloatTensor | None = None
-    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_states: torch.Tensor | None = None
+    intermediate_activations: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -70,20 +70,20 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
 @dataclass
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state of the first token of the sequence (classification token) after further processing
         through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
         the classification token after processing through a linear layer and a tanh activation function. The linear
         layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+    intermediate_activations (`tuple(torch.Tensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    intermediate_activations: tuple[torch.Tensor, ...] | None = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -131,7 +131,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = torch_int(len(posemb_grid) ** 0.5)
+        old_grid_size = torch_int(posemb_grid.shape[0] ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -522,7 +522,7 @@ class DPTReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -782,7 +782,7 @@ class DPTModel(DPTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
         embedding_output: BaseModelOutputWithIntermediateActivations = self.embeddings(pixel_values)
@@ -854,7 +854,7 @@ class DPTNeck(nn.Module):
     ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -921,7 +921,7 @@ class DPTDepthEstimationHead(nn.Module):
     """
 )
 class DPTForDepthEstimation(DPTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DPTConfig):
         super().__init__(config)
 
         self.backbone = None
@@ -941,23 +941,21 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, DPTForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -988,13 +986,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
-
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
 
         if self.backbone is not None:
             outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
@@ -1030,7 +1021,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1094,22 +1085,19 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1126,13 +1114,6 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
 
         outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
@@ -1177,7 +1158,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

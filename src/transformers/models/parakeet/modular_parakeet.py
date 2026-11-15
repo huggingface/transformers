@@ -34,7 +34,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
@@ -71,51 +71,31 @@ class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: ParakeetEncoderConfig, device=None):
+    def __init__(self, config: ParakeetEncoderConfig):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
         self.config = config
-        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        inv_freq = self.compute_default_relative_positional_parameters(config)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     @staticmethod
-    def compute_default_relative_positional_parameters(
-        config: ParakeetEncoderConfig | None = None,
-        device=None,
-    ) -> torch.Tensor:
+    def compute_default_relative_positional_parameters(config: ParakeetEncoderConfig) -> torch.Tensor:
         base = 10000.0
-        inv_freq = 1.0 / (
-            base
-            ** (
-                torch.arange(0, config.hidden_size, 2, dtype=torch.int64).to(device=device, dtype=torch.float)
-                / config.hidden_size
-            )
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
         return inv_freq
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 
@@ -189,10 +169,7 @@ class ParakeetEncoderAttention(LlamaAttention):
         matrix_bd = matrix_bd * self.scaling
 
         if attention_mask is not None:
-            # here the original codebase uses -10000.0 rather than float("-inf") and then manual masked fill with 0.0s
-            # see: https://github.com/NVIDIA-NeMo/NeMo/blob/8cfedd7203462cb251a914e700e5605444277561/nemo/collections/asr/parts/submodules/multi_head_attention.py#L320-L340
-            # we rather went for a straight-forward approach with float("-inf")
-            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), float("-inf"))
+            matrix_bd = matrix_bd.masked_fill_(attention_mask.logical_not(), torch.finfo(matrix_bd.dtype).min)
 
         # will compute matrix_ac - terms (a) and (c) - and add matrix_bd
         attn_output, attn_weights = attention_interface(
@@ -429,7 +406,6 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,
@@ -480,7 +456,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -508,22 +484,22 @@ class ParakeetCTCGenerateOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor
-    logits: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    logits: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
 
 
 @dataclass
@@ -539,6 +515,11 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
         )
 
 
+class ParakeetEncoderCTCHead(nn.Conv1d):
+    def forward(self, hidden_states: torch.Tensor):
+        return super().forward(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+
 @auto_docstring(
     custom_intro="""
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -551,7 +532,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         # Conv rather than linear to be consistent with NeMO decoding layer
-        self.ctc_head = nn.Conv1d(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
+        self.ctc_head = ParakeetEncoderCTCHead(config.encoder_config.hidden_size, config.vocab_size, kernel_size=1)
 
         self.post_init()
 
@@ -593,30 +574,20 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = encoder_outputs.last_hidden_state
-        logits = self.ctc_head(hidden_states.transpose(1, 2)).transpose(1, 2)
+        logits = self.ctc_head(hidden_states)
 
         loss = None
         if labels is not None:
             encoder_lengths = encoder_outputs.attention_mask.sum(-1)
-
-            # assuming that padded tokens are filled with pad_token_id when not being attended to
-            labels_mask = labels != self.config.pad_token_id
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    encoder_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=encoder_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss,
@@ -758,17 +729,17 @@ class ParakeetRNNTOutput(BaseModelOutputWithPooling):
     Output of the Parakeet RNN-T forward pass.
 
     Args:
-        loss (`torch.FloatTensor`, *optional*):
+        loss (`torch.Tensor`, *optional*):
             RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
+        logits (`torch.Tensor`):
             Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
             or `(batch, 1, 1, vocab)` for single-step inference.
         decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
             Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     decoder_cache: ParakeetRNNTDecoderCache | None = None
 
 
@@ -816,7 +787,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.Tensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetRNNTOutput:
@@ -830,7 +801,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         use_decoder_cache (`bool`, *optional*):
             Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
             is created automatically during the forward pass.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(torch.Tensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
             Can be a tuple or `ParakeetEncoderModelOutput`.
 
@@ -925,7 +896,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.Tensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetRNNTOutput:
@@ -939,7 +910,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
         use_decoder_cache (`bool`, *optional*):
             Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
             is created automatically during the forward pass.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(torch.Tensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
             Can be a tuple or `ParakeetEncoderModelOutput`.
 

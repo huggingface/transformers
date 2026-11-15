@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -102,7 +102,7 @@ each of length `config.lsh_chunk_length`. For each chunk, the query embedding ve
 (which are tied to themselves) and to the key embedding vectors of `config.lsh_num_chunks_before` previous
 neighboring chunks and `config.lsh_num_chunks_after` following neighboring chunks.
 
-For more information, see the [original Paper](https://huggingface.co/papers/2001.04451) or this great [blog post](https://www.pragmatic.ml/reformer-deep-dive/).
+For more information, see the [original Paper](https://huggingface.co/papers/2001.04451).
 
 Note that `config.num_buckets` can also be factorized into a list $(n_{\text{buckets}}^1,
 n_{\text{buckets}}^2)$. This way instead of assigning the query key embedding vectors to one of $(1,\ldots,
@@ -158,10 +158,6 @@ loss = model(input_ids, labels=input_ids)[0]
 
 [[autodoc]] ReformerTokenizer
     - save_vocabulary
-
-## ReformerTokenizerFast
-
-[[autodoc]] ReformerTokenizerFast
 
 ## ReformerModel
 

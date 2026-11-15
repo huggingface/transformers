@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -41,7 +41,7 @@ providing more explicit control over text generation. These codes also allow CTR
 training data are most likely given a sequence. This provides a potential method for analyzing large amounts of data
 via model-based source attribution.*
 
-This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitishr). The original code can be found
+This model was contributed by keskarnitishr. The original code can be found
 [here](https://github.com/salesforce/ctrl).
 
 ## Usage tips
@@ -52,11 +52,10 @@ This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitis
 - CTRL is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
 - CTRL was trained with a causal language modeling (CLM) objective and is therefore powerful at predicting the next
-  token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text as it can be
-  observed in the *run_generation.py* example script.
-- The PyTorch models can take the `past_key_values` as input, which is the previously computed key/value attention pairs.
-  Using the `past_key_values` value prevents the model from re-computing
-  pre-computed values in the context of text generation. See the [`forward`](model_doc/ctrl#transformers.CTRLModel.forward)
+  token in a sequence. Leveraging this feature allows CTRL to generate syntactically coherent text.
+- The PyTorch models can take the `cache` as input, which is the previously computed key/value attention pairs.
+  Using the `cache` value prevents the model from re-computing
+  pre-computed values in the context of text generation. See the [`~CTRLModel#forward`]
   method for more information on the usage of this argument.
 
 ## Resources

@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -87,11 +87,11 @@ categories to integer ids, compute areas, and filter out degenerate bounding box
 ```py
 >>> def prepare_example(example, idx):
 ...     objects = example["objects"]
-...     bboxes = objects["bbox"]
+...     in_bboxes = objects["bbox"]
 ...     categories = objects["category"]
 ...     img_w, img_h = example["width"], example["height"]
 ...     bboxes, cats, areas, ids = [], [], [], []
-...     for i, (bbox, cat) in enumerate(zip(bboxes, categories)):
+...     for i, (bbox, cat) in enumerate(zip(in_bboxes, categories)):
 ...         x, y, w, h = bbox
 ...         if w <= 0 or h <= 0:
 ...             continue

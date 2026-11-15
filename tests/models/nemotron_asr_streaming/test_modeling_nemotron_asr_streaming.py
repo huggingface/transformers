@@ -195,9 +195,8 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/nemotron-speech-streaming-en-0.6b"
-        cls.revision = "refs/pr/17"
         cls.dtype = torch.float32
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -240,13 +239,11 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
-        )
+        model = NemotronAsrStreamingForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -259,13 +256,11 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         # NeMo reference; all five HF transcripts match it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_batch_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
-        )
+        model = NemotronAsrStreamingForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -288,7 +283,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_streaming_rnnt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_streaming.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
         # The shorter streaming example emits a few words less than the full fixture reference.
         EXPECTED_TRANSCRIPTION = EXPECTED_TRANSCRIPTION[: -len(" of the")]
@@ -298,9 +293,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
             sampling_rate=sampling_rate,
         )
-        model = NemotronAsrStreamingForRNNT.from_pretrained(
-            self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto"
-        )
+        model = NemotronAsrStreamingForRNNT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         # Select the streaming right attention context (lookahead, in subsampled encoder frames). This sizes
         # the audio/mel chunks the processor emits and must reach `generate` so the forward matches; it travels

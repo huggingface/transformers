@@ -19,13 +19,9 @@ import numpy as np
 
 from transformers import Gemma4UnifiedProcessor
 from transformers.testing_utils import get_tests_dir, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
-
-if is_vision_available():
-    pass
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -33,14 +29,9 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma4UnifiedProcessor
-    video_unstructured_max_length = 570
-    video_text_kwargs_max_length = 570
-    video_text_kwargs_override_max_length = 570
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
+    videos_unstructured_max_length = 570
+    videos_text_kwargs_max_length = 570
+    videos_text_kwargs_override_max_length = 570
 
     @classmethod
     def _setup_video_processor(cls):
@@ -86,6 +77,18 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
         return tokenizer
 
+    @property
+    def video_sampling_expectations(self):
+        # Frames of all videos are concatenated along dim 0 instead of stacked on a video axis,
+        # so the sampled frame count is `shape[0]` rather than `shape[1]`.
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 3},
+            {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 2},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 11},
+            {"expected_dim": 0, "output_length": 2},
+        ]
+
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -106,13 +109,13 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {
-            "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<image_soft_token>' }}\n       {%- elif item['type'] == 'video' -%}\n{{ '<video_soft_token>' }}\n      {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
+            "chat_template": "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}\n    {%- set first_user_prefix = messages[0]['content'][0]['text'] + '\n\n' -%}\n    {%- set loop_messages = messages[1:] -%}\n{%- else -%}\n    {%- set first_user_prefix = \"\" -%}\n    {%- set loop_messages = messages -%}\n{%- endif -%}\n{%- for message in loop_messages -%}\n    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}\n        {{ raise_exception(\"Conversation roles must alternate user/assistant/user/assistant/...\") }}\n    {%- endif -%}\n    {%- if (message['role'] == 'assistant') -%}\n        {%- set role = \"model\" -%}\n    {%- else -%}\n        {%- set role = message['role'] -%}\n    {%- endif -%}\n    {{ '<start_of_turn>' + role + '\n' + (first_user_prefix if loop.first else \"\") }}\n    {%- if message['content'] is string -%}\n        {{ message['content'] | trim }}\n    {%- elif message['content'] is iterable -%}\n        {%- for item in message['content'] -%}\n            {%- if item['type'] == 'image' -%}\n                {{ '<image_soft_token>' }}\n       {%- elif item['type'] == 'video' -%}\n{{ '<|video|>' }}\n      {%- elif item['type'] == 'audio' -%}\n                {{ '<audio_soft_token>' }}\n {%- elif item['type'] == 'text' -%}\n                {{ item['text'] | trim }}\n            {%- endif -%}\n        {%- endfor -%}\n    {%- else -%}\n        {{ raise_exception(\"Invalid content type\") }}\n    {%- endif -%}\n    {{ '<end_of_turn>\n' }}\n{%- endfor -%}\n{%- if add_generation_prompt -%}\n    {{'<start_of_turn>model\n'}}\n{%- endif -%}\n",            "image_seq_length": 3,
         }  # fmt: skip
 
     # Override as Gemma4Unified needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -132,7 +135,7 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_multi_images = f"{processor.image_token}{processor.image_token}Dummy text!"
         text_single_image = f"{processor.image_token}Dummy text!"
 
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
 
         # We can't be sure what is users intention: if user wants one image per text OR two images for first text and no image for second text
         with self.assertRaises(ValueError):
@@ -153,7 +156,7 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,
@@ -200,7 +203,3 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
-
-    @unittest.skip("This test seems to be loading a different video, check for all models and fix")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass

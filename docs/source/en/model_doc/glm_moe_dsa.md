@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
 *This model was published in HF papers on 2026-02-17 and contributed to Hugging Face Transformers on 2026-02-09.*
@@ -25,11 +25,21 @@ limitations under the License.
     </div>
 </div>
 
-# GLM-5, GLM-5.1, GLM-5.2
+# GLM-5, GLM-5.1, GLM-5.2, GLM-5.3
 
 ## Overview
 
-**GLM-5**, **GLM-5.1** and **GLM-5.2** language model use this class. The implementation in transformers does not include an MTP layer.
+**GLM-5**, **GLM-5.1**, **GLM-5.2** and **GLM-5.3** language model use this class. The implementation in transformers does not include an MTP layer.
+
+### GLM-5.3
+
+GLM-5.3 uses the same base model as GLM-5.2 — every gain comes from post-training. Compared with GLM-5.2, it is much better at complex coding and long-horizon tasks:
+
++ Stronger Coding: GLM-5.3 is the most capable open-weights model for coding, with a 50% improvement over GLM-5.2 on our in-house Z.ai Code Bench. It also achieve open-source SOTA on public benchmarks including Terminal Bench 3.0 and
+  Agents' Last Exam.
++ Emergent Cyber Capability: As we scaled post-training, cyber capability developed faster than we expected. GLM-5.3 is state of the art on CyberGym for vulnerability discovery, and its gains are largest further up the exploitation chain, where it more than doubles GLM-5.2 on exploitation benchmarks.
+
+![bench_53](https://raw.githubusercontent.com/zai-org/GLM-5/refs/heads/main/resources/bench_53_2.png)
 
 ### GLM-5.2
 

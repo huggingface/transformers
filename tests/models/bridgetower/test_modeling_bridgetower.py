@@ -307,7 +307,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
-    test_torch_exportable = False
     test_resize_embeddings = False
     has_attentions = False
 
@@ -445,6 +444,10 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="Bridge Tower does not use inputs_embeds")
     def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @unittest.skip(reason="hidden states are concatenated as 3 tuples of text/image/cross")
+    def test_can_capture_specific_layers_hidden_states(self):
         pass
 
 

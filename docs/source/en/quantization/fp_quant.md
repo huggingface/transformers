@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -43,7 +43,7 @@ A **Blackwell-generation GPU is required** to run the kernels. Runtime support f
 Users **without a Blackwell-generation GPU** , can use the method with `quantization_config=FPQuantConfig(pseudoquantization=True)` without having to install [QuTLASS](https://github.com/IST-DASLab/qutlass). This would provide no speedups but would fully emulate the effect of quantization.
 
 > [!TIP]
-> Find models pre-quantized with FP-Quant in the official ISTA-DASLab [collection](https://huggingface.co/collections/ISTA-DASLab/fp-quant-6877c186103a21d3a02568ee).
+> Find models pre-quantized with FP-Quant in the [ISTA-DASLab](https://huggingface.co/ISTA-DASLab/models?search=FPQuant) organization.
 
 ## torch.compile
 

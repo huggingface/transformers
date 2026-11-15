@@ -238,7 +238,7 @@ def load_metadata(repo_id, class_info_file):
         except RepositoryNotFoundError:
             fname = hf_hub_download(repo_id, class_info_file)
 
-    with open(fname, "r") as f:
+    with open(fname, "r", encoding="utf-8") as f:
         class_info = json.load(f)
 
     return class_info
@@ -838,7 +838,7 @@ class OneFormerImageProcessorPil(PilBackend):
             task_type (`str`, *optional*, defaults to "instance"):
                 The post processing depends on the task token input. If the `task_type` is "panoptic", we need to
                 ignore the stuff predictions.
-            is_demo (`bool`, *optional)*, defaults to `True`):
+            is_demo (`bool`, *optional*, defaults to `True`):
                 Whether the model is in demo mode. If true, use threshold to predict final masks.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
@@ -851,7 +851,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
-            return_coco_annotation (`bool`, *optional)*, defaults to `False`):
+            return_coco_annotation (`bool`, *optional*, defaults to `False`):
                 Whether to return predictions in COCO format.
 
         Returns:
