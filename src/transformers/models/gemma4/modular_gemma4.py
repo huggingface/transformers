@@ -682,7 +682,8 @@ class Gemma4VisionPooler(nn.Module):
         input and output lengths
         """
         input_seq_len = hidden_states.shape[1]
-        k = int((input_seq_len // length) ** 0.5)
+        # An integer square root: under dynamic shapes, `int(x ** 0.5)` truncates a symbolic 2.999... to 2
+        k = math.isqrt(input_seq_len // length)
         k_squared = k**2
         if k_squared * length != input_seq_len:
             raise ValueError(
@@ -1985,7 +1986,7 @@ class Gemma4Model(Gemma3nModel):
         vision_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True, **kwargs)
         pooler_output = vision_outputs.pooler_output
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
-        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
         non_pad_mask = (image_position_ids != -1).all(dim=-1)
         split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
         vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
