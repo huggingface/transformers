@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
 import onnx_ir as ir
@@ -35,6 +36,10 @@ from onnxscript.rewriter.ort_fusions.skip_normalization import fuse_skip_rms_nor
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxruntime_available
+
+
+if TYPE_CHECKING:
+    from .configs import OrtFusionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1470,61 +1475,61 @@ def _merge_equal_computations(model: ir.Model) -> None:
     common_passes.RemoveUnusedNodesPass()(model)
 
 
-# The pipeline, step by step: `(step(model), the providers it's for, or None for all)`.
+# The pipeline, step by step: `(step(model), the providers it's for or None for all, the OrtFusionConfig toggle it
+# needs or None)`.
 _STEPS = (
     # 1. Prepare.
-    (_type_loop_sequences, None),
-    (_RSQRT_FROM_POW.apply_to_model, None),
-    (_KEY_TRANSPOSE.apply_to_model, None),
+    (_type_loop_sequences, None, None),
+    (_RSQRT_FROM_POW.apply_to_model, None, None),
+    (_KEY_TRANSPOSE.apply_to_model, None, None),
     # 2. Rotary embeddings, and attentions sharing a key.
-    (_fuse_rotary_embeddings, None),
-    (_fuse_shared_key_attentions, None),
+    (_fuse_rotary_embeddings, None, "rotary_embeddings"),
+    (_fuse_shared_key_attentions, None, None),
     # 3. onnxscript's ORT fusions: norms, skip norms, attention, GELU.
-    (optimize_for_ort, None),
+    (optimize_for_ort, None, None),
     # 4. Repair.
-    (_unfuse_mixed_dtype_skip_norms, None),
-    (_set_partial_rotary_heads, None),
-    (_unfuse_leftover_attentions, None),
-    (_unfuse_attention_activation_biases, None),
-    (_unfuse_group_norms, None),
-    (_untranspose_batch_matmuls, ("cuda", "dml")),
-    (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",)),
+    (_unfuse_mixed_dtype_skip_norms, None, None),
+    (_set_partial_rotary_heads, None, None),
+    (_unfuse_leftover_attentions, None, None),
+    (_unfuse_attention_activation_biases, None, None),
+    (_unfuse_group_norms, None, None),
+    (_untranspose_batch_matmuls, ("cuda", "dml"), None),
+    (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",), None),
     # 5. More fusions.
-    (_WEIGHTLESS_RMS_NORMS.apply_to_model, None),
-    (_narrow_norms, None),
+    (_WEIGHTLESS_RMS_NORMS.apply_to_model, None, None),
+    (_narrow_norms, None, None),
     # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again, and those a float32
     # scale still keeps apart (Qwen3.5's `1 + weight`) undone again.
-    (fuse_skip_rms_normalization, None),
-    (_unfuse_mixed_dtype_skip_norms, None),
+    (fuse_skip_rms_normalization, None, None),
+    (_unfuse_mixed_dtype_skip_norms, None, None),
     # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
     # `MultiHeadAttention`'s (microsoft/onnxruntime#33869).
-    (_fuse_group_query_attention, ("cpu",)),
-    (partial(_fuse_group_query_attention, prefill=False, head_norms=True), ("cuda",)),
+    (_fuse_group_query_attention, ("cpu",), "group_query_attention"),
+    (partial(_fuse_group_query_attention, prefill=False, head_norms=True), ("cuda",), "group_query_attention"),
     # WebGPU's rotates at the positions after the past, ignoring `position_ids`: rotary stays its own op.
-    (partial(_fuse_group_query_attention, rotary=False), ("webgpu",)),
+    (partial(_fuse_group_query_attention, rotary=False), ("webgpu",), "group_query_attention"),
     # DirectML's ignores rotary and `attention_bias` and needs unpacked q/k/v: it keeps `MultiHeadAttention`.
-    (_fuse_mixture_of_experts, ("cuda",)),
+    (_fuse_mixture_of_experts, ("cuda",), "mixture_of_experts"),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused (microsoft/onnxruntime#33873): the ones
     # left, unfused.
-    (_unfuse_attentions, ("cpu",)),
-    (_sink_head_transposes, None),
-    (_pack_sibling_matmuls, None),
-    (_pack_group_query_attention_inputs, None),
+    (_unfuse_attentions, ("cpu",), None),
+    (_sink_head_transposes, None, None),
+    (_pack_sibling_matmuls, None, "packed_projections"),
+    (_pack_group_query_attention_inputs, None, "packed_projections"),
     # 6. CUDA provider.
-    (_CONSTANT_GATHER_ND.apply_to_model, ("cuda",)),
+    (_CONSTANT_GATHER_ND.apply_to_model, ("cuda",), None),
     # What every layer computes alike (its mask's unattended rows), computed once.
-    (_merge_equal_computations, None),
+    (_merge_equal_computations, None, None),
 )
 
 
-def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str) -> None:
-    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, `ort_fusions` (`"cpu"`, `"cuda"`,
-    `"webgpu"` or `"dml"`)."""
-    if ort_fusions == "cuda" and not is_onnxruntime_available("1.28.0"):
+def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig) -> None:
+    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks."""
+    if fusions.provider == "cuda" and not is_onnxruntime_available("1.28.0"):
         logger.warning(
             "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "
             "has no query and key norms and float16 skip norms overflow on large activations."
         )
-    for step, providers in _STEPS:
-        if providers is None or ort_fusions in providers:
+    for step, providers, toggle in _STEPS:
+        if (providers is None or fusions.provider in providers) and (toggle is None or getattr(fusions, toggle)):
             step(model)
