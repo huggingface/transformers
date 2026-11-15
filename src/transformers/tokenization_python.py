@@ -117,6 +117,10 @@ class Trie:
         ["[CLS]", " This is a ", "extra_id_100"]
         ```
         """
+        # A shared starting character can be checked with Python's native string search.
+        if not self.data or (len(self.data) == 1 and next(iter(self.data)) not in text):
+            return [text] if text else []
+
         # indexes are counted left of the chars index.
         # "hello", index 0, is left of h, index 1 is between h and e.
         # index 5 is right of the "o".
