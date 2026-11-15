@@ -25,7 +25,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -33,6 +32,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_image_processing_common import load_coco_image
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -173,7 +173,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class Ovis2_5IntegrationTest(unittest.TestCase):
+class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "ovis-community/Ovis2.5-2B"
     smoke_pixels = 448 * 448
 
@@ -188,12 +188,6 @@ class Ovis2_5IntegrationTest(unittest.TestCase):
             device_map=torch_device,
             output_loading_info=True,
         )
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        del cls.processor
-        cleanup(torch_device, gc_collect=True)
 
     @parameterized.expand(
         [
