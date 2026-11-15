@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -82,7 +82,7 @@ class ExportConfigMixin:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         values = {name: value for name, value in self.__dict__.items() if name != "quantizer"}
-        return json.dumps(values, indent=2, sort_keys=True, default=repr)
+        return json.dumps(values, indent=2, sort_keys=True, default=lambda v: vars(v) if is_dataclass(v) else repr(v))
 
     def __iter__(self):
         yield from self.__dict__.items()
@@ -130,6 +130,41 @@ class DynamoConfig(ExportConfigMixin):
     quantizer: ExportQuantizer | None = None
 
 
+ORT_PROVIDERS = ("cpu", "cuda", "webgpu", "dml")
+
+
+@dataclass
+class OrtFusionConfig:
+    """
+    Which of ONNX Runtime's fusions `OnnxConfig(ort_fusions=...)` applies. onnxscript's norm, attention and GELU
+    fusions always do.
+
+    Args:
+        provider (`str`):
+            The execution provider the fused graph runs on: `"cpu"`, `"cuda"`, `"webgpu"` or `"dml"`.
+        rotary_embeddings (`bool`, *optional*, defaults to `True`):
+            Fuse rotary embeddings into `RotaryEmbedding`, folded into `GroupQueryAttention` where it takes them.
+        group_query_attention (`bool`, *optional*, defaults to `True`):
+            Fuse attentions reading a key-value cache into `GroupQueryAttention` (DirectML keeps `MultiHeadAttention`).
+        mixture_of_experts (`bool`, *optional*, defaults to `False`):
+            Fuse mixture-of-experts blocks into `MoE` (CUDA only), whose kernels need a Hopper or newer GPU.
+        packed_projections (`bool`, *optional*, defaults to `True`):
+            Pack the projections reading one input (query, key and value; gate and up) into one `MatMul`.
+    """
+
+    provider: Literal["cpu", "cuda", "webgpu", "dml"]
+    rotary_embeddings: bool = True
+    group_query_attention: bool = True
+    mixture_of_experts: bool = False
+    packed_projections: bool = True
+
+    def __post_init__(self):
+        if self.provider not in ORT_PROVIDERS:
+            raise ValueError(f"`provider` must be 'cpu', 'cuda', 'webgpu' or 'dml', got {self.provider!r}")
+        if self.mixture_of_experts and self.provider != "cuda":
+            raise ValueError("`mixture_of_experts` fuses ONNX Runtime's CUDA `MoE`: it needs `provider='cuda'`.")
+
+
 @dataclass
 class OnnxConfig(DynamoConfig):
     """
@@ -146,20 +181,24 @@ class OnnxConfig(DynamoConfig):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that
             hit upstream `onnxscript` optimiser bugs.
-        ort_fusions (`str`, *optional*):
+        ort_fusions (`str` or [`OrtFusionConfig`], *optional*):
             Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
-            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
+            `"webgpu"` or `"dml"` for its default fusions, or an [`OrtFusionConfig`] picking them. The fused graph only
+            runs on ONNX Runtime. Requires `optimize=True`.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
     opset_version: int | None = None
     optimize: bool = True
-    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
+    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | OrtFusionConfig | None = None
 
     def __post_init__(self):
-        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml"):
-            raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_fusions!r}")
+        # A provider for its default fusions; a dict as saved with an export.
+        if isinstance(self.ort_fusions, str):
+            self.ort_fusions = OrtFusionConfig(provider=self.ort_fusions)
+        elif isinstance(self.ort_fusions, dict):
+            self.ort_fusions = OrtFusionConfig(**self.ort_fusions)
         if self.ort_fusions is not None and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 
