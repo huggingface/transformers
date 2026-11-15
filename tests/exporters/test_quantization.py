@@ -530,8 +530,8 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @require_onnxscript
     @require_onnxruntime
     def test_onnxruntime_calibration_table_skips_infinite_ranges(self):
-        """A tensor whose range isn't finite (scores masked with `-inf`) gets no entry, which TensorRT would refuse
-        (`setDynamicRange` takes finite bounds only), so it stays out of int8."""
+        """A tensor whose range overflows the engine's precision (scores masked with the float minimum, or `-inf`) gets
+        no entry, which TensorRT would refuse, so it stays out of int8."""
         import json
 
         from transformers.exporters import (
@@ -544,14 +544,15 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 
         class MaskedSoftmax(torch.nn.Module):
             def forward(self, x):
-                return x.masked_fill(x < 0, float("-inf")).softmax(-1)
+                masked = x.masked_fill(x < 0, torch.finfo(x.dtype).min).softmax(-1)
+                return masked + x.masked_fill(x < 0, float("-inf")).softmax(-1)
 
         inputs = {"x": torch.randn(2, 8)}
         quantizer = OnnxRuntimeQuantizer(OnnxRuntimeCalibrationTableConfig(), calibration_dataset=[inputs])
         exported = OnnxExporter().export(MaskedSoftmax(), dict(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
         table = json.loads(exported.program.metadata_props[TENSORRT_CALIBRATION_TABLE])
         self.assertTrue(table)
-        self.assertTrue(all(value <= torch.finfo(torch.float32).max for value in table.values()))
+        self.assertTrue(all(value <= torch.finfo(torch.float16).max for value in table.values()))
 
     @parameterized.expand(
         [(family, weights_only) for family in ("dense", "moe", "ssm") for weights_only in (False, True)]
