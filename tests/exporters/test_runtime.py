@@ -795,8 +795,8 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         self._check_backend(ExecutorchExporter(), ExecutorchConfig)
 
     def _check_cuda_graphs(self, providers):
-        """A static export, its prefill and decode disaggregated, generates as eager does with both graphs replaying
-        CUDA graphs: a second `generate` replays the prompt graph's and the decode graph's captures."""
+        """A static export generates as eager does with its decode graph replaying a CUDA graph, its prompt graph
+        (dynamic) not: a second `generate` replays the decode graph's capture."""
         torch.manual_seed(0)
         model, inputs = self._llama()
         model, inputs = model.to("cuda"), {name: value.to("cuda") for name, value in inputs.items()}
@@ -809,15 +809,16 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
             model, copy.deepcopy(inputs), OnnxConfig(dynamic=False), generation_config=generation_config
         )
         exported.to(providers=providers)
-        runners = [exported.runners[name] for name in ("model", "prefill_model")]
+        decode, prefill = exported.runners["model"], exported.runners["prefill_model"]
         # ONNX Runtime lists an execution provider whose libraries are missing (TensorRT's), and falls back past it.
-        if any(runner.session.get_providers()[0] != providers[0][0] for runner in runners):
+        if decode.session.get_providers()[0] != providers[0][0]:
             self.skipTest(f"{providers[0][0]} could not load its libraries")
-        self.assertTrue(all(runner.replays_cuda_graph for runner in runners))
+        self.assertTrue(decode.replays_cuda_graph)
+        self.assertFalse(prefill.replays_cuda_graph)
         for _ in range(2):
             generated = exported.generate(**copy.deepcopy(inputs), generation_config=generation_config)
             self.assertEqual(generated.tolist(), expected.tolist())
-        self.assertTrue(all(runner.cuda_graph is not None for runner in runners))
+        self.assertIsNotNone(decode.cuda_graph)
 
     @require_onnxscript
     @require_onnxruntime

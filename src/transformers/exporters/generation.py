@@ -266,10 +266,14 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             if spec.get("rank") == 4 and (mask is None or mask.dim() == 2):
                 kwargs[mask_name] = self._causal_mask(kwargs, mask, spec["dtype"])
             elif "leaves" in spec and isinstance(mask, dict):
-                # Per layer type (mixed full / sliding attention): only the slots `generate` left empty.
+                # Per layer type (mixed full / sliding attention): only the slots `generate` left empty, and none for a
+                # slot traced empty (an unpadded linear-attention mask), which the graph doesn't read.
+                leaves = spec["leaves"]
                 kwargs[mask_name] = {
-                    layer_type: self._causal_mask(kwargs, None, spec["leaves"][layer_type]["dtype"])
-                    if value is None and spec["leaves"].get(layer_type, {}).get("rank") == 4
+                    layer_type: None
+                    if leaves.get(layer_type) == {"value": None}
+                    else self._causal_mask(kwargs, None, leaves[layer_type]["dtype"])
+                    if value is None and leaves.get(layer_type, {}).get("rank") == 4
                     else value
                     for layer_type, value in mask.items()
                 }
