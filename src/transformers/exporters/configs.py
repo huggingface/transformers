@@ -175,11 +175,9 @@ class OnnxConfig(DynamoConfig):
 
     Args:
         opset_version (`int`, *optional*):
-            ONNX opset version to target. By default, 23, the first with `Attention`, `RMSNormalization` and
-            `RotaryEmbedding`, which `torch.onnx` exports SDPA, RMS norms and rotary embeddings to instead of their
-            decompositions; with `ort_fusions` or a `quantizer`, 20, as ONNX Runtime's fusions rewrite those
-            decompositions into its own ops and quantizers write opset-20 quantization nodes. ONNX Runtime's TensorRT provider takes 22 at most: TensorRT builds `Attention` only into a
-            strongly typed network, which the provider doesn't make.
+            ONNX opset version to target. Defaults to 23, which exports SDPA, RMS norms and rotary embeddings as
+            single ops (`Attention`, `RMSNormalization`, `RotaryEmbedding`); to 20 with `ort_fusions` or a
+            `quantizer`, which work on their decompositions. ONNX Runtime's TensorRT provider takes 22 at most.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that

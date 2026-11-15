@@ -144,7 +144,7 @@ class OnnxExporter(DynamoExporter):
         quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
         # Opset 23 exports attention, RMS norms and rotary embeddings as single ops. ONNX Runtime's fusions match their
-        # decompositions instead, and NNCF quantizes at 20 (at 23 its `QuantizeLinear` outputs mismatch their zero point).
+        # decompositions, and NNCF's `QuantizeLinear` mismatches its zero point at 23.
         opset_version = config.opset_version or (20 if ort_fusions is not None or quantizer is not None else 23)
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions is not None and ort_fusions.mixture_of_experts else None
