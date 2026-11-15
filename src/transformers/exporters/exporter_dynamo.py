@@ -516,11 +516,14 @@ def _patch_chunk_gated_delta_rule(_original):
         query = query * query.shape[-1] ** -0.5
 
         # Padded to a whole number of chunks, written as a product so the chunked reshape is provably exact. At least
-        # two: a trace guards a dynamic size against 1, which would refuse a one-chunk prompt.
+        # two: a trace guards a dynamic size against 1, which would refuse a one-chunk prompt. Padded by two chunks then
+        # cut, as a pad of `padded - sequence_length` is 0 on a whole number of chunks, which a trace specializes on.
         num_chunks = torch.sym_max(2, (sequence_length + chunk_size - 1) // chunk_size)
-        pad_size = num_chunks * chunk_size - sequence_length
-        query, key, value = (torch.nn.functional.pad(x, (0, 0, 0, pad_size)) for x in (query, key, value))
-        beta, decay = (torch.nn.functional.pad(x, (0, pad_size)) for x in (beta, decay))
+        padded = num_chunks * chunk_size
+        query, key, value = (
+            torch.nn.functional.pad(x, (0, 0, 0, 2 * chunk_size))[:, :, :padded] for x in (query, key, value)
+        )
+        beta, decay = (torch.nn.functional.pad(x, (0, 2 * chunk_size))[:, :, :padded] for x in (beta, decay))
         v_beta = value * beta.unsqueeze(-1)
         k_beta = key * beta.unsqueeze(-1)
         query, key, k_beta, v_beta = [
@@ -564,7 +567,10 @@ def _patch_chunk_gated_delta_rule(_original):
         state = state.unflatten(0, (batch_size, num_v_heads))
         core_attn_out = core_attn_out.unflatten(1, (batch_size, num_v_heads)).movedim(0, 2)
         core_attn_out = core_attn_out.reshape(batch_size, num_v_heads, -1, v_head_dim)
-        core_attn_out = core_attn_out[:, :, :sequence_length]
+        # A gather rather than a slice: on a whole number of chunks the slice keeps every position, which a trace
+        # specializes on
+        positions = torch.arange(sequence_length, device=core_attn_out.device)
+        core_attn_out = core_attn_out.index_select(2, positions)
         core_attn_out = core_attn_out.transpose(1, 2).to(initial_dtype, memory_format=torch.contiguous_format)
         return core_attn_out, state if output_final_state else None
 
