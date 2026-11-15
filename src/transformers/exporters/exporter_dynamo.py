@@ -520,9 +520,9 @@ def _patch_chunk_gated_delta_rule(_original):
             key = key * torch.rsqrt((key * key).sum(dim=-1, keepdim=True) + 1e-6)
         query = query * query.shape[-1] ** -0.5
 
-        # Padded to a whole number of chunks, written as a product so the chunked reshape is provably exact. At least
-        # two: a trace guards a dynamic size against 1, which would refuse a one-chunk prompt. Padded by two chunks then
-        # cut, as a pad of `padded - sequence_length` is 0 on a whole number of chunks, which a trace specializes on.
+        # Padded to a whole number of chunks, at least two (a trace guards a dynamic size against 1), written as a
+        # product so the chunked reshape is provably exact. Padded by two chunks then cut: a pad of
+        # `padded - sequence_length` is 0 on a whole number of chunks, which a trace specializes on.
         num_chunks = torch.sym_max(2, (sequence_length + chunk_size - 1) // chunk_size)
         padded = num_chunks * chunk_size
         query, key, value = (
@@ -572,8 +572,7 @@ def _patch_chunk_gated_delta_rule(_original):
         state = state.unflatten(0, (batch_size, num_v_heads))
         core_attn_out = core_attn_out.unflatten(1, (batch_size, num_v_heads)).movedim(0, 2)
         core_attn_out = core_attn_out.reshape(batch_size, num_v_heads, -1, v_head_dim)
-        # A gather rather than a slice: on a whole number of chunks the slice keeps every position, which a trace
-        # specializes on
+        # A gather, as a slice keeps every position on a whole number of chunks, which a trace specializes on
         positions = torch.arange(sequence_length, device=core_attn_out.device)
         core_attn_out = core_attn_out.index_select(2, positions)
         core_attn_out = core_attn_out.transpose(1, 2).to(initial_dtype, memory_format=torch.contiguous_format)
@@ -583,7 +582,7 @@ def _patch_chunk_gated_delta_rule(_original):
 
 
 def _scan(combine_fn, init, xs):
-    """`torch`'s `scan` of `combine_fn` over the leading dim of the tensors `xs`, a backend that can't lower it patches.
+    """`torch`'s `scan` of `combine_fn` over the leading dim of `xs`, which a backend that can't lower it patches.
 
     The `scan` operator itself, not `torch`'s `scan` wrapper: the wrapper traces the loop body with dynamo, whose cache
     hands a later export the body an earlier one traced, sizes baked in.
@@ -594,8 +593,7 @@ def _scan(combine_fn, init, xs):
         carry, output = combine_fn(carry, list(chunk))
         return [carry, output]
 
-    carry, outputs = scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
-    return carry, outputs
+    return scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
 
 
 def _unit_lower_triangular_inverse(matrix):

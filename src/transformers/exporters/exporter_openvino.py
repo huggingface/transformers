@@ -2299,13 +2299,9 @@ def _patch_scatter_reduce(original):
 
 @register_patch("openvino", "transformers.exporters.exporter_dynamo._scan")
 def _patch_scan(_original):
-    """The gated delta rule's ``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop``: it has no ``scan``
-    conversion.
-
-    Every tensor the body reads is carried through the loop, the scanned ones included: OV's ``while_loop``
-    conversion takes the inputs a closure lifts for carried ones, and fails on the count. The ``while_loop`` operator
-    itself, not ``torch``'s wrapper, whose dynamo cache hands a later export the body an earlier one traced.
-    """
+    """The gated delta rule's ``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop`` (it has no
+    ``scan`` conversion). The ``while_loop`` operator itself, not ``torch``'s wrapper, whose dynamo cache hands a later
+    export the body an earlier one traced; the operator lifts no closure, so the scanned tensors are carried."""
     from torch._higher_order_ops.while_loop import while_loop_op
 
     def patch(combine_fn, init, xs):
@@ -2314,7 +2310,7 @@ def _patch_scan(_original):
         outputs = first.new_zeros(xs[0].shape[0], *first.shape)
 
         def cond(index, carry, outputs, *xs):
-            return index < xs[0].shape[0]
+            return index < outputs.shape[0]
 
         def body(index, carry, outputs, *xs):
             position = index.reshape(1)

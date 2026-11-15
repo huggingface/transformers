@@ -1265,9 +1265,9 @@ def _replace_by_swapped_heads(node: ir.Node, x: ir.Value) -> None:
 
 def _sink_head_transposes(model: ir.Model) -> None:
     """Move the transposes between `[batch, length, heads, head_dim]` and `[batch, heads, length, head_dim]` past the
-    ops that read either layout alike, the per-head norms, the rotary embeddings, the repeat of the key-value heads and
-    the zeroing of unattended rows, until they meet the transpose back and cancel: `MultiHeadAttention` reads and writes the first
-    layout, so each attention copied its query, keys, values and output there and back."""
+    ops that read either layout alike (the per-head norms, the rotary embeddings, the repeat of the key-value heads and
+    the zeroing of unattended rows), until they meet the transpose back and cancel: `MultiHeadAttention` reads and
+    writes the first layout, so each attention copied its query, keys, values and output there and back."""
     graph = model.graph
     for index, node in enumerate(list(graph)):
         name = f"head_transposes_{index}"
