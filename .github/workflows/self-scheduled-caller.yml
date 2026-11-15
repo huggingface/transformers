@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_nvidia_ci*
+      - test-kernels-ci-full-v2
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -23,7 +23,7 @@ on:
 
 # Used for `push` to easily modify the target workflow runs to compare against
 env:
-    prev_workflow_run_id: ""
+    prev_workflow_run_id: "43667655478"
     other_workflow_run_id: ""
 
 
@@ -51,25 +51,12 @@ jobs:
           name: setup_values
           path: setup_values
 
-  model-ci:
-    name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
-    with:
-      job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
-      docker: huggingface/transformers-all-latest-gpu
-      ci_event: Daily CI
-      runner_type: "a10"
-      report_repo_id: hf-internal-testing/transformers_daily_ci
-      commit_sha: ${{ github.sha }}
-    secrets: inherit
-
   torch-pipeline:
     name: Torch pipeline CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@test-kernels-ci-full
     with:
       job: run_pipelines_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-pipeline-torch"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
@@ -78,10 +65,10 @@ jobs:
 
   trainer-fsdp-ci:
     name: Trainer/FSDP CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@test-kernels-ci-full
     with:
       job: run_trainer_and_fsdp_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       runner_type: "a10"
       ci_event: Daily CI
@@ -91,10 +78,10 @@ jobs:
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@test-kernels-ci-full
     with:
       job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#transformers-ci-daily-training"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-pytorch-deepspeed-latest-gpu
       ci_event: Daily CI
       working-directory-prefix: /workspace
@@ -104,10 +91,10 @@ jobs:
 
   quantization-ci:
     name: Quantization CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@test-kernels-ci-full
     with:
       job: run_quantization_torch_gpu
-      slack_report_channel: "#transformers-ci-daily-quantization"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-quantization-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
@@ -116,10 +103,10 @@ jobs:
 
   kernels-ci:
     name: Kernels CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@test-kernels-ci-full
     with:
       job: run_kernels_gpu
-      slack_report_channel: "#transformers-ci-daily-kernels"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       report_repo_id: hf-internal-testing/transformers_daily_ci
