@@ -581,9 +581,7 @@ class HfExporter(ABC):
         `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
         prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights, and a static prompt
         graph takes prompts of the captured length only (another raises). A stateful export (OpenVINO's) keeps the
-        cache as each graph's state: the decode graph continues from a copy of the prompt graph's. A dynamic export of
-        a model switching kernels on the query length (Qwen3.5's linear attention) gets no prompt graph, whose chunked
-        kernel would be unrolled for the traced prompt's chunk count: it generates from one-token prompts only.
+        cache as each graph's state: the decode graph continues from a copy of the prompt graph's.
 
         Args:
             model ([`PreTrainedModel`]):
@@ -615,11 +613,8 @@ class HfExporter(ABC):
         generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
         )
-        # A decode graph taking one token leaves the prompt to a graph of its own, except a dynamic one of a model
-        # switching kernels on the query length: tracing unrolls its chunked kernel for the traced chunk count.
-        disaggregated = not multi_token_decode and not (
-            _is_dynamic(config) and _switches_kernels_on_query_length(model)
-        )
+        # A decode graph taking one token leaves the prompt to a graph of its own.
+        disaggregated = not multi_token_decode
         components = decompose_for_generation(
             model,
             sample_inputs,
