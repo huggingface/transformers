@@ -1726,6 +1726,16 @@ class Trainer:
         explicit `dtype` (e.g. `dtype=torch.bfloat16`, for pure half-precision training) carry no marker and are
         left untouched, as are frozen parameters (e.g. a PEFT base model) and models that were not loaded through
         `from_pretrained` at all. DeepSpeed is skipped: it keeps its own float32 copy of the weights.
+
+        One mix is not upcast into: without autocast, a linear layer refuses operands of different dtypes, so a
+        float32 weight must never meet a half-precision activation stream inside the forward pass. If the model
+        also has frozen half-precision parameters outside its embeddings (e.g. head-only fine-tuning, where a
+        frozen half-precision body feeds the trainable head), upcasting only the trainable parameters would
+        strand exactly that boundary in place, so the upcast is skipped with a warning and the model trains in
+        its loaded dtype, as it did before. With `bf16=True`/`fp16=True` the upcast applies to such a mix as
+        well, since autocast casts at the boundary. Frozen parameters that belong to embeddings do not block the
+        upcast: an embedding has no tensor input to mismatch, and its output is promoted to float32 by the first
+        norm or embedding sum it feeds, before a linear layer consumes it.
         """
         if self.is_deepspeed_enabled:
             return
@@ -1739,6 +1749,23 @@ class Trainer:
             if param.requires_grad and param.dtype in (torch.float16, torch.bfloat16)
         }
         if not half_params:
+            return
+        if not (self.args.bf16 or self.args.fp16) and any(
+            not param.requires_grad and param.dtype in (torch.float16, torch.bfloat16)
+            for module in loaded
+            for submodule in module.modules()
+            if not isinstance(submodule, nn.Embedding)
+            for param in submodule.parameters(recurse=False)
+        ):
+            logger.warning_once(
+                "Trainer did not upcast the trainable half-precision parameters that were loaded with the "
+                "default `dtype` to float32: the model also has frozen half-precision parameters outside its "
+                "embeddings, and upcasting only the trainable parameters would leave the two precisions meeting "
+                "inside the forward pass, where a linear layer refuses operands of different dtypes. The "
+                "trainable parameters keep their loaded dtype. To train them with float32 master weights, load "
+                "the model with an explicit `dtype=torch.float32`, or enable autocast with `bf16=True`/`fp16=True` "
+                "(the upcast is applied in that case, as autocast casts at the boundary)."
+            )
             return
         logger.warning_once(
             f"Trainer upcast {len(half_params)} trainable parameter(s) that were loaded in half precision with "

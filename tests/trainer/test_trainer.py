@@ -211,6 +211,44 @@ class TrainerDefaultDtypeTest(TestCasePlus):
             self.assertEqual(model.model.embed_tokens.weight.dtype, torch.bfloat16)
             self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.float32)
 
+    def test_head_only_finetuning_default_dtype(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint)
+            model.requires_grad_(False)
+            model.lm_head.requires_grad_(True)
+            self._train(model, tmp_dir)
+
+    def test_head_only_finetuning_without_autocast_is_not_upcast(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint)
+            model.requires_grad_(False)
+            model.lm_head.requires_grad_(True)
+            self._train(model, tmp_dir)
+            self.assertEqual(model.lm_head.weight.dtype, torch.bfloat16)
+
+    def test_head_only_finetuning_with_autocast_upcasts(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint)
+            model.requires_grad_(False)
+            model.lm_head.requires_grad_(True)
+            dataset = [{"input_ids": [1, 2, 3, 4], "labels": [1, 2, 3, 4]}] * 4
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                per_device_train_batch_size=2,
+                max_steps=2,
+                report_to=[],
+                save_strategy="no",
+                bf16=True,
+                use_cpu=True,
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=dataset, data_collator=default_data_collator)
+            trainer.train()
+            self.assertEqual(model.lm_head.weight.dtype, torch.float32)
+            self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.bfloat16)
+
 
 @require_torch
 class TrainerDDPKwargsTest(TestCasePlus):
