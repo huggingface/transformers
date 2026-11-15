@@ -151,6 +151,11 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
 
         @wraps(orig_layer_init)
         def _patched_layer_init(self, *args, **kwargs):
+            layer_init_contexts = _layer_init_contexts.get()
+            if not layer_init_contexts:
+                # No model is being built with generic heterogeneous modeling
+                return orig_layer_init(self, *args, **kwargs)
+
             try:
                 bound_arguments = orig_layer_init_signature.bind(self, *args, **kwargs)
             except TypeError:
@@ -160,7 +165,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             context = next(
                 (
                     context
-                    for context in reversed(_layer_init_contexts.get())
+                    for context in reversed(layer_init_contexts)
                     if layer_cls in context.heterogeneous_modeling_specs and context.model.config is config
                 ),
                 None,

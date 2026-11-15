@@ -125,11 +125,17 @@ class TestHeterogeneousMasking(unittest.TestCase):
         create_mask = (
             create_bidirectional_mask if layer_type == "full_attention" else create_bidirectional_sliding_window_mask
         )
+        # The layers hold caches of different lengths, so the layers of each type need different masks
+        cache = DynamicCache(config=config)
+        for layer_idx in range(config.num_hidden_layers):
+            states = torch.randn(1, config.num_key_value_heads, layer_idx + 1, config.head_dim)
+            cache.update(states, states, layer_idx=layer_idx)
 
         mask = create_mask(
             config,
             inputs_embeds=torch.randn(1, 4, config.hidden_size),
             attention_mask=None,
+            cache=cache,
         )
 
         self.assertEqual(set(mask), expected_layer_indices)
@@ -186,7 +192,8 @@ class TestHeterogeneousMasking(unittest.TestCase):
                     cache.update(states, states, layer_idx=layer_idx)
                 mask = create_mask(config, inputs_embeds, attention_mask=None, cache=cache)
 
-        self.assertIs(mask[0], mask[1])
+        # Both layers share one mask, so the mask factory returns it without a container
+        self.assertIsInstance(mask, torch.Tensor)
 
     def test_static_cache_layers_share_masks_when_a_layer_skips_attention(self):
         config = tiny_llama_config(num_hidden_layers=3, per_layer_config={0: {"skip": ["attention"]}})
@@ -202,8 +209,7 @@ class TestHeterogeneousMasking(unittest.TestCase):
         mask = create_causal_mask(config, torch.randn(1, 1, config.hidden_size), None, cache)
 
         # The layers that write to their caches stay at the same position, so they share a mask
-        self.assertIs(mask[1], mask[2])
-        self.assertIsNone(mask[0])
+        self.assertIsInstance(mask, torch.Tensor)
 
     def test_encoder_layer_with_skipped_attention_gets_no_mask(self):
         # ModernBERT's attention consumes the attention mask, and nothing writes to a cache
@@ -224,15 +230,16 @@ class TestHeterogeneousMasking(unittest.TestCase):
             hidden_size=64,
             intermediate_size=128,
             num_attention_heads=4,
-            num_hidden_layers=2,
-            layer_types=["full_attention", "full_attention"],
-            per_layer_config={0: {"skip": ["attention"]}},
+            num_hidden_layers=3,
+            layer_types=["sliding_attention", "sliding_attention", "sliding_attention"],
+            # Layers 1 and 2 need different masks, so the mask factory returns the mask of each layer
+            per_layer_config={0: {"skip": ["attention"]}, 1: {"sliding_window": 1}, 2: {"sliding_window": 2}},
         )
         with patch.object(ModernBertModel, "_heterogeneous_modeling_spec", spec, create=True):
             ModernBertModel(config)
         attention_mask = torch.tensor([[0, 1, 1, 1], [1, 1, 1, 1]])
 
-        mask = create_bidirectional_mask(config, torch.randn(2, 4, config.hidden_size), attention_mask)
+        mask = create_bidirectional_sliding_window_mask(config, torch.randn(2, 4, config.hidden_size), attention_mask)
 
         self.assertIsNone(mask[0])
         self.assertIsNotNone(mask[1])

@@ -104,8 +104,8 @@ class HeterogeneousModelingSpec:
             `(path, class)` key for a member that exists in only some layers. Required if `skip_descriptors` is not
             empty; use `[]` when there are none.
 
-            If a layer has attention mask consumers and its skips replace all of them, the attention mask of the layer
-            is `None`.
+            If a layer has attention mask consumers and its skips replace all of them, no attention mask is built for
+            the layer.
         cache_writers (`dict[str | tuple[str, type], Iterable[str]]`, *optional*):
             Maps the member key of each member that writes to a cache to the caches that it writes. Include members
             that are never skipped, since otherwise a layer can lose a cache that one of its members still writes, and

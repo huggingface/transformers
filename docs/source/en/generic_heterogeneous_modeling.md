@@ -52,9 +52,10 @@ patches the initialization of the architecture's layer class so that:
    attribute overrides such as `intermediate_size` or `num_key_value_heads` apply naturally.
 2. Each skip type in the layer's `skip` applies a skip descriptor from the spec, replacing the layer members it lists
    with modules that turn them into a no-op.
-3. Causal, bidirectional, sliding-window, and chunked attention masks are packaged in a container keyed by layer index.
-   Layers can share a mask when their mask settings and cache geometry match. A forward pre-hook on each layer selects
-   its mask.
+3. Causal, bidirectional, sliding-window, and chunked attention masks are built for each layer from its own
+   configuration and cache. Layers share a mask when their mask settings and cache geometry match. When the layers
+   need different masks, the masks are packaged in a container keyed by layer index, and a forward pre-hook on each
+   layer selects its mask.
 
 All of this is driven by a single declaration, the `HeterogeneousModelingSpec`.
 
@@ -196,8 +197,8 @@ In `attention_mask_consumers` and `cache_writers`, name members with [member key
 descriptors. For a member that only some layers build, use a `(path, class)` key: layers without a matching member
 ignore it, while a plain path must name a member in each layer that has a skip.
 
-Skipping all of a layer's attention mask consumers removes its attention mask, and skipping all writers of a cache
-removes that cache from the layer.
+Skipping all of a layer's attention mask consumers means that no attention mask is built for it, and skipping all
+writers of a cache removes that cache from the layer.
 
 ## The resulting model
 
@@ -230,8 +231,8 @@ model.model.layers[1].mlp.experts.down_proj.shape
 # torch.Size([128, 32, 2880])
 
 # Layer 0 uses the global sliding window; layer 2 uses its override. Internally,
-# attention masks are keyed by layer index, and layers with the same mask-relevant
-# configuration may share the same mask object.
+# these two layers need different attention masks, so their masks are keyed by
+# layer index.
 model.model.layers[0].self_attn.sliding_window
 # 16
 

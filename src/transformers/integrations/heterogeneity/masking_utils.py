@@ -133,13 +133,13 @@ def layer_consumes_attention_masks(
     return True
 
 
-def _create_attention_masks_by_layer_idx(
+def _create_per_layer_attention_masks(
     *,
     create_mask_fn: Callable,
     attribute_name: str | None,
     config: PreTrainedConfig,
     **kwargs: Any,
-) -> AttentionMasksByLayerIdx:
+) -> Any:
     attention_masks = AttentionMasksByLayerIdx()
     # Keys are compared with `==` instead of being stored in a dict. Under `torch.compile`, a dict lookup makes the
     # compiled graph depend on the exact cache length in the key, so the graph would recompile at every decoding step.
@@ -176,11 +176,15 @@ def _create_attention_masks_by_layer_idx(
         attention_masks[layer_idx] = create_mask_fn(config=layer_config, **layer_kwargs)
         reuse_keys_and_layer_indices.append((reuse_key, layer_idx))
 
+    # Only one mask was built, so return it without the container, as mask factories usually do
+    if len(reuse_keys_and_layer_indices) == 1:
+        return attention_masks[reuse_keys_and_layer_indices[0][1]]
+
     return attention_masks
 
 
 def support_per_layer_mask_creation(attribute_name: str | None = None) -> Callable:
-    """Decorate a mask factory to return layer-indexed masks for generic heterogeneous models."""
+    """Decorate a mask factory to create the mask of each layer for generic heterogeneous models."""
 
     def decorator(create_mask_fn: Callable) -> Callable:
         parameter_names = tuple(signature(create_mask_fn).parameters)
@@ -197,7 +201,7 @@ def support_per_layer_mask_creation(attribute_name: str | None = None) -> Callab
                 if isinstance(attention_mask, AttentionMasksByLayerIdx):
                     return attention_mask
 
-                return _create_attention_masks_by_layer_idx(
+                return _create_per_layer_attention_masks(
                     create_mask_fn=create_mask_fn,
                     attribute_name=attribute_name,
                     **mask_kwargs,
