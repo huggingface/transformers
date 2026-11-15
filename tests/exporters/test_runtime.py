@@ -399,6 +399,26 @@ class ExportedModelTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "captured with"):
             exported(**{name: tensor[:1] for name, tensor in calls[0].items()})
 
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_cuda_graph_skips_data_dependent_outputs(self):
+        """A static export whose output size depends on the data never replays a CUDA graph, which would bind the
+        outputs at the captured size."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        class Positives(torch.nn.Module):
+            def forward(self, x):
+                return x[x > 0]
+
+        x = torch.tensor([1.0, -1.0, 2.0, -2.0], device="cuda")
+        exported = OnnxExporter().export(Positives(), {"x": x}, OnnxConfig())
+        exported.to(providers=[("CUDAExecutionProvider", {"device_id": 0, "enable_cuda_graph": "1"})])
+        self.assertFalse(exported.runners["model"].replays_cuda_graph)
+        for inputs in (x, -x, torch.ones_like(x)):
+            torch.testing.assert_close(exported(x=inputs), inputs[inputs > 0])
+
     @require_openvino
     @pytest.mark.openvino_export_test
     def test_openvino(self):
