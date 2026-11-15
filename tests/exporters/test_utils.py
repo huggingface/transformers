@@ -49,7 +49,12 @@ from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, Expor
 from transformers.exporters.decompose import decompose_multimodal, embedded_inputs
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
-from transformers.utils.import_utils import is_torch_available
+from transformers.utils.import_utils import (
+    is_onnxruntime_available,
+    is_onnxscript_available,
+    is_openvino_available,
+    is_torch_available,
+)
 
 
 if is_torch_available():
@@ -353,6 +358,53 @@ class ChunkedVisionAttentionPatchTest(unittest.TestCase):
             expected = attention(hidden_states, cu_seqlens=cu_seqlens, position_embeddings=(cos, sin))
             actual = program.module()(hidden_states, cu_seqlens, cos, sin)
         torch.testing.assert_close(actual, expected)
+
+
+@require_torch
+class GatedDeltaRulePatchTest(unittest.TestCase):
+    def test_dynamic_export_takes_other_chunk_counts(self):
+        # The chunked gated delta rule loops over 64-token chunks: traced on two, the export must serve one and four
+        from transformers import Qwen3_5ForCausalLM, Qwen3_5TextConfig
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        exporters = [(DynamoExporter, DynamoConfig)]
+        if is_onnxscript_available() and is_onnxruntime_available():
+            from transformers.exporters import OnnxExporter
+
+            exporters.append((OnnxExporter, OnnxConfig))
+        if is_openvino_available():
+            from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+            exporters.append((OpenVINOExporter, OpenVINOConfig))
+        torch.manual_seed(0)
+        config = Qwen3_5TextConfig(
+            vocab_size=99,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            layer_types=["linear_attention", "full_attention"],
+            linear_conv_kernel_dim=2,
+            linear_key_head_dim=16,
+            linear_value_head_dim=16,
+            linear_num_key_heads=4,
+            linear_num_value_heads=8,
+        )
+        model = Qwen3_5ForCausalLM(config).eval()
+
+        def prompt(length):
+            return {"input_ids": torch.randint(1, 98, (2, length)), "use_cache": False}
+
+        for exporter, config_class in exporters:
+            with self.subTest(exporter.__name__):
+                exported = exporter().export(model, prompt(100), config_class(dynamic=True))
+                for length in (30, 250):
+                    inputs = prompt(length)
+                    with torch.no_grad():
+                        expected = model(**inputs).logits
+                    torch.testing.assert_close(exported(**inputs).logits, expected, atol=1e-4, rtol=1e-4)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
