@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -682,7 +683,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         vision_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True, **kwargs)
         pooler_output = vision_outputs.pooler_output
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
-        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
         non_pad_mask = (image_position_ids != -1).all(dim=-1)
         split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
         vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
