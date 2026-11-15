@@ -49,13 +49,15 @@ class GraniteSwitchConfig(PreTrainedConfig):
     control token.
 
     num_adapters (`int`, *optional*, defaults to 0):
-        Number of LoRA adapters embedded in the checkpoint. Counts real adapters only, not the base;
+        Number of adapter slots embedded in the checkpoint, where a slot holds either a LoRA adapter
+        or an activation probe head (see `adapter_kinds`). Counts real slots only, not the base;
         adapter index 0 always means "base / no adapter".
     adapter_token_ids (`list[int]`, *optional*):
         Token ids that activate an adapter. Length is `num_adapters`, or `num_adapters + 1` with a
         leading base-reset token that returns the stream to base mid-request. Must be unique, since
         token exchange keys its lookup by control-token id. `adapter_token_ids[i]` activates adapter
-        `i + 1`; adapter 0 is base and needs no token. Required when `num_adapters > 0`.
+        `i + 1`, a LoRA adapter or a probe head; adapter 0 is base and needs no token. Required when
+        `num_adapters > 0`.
     adapter_substitute_token_ids (`list[int]`, *optional*):
         Token ids whose embeddings replace the control-token embeddings before the decoder runs.
         Same length as `adapter_token_ids`. Required when `num_adapters > 0`.
@@ -72,6 +74,19 @@ class GraniteSwitchConfig(PreTrainedConfig):
         `shared_input_linear` and `shared_output_linear`. Defaults to the groups the architecture
         actually has: a pure sparse-MoE base has no shared MLP, so asking for its groups would build
         zero-width LoRA projections.
+    adapter_kinds (`list[str]`, *optional*):
+        What each adapter slot holds, `"lora"` or `"probe"`. Length `num_adapters`, defaulting to all
+        `"lora"`. A probe slot keeps its control token and adapter index but carries a linear head
+        over a hidden state instead of LoRA weights: the LoRA path is a no-op at its positions, and
+        the head's verdict is written into the logits of its control token.
+    probe_label_token_ids (`list[list[int] | None]`, *optional*):
+        Per slot, the token ids of a probe's label words, one id per label, in the order of the
+        head's output rows. Length `num_adapters`, with `None` on every LoRA slot. A probe reports
+        its verdict as a generated label word, so this is required as soon as one slot is a probe.
+    probe_read_layers (`list[int | None]`, *optional*):
+        Per slot, the zero-based decoder layer whose output a probe head reads. Length
+        `num_adapters`. `None`, which is also what a LoRA slot must carry, reads the final
+        normalized hidden state.
     control_token_gain (`float`, *optional*, defaults to 15.0):
         Attention gain that separates control tokens from ordinary tokens in the switch heads.
     switch_head_dim (`int`, *optional*, defaults to 32):
@@ -171,6 +186,10 @@ class GraniteSwitchConfig(PreTrainedConfig):
     adapter_ranks: list[int] | None = None
     lora_target_modules: list[str] | None = None
 
+    adapter_kinds: list[str] | None = None
+    probe_label_token_ids: list[list[int] | None] | None = None
+    probe_read_layers: list[int | None] | None = None
+
     control_token_gain: float = 15.0
     switch_head_dim: int = 32
 
@@ -219,6 +238,9 @@ class GraniteSwitchConfig(PreTrainedConfig):
                 if self.shared_intermediate_size > 0:
                     lora_target_modules += ["shared_input_linear", "shared_output_linear"]
             self.lora_target_modules = lora_target_modules
+
+        if self.adapter_kinds is None:
+            self.adapter_kinds = ["lora"] * self.num_adapters
 
         # The hybrid parent's `__post_init__` resolves mamba geometry from fields this config
         # retires, so skip it and delegate straight to the base implementation.
@@ -314,6 +336,57 @@ class GraniteSwitchConfig(PreTrainedConfig):
             config_dict = {k: v for k, v in config_dict.items() if k != "switch_type"}
         config = super().from_dict(config_dict, **kwargs)
         return config
+
+    def validate_probes(self):
+        """Part of `@strict`-powered validation. Checks the probe slots are fully described."""
+        if len(self.adapter_kinds) != self.num_adapters:
+            raise ValueError(
+                f"adapter_kinds length ({len(self.adapter_kinds)}) must equal num_adapters ({self.num_adapters})."
+            )
+        invalid_kinds = [kind for kind in self.adapter_kinds if kind not in ("lora", "probe")]
+        if invalid_kinds:
+            raise ValueError(f"adapter_kinds values must be 'lora' or 'probe'; got invalid entries {invalid_kinds}")
+
+        if self.probe_label_token_ids is None:
+            if "probe" in self.adapter_kinds:
+                raise ValueError(
+                    "adapter_kinds declares a probe slot but probe_label_token_ids is unset. A probe reports "
+                    "its verdict as a label word, so the token id of every label is required."
+                )
+        else:
+            if len(self.probe_label_token_ids) != self.num_adapters:
+                raise ValueError(
+                    f"probe_label_token_ids length ({len(self.probe_label_token_ids)}) must equal num_adapters "
+                    f"({self.num_adapters}); it is indexed by adapter slot, with None on the LoRA slots."
+                )
+            for slot, (kind, label_ids) in enumerate(zip(self.adapter_kinds, self.probe_label_token_ids)):
+                if kind == "probe":
+                    if not label_ids:
+                        raise ValueError(f"probe slot {slot} must declare its label token ids; got {label_ids!r}.")
+                    if any(token_id < 0 for token_id in label_ids):
+                        raise ValueError(
+                            f"probe_label_token_ids[{slot}] must all be >= 0 (real token ids); got {label_ids}"
+                        )
+                elif label_ids:
+                    raise ValueError(f"LoRA slot {slot} must have no label token ids; got {label_ids!r}.")
+
+        if self.probe_read_layers is not None:
+            if len(self.probe_read_layers) != self.num_adapters:
+                raise ValueError(
+                    f"probe_read_layers length ({len(self.probe_read_layers)}) must equal num_adapters "
+                    f"({self.num_adapters})."
+                )
+            for slot, (kind, layer) in enumerate(zip(self.adapter_kinds, self.probe_read_layers)):
+                if layer is None:
+                    continue
+                if kind != "probe":
+                    raise ValueError(f"LoRA slot {slot} must have no read layer; got {layer!r}.")
+                # `bool` is an `int` subclass, and `True` is not a layer.
+                if isinstance(layer, bool) or not 0 <= layer < self.num_hidden_layers:
+                    raise ValueError(
+                        f"probe_read_layers[{slot}] = {layer!r} must be an int in 0..{self.num_hidden_layers - 1}; "
+                        "leave it None to read the final normalized hidden state."
+                    )
 
     def validate_shadow_residual(self):
         """Part of `@strict`-powered validation. Checks the Shadow Residual fields agree."""

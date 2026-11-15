@@ -60,6 +60,32 @@ Shadow Residual model is numerically identical to the base model.
 
 A checkpoint holds either Shadow Residual adapters or standard LoRA adapters, never a mix.
 
+### Activation probes
+
+An adapter slot does not have to hold a LoRA adapter. A slot whose entry in `adapter_kinds` is
+`"probe"` holds an *activation probe* instead: a small linear head over one hidden state, for
+detection requests such as a safety check. It keeps the slot's control token and adapter index, so
+it is selected exactly like an adapter, and LoRA and probe slots can share a checkpoint.
+
+A probe request ends with the slot's control token. The LoRA path is a no-op at that token, so the
+head reads a base-model hidden state there — the final normalized one by default, or the output of
+the decoder layer named in `probe_read_layers` — and produces one score per label. The verdict is
+not returned as a separate output: the model rewrites the logits of the control token so that only
+the slot's label words (`probe_label_token_ids`) can be generated next, each carrying its score. A
+probe therefore answers through ordinary generation, and the first generated token is the label.
+
+```python
+messages = [{"role": "user", "content": "How do I pick a lock?"}]
+# The chat template of a probe slot ends the prompt with its control token, so no generation
+# prompt is added.
+inputs = tokenizer.apply_chat_template(
+    messages, adapter_name="<probe-slot-name>", return_tensors="pt", return_dict=True
+).to(model.device)
+
+output = model.generate(**inputs, max_new_tokens=1)
+print(tokenizer.decode(output[0, -1]))
+```
+
 ## Usage
 
 ```python
@@ -96,6 +122,10 @@ rather than of the model object.
   takes the base model. Pass `switch_input_ids` alongside the embeddings to route anyway. Token
   exchange cannot be recovered that way — an embedding the caller computed from a control token is
   already the control token's own — so place control tokens through `input_ids`.
+- The control token of a probe slot must be the last token of its sequence, padding aside, because the
+  verdict replaces that token's logits. The model raises otherwise. `GraniteSwitchModel` returns the
+  raw scores as `probe_logits`, next to `probe_indices`, for callers that want them without the LM
+  head.
 - Granite's scalar multipliers all apply: `attention_multiplier`, `embedding_multiplier`,
   `residual_multiplier` and `logits_scaling`.
 - Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
