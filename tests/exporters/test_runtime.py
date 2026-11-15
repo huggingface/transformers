@@ -170,7 +170,8 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         inputs = {"input_ids": torch.randint(1, 99, (1, 7)), "attention_mask": torch.ones(1, 7, dtype=torch.long)}
         decode = (
             OpenVINOExporter()
-            .export_for_generation(model, inputs, OpenVINOConfig(dynamic=True))["decoder_model"]
+            .export_for_generation(model, inputs, OpenVINOConfig(dynamic=True))
+            .components["decoder_model"]
             .program
         )
 
