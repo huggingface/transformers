@@ -22,7 +22,6 @@ import torch
 from tests.exporters.test_utils import _check_names_the_cats, _load
 from transformers import (
     AutoImageProcessor,
-    AutoModelForCausalLM,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoProcessor,
@@ -47,18 +46,27 @@ from transformers.testing_utils import (
 @require_executorch
 class OptimumExecutorchTest(unittest.TestCase):
     def test_causal_lm(self):
-        """A program keeping its cache in its buffers generates the eager model's tokens, and starts over each call."""
-        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+        """A program keeping its cache in its buffers, its sequence axis dynamic, takes the prompt in one call and
+        generates the same tokens on every call. Its weights are int4, so its tokens aren't eager's."""
+        repo = "larryliu0820/Gemma3-1B-IT-INT8-INT4-ExecuTorch-XNNPACK"
+        tokenizer = AutoTokenizer.from_pretrained(repo)
         inputs = tokenizer(["The capital of France is"], return_tensors="pt")
         generation_config = GenerationConfig(max_new_tokens=8, do_sample=False)
-        model = _load(self, "executorch-community/SmolLM2-135M", "optimum-executorch")
+        model = _load(self, repo, "optimum-executorch")
         self.assertIsInstance(model, ExportedModelForCausalLM)
-        eager = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-135M", dtype=torch.float32).eval()
-        with torch.no_grad():
-            expected = eager.generate(**inputs, generation_config=generation_config)
-        for _ in range(2):
-            generated = model.generate(**inputs, generation_config=generation_config)
-            self.assertEqual(generated.tolist(), expected.tolist())
+        self.assertGreater(model.runner.metadata.kwargs["input_ids"]["shape"][1], 1)
+        first = model.generate(**inputs, generation_config=generation_config)
+        self.assertEqual(first.shape[1], inputs["input_ids"].shape[1] + 8)
+        self.assertEqual(model.generate(**inputs, generation_config=generation_config).tolist(), first.tolist())
+
+    def test_causal_lm_taking_one_token_refuses_a_prompt(self):
+        """A program whose sequence axis is one token, with no program for the prompt, can't take a prompt: it raises
+        rather than run it a token at a time."""
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+        inputs = tokenizer(["The capital of France is"], return_tensors="pt")
+        model = _load(self, "executorch-community/SmolLM2-135M", "optimum-executorch")
+        with self.assertRaisesRegex(ValueError, "no prompt graph"):
+            model.generate(**inputs, generation_config=GenerationConfig(max_new_tokens=8, do_sample=False))
 
     def test_encoder_decoder(self):
         """`encoder` and `text_decoder` methods of one program, through `generate` as eager's."""
