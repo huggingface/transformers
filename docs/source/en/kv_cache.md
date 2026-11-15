@@ -49,7 +49,7 @@ inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.de
 model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
 ```
 
-Cache classes can also be initialized first before calling and passing it to the models [`~generation.GenerateDecoderOnlyOutput#past_key_values`] parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
+Cache classes can also be initialized first before calling and passing it to the models [`~generation.GenerateDecoderOnlyOutput#cache`] parameter. This can be useful for more fine-grained control, or more advanced usage such as context caching.
 
 In most cases, it's easier to define the cache strategy in the [`~GenerationConfig#cache_implementation`] parameter.
 
@@ -61,8 +61,8 @@ tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
 inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
 
-past_key_values = DynamicCache(config=model.config)
-out = model.generate(**inputs, do_sample=False, max_new_tokens=20, past_key_values=past_key_values)
+cache = DynamicCache(config=model.config)
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache=cache)
 ```
 
 ## Fixed-size cache
@@ -122,7 +122,7 @@ You may want to consider offloading if you have a small GPU and you're getting o
 > You may notice a small degradation in generation throughput compared to a full on-device cache, depending on your model and generation choices (context size, number of generated tokens, number of beams, etc.). This is because moving the key/value states back and forth requires some work.
 
 Offloading is available for both [`DynamicCache`] and [`StaticCache`]. You can enable it by configuring `cache_implementation="offloaded"` for the dynamic version, or `cache_implementation="offloaded_static"` for the static version, in either [`GenerationConfig`] or [`~GenerationMixin.generate`].
-Additionally, you can also instantiate your own [`DynamicCache`] or [`StaticCache`] with the `offloading=True` option, and pass this cache in `generate` or your model's `forward` (for example, `past_key_values=DynamicCache(config=model.config, offloading=True)` for a dynamic cache).
+Additionally, you can also instantiate your own [`DynamicCache`] or [`StaticCache`] with the `offloading=True` option, and pass this cache in `generate` or your model's `forward` (for example, `cache=DynamicCache(config=model.config, offloading=True)` for a dynamic cache).
 
 Note that the 2 [`Cache`] classes mentioned above have an additional option when instantiating them directly, `offload_only_non_sliding`.
 This additional argument decides if the layers using sliding window/chunk attention (if any), will be offloaded as well. Since
@@ -286,14 +286,14 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
 
-past_key_values = DynamicCache(config=model.config)
+cache = DynamicCache(config=model.config)
 
 messages = []
 for prompt in user_prompts:
     messages.append({"role": "user", "content": prompt})
     inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
     input_length = inputs["input_ids"].shape[1]
-    outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256, past_key_values=past_key_values)
+    outputs = model.generate(**inputs, do_sample=False, max_new_tokens=256, cache=cache)
     completion = tokenizer.decode(outputs[0, input_length: ], skip_special_tokens=True)
     messages.append({"role": "assistant", "content": completion})
 ```
@@ -304,14 +304,14 @@ Use [`~Cache.crop`] to roll back tokens from a cache, such as when a candidate c
 
 ```py
 # Remove the last three tokens from the cache.
-past_key_values.crop(-3)
+cache.crop(-3)
 ```
 
 Sliding-window and linear-attention layers discard past states as they go, so there's nothing to roll back to by default. Call [`~Cache.activate_past_recording`] before the forward pass to make them hold onto those states. Without it, `crop` raises a `RuntimeError` once a sliding-window layer fills its window, and immediately for linear-attention layers.
 
 ```py
 # Enable this before the forward pass if you need to roll back tokens.
-past_key_values.activate_past_recording()
+cache.activate_past_recording()
 ```
 
 `crop(0)` does not clear the cache. It removes no tokens from the cached sequence and is a no-op for full-attention layers. For sliding-window and linear-attention layers, it can discard cached information that the next model call will not use. This reduces memory use without rolling back tokens.
@@ -360,14 +360,14 @@ INITIAL_PROMPT = "You are a helpful assistant. "
 inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(model.device.type)
 # This is the common prompt cached, we need to run forward without grad to be able to copy
 with torch.no_grad():
-     prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
+     prompt_cache = model(**inputs_initial_prompt, cache = prompt_cache).cache
 
 prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
 responses = []
 for prompt in prompts:
     new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(model.device.type)
-    past_key_values = copy.deepcopy(prompt_cache)
-    outputs = model.generate(**new_inputs, past_key_values=past_key_values,max_new_tokens=20)
+    cache = copy.deepcopy(prompt_cache)
+    outputs = model.generate(**new_inputs, cache=cache,max_new_tokens=20)
     response = tokenizer.batch_decode(outputs)[0]
     responses.append(response)
 

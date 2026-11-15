@@ -42,7 +42,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..florence2.modeling_florence2 import Florence2ForConditionalGeneration
@@ -359,6 +359,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
@@ -369,7 +370,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         decoder_attention_mask: torch.LongTensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         encoder_outputs: list[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
@@ -398,7 +399,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs.pooler_output,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -406,7 +407,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -422,6 +423,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
@@ -430,7 +432,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: list[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -471,7 +473,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -497,7 +499,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         return Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

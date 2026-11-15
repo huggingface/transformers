@@ -169,7 +169,7 @@ class MambaModelTester:
         outputs = model(
             input_ids[:, -1:],
             use_cache=True,
-            cache_params=outputs.cache_params,
+            cache=outputs.cache,
         )
         output_two = outputs.last_hidden_state
 
@@ -189,7 +189,7 @@ class MambaModelTester:
             model.activation_checkpointing_enable()
 
         # create cache
-        cache = model(input_ids, use_cache=True).cache_params
+        cache = model(input_ids, use_cache=True).cache
         cache.reset()
 
         # use cache

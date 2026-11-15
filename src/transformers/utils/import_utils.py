@@ -1616,7 +1616,13 @@ def is_soundfile_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_timm_available() -> bool:
-    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
+    # timm requires PIL/torchvision under the hood so we check all of deps here once
+    return (
+        is_vision_available()
+        and is_torchvision_available()
+        and is_torch_available()
+        and _is_package_available("timm")[0]
+    )
 
 
 @lru_cache
