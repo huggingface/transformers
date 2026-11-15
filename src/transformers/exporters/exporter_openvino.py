@@ -2256,45 +2256,34 @@ def _patch_scatter_reduce(original):
     return patch
 
 
-@register_patch("openvino", "torch._higher_order_ops.scan.scan")
-def _patch_scan(original):
-    """``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop``: it has no ``scan`` conversion.
+@register_patch("openvino", "transformers.exporters.exporter_dynamo._scan")
+def _patch_scan(_original):
+    """The gated delta rule's ``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop``: it has no ``scan``
+    conversion.
 
     Every tensor the body reads is carried through the loop, the scanned ones included: OV's ``while_loop``
-    conversion takes the inputs a closure lifts for carried ones, and fails on the count.
+    conversion takes the inputs a closure lifts for carried ones, and fails on the count. The ``while_loop`` operator
+    itself, not ``torch``'s wrapper, whose dynamo cache hands a later export the body an earlier one traced.
     """
-    from torch._higher_order_ops.while_loop import while_loop
-    from torch.utils._pytree import tree_flatten, tree_unflatten
+    from torch._higher_order_ops.while_loop import while_loop_op
 
-    def patch(combine_fn, init, xs, *, dim=0, reverse=False):
-        if reverse:
-            return original(combine_fn, init, xs, dim=dim, reverse=reverse)
-        init_leaves, init_spec = tree_flatten(init)
-        xs_leaves, xs_spec = tree_flatten(xs)
-        xs_leaves = [x.movedim(dim, 0) for x in xs_leaves]
-        num_carry, num_xs = len(init_leaves), len(xs_leaves)
-        # The per-step outputs' shapes, from one step: nothing reads its values, so the trace drops it.
-        _, first = combine_fn(init, tree_unflatten([x[0] for x in xs_leaves], xs_spec))
-        ys_leaves, ys_spec = tree_flatten(first)
-        length = xs_leaves[0].shape[0]
-        ys_leaves = [y.new_zeros(length, *y.shape) for y in ys_leaves]
+    def patch(combine_fn, init, xs):
+        # The per-step output's shape, from one step: nothing reads its values, so the trace drops it.
+        _, first = combine_fn(init, [x[0] for x in xs])
+        outputs = first.new_zeros(xs[0].shape[0], *first.shape)
 
-        def cond(index, *carried):
-            return index < carried[num_carry].shape[0]
+        def cond(index, carry, outputs, *xs):
+            return index < xs[0].shape[0]
 
-        def body(index, *carried):
-            carry, xs, ys = carried[:num_carry], carried[num_carry : num_carry + num_xs], carried[num_carry + num_xs :]
+        def body(index, carry, outputs, *xs):
             position = index.reshape(1)
-            step = tree_unflatten([x.index_select(0, position).squeeze(0) for x in xs], xs_spec)
-            carry, y = combine_fn(tree_unflatten(list(carry), init_spec), step)
-            ys = [buffer.index_copy(0, position, value.unsqueeze(0)) for buffer, value in zip(ys, tree_flatten(y)[0])]
-            return index + 1, *tree_flatten(carry)[0], *(x.clone() for x in xs), *ys
+            carry, output = combine_fn(carry, [x.index_select(0, position).squeeze(0) for x in xs])
+            outputs = outputs.index_copy(0, position, output.unsqueeze(0))
+            return index + 1, carry, outputs, *(x.clone() for x in xs)
 
-        index = torch.zeros((), dtype=torch.int64, device=xs_leaves[0].device)
-        outputs = while_loop(cond, body, (index, *init_leaves, *xs_leaves, *ys_leaves))
-        carry = tree_unflatten(list(outputs[1 : 1 + num_carry]), init_spec)
-        ys = [y.movedim(0, dim) for y in outputs[1 + num_carry + num_xs :]]
-        return carry, tree_unflatten(ys, ys_spec)
+        index = torch.zeros((), dtype=torch.int64, device=init.device)
+        _, carry, outputs, *_ = while_loop_op(cond, body, (index, init, outputs, *xs), ())
+        return carry, outputs
 
     return patch
 
