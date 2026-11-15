@@ -232,16 +232,6 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
         # The multi-token decode graph also serves the prefill step, and these can't take that call.
-        "MambaForCausalLM": (
-            "The selective scan runs as a python loop under export, which unrolls to the traced length, so the "
-            "decode graph can't take the prefill call (`Guard failed: input_ids.size()[1] == 2`)."
-        ),
-        "FalconMambaForCausalLM": "Same unrolled selective scan as `MambaForCausalLM`.",
-        "JambaForCausalLM": "Same unrolled selective scan as `MambaForCausalLM`.",
-        "ZambaForCausalLM": (
-            "Its per-head mixer runs the selective scan as a python loop, which unrolls under export and fixes the query "
-            "axis to the traced length (`Guard failed: input_ids.size()[1] == 2`)."
-        ),
         "NemotronH_Omni_Reasoning_V3": (
             "The Mamba2 chunked scan fixes the query axis to one chunk (`Guard failed: 8 >= inputs_embeds.size()[1] "
             "+ ...`), so a prompt longer than `chunk_size` can't take the decode graph."
