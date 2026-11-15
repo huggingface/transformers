@@ -319,7 +319,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         even when vision_config has rope_parameters as None, empty dict, or missing attribute (#50770).
         """
         # Test with rope_parameters=None
-        config = PaddleOCRVisionConfig()
+        config = self.model_tester.get_config().vision_config
         config.rope_parameters = None
         rotary = PaddleOCRVisionRotaryEmbedding(config)
         self.assertEqual(rotary.rope_type, "axial")
@@ -338,7 +338,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     raise AttributeError("no rope_parameters")
                 return super().__getattribute__(name)
 
-        legacy_config = LegacyVisionConfig()
+        legacy_config = LegacyVisionConfig(**self.model_tester.vision_config)
         rotary = PaddleOCRVisionRotaryEmbedding(legacy_config)
         self.assertEqual(rotary.rope_type, "axial")
         _ = PaddleOCRVisionModel(legacy_config)
