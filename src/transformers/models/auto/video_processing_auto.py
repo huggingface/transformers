@@ -134,12 +134,20 @@ def _load_backend_class(video_processor_class_name: str, backend: str):
             mapping = mapping_dict
             break
 
-    if (processor_class := mapping.get(backend)) is not None:
+    backends_to_try = [backend] + [k for k in mapping if k != backend]
+    for b in backends_to_try:
+        processor_class = mapping.get(b)
+        if processor_class is None:
+            continue
         if isinstance(processor_class, str):
             processor_class = video_processor_class_from_name(processor_class)
+        if processor_class is None or getattr(processor_class, "is_dummy", False):
+            continue
+        if b != backend:
+            logger.warning_once(f"Requested {backend} backend is not available. Falling back to {b} backend.")
         return processor_class
-    else:
-        raise ImportError(f"Video processor cannot be loaded - requested {backend} backend is not available.")
+
+    raise ImportError(f"Video processor cannot be loaded - requested {backend} backend is not available.")
 
 
 def get_video_processor_config(

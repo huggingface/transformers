@@ -399,3 +399,10 @@ class AutoVideoProcessorTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
                 del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
+
+    def test_load_backend_class_fallback(self):
+        from transformers.models.auto.video_processing_auto import _load_backend_class
+
+        processor_cls = _load_backend_class("Gemma4VideoProcessor", "pil")
+        self.assertEqual(processor_cls.__name__, "Gemma4VideoProcessor")
+
