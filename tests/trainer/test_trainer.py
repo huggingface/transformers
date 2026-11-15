@@ -146,6 +146,73 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 @require_torch
+class TrainerDefaultDtypeTest(TestCasePlus):
+    """Training a checkpoint that was loaded with the default `dtype` must not run in pure half precision (#50581)."""
+
+    def _save_bf16_checkpoint(self, tmp_dir):
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=2, num_attention_heads=4)
+        model = LlamaForCausalLM(config).to(torch.bfloat16)
+        model.save_pretrained(tmp_dir)
+        return tmp_dir
+
+    def _train(self, model, tmp_dir):
+        dataset = [{"input_ids": [1, 2, 3, 4], "labels": [1, 2, 3, 4]}] * 4
+        args = TrainingArguments(
+            output_dir=tmp_dir, per_device_train_batch_size=2, max_steps=2, report_to=[], save_strategy="no"
+        )
+        trainer = Trainer(model=model, args=args, train_dataset=dataset, data_collator=default_data_collator)
+        trainer.train()
+
+    def test_marker_only_set_when_dtype_defaulted(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint)
+            self.assertTrue(getattr(model, "_loaded_with_default_dtype", False))
+            model = LlamaForCausalLM.from_pretrained(checkpoint, dtype=torch.bfloat16)
+            self.assertFalse(getattr(model, "_loaded_with_default_dtype", False))
+            model = LlamaForCausalLM.from_pretrained(checkpoint, dtype=torch.float32)
+            self.assertFalse(getattr(model, "_loaded_with_default_dtype", False))
+
+    def test_trainer_upcasts_default_loaded_bf16_params(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint)
+            self.assertEqual(next(model.parameters()).dtype, torch.bfloat16)
+            self._train(model, tmp_dir)
+            for param in model.parameters():
+                if param.requires_grad:
+                    self.assertEqual(param.dtype, torch.float32)
+
+    def test_trainer_respects_explicit_bf16(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint, dtype=torch.bfloat16)
+            self._train(model, tmp_dir)
+            for param in model.parameters():
+                if param.requires_grad:
+                    self.assertEqual(param.dtype, torch.bfloat16)
+
+    def test_trainer_leaves_model_not_loaded_from_pretrained_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=2, num_attention_heads=4)
+            model = LlamaForCausalLM(config).to(torch.bfloat16)
+            self._train(model, tmp_dir)
+            for param in model.parameters():
+                if param.requires_grad:
+                    self.assertEqual(param.dtype, torch.bfloat16)
+
+    def test_frozen_half_params_are_not_upcast(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint = self._save_bf16_checkpoint(tmp_dir)
+            model = LlamaForCausalLM.from_pretrained(checkpoint)
+            for param in model.model.embed_tokens.parameters():
+                param.requires_grad = False
+            self._train(model, tmp_dir)
+            self.assertEqual(model.model.embed_tokens.weight.dtype, torch.bfloat16)
+            self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.float32)
+
+
+@require_torch
 class TrainerDDPKwargsTest(TestCasePlus):
     """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
 

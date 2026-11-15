@@ -4184,6 +4184,11 @@ class PreTrainedModel(
         # For BC on torch_dtype argument
         if torch_dtype is not None:
             dtype = dtype if dtype is not None else torch_dtype
+        # Whether the dtype came from the default (no `dtype` argument was given). `Trainer` reads
+        # the marker this sets on the loaded model to restore float32 master weights when a
+        # half-precision checkpoint is fine-tuned, instead of training the half-precision
+        # parameters directly (see https://github.com/huggingface/transformers/issues/50581).
+        dtype_was_defaulted = dtype is None
         if dtype is None:
             dtype = "auto"
 
@@ -4481,6 +4486,9 @@ class PreTrainedModel(
                 load_config=load_config,
                 adapter_kwargs=adapter_kwargs,
             )
+
+        if dtype_was_defaulted:
+            model._loaded_with_default_dtype = True
 
         if output_loading_info:
             return model, loading_info.to_dict()

@@ -1712,8 +1712,47 @@ class Trainer:
 
         return epochs_trained, steps_trained_in_current_epoch
 
+    def _upcast_default_dtype_params(self):
+        """
+        Upcast trainable half-precision parameters that were loaded with the default `dtype` to float32.
+
+        Since v5, `from_pretrained` without a `dtype` argument loads a checkpoint in its stored precision, so a
+        bf16/fp16 checkpoint reaches `Trainer` with half-precision parameters and no float32 master copy. The
+        optimizer then updates the weights in half precision, where most updates at ordinary learning rates are
+        smaller than half an ulp and round away (#50581). When the dtype came from the default, `from_pretrained`
+        marks the model with `_loaded_with_default_dtype`, and the trainable parameters under a marked module are
+        upcast here, before the optimizer is created, restoring the float32 master weights that full fine-tuning
+        had in v4 (with `bf16=True`/`fp16=True` this is then proper mixed precision). Models loaded with an
+        explicit `dtype` (e.g. `dtype=torch.bfloat16`, for pure half-precision training) carry no marker and are
+        left untouched, as are frozen parameters (e.g. a PEFT base model) and models that were not loaded through
+        `from_pretrained` at all. DeepSpeed is skipped: it keeps its own float32 copy of the weights.
+        """
+        if self.is_deepspeed_enabled:
+            return
+        loaded = [module for module in self.model.modules() if getattr(module, "_loaded_with_default_dtype", False)]
+        if not loaded:
+            return
+        half_params = {
+            id(param): param
+            for module in loaded
+            for param in module.parameters()
+            if param.requires_grad and param.dtype in (torch.float16, torch.bfloat16)
+        }
+        if not half_params:
+            return
+        logger.warning_once(
+            f"Trainer upcast {len(half_params)} trainable parameter(s) that were loaded in half precision with "
+            "the default `dtype` to float32, so the optimizer updates float32 master weights. To keep pure "
+            "half-precision training instead, load the model with an explicit dtype, e.g. `dtype=torch.bfloat16` "
+            "in `from_pretrained`."
+        )
+        for param in half_params.values():
+            param.data = param.data.float()
+
     def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
+        self._upcast_default_dtype_params()
+
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
         # Can't delay optimizer creation when using FSDP2: https://github.com/huggingface/accelerate/blob/3f636d626063ffcf9a337c7d3624d61b7d187d59/src/accelerate/accelerator.py#L1404
