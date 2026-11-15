@@ -820,6 +820,62 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
             self.assertEqual(generated.tolist(), expected.tolist())
         self.assertIsNotNone(decode.cuda_graph)
 
+    def _check_static_export_takes_other_prompt_lengths(self, exporter, config_class):
+        """A static export's prompt graph is dynamic: it takes prompts shorter and longer than the traced one."""
+        torch.manual_seed(0)
+        model, inputs = self._llama()
+        generation_config = GenerationConfig(
+            max_new_tokens=6, do_sample=False, eos_token_id=None, cache_implementation="static", max_cache_len=48
+        )
+        exported = exporter.export_for_generation(
+            model, copy.deepcopy(inputs), config_class(dynamic=False), generation_config=generation_config
+        ).to("cpu")
+        for length in (4, 11):
+            prompt = {"input_ids": torch.randint(1, 98, (1, length)), "attention_mask": torch.ones(1, length).long()}
+            with self.subTest(length=length), torch.no_grad():
+                expected = model.generate(**copy.deepcopy(prompt), generation_config=generation_config)
+                generated = exported.generate(**copy.deepcopy(prompt), generation_config=generation_config)
+                self.assertEqual(generated.tolist(), expected.tolist())
+
+    @pytest.mark.torch_export_test
+    def test_dynamo_static_export_takes_other_prompt_lengths(self):
+        self._check_static_export_takes_other_prompt_lengths(DynamoExporter(), DynamoConfig)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_static_export_takes_other_prompt_lengths(self):
+        self._check_static_export_takes_other_prompt_lengths(OnnxExporter(), OnnxConfig)
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino_static_export_takes_other_prompt_lengths(self):
+        self._check_static_export_takes_other_prompt_lengths(OpenVINOExporter(), OpenVINOConfig)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_cuda_graphs_by_default(self):
+        """Opened for CUDA with the runner's own providers, a static export's decode graph replays a CUDA graph; its
+        dynamic prompt graph and a dynamic export's graph don't."""
+        torch.manual_seed(0)
+        model, inputs = self._llama()
+        model, inputs = model.to("cuda"), {name: value.to("cuda") for name, value in inputs.items()}
+        generation_config = GenerationConfig(
+            max_new_tokens=6, do_sample=False, eos_token_id=None, cache_implementation="static", max_cache_len=48
+        )
+        for dynamic, expected in ((False, {"model": True, "prefill_model": False}), (True, {"model": False})):
+            exported = (
+                OnnxExporter()
+                .export_for_generation(
+                    model, copy.deepcopy(inputs), OnnxConfig(dynamic=dynamic), generation_config=generation_config
+                )
+                .to("cuda")
+            )
+            replays = {name: runner.replays_cuda_graph for name, runner in exported.runners.items()}
+            self.assertEqual(replays, expected, f"dynamic={dynamic}")
+
     @require_onnxscript
     @require_onnxruntime
     @require_torch_gpu
