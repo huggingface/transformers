@@ -829,7 +829,7 @@ def decompose_for_generation(
     """Decompose a generative model into independently exportable components.
 
     Captures prefill and decode kwargs from a real `generate` and splits a multi-modal model into components. The
-    decode graph serves the prefill step too (all at once with `multi_token_decode`, else a token at a time), so
+    decode graph serves the prefill step too (with `multi_token_decode`; else it is the prompt graph's), so
     `"prefill"` is that step's call to the decode graph, not a graph of its own: a caller exports the decode graph only
     (as `export_for_generation` does) and can use `"prefill"`'s inputs to calibrate or check it on that step. A model
     whose prefill step needs a graph of its own raises.

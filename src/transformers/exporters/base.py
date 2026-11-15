@@ -367,8 +367,7 @@ def _is_dynamic(config) -> bool:
 def _switches_kernels_on_query_length(model) -> bool:
     """Whether the model's linear attention runs the chunked gated delta rule beyond one token and the recurrent one
     for a single token (Qwen3.5's, Qwen3-Next's): a decode graph traced on several tokens keeps the chunked kernel,
-    which a one-token step then runs wrong, so the decode graph takes one token and the prompt goes through it a
-    token at a time."""
+    which a one-token step then runs wrong, so the decode graph takes one token."""
     return any(
         hasattr(sys.modules.get(type(module).__module__), "torch_chunk_gated_delta_rule") for module in model.modules()
     )
@@ -581,11 +580,10 @@ class HfExporter(ABC):
         (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or with
         `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
         prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights, and a static prompt
-        graph takes prompts of the captured length only (another goes through the decode graph a token at a time). A
-        stateful export (OpenVINO's) keeps the cache as each graph's state: the decode graph continues from a copy of
-        the prompt graph's. A dynamic export of a model switching kernels on the query length (Qwen3.5's linear
-        attention) gets no prompt graph, whose chunked kernel would be unrolled for the traced prompt's chunk count:
-        its prompt goes through the decode graph a token at a time.
+        graph takes prompts of the captured length only (another raises). A stateful export (OpenVINO's) keeps the
+        cache as each graph's state: the decode graph continues from a copy of the prompt graph's. A dynamic export of
+        a model switching kernels on the query length (Qwen3.5's linear attention) gets no prompt graph, whose chunked
+        kernel would be unrolled for the traced prompt's chunk count: it generates from one-token prompts only.
 
         Args:
             model ([`PreTrainedModel`]):
@@ -618,8 +616,7 @@ class HfExporter(ABC):
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
         )
         # A decode graph taking one token leaves the prompt to a graph of its own, except a dynamic one of a model
-        # switching kernels on the query length: tracing unrolls its chunked kernel for the traced prompt's chunk count,
-        # so its prompt goes through the decode graph a token at a time.
+        # switching kernels on the query length: tracing unrolls its chunked kernel for the traced chunk count.
         disaggregated = not multi_token_decode and not (
             _is_dynamic(config) and _switches_kernels_on_query_length(model)
         )
