@@ -43,7 +43,7 @@ import copy
 import inspect
 import sys
 import types
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from contextlib import contextmanager
 from typing import Any
 
@@ -309,10 +309,12 @@ def _reshaped_vision_attention_forward(
     rotary_pos_emb: torch.Tensor | None = None,
     position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     returns_tuple: bool = False,
+    uneven_segments: bool = False,
     **kwargs,
 ):
-    """Export-safe chunked vision/audio attention: reshape segments into a batch dim,
-    apply rotary if provided, run one SDPA call, project, and re-emit in the original layout."""
+    """Export-safe chunked vision/audio attention: reshape segments into a batch dim (or, for uneven segments such as
+    window attention's, mask attention to each segment), apply rotary if provided, run one SDPA call, project, and
+    re-emit in the original layout."""
 
     # Normalise NaViT-style `(1, T, D)` packing (minicpmv4_6) to the flat `(T, D)` layout
     # the rest of this wrapper assumes. The leading dim is always 1 — multi-image batches
@@ -330,7 +332,7 @@ def _reshaped_vision_attention_forward(
     # The reshape-into-batch below needs equal-length segments.
     segment_lengths = cu_seqlens[1:] - cu_seqlens[:-1]
     torch_compilable_check(
-        (segment_lengths == segment_lengths[0]).all(),
+        uneven_segments or (segment_lengths == segment_lengths[0]).all(),
         "Chunked vision attention requires uniform segment lengths during export. "
         "Ensure all images have the same resolution (use do_resize=True in the processor) "
         "or pad inputs to a common size.",
@@ -377,7 +379,15 @@ def _reshaped_vision_attention_forward(
             query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
             key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
 
-    seg_len = seq_length // num_segments
+    attention_mask = None
+    if uneven_segments:
+        # One sequence, each token attending to its own segment
+        positions = torch.arange(seq_length, device=hidden_states.device)
+        segment_ids = (positions[:, None] >= cu_seqlens[None, 1:]).sum(-1)
+        attention_mask = segment_ids[:, None] == segment_ids[None, :]
+        num_segments, seg_len = 1, seq_length
+    else:
+        seg_len = seq_length // num_segments
 
     # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
     def _to_batched(t):
@@ -393,6 +403,7 @@ def _reshaped_vision_attention_forward(
         query_states,
         key_states,
         value_states,
+        attn_mask=attention_mask,
         is_causal=False,
         scale=self.scaling,
         dropout_p=0.0 if not self.training else self.attention_dropout,
@@ -451,14 +462,155 @@ def _reshaped_vision_attention_forward(
     "transformers.models.qwen3_asr.modeling_qwen3_asr.Qwen3ASRAudioAttention.forward",
 )
 def _patch_chunked_vision_attention(original):
-    """Bind `returns_tuple` once per class by inspecting the original forward's source."""
+    """Bind `returns_tuple` and `uneven_segments` (window attention) once per class by inspecting the sources."""
     src = inspect.getsource(original)
     returns_tuple = "return attn_output, attn_weight" in src or "return attn_output, None" in src
+    uneven_segments = "cu_window_seqlens" in inspect.getsource(inspect.getmodule(original))
 
     def forward(self, *args, **kwargs):
-        return _reshaped_vision_attention_forward(self, *args, returns_tuple=returns_tuple, **kwargs)
+        return _reshaped_vision_attention_forward(
+            self, *args, returns_tuple=returns_tuple, uneven_segments=uneven_segments, **kwargs
+        )
 
     return forward
+
+
+@register_patch(
+    "dynamo",
+    "transformers.models.olmo_hybrid.modeling_olmo_hybrid.torch_chunk_gated_delta_rule",
+    "transformers.models.qwen3_5.modeling_qwen3_5.torch_chunk_gated_delta_rule",
+    "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.torch_chunk_gated_delta_rule",
+    "transformers.models.qwen3_next.modeling_qwen3_next.torch_chunk_gated_delta_rule",
+    "transformers.models.qwen4_exp.modeling_qwen4_exp.torch_chunk_gated_delta_rule",
+)
+def _patch_chunk_gated_delta_rule(_original):
+    """The chunked gated delta rule for any number of chunks: a trace unrolls its loop over chunks for the traced
+    sequence's chunk count, so the loop runs as a `scan`, and its triangular solve, unrolled for every position of a
+    chunk, as a block inversion."""
+
+    def patch(
+        query,
+        key,
+        value,
+        g,
+        beta,
+        chunk_size=64,
+        initial_state=None,
+        output_final_state=False,
+        use_qk_l2norm_in_kernel=False,
+        **kwargs,
+    ):
+        initial_dtype = query.dtype
+        batch_size, sequence_length, num_k_heads, k_head_dim = key.shape
+        num_v_heads, v_head_dim = value.shape[-2:]
+        if num_k_heads != num_v_heads:
+            query = query.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+            key = key.repeat_interleave(num_v_heads // num_k_heads, dim=2)
+        query, key, value, beta, decay = [
+            x.transpose(1, 2).to(torch.float32, memory_format=torch.contiguous_format)
+            for x in (query, key, value, beta, g)
+        ]
+        if use_qk_l2norm_in_kernel:
+            query = query * torch.rsqrt((query * query).sum(dim=-1, keepdim=True) + 1e-6)
+            key = key * torch.rsqrt((key * key).sum(dim=-1, keepdim=True) + 1e-6)
+        query = query * query.shape[-1] ** -0.5
+
+        # Padded to a whole number of chunks, written as a product so the chunked reshape is provably exact. At least
+        # two: a trace guards a dynamic size against 1, which would refuse a one-chunk prompt.
+        num_chunks = torch.sym_max(2, (sequence_length + chunk_size - 1) // chunk_size)
+        pad_size = num_chunks * chunk_size - sequence_length
+        query, key, value = (torch.nn.functional.pad(x, (0, 0, 0, pad_size)) for x in (query, key, value))
+        beta, decay = (torch.nn.functional.pad(x, (0, pad_size)) for x in (beta, decay))
+        v_beta = value * beta.unsqueeze(-1)
+        k_beta = key * beta.unsqueeze(-1)
+        query, key, k_beta, v_beta = [
+            x.reshape(batch_size, num_v_heads, num_chunks, chunk_size, x.shape[-1])
+            for x in (query, key, k_beta, v_beta)
+        ]
+        decay = decay.reshape(batch_size, num_v_heads, num_chunks, chunk_size)
+
+        strictly_upper_mask = torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device).triu(1)
+        cum_decay = decay.cumsum(dim=3)
+        pairwise_decay = cum_decay.unsqueeze(4) - cum_decay.unsqueeze(3)
+        pairwise_decay = pairwise_decay.masked_fill(strictly_upper_mask, float("-inf")).exp()
+        ut_system = (k_beta @ key.transpose(-1, -2)) * pairwise_decay
+        intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
+        decayed_k_beta = k_beta * cum_decay.exp().unsqueeze(-1)
+
+        inverse = _unit_lower_triangular_inverse(ut_system)
+        new_values, k_cumdecay = inverse @ v_beta, inverse @ decayed_k_beta
+
+        if initial_state is None:
+            state = new_values.new_zeros(batch_size, num_v_heads, k_head_dim, v_head_dim)
+        else:
+            state = initial_state.to(new_values)
+        query = query * cum_decay.exp().unsqueeze(-1)
+        key = key * (cum_decay[..., -1:] - cum_decay).exp().unsqueeze(-1)
+        chunk_decay = cum_decay[..., -1].exp()[..., None, None]
+
+        def chunk_step(state, chunk):
+            query, key, new_values, k_cumdecay, intra_chunk_attn, chunk_decay = chunk
+            v_new = new_values - torch.bmm(k_cumdecay, state)
+            output = torch.bmm(query, state) + torch.bmm(intra_chunk_attn, v_new)
+            return state * chunk_decay + torch.bmm(key.transpose(-1, -2), v_new), output
+
+        # Batch and heads flattened into one dim: the loop body runs `bmm`, whereas a batched `matmul` decomposes on
+        # its inputs' symbolic sizes, which backends retracing the body (ONNX's decompositions, ExecuTorch's passes)
+        # fail on.
+        chunks = [
+            x.movedim(2, 0).flatten(1, 2) for x in (query, key, new_values, k_cumdecay, intra_chunk_attn, chunk_decay)
+        ]
+        state, core_attn_out = _scan(chunk_step, state.flatten(0, 1), chunks)
+        state = state.unflatten(0, (batch_size, num_v_heads))
+        core_attn_out = core_attn_out.unflatten(1, (batch_size, num_v_heads)).movedim(0, 2)
+        core_attn_out = core_attn_out.reshape(batch_size, num_v_heads, -1, v_head_dim)
+        core_attn_out = core_attn_out[:, :, :sequence_length]
+        core_attn_out = core_attn_out.transpose(1, 2).to(initial_dtype, memory_format=torch.contiguous_format)
+        return core_attn_out, state if output_final_state else None
+
+    return patch
+
+
+def _scan(combine_fn, init, xs):
+    """`torch`'s `scan` of `combine_fn` over the leading dim of the tensors `xs`, a backend that can't lower it patches.
+
+    The `scan` operator itself, not `torch`'s `scan` wrapper: the wrapper traces the loop body with dynamo, whose cache
+    hands a later export the body an earlier one traced, sizes baked in.
+    """
+    from torch._higher_order_ops.scan import scan_op
+
+    def flat_combine_fn(carry, *chunk):
+        carry, output = combine_fn(carry, list(chunk))
+        return [carry, output]
+
+    carry, outputs = scan_op(flat_combine_fn, [init], list(xs), additional_inputs=())
+    return carry, outputs
+
+
+def _unit_lower_triangular_inverse(matrix):
+    """The inverse of the unit lower triangular matrix holding `matrix`'s strictly lower triangle, its size a power of
+    two, by doubling inverted diagonal blocks: `[[A, 0], [C, B]]` inverts to `[[A^-1, 0], [-B^-1 C A^-1, B^-1]]`."""
+    size = matrix.shape[-1]
+    # Batch dims flattened, and every shape read off a tensor rather than built from a symbolic size
+    flat = matrix.reshape(-1, size, size)
+    # The inverted diagonal blocks, `[batch, size // block, block, block]`
+    blocks = torch.ones_like(flat[:, :, :1]).unsqueeze(-1)
+    block = 1
+    while block < size:
+        pairs = size // (2 * block)
+        inverses = blocks.reshape(-1, pairs, 2, block, block)
+        upper_inverse, lower_inverse = inverses[:, :, 0], inverses[:, :, 1]
+        # Each pair's own `2 * block` square of `matrix` (masking the others out: OV has no `diagonal`), then its
+        # lower-left block
+        grid = flat.reshape(-1, pairs, 2 * block, pairs, 2 * block)
+        own = torch.eye(pairs, dtype=matrix.dtype, device=matrix.device)[:, None, :, None]
+        corner = (grid * own).sum(dim=-2)[..., block:, :block]
+        corner = -lower_inverse @ corner @ upper_inverse
+        top = torch.cat([upper_inverse, torch.zeros_like(upper_inverse)], dim=-1)
+        bottom = torch.cat([corner, lower_inverse], dim=-1)
+        blocks = torch.cat([top, bottom], dim=-2)
+        block *= 2
+    return blocks.reshape_as(matrix)
 
 
 # ── Stage 3: Pytree registration ─────────────────────────────────────────────
@@ -702,9 +854,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
     - Scalars / None → None (no dynamic dims).
     - Registered pytree nodes (ModelOutput, Cache, …) → list of one spec per child of the
       registered flatten, recursed, matching the ``TreeSpec(list, …)`` torch.export compares against.
-    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Lists / tuples → same container type, recursed element-wise.
-    - Plain dicts → recursed dict of specs.
+    - Dicts and other mappings (a processor's `BatchFeature`) → recursed dict of specs.
+    - Other objects with ``__dict__`` → flat list of leaf specs.
     - Everything else → None.
     """
     if isinstance(inputs, torch.Tensor):
@@ -723,6 +875,9 @@ def get_auto_dynamic_shapes(inputs: Any) -> Any:
         # against -- flattening it to tensors hands over a flat spec where nested children are expected.
         children, _ = node.flatten_fn(inputs)
         return [get_auto_dynamic_shapes(child) for child in children]
+    if isinstance(inputs, Mapping):
+        # A processor's `BatchFeature`, which `torch.export` takes as the dict of its items
+        return {k: get_auto_dynamic_shapes(v) for k, v in inputs.items()}
     if hasattr(inputs, "__dict__"):
         leaves, _ = _pytree_flatten(inputs)
         return get_auto_dynamic_shapes(leaves)
