@@ -2256,6 +2256,38 @@ def _patch_scatter_reduce(original):
     return patch
 
 
+@register_patch("openvino", "transformers.exporters.exporter_dynamo._scan")
+def _patch_scan(_original):
+    """The gated delta rule's ``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop``: it has no ``scan``
+    conversion.
+
+    Every tensor the body reads is carried through the loop, the scanned ones included: OV's ``while_loop``
+    conversion takes the inputs a closure lifts for carried ones, and fails on the count. The ``while_loop`` operator
+    itself, not ``torch``'s wrapper, whose dynamo cache hands a later export the body an earlier one traced.
+    """
+    from torch._higher_order_ops.while_loop import while_loop_op
+
+    def patch(combine_fn, init, xs):
+        # The per-step output's shape, from one step: nothing reads its values, so the trace drops it.
+        _, first = combine_fn(init, [x[0] for x in xs])
+        outputs = first.new_zeros(xs[0].shape[0], *first.shape)
+
+        def cond(index, carry, outputs, *xs):
+            return index < xs[0].shape[0]
+
+        def body(index, carry, outputs, *xs):
+            position = index.reshape(1)
+            carry, output = combine_fn(carry, [x.index_select(0, position).squeeze(0) for x in xs])
+            outputs = outputs.index_copy(0, position, output.unsqueeze(0))
+            return index + 1, carry, outputs, *(x.clone() for x in xs)
+
+        index = torch.zeros((), dtype=torch.int64, device=init.device)
+        _, carry, outputs, *_ = while_loop_op(cond, body, (index, init, outputs, *xs), ())
+        return carry, outputs
+
+    return patch
+
+
 # ── OpenVINO conversion extensions ──────────────────────────────────────────
 # Custom OV-side translations registered in ``_OV_CONVERSION_EXTENSIONS`` and passed to
 # ``openvino.convert_model(extension=...)``. Mirrors the role of ONNX's

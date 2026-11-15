@@ -23,7 +23,7 @@ from ..modeling_outputs import BaseModelOutput
 from ..utils import is_torch_available
 from .base import ExportedModel
 from .cache import advance_cache_length, causal_mask, mask_width, materialize_cache_layers
-from .decompose import _MODALITY_SPECS, DEEPSTACK_INPUTS, PREFILL_GRAPH, decode_graph_name
+from .decompose import _MODALITY_SPECS, PREFILL_GRAPH, decode_graph_name
 from .metadata import load_treespec
 from .multimodal import ExportedMultimodalModel
 from .precompute import get_rope_index_from_config
@@ -241,58 +241,21 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             outputs = self._call(prefill, **kwargs)
             self.runner.load_state(prefill)
             return outputs
-        # A multi-token decode graph is traced on two tokens; one traced on a single token (any static export, or a
-        # dynamic one whose model can't decode several at once) takes the prompt a token at a time.
+        # A multi-token decode graph is traced on two tokens.
         if query_length == 1 or traced[text_name].get("shape", [0, 0])[1] != 1:
             return self._call(self.runner, **kwargs)
-        outputs = None
-        for index in range(query_length):
-            outputs = self._call(self.runner, **self._token(kwargs, index, query_length))
-            if getattr(outputs, "cache", None) is not None:
-                kwargs["cache"] = outputs.cache
-        return outputs
-
-    @staticmethod
-    def _token(kwargs: dict, index: int, query_length: int) -> dict:
-        """The `index`-th token's call out of a `query_length`-token step: per-token inputs sliced to it, and the
-        padding mask to the positions seen so far."""
-
-        def mask_for_token(mask):
-            # A padding mask covers the positions seen so far, a 4D one the token's own query row.
-            if mask is None or mask.dim() not in (2, 4):
-                return mask
-            return (
-                mask[:, : mask.shape[1] - query_length + index + 1]
-                if mask.dim() == 2
-                else mask[:, :, index : index + 1]
+        prefill = self.runners.get(PREFILL_GRAPH)
+        if prefill is None:
+            raise ValueError(
+                f"This export can't take a {query_length}-token prompt: its decode graph takes one token and it has "
+                "no prompt graph. Export it static, which gives it one."
             )
-
-        token = dict(kwargs)
-        features = {spec.features for spec in DEEPSTACK_INPUTS.values()}
-        for name, value in kwargs.items():
-            if name in features and value is not None:
-                # One row per position of the step (`dense_deepstack`): the token's.
-                def rows(dense):
-                    return dense.view(-1, query_length, dense.shape[-1])[:, index]
-
-                is_dict = isinstance(value, dict)
-                token[name] = {key: rows(item) for key, item in value.items()} if is_dict else [rows(v) for v in value]
-                continue
-            if name in ("attention_mask", "decoder_attention_mask"):
-                is_dict = isinstance(value, dict)
-                token[name] = (
-                    {key: mask_for_token(mask) for key, mask in value.items()} if is_dict else mask_for_token(value)
-                )
-                continue
-            if not isinstance(value, torch.Tensor):
-                continue
-            elif name in ("position_ids", "decoder_position_ids"):
-                token[name] = value[..., index : index + 1]
-            elif name == "cache_position":
-                token[name] = value[index : index + 1]
-            elif value.dim() >= 2 and value.shape[1] == query_length:
-                token[name] = value[:, index : index + 1]
-        return token
+        traced_length = prefill.metadata.kwargs.get(text_name, {}).get("shape", [0, 0])[1]
+        raise ValueError(
+            f"This export's prompt graph is static, traced on {traced_length}-token prompts, so it can't take a "
+            f"{query_length}-token one: pad the prompt to {traced_length} tokens, or export the prompt graph dynamic "
+            f'(`{{"{PREFILL_GRAPH}": dynamic_config, ...}}`).'
+        )
 
     def _call(self, runner: ModelRunner, **kwargs) -> Any:
         """One call of `runner`'s graph (the decode graph's, or the prompt graph's) on the step's kwargs."""
