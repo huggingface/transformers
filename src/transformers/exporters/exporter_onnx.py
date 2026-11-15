@@ -45,7 +45,7 @@ import copy
 import functools
 import operator
 from collections.abc import MutableMapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -60,6 +60,7 @@ from .utils import (
     apply_fx_node_fixes,
     apply_patches,
     disambiguate_io_names,
+    patch_attribute,
     patch_model_outputs,
     quantize_converted_model,
     register_fx_node_fix,
@@ -77,6 +78,7 @@ if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
+    from onnxscript.onnx_opset import opset23
 
     from .onnxruntime_fusions import fuse_for_onnxruntime
 
@@ -142,12 +144,24 @@ class OnnxExporter(DynamoExporter):
         # A model quantized before export has no ops the fusions match.
         quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
+        # Opset 23 exports attention, RMS norms and rotary embeddings as single ops. ONNX Runtime's fusions match their
+        # decompositions instead, and NNCF quantizes at 20 (at 23 its `QuantizeLinear` outputs mismatch their zero point).
+        # TensorRT builds opset 23's `Attention` only into a strongly typed network, which ONNX Runtime doesn't request.
+        if config.opset_version is not None:
+            opset_version = config.opset_version
+        elif config.for_tensorrt:
+            opset_version = 22
+        else:
+            opset_version = 20 if ort_fusions is not None or quantizer is not None else 23
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions is not None and ort_fusions.mixture_of_experts else None
 
         with (
             apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
+            patch_attribute(torch.nn.functional, "scaled_dot_product_attention", _additive_sdpa_mask)
+            if not config.for_tensorrt
+            else nullcontext(),
             patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
@@ -158,8 +172,8 @@ class OnnxExporter(DynamoExporter):
                 args=(),
                 input_names=inputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
-                custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                opset_version=config.opset_version,
+                custom_translation_table=_onnx_translation_table(opset_version),
+                opset_version=opset_version,
                 optimize=config.optimize,
             )
 
@@ -167,7 +181,12 @@ class OnnxExporter(DynamoExporter):
         apply_onnx_ir_fixes(onnx_program)
 
         if ort_fusions is not None:
-            fuse_for_onnxruntime(onnx_program.model, ort_fusions)
+            # Token types mark blocks attended bidirectionally (PaliGemma's prefix, Gemma3's images), as may a custom
+            # 4D mask (the one PaliGemma's language model takes, built from them).
+            mask = sample_inputs.get("attention_mask")
+            custom_mask = isinstance(mask, torch.Tensor) and mask.dim() == 4
+            causal = "token_type_ids" not in sample_inputs and not custom_mask
+            fuse_for_onnxruntime(onnx_program.model, ort_fusions, causal=causal)
 
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
         record_output_structure(metadata, traced_outputs[-1])
@@ -293,8 +312,7 @@ def _patch_sdpa(original):
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
 
-    A boolean mask goes in as an additive one (torchlib's boolean softmax adds a redundant `IsNaN`/`Where`), and
-    unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
+    Unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
     microsoft/onnxruntime#33876). The key, value and mask lengths are checked equal, so a dynamic export gives them
     one symbol, which onnxscript's attention fusion needs.
     """
@@ -309,13 +327,31 @@ def _patch_sdpa(original):
         # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
             attended = attn_mask.to(query.dtype)
-            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
             attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
         unattended = attended.sum(dim=-1, keepdim=True) < 1
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
+
+    return patch
+
+
+def _additive_sdpa_mask(original):
+    """Turn a boolean attention mask into an additive one, unless the export is for TensorRT
+    (`OnnxConfig(for_tensorrt=True)`).
+
+    torchlib's boolean softmax guards every attention with an `IsNaN`/`Where` over the scores, which `_patch_sdpa`
+    makes redundant and which ONNX Runtime pays for (2x on a 2520-patch vision attention on its CPU provider).
+    TensorRT, on the other hand, builds a faster engine from the boolean form (2.53 ms against 3.00 ms on EmbeddingGemma2
+    in bf16 on a B200).
+    """
+
+    def patch(query, key, value, attn_mask=None, *args, **kwargs):
+        if attn_mask is not None and attn_mask.dtype == torch.bool:
+            # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
+            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
+        return original(query, key, value, attn_mask, *args, **kwargs)
 
     return patch
 
@@ -1203,6 +1239,29 @@ def _quantized_decomposed_dequantize_per_channel(
     return op.DequantizeLinear(input, scales, axis=axis)
 
 
+def _aten_scaled_dot_product_attention_23(
+    query, key, value, attn_mask=None, dropout_p: float = 0.0, is_causal: bool = False, scale=None, enable_gqa=False
+):
+    """SDPA as one `Attention` (opset 23). torchlib lowers it the same way but first checks the query's and key's head
+    counts against each other, which fails on a symbolic head axis: `dynamic=True` marks every axis of a cache input
+    dynamic. `Attention` reads both head counts from the shapes when it runs, and SDPA already requires them to match
+    (or, with `enable_gqa`, to divide)."""
+    if dropout_p != 0:
+        raise ValueError("`Attention` has no dropout: export the model in eval mode.")
+    output, _, _, _ = opset23.Attention(query, key, value, attn_mask=attn_mask, scale=scale, is_causal=is_causal)
+    return output
+
+
+def _onnx_translation_table(opset_version: int) -> dict[Any, Any]:
+    """`_ONNX_TRANSLATION_TABLE`, plus the translations to ops of `opset_version` (`Attention` from 23)."""
+    if opset_version < 23:
+        return _ONNX_TRANSLATION_TABLE
+    return {
+        **_ONNX_TRANSLATION_TABLE,
+        torch.ops.aten.scaled_dot_product_attention.default: _aten_scaled_dot_product_attention_23,
+    }
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
@@ -1281,9 +1340,40 @@ def _fix_ir_constant_gather_nd(graph_like: onnx_ir.Graph) -> None:
         replacement.name = gathered.name
 
 
+def _fix_ir_rotary_embedding_batch(graph_like: onnx_ir.Graph) -> None:
+    """Expand a `RotaryEmbedding`'s cos and sin to its input's batch. onnxscript fuses the rotation into the op (opset
+    23) from cos and sin a model computes once for the batch (batch 1), which torch broadcasts against the input; the
+    op takes them only at the input's batch."""
+    for node in list(graph_like):
+        if node.op_type != "RotaryEmbedding" or node.domain not in ("", "ai.onnx"):
+            continue
+        # With `position_ids`, cos and sin are a cache indexed by position, without a batch axis.
+        if len(node.inputs) > 3 and node.inputs[3] is not None:
+            continue
+        x, cos, sin = node.inputs[:3]
+        if x.shape is not None and cos.shape is not None and sin.shape is not None:
+            if isinstance(x.shape[0], int) and x.shape[0] == cos.shape[0] == sin.shape[0]:
+                continue
+        batch = onnx_ir.node("Shape", [x], {"start": 0, "end": 1})
+        batch.outputs[0].dtype = onnx_ir.DataType.INT64
+        added = [batch]
+        for index, value in ((1, cos), (2, sin)):
+            rest = onnx_ir.node("Shape", [value], {"start": 1})
+            shape = onnx_ir.node("Concat", [batch.outputs[0], rest.outputs[0]], {"axis": 0})
+            expanded = onnx_ir.node("Expand", [value, shape.outputs[0]])
+            # cos and sin share the input's dtype; the fused graph may not record theirs.
+            expanded.outputs[0].dtype = value.dtype or x.dtype
+            for shape_node in (rest, shape):
+                shape_node.outputs[0].dtype = onnx_ir.DataType.INT64
+            added += [rest, shape, expanded]
+            node.replace_input_with(index, expanded.outputs[0])
+        graph_like.insert_before(node, added)
+
+
 _IR_FIXES = [
     _fix_ir_topk_sorted,
     _fix_ir_constant_gather_nd,
+    _fix_ir_rotary_embedding_batch,
 ]
 
 

@@ -254,9 +254,9 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             "cache": cache,
             "position_ids": position_ids,
         }
-        is_first_iteration = cache is None or not cache.is_initialized or pixel_values is not None
-        if token_type_ids is not None and is_first_iteration:
-            # Can attend bidirectionally in prefix and only causally in suffix
+        if token_type_ids is not None:
+            # Can attend bidirectionally in prefix and only causally in suffix. A step after the prompt has no prefix:
+            # its query positions fall past the given ids, padded with -1.
             mask_kwargs["block_sequence_ids"] = torch.where(token_type_ids == 0, 0, -1)
 
         # PG has no sliding window, only full attn. But PG2 needs sliding mask and full mask

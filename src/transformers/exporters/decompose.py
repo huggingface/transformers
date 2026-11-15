@@ -37,6 +37,7 @@ from .components import (
     Component,
     CrossAttentionEncoder,
     ModalityEncoder,
+    PaddedSequenceClassifier,
     PatchVisionEncoder,
     TokenEmbedder,
 )
@@ -50,6 +51,7 @@ if is_torch_available():
     import torch
 
     from ..cache_utils import Cache, EncoderDecoderCache
+    from ..modeling_layers import GenericForSequenceClassification
     from ..modeling_utils import PreTrainedModel
 
 
@@ -557,7 +559,7 @@ def decompose_multimodal(
                 spec.component: stack.enter_context(_capture_calls(owner, getter))
                 for spec, owner, getter in active_modalities
             }
-            model(**copy.deepcopy(inputs))
+            outputs = model(**copy.deepcopy(inputs))
     except Exception as e:
         raise RuntimeError(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
@@ -565,9 +567,14 @@ def decompose_multimodal(
     if active_modalities and not any(captured_features.values()):
         return {"model": Component(model, inputs)}
 
-    components = (
-        {"language_model": Component(model, _main_inputs(model, inputs, decoder_calls[-1]))} if decoder_calls else {}
-    )
+    components = {}
+    if decoder_calls:
+        language_model, main_inputs = model, _main_inputs(model, inputs, decoder_calls[-1])
+        # A sequence classifier finds its padding in the token ids, which the embeddings replaced.
+        if isinstance(model, GenericForSequenceClassification) and "input_ids" not in main_inputs:
+            language_model = PaddedSequenceClassifier(model)
+            main_inputs = {"input_ids": inputs["input_ids"], **main_inputs}
+        components["language_model"] = Component(language_model, main_inputs)
 
     # Dual-encoders (owlvit) refuse `get_input_embeddings`. `prompt_ids` covers an encoder-decoder, whose
     # prefill kwargs carry `decoder_input_ids` instead.
@@ -607,7 +614,11 @@ def decompose_multimodal(
             components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
             continue
         feature_inputs = precompute_export_inputs(model.config, feature_inputs)
-        components[name] = Component(ModalityEncoder(owner, getter, spec.grid_key), feature_inputs)
+        # The image features keep the shape the model returns them in (`image_hidden_states`): flat (LLaVA), or one
+        # row per image (Gemma3, PaliGemma).
+        returned = getattr(outputs, "image_hidden_states", None) if name == "vision_embeddings_model" else None
+        flatten = not isinstance(returned, torch.Tensor) or returned.dim() == 2
+        components[name] = Component(ModalityEncoder(owner, getter, spec.grid_key, flatten), feature_inputs)
     return components
 
 

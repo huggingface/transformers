@@ -42,6 +42,7 @@ import math
 import operator
 import re
 import shutil
+import sys
 from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,7 @@ from .utils import (
     apply_fx_program_fixes,
     apply_patches,
     module_dtype,
+    patch_attributes,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -664,6 +666,28 @@ def _patch_expand(original):
         if 0 in result.stride():
             return result.clone(memory_format=torch.contiguous_format)
         return result
+
+    return patch
+
+
+@register_patch(
+    "executorch",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(original):
+    """Run Mamba's recurrence as its Python loop, unrolled for the traced length: ExecuTorch lowers neither the
+    `while_loop` an export runs it as ("Unsupported control flow operator") nor `associative_scan`."""
+    module = sys.modules[original.__module__]
+
+    def patch(*args, **kwargs):
+        not_tracing = lambda _original: lambda: False  # noqa: E731
+        with patch_attributes(
+            [(module, "is_torchdynamo_exporting", not_tracing), (module, "is_torchdynamo_compiling", not_tracing)]
+        ):
+            return original(*args, **kwargs)
 
     return patch
 

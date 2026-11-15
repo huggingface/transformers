@@ -219,6 +219,24 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         feeds = {name: value.numpy() for name, value in inputs.items()}
         np.testing.assert_allclose(_run(fused, feeds)[0], _run(plain, feeds)[0], atol=1e-4, rtol=1e-4)
 
+    def test_tensorrt_keeps_the_boolean_mask(self):
+        """`for_tensorrt=True` fuses nothing and keeps the attention mask boolean (torchlib guards its softmax
+        with `IsNaN`), which TensorRT builds a faster engine from; every other export takes it additive, as ONNX
+        Runtime runs faster."""
+        model = _ort_model()
+        inputs = _padded_inputs(model)
+        tensorrt = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, for_tensorrt=True))
+        plain = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False))
+        tensorrt_ops = collections.Counter(node.op_type for node in tensorrt.program.graph.all_nodes())
+        plain_ops = collections.Counter(node.op_type for node in plain.program.graph.all_nodes())
+        self.assertGreater(tensorrt_ops["IsNaN"], 0)
+        self.assertEqual(plain_ops["IsNaN"], 0)
+        self.assertFalse(any(node.domain == "com.microsoft" for node in tensorrt.program.graph.all_nodes()))
+        feeds = {name: value.numpy() for name, value in inputs.items()}
+        np.testing.assert_allclose(
+            _run(tensorrt.program, feeds)[0], _run(plain.program, feeds)[0], atol=1e-4, rtol=1e-4
+        )
+
     def test_decode_matches_plain_export(self):
         model = _ort_model()
         inputs = _padded_inputs(model)
@@ -313,11 +331,11 @@ class OpenVINOFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def assert_decode_fused(self, model, decode, fusions):
         num_layers = model.config.num_hidden_layers
         # The cache update feeds its state as is: anything between them keeps the plugin from fusing the cache into
-        # its attention.
+        # its attention. Only the keys' and values' states: a sliding-window layer keeps its window as one too.
         assign_sources = [
             op.input_value(0).get_node().get_type_name()
             for op in decode.get_ordered_ops()
-            if op.get_type_name() == "Assign"
+            if op.get_type_name() == "Assign" and op.get_variable_id().split(".")[-1].startswith(("keys", "values"))
         ]
         self.assertEqual(assign_sources, ["Concat"] * 2 * num_layers)
         layers = collections.Counter(layer for layer, _ in _compiled_ops(decode))

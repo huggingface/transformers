@@ -105,7 +105,14 @@ class OpenVINOModelRunner(ModelRunner):
                 torch.set_num_threads(torch_threads)
                 defaults["INFERENCE_NUM_THREADS"] = max(1, _physical_cores() - torch_threads)
                 defaults["ENABLE_CPU_PINNING"] = True
-        return cls(openvino.Core().compile_model(program, device, {**defaults, **(config or {})}), metadata)
+        # The precision the export recorded (`runtime_options` in the model's rt_info): OpenVINO doesn't apply it on
+        # its own, and the CPU plugin otherwise runs an fp32 model in bf16 where the CPU has it (AMX).
+        recorded = {}
+        if program.has_rt_info("runtime_options"):
+            recorded = dict(program.get_rt_info("runtime_options").value)
+        return cls(
+            openvino.Core().compile_model(program, device, {**recorded, **defaults, **(config or {})}), metadata
+        )
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
