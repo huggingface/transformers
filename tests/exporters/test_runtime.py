@@ -810,6 +810,9 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         )
         exported.to(providers=providers)
         runners = [exported.runners[name] for name in ("model", "prefill_model")]
+        # ONNX Runtime lists an execution provider whose libraries are missing (TensorRT's), and falls back past it.
+        if any(runner.session.get_providers()[0] != providers[0][0] for runner in runners):
+            self.skipTest(f"{providers[0][0]} could not load its libraries")
         self.assertTrue(all(runner.replays_cuda_graph for runner in runners))
         for _ in range(2):
             generated = exported.generate(**copy.deepcopy(inputs), generation_config=generation_config)
