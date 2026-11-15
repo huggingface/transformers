@@ -31,6 +31,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granitemoehybrid.configuration_granitemoehybrid import GraniteMoeHybridConfig
@@ -1098,12 +1099,13 @@ class GraniteSwitchAttention(nn.Module):
         else:
             self.o_proj = nn.Linear(self.q_size, self.hidden_size, bias=config.attention_bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         adapter_indices: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         return_kv: bool = False,
         **kwargs: Unpack[TransformersKwargs],
@@ -1132,8 +1134,8 @@ class GraniteSwitchAttention(nn.Module):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1363,11 +1365,12 @@ class GraniteSwitchDecoderLayer(GradientCheckpointingLayer):
         return moe_output + shared_output
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1382,7 +1385,7 @@ class GraniteSwitchDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             adapter_indices=adapter_indices,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -1485,12 +1488,13 @@ class GraniteSwitchShadowResidualDecoderLayer(GradientCheckpointingLayer):
         return moe_output + shared_output
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         base_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         adapter_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1516,7 +1520,7 @@ class GraniteSwitchShadowResidualDecoderLayer(GradientCheckpointingLayer):
             hidden_states=base_normed,
             attention_mask=attention_mask,
             adapter_indices=None,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             return_kv=True,
             **kwargs,
@@ -1580,7 +1584,7 @@ class GraniteSwitchPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteSwitchDecoderLayer", "GraniteSwitchShadowResidualDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1723,12 +1727,13 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         switch_input_ids: torch.LongTensor | None = None,
@@ -1745,8 +1750,8 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if input_ids is not None:
             batch_size, seq_length = input_ids.shape
@@ -1756,7 +1761,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
             device = inputs_embeds.device
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=device).unsqueeze(0)
 
         # Mask creation reads the embedding tensor only for batch size, query length and dtype, and
@@ -1770,7 +1775,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
             config=self.config,
             inputs_embeds=mask_shape_proxy,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -1833,7 +1838,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     position_embeddings=position_embeddings,
                     adapter_indices=adapter_indices,
                     **kwargs,
@@ -1843,7 +1848,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
                     hidden_states,
                     base_hidden_states,
                     attention_mask=causal_mask,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     position_embeddings=position_embeddings,
                     adapter_indices=adapter_indices,
                     **kwargs,
@@ -1864,7 +1869,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
 
         return GraniteSwitchModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             probe_logits=probe_logits,
             probe_indices=probe_indices,
         )
@@ -1929,12 +1934,13 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
@@ -1970,7 +1976,7 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             output_router_logits=output_router_logits,
             switch_input_ids=switch_input_ids,
@@ -2004,7 +2010,7 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
