@@ -27,6 +27,13 @@ from transformers import (
     PaddleOCRVLModel,
     is_torch_available,
 )
+from transformers.models.paddleocr_vl import (
+    PaddleOCRVisionConfig,
+    PaddleOCRVisionModel,
+)
+from transformers.models.paddleocr_vl.modeling_paddleocr_vl import (
+    PaddleOCRVisionRotaryEmbedding,
+)
 from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
@@ -305,6 +312,36 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     @unittest.skip("PaddleOCRVL does not support this test.")
     def test_model_is_small(self):
         pass
+
+    def test_vision_rotary_embedding_missing_or_none_rope_parameters(self):
+        """
+        Tests that PaddleOCRVisionRotaryEmbedding and PaddleOCRVisionModel can initialize
+        even when vision_config has rope_parameters as None, empty dict, or missing attribute (#50770).
+        """
+        # Test with rope_parameters=None
+        config = PaddleOCRVisionConfig()
+        config.rope_parameters = None
+        rotary = PaddleOCRVisionRotaryEmbedding(config)
+        self.assertEqual(rotary.rope_type, "axial")
+        _ = PaddleOCRVisionModel(config)
+
+        # Test with empty rope_parameters dict
+        config.rope_parameters = {}
+        rotary = PaddleOCRVisionRotaryEmbedding(config)
+        self.assertEqual(rotary.rope_type, "axial")
+        _ = PaddleOCRVisionModel(config)
+
+        # Test with legacy config where rope_parameters attribute does not exist
+        class LegacyVisionConfig(PaddleOCRVisionConfig):
+            def __getattribute__(self, name):
+                if name == "rope_parameters":
+                    raise AttributeError("no rope_parameters")
+                return super().__getattribute__(name)
+
+        legacy_config = LegacyVisionConfig()
+        rotary = PaddleOCRVisionRotaryEmbedding(legacy_config)
+        self.assertEqual(rotary.rope_type, "axial")
+        _ = PaddleOCRVisionModel(legacy_config)
 
 
 @require_torch

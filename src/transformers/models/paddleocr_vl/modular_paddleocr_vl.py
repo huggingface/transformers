@@ -356,7 +356,51 @@ class PaddleOCRProjector(nn.Module):
 
 
 class PaddleOCRVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
-    pass
+    def __init__(self, config: PaddleOCRVisionConfig):
+        nn.Module.__init__(self)
+        self.config = config
+
+        rope_params = getattr(self.config, "rope_parameters", None)
+        if rope_params is None or not isinstance(rope_params, dict):
+            rope_params = {
+                "rope_type": "axial",
+                "rope_theta": getattr(self.config, "rope_theta", None) or 10000.0,
+            }
+        rope_type = rope_params.get("rope_type") or "axial"
+        if rope_type == "default":
+            rope_type = "axial"
+        self.rope_type = rope_type
+        rope_init_fn = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(
+        config: PaddleOCRVisionConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        rope_params = getattr(config, "rope_parameters", None)
+        if not isinstance(rope_params, dict):
+            rope_params = {}
+        base = rope_params.get("rope_theta") or getattr(config, "rope_theta", None) or 10000.0
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
 
 class PaddleOCRRotaryEmbedding(Qwen2VLRotaryEmbedding):
