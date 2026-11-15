@@ -916,18 +916,18 @@ def decompose_for_generation(
     return {names.get(name, name): component for name, component in components.items()}
 
 
-# The decode graph's names, after optimum-intel's: a causal LM's `model`, an encoder-decoder's `decoder_model` (beside
-# its `encoder_model`), and a multi-modal model's `language_model`.
-DECODE_GRAPHS = ("model", "decoder_model", "language_model")
-
-
-# The prompt graph `export_for_generation` exports beside a decode graph taking one token: the decode graph's module,
-# traced on the whole prompt.
+# The prompt graph `export_for_generation` exports beside a decode graph taking one token (the decode graph's module,
+# traced on the whole prompt), and that decode graph's name then.
 PREFILL_GRAPH = "prefill_model"
+DECODE_GRAPH = "decode_model"
+
+# The decode graph's names: after optimum-intel's, a causal LM's `model`, an encoder-decoder's `decoder_model` (beside
+# its `encoder_model`) and a multi-modal model's `language_model`; beside a prompt graph, `decode_model`.
+DECODE_GRAPHS = ("model", "decoder_model", "language_model", DECODE_GRAPH)
 
 
 def decode_graph_name(components) -> str:
-    """The name of the decode graph among `components` (`model`, `decoder_model` or `language_model`), if any."""
+    """The name of the decode graph among `components`, if any."""
     return next((name for name in DECODE_GRAPHS if name in components), None)
 
 
