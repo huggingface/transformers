@@ -406,6 +406,15 @@ class GatedDeltaRulePatchTest(unittest.TestCase):
                     with torch.no_grad():
                         expected = model(**inputs).logits
                     torch.testing.assert_close(exported(**inputs).logits.cpu(), expected, atol=1e-4, rtol=1e-4)
+                if exporter.__name__ == "OnnxExporter":
+                    # TensorRT's int8 refuses a non-finite constant, such as a `-inf` mask fill
+                    constants = [
+                        torch.from_numpy(value.const_value.numpy())
+                        for value in exported.program.graph.initializers.values()
+                    ]
+                    self.assertTrue(
+                        all(constant.isfinite().all() for constant in constants if constant.is_floating_point())
+                    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

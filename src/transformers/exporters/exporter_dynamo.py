@@ -539,7 +539,8 @@ def _patch_chunk_gated_delta_rule(_original):
         strictly_upper_mask = torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device).triu(1)
         cum_decay = decay.cumsum(dim=3)
         pairwise_decay = cum_decay.unsqueeze(4) - cum_decay.unsqueeze(3)
-        pairwise_decay = pairwise_decay.masked_fill(strictly_upper_mask, float("-inf")).exp()
+        # Zeroed after the exponential rather than set to `-inf` before it: TensorRT's int8 refuses a non-finite constant
+        pairwise_decay = pairwise_decay.masked_fill(strictly_upper_mask, 0).exp().masked_fill(strictly_upper_mask, 0)
         ut_system = (k_beta @ key.transpose(-1, -2)) * pairwise_decay
         intra_chunk_attn = (query @ key.transpose(-1, -2)) * pairwise_decay
         decayed_k_beta = k_beta * cum_decay.exp().unsqueeze(-1)
