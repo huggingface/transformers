@@ -165,6 +165,7 @@ if TYPE_CHECKING:
     from .flaubert import *
     from .flava import *
     from .flex_olmo import *
+    from .flexglue import *
     from .flint import *
     from .florence2 import *
     from .fnet import *
