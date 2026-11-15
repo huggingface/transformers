@@ -2088,6 +2088,49 @@ def _patch_scatter_reduce(original):
     return patch
 
 
+@register_patch("openvino", "torch._higher_order_ops.scan.scan")
+def _patch_scan(original):
+    """``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop``: it has no ``scan`` conversion.
+
+    Every tensor the body reads is carried through the loop, the scanned ones included: OV's ``while_loop``
+    conversion takes the inputs a closure lifts for carried ones, and fails on the count.
+    """
+    from torch._higher_order_ops.while_loop import while_loop
+    from torch.utils._pytree import tree_flatten, tree_unflatten
+
+    def patch(combine_fn, init, xs, *, dim=0, reverse=False):
+        if reverse:
+            return original(combine_fn, init, xs, dim=dim, reverse=reverse)
+        init_leaves, init_spec = tree_flatten(init)
+        xs_leaves, xs_spec = tree_flatten(xs)
+        xs_leaves = [x.movedim(dim, 0) for x in xs_leaves]
+        num_carry, num_xs = len(init_leaves), len(xs_leaves)
+        # The per-step outputs' shapes, from one step: nothing reads its values, so the trace drops it.
+        _, first = combine_fn(init, tree_unflatten([x[0] for x in xs_leaves], xs_spec))
+        ys_leaves, ys_spec = tree_flatten(first)
+        length = xs_leaves[0].shape[0]
+        ys_leaves = [y.new_zeros(length, *y.shape) for y in ys_leaves]
+
+        def cond(index, *carried):
+            return index < carried[num_carry].shape[0]
+
+        def body(index, *carried):
+            carry, xs, ys = carried[:num_carry], carried[num_carry : num_carry + num_xs], carried[num_carry + num_xs :]
+            position = index.reshape(1)
+            step = tree_unflatten([x.index_select(0, position).squeeze(0) for x in xs], xs_spec)
+            carry, y = combine_fn(tree_unflatten(list(carry), init_spec), step)
+            ys = [buffer.index_copy(0, position, value.unsqueeze(0)) for buffer, value in zip(ys, tree_flatten(y)[0])]
+            return index + 1, *tree_flatten(carry)[0], *(x.clone() for x in xs), *ys
+
+        index = torch.zeros((), dtype=torch.int64, device=xs_leaves[0].device)
+        outputs = while_loop(cond, body, (index, *init_leaves, *xs_leaves, *ys_leaves))
+        carry = tree_unflatten(list(outputs[1 : 1 + num_carry]), init_spec)
+        ys = [y.movedim(0, dim) for y in outputs[1 + num_carry + num_xs :]]
+        return carry, tree_unflatten(ys, ys_spec)
+
+    return patch
+
+
 # ── OpenVINO conversion extensions ──────────────────────────────────────────
 # Custom OV-side translations registered in ``_OV_CONVERSION_EXTENSIONS`` and passed to
 # ``openvino.convert_model(extension=...)``. Mirrors the role of ONNX's
