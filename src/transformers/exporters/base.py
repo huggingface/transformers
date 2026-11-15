@@ -358,6 +358,12 @@ def _exported_model_class(component_names, generation: bool = False) -> type[Exp
     return ExportedMultimodalModel if multimodal else ExportedModel
 
 
+def _is_dynamic(config) -> bool:
+    """Whether the decode graph's export config (or the single config) exports dynamic shapes."""
+    decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
+    return bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
+
+
 def _switches_kernels_on_query_length(model) -> bool:
     """Whether the model's linear attention runs the chunked gated delta rule beyond one token and the recurrent one
     for a single token (Qwen3.5's, Qwen3-Next's): a decode graph traced on several tokens keeps the chunked kernel,
@@ -572,12 +578,14 @@ class HfExporter(ABC):
 
         The model is run on **generate** kwargs to capture what each component is called with
         ([`~exporters.decompose.decompose_for_generation`]). A decode graph taking several tokens
-        (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or Qwen3.5's)
-        leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole prompt: prefill and decode are
-        disaggregated, at the cost of a second copy of the weights, and a static prompt graph takes prompts of the
-        captured length only (another goes through the decode graph a token at a time). A stateful export (OpenVINO's)
-        keeps its cache as the decode graph's own state, which a prompt graph can't write: its decode graph takes the
-        prompt a token at a time.
+        (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or with
+        `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
+        prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights, and a static prompt
+        graph takes prompts of the captured length only (another goes through the decode graph a token at a time). A
+        stateful export (OpenVINO's) keeps the cache as each graph's state: the decode graph continues from a copy of
+        the prompt graph's. A dynamic export of a model switching kernels on the query length (Qwen3.5's linear
+        attention) gets no prompt graph, whose chunked kernel would be unrolled for the traced prompt's chunk count:
+        its prompt goes through the decode graph a token at a time.
 
         Args:
             model ([`PreTrainedModel`]):
@@ -609,9 +617,12 @@ class HfExporter(ABC):
         generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
         )
-        # A decode graph taking one token leaves the prompt to a graph of its own, unless the cache is its state.
-        configs = config.values() if isinstance(config, dict) else [config]
-        disaggregated = not multi_token_decode and not any(getattr(c, "stateful", False) for c in configs)
+        # A decode graph taking one token leaves the prompt to a graph of its own, except a dynamic one of a model
+        # switching kernels on the query length: tracing unrolls its chunked kernel for the traced prompt's chunk count,
+        # so its prompt goes through the decode graph a token at a time.
+        disaggregated = not multi_token_decode and not (
+            _is_dynamic(config) and _switches_kernels_on_query_length(model)
+        )
         components = decompose_for_generation(
             model,
             sample_inputs,
@@ -665,8 +676,7 @@ class HfExporter(ABC):
                 defaults = GenerationConfig()
                 for name in ("temperature", "top_p", "top_k", "min_p", "typical_p", "epsilon_cutoff", "eta_cutoff"):
                     setattr(generation_config, name, getattr(defaults, name))
-        decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
-        dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
+        dynamic = _is_dynamic(config)
         if multi_token_decode is None:
             multi_token_decode = dynamic and not _switches_kernels_on_query_length(model)
         elif multi_token_decode and not dynamic:
