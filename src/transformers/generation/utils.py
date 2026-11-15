@@ -1137,7 +1137,7 @@ class GenerationMixin(ContinuousMixin):
                 # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
                 return list(inputs) * repeat_times
 
-        for modality in ["image", "video"]:
+        for modality in ["image", "video", "audio"]:
             modalily_outputs = mm_encoder_output.get(modality)
             if modalily_outputs is None or getattr(modalily_outputs, "pooler_output", None) is None:
                 continue

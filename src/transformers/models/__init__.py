@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .audioflamingo3 import *
+    from .audiovisualflamingo import *
     from .auto import *
     from .autoformer import *
     from .axk1 import *

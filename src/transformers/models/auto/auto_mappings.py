@@ -44,6 +44,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("audio-spectrogram-transformer", "ASTConfig"),
         ("audioflamingo3", "AudioFlamingo3Config"),
         ("audioflamingo3_encoder", "AudioFlamingo3EncoderConfig"),
+        ("audiovisualflamingo", "AudioVisualFlamingoConfig"),
         ("autoformer", "AutoformerConfig"),
         ("axk1", "AXK1Config"),
         ("axk2", "AXK2Config"),
@@ -1148,6 +1149,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
 
 VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("audiovisualflamingo", {"torchvision": "AudioVisualFlamingoVideoProcessor"}),
         ("cohere_compass", {"torchvision": "CohereCompassVideoProcessor"}),
         ("cosmos3_edge", {"torchvision": "Cosmos3EdgeVideoProcessor"}),
         ("embedding_gemma2", {"torchvision": "EmbeddingGemma2VideoProcessor"}),
@@ -1233,6 +1235,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("apertus1p5", "Apertus1p5Processor"),
         ("aria", "AriaProcessor"),
         ("audioflamingo3", "AudioFlamingo3Processor"),
+        ("audiovisualflamingo", "AudioVisualFlamingoProcessor"),
         ("aya_vision", "AyaVisionProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
@@ -1398,6 +1401,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("apertus1p5", {"torchvision": "Apertus1p5ImageProcessor"}),
         ("aria", {"pil": "AriaImageProcessorPil", "torchvision": "AriaImageProcessor"}),
+        ("audiovisualflamingo", {"torchvision": "AudioVisualFlamingoImageProcessor"}),
         ("beit", {"pil": "BeitImageProcessorPil", "torchvision": "BeitImageProcessor"}),
         ("bit", {"pil": "BitImageProcessorPil", "torchvision": "BitImageProcessor"}),
         ("blip", {"pil": "BlipImageProcessorPil", "torchvision": "BlipImageProcessor"}),

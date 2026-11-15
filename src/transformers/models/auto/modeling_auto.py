@@ -56,6 +56,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("audio-spectrogram-transformer", "ASTModel"),
         ("audioflamingo3", "AudioFlamingo3Model"),
         ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
+        ("audiovisualflamingo", "AudioVisualFlamingoModel"),
         ("autoformer", "AutoformerModel"),
         ("axk1", "AXK1Model"),
         ("axk2", "AXK2Model"),
@@ -669,6 +670,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         # Model for pre-training mapping
         ("albert", "AlbertForPreTraining"),
         ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
+        ("audiovisualflamingo", "AudioVisualFlamingoForConditionalGeneration"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForPreTraining"),
         ("big_bird", "BigBirdForPreTraining"),
@@ -1182,6 +1184,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
         ("apertus1p5", "Apertus1p5ForConditionalGeneration"),
         ("aria", "AriaForConditionalGeneration"),
+        ("audiovisualflamingo", "AudioVisualFlamingoForConditionalGeneration"),
         ("aya_vision", "AyaVisionForConditionalGeneration"),
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
