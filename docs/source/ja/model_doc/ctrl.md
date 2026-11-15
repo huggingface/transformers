@@ -53,8 +53,8 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
   左。
 - CTRL は因果言語モデリング (CLM) の目的でトレーニングされているため、次の予測に強力です。
   シーケンス内のトークン。この機能を利用すると、CTRL は構文的に一貫したテキストを生成できるようになります。
-- PyTorch モデルは、以前に計算されたキーと値のアテンション ペアである`past_key_values`を入力として受け取ることができます。
-  TensorFlow モデルは`past`を入力として受け入れます。 `past_key_values`値を使用すると、モデルが再計算されなくなります。
+- PyTorch モデルは、以前に計算されたキーと値のアテンション ペアである`cache`を入力として受け取ることができます。
+  TensorFlow モデルは`past`を入力として受け入れます。 `cache`値を使用すると、モデルが再計算されなくなります。
   テキスト生成のコンテキストで事前に計算された値。 [`forward`](model_doc/ctrl#transformers.CTRLModel.forward) を参照してください。
   この引数の使用法の詳細については、メソッドを参照してください。
 

@@ -129,7 +129,7 @@ class Qwen3VLConfig(PreTrainedConfig):
         "vision_config": Qwen3VLVisionConfig,
         "text_config": Qwen3VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

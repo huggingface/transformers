@@ -705,8 +705,8 @@ decode = exported.runners["decode"]
 
 # the program carries an initialized StaticCache template — reuse it (reset to empty)
 _, example_kwargs = exported.components["decode"].program.example_inputs
-past_key_values = copy.deepcopy(example_kwargs["past_key_values"])
-past_key_values.reset()
+cache = copy.deepcopy(example_kwargs["cache"])
+cache.reset()
 
 def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
     return (torch.arange(cache_len, device="cuda")[None, :] <= positions[:, None])[None, None]
@@ -714,7 +714,7 @@ def causal_mask(positions, cache_len):   # [1, 1, len(positions), cache_len]
 # prefill: the whole prompt in one call
 positions = torch.arange(prompt_len, device="cuda")
 logits = decode(input_ids=prompt_ids, attention_mask=causal_mask(positions, max_cache_len),
-                position_ids=positions[None], past_key_values=past_key_values).logits
+                position_ids=positions[None], cache=cache).logits
 next_token = logits[:, -1:].argmax(-1)
 
 # decode: query=1 buffers reused in place
@@ -727,7 +727,7 @@ for position in range(prompt_len, max_cache_len):
     position_ids.fill_(position)
     attention_mask[0, 0, 0].copy_(slots <= position)
     logits = decode(input_ids=input_ids, attention_mask=attention_mask,
-                    position_ids=position_ids, past_key_values=past_key_values).logits
+                    position_ids=position_ids, cache=cache).logits
     next_token = logits[:, -1:].argmax(-1)
 ```
 
@@ -888,12 +888,21 @@ config = OnnxConfig(ort_fusions="dml")
 |---|---|---|---|---|
 | Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
 | Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
-| Mixture of experts | unfused | `MoE` | unfused | unfused |
+| Mixture of experts | unfused | `MoE`, opted into | unfused | unfused |
 | CUDA graphs | — | static exports can replay | — | — |
 
-A `"cuda"` graph with `MoE` doesn't run on CPU, since ONNX Runtime's `MoE` only exists for CUDA. A `"webgpu"` graph runs
-in the browser with onnxruntime-web, or natively with onnxruntime-webgpu. A `"dml"` graph runs on Windows with
-onnxruntime-directml.
+A `"webgpu"` graph runs in the browser with onnxruntime-web, or natively with onnxruntime-webgpu. A `"dml"` graph runs on
+Windows with onnxruntime-directml.
+
+Pass an [`~exporters.OrtFusionConfig`] instead to pick the fusions. `MoE` is off by default because ONNX Runtime's `MoE`
+kernels only run on Hopper or newer GPUs.
+
+```python
+from transformers.exporters import OnnxConfig, OrtFusionConfig
+
+config = OnnxConfig(ort_fusions=OrtFusionConfig(provider="cuda", mixture_of_experts=True))
+config = OnnxConfig(ort_fusions=OrtFusionConfig(provider="cpu", packed_projections=False))
+```
 
 The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
 is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for

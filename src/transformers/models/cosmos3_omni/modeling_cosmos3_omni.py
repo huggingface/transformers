@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs
 from ..auto.modeling_auto import AutoModel
 from .configuration_cosmos3_omni import Cosmos3OmniConfig
@@ -67,7 +68,7 @@ class Cosmos3OmniPreTrainedModel(PreTrainedModel):
 
     # So that modular doesn't drag unnecessary deps
     _no_split_modules = None
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -256,6 +257,19 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        All videos' features as one tensor; `get_video_features` splits them per video.
+        """
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -268,19 +282,32 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
+            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
+        )
+        return vision_output
+
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
-            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
-        )
-        image_embeds = vision_output.pooler_output
+        vision_output = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_output.pooler_output = torch.split(image_embeds, split_sizes)
+        vision_output.pooler_output = torch.split(vision_output.pooler_output, split_sizes)
         vision_output.deepstack_features = [
             torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
         ]
@@ -327,6 +354,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -334,10 +362,10 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
         image_grid_thw: torch.Tensor | None = None,
         video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: torch.Tensor | None = None,
+        cache: torch.Tensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        cache_length = 0 if cache is None else cache.get_seq_length()
         has_multimodal = image_grid_thw is not None or video_grid_thw is not None
         if has_multimodal and mm_token_type_ids is None and input_ids is not None:
             raise ValueError(
@@ -347,7 +375,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             )
         can_compute_mrope = input_ids is not None and mm_token_type_ids is not None and has_multimodal
 
-        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+        if can_compute_mrope and (self.rope_deltas is None or cache_length == 0):
             position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 image_grid_thw=image_grid_thw,
@@ -357,17 +385,17 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             )
             self.rope_deltas = rope_deltas
         # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
-        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
-        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # generation (cache_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without cache to avoid shape
         # mismatches from stale rope_deltas (e.g., training forward pass after generation).
-        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+        elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids = position_ids.masked_fill(attention_mask == 0, 0)
                 position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
             else:
-                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = torch.arange(cache_length, cache_length + seq_length)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
             position_ids = position_ids + delta.to(device=inputs_embeds.device)
@@ -378,12 +406,13 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
@@ -420,8 +449,13 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            deepstack_image_embeds = [
+                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
+                for feat in mm_encoder_outputs["image"].deepstack_features
+            ]
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -429,8 +463,13 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            deepstack_video_embeds = [
+                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
+                for feat in mm_encoder_outputs["video"].deepstack_features
+            ]
+            if not isinstance(video_embeds, torch.Tensor):
+                video_embeds = torch.cat(video_embeds, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -447,8 +486,6 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(deepstack_image_embeds, deepstack_video_embeds):
-                img_embed = torch.cat(img_embed, dim=0)
-                vid_embed = torch.cat(vid_embed, dim=0)
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
 
                 embed_joint[image_mask_joint, :] = img_embed
@@ -457,11 +494,11 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
             visual_pos_masks = image_mask
-            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
+            deepstack_visual_embeds = deepstack_image_embeds
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
             visual_pos_masks = video_mask
-            deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
+            deepstack_visual_embeds = deepstack_video_embeds
 
         if position_ids is None:
             position_ids = self.compute_3d_position_ids(
@@ -470,7 +507,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
                 video_grid_thw=video_grid_thw,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 mm_token_type_ids=mm_token_type_ids,
             )
 
@@ -478,7 +515,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             visual_pos_masks=visual_pos_masks,
             deepstack_visual_embeds=deepstack_visual_embeds,
@@ -502,6 +539,19 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
         self.post_init()
 
     @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -513,6 +563,19 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -529,12 +592,13 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -592,7 +656,7 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
             video_grid_thw=video_grid_thw,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -613,7 +677,7 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -626,7 +690,7 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
         # Early exit in case we are continuing generation from past kv. The stored `rope_deltas` come from an earlier
         # call, so if the uncached tokens hold new images or videos their 3D positions have to be computed below.
         past_length = 0
-        if (cache := model_kwargs.get("past_key_values")) is not None:
+        if (cache := model_kwargs.get("cache")) is not None:
             past_length = cache.get_seq_length()
         mm_token_type_ids = model_kwargs.get("mm_token_type_ids")
         has_new_vision_tokens = mm_token_type_ids is not None and bool(mm_token_type_ids[:, past_length:].any())

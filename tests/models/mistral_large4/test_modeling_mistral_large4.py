@@ -111,13 +111,13 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # KV-shared layers attend to the cache of their source layer and leave their own cache layer empty, and NoPE
         # layers cache an empty rotary key
         config = config.get_text_config(decoder=True)
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
         k_shape, v_shape = self._get_attention_shape(batch_size, seq_length, config)
-        for layer_idx, layer in enumerate(past_key_values.layers):
+        for layer_idx, layer in enumerate(cache.layers):
             if config.kv_source_layers[layer_idx] != layer_idx:
                 self.assertIsNone(layer.keys)
             else:

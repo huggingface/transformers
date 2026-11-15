@@ -102,8 +102,9 @@ def _write_tensorrt_table(table: dict[str, float], path: str) -> None:
         file.write(builder.Output())
 
 
-def _execution_providers(device=None) -> list:
-    """The ONNX Runtime providers for `device`: CUDA when asked for, or by default when this build and a GPU have it."""
+def _execution_providers(device=None, cuda_graph: bool = False) -> list:
+    """The ONNX Runtime providers for `device`: CUDA when asked for, or by default when this build and a GPU have it,
+    replaying a CUDA graph if `cuda_graph`."""
     available = ort.get_available_providers()
     if device is None:
         device = "cuda" if torch.cuda.is_available() and "CUDAExecutionProvider" in available else "cpu"
@@ -111,7 +112,12 @@ def _execution_providers(device=None) -> list:
     if device.type == "cpu":
         return ["CPUExecutionProvider"]
     if device.type == "cuda" and "CUDAExecutionProvider" in available:
-        return [("CUDAExecutionProvider", {"device_id": device.index or 0}), "CPUExecutionProvider"]
+        # ONNX Runtime runs float32 matmuls in TF32 by default, torch only when asked to
+        use_tf32 = torch.get_float32_matmul_precision() != "highest"
+        options = {"device_id": device.index or 0, "use_tf32": str(int(use_tf32))}
+        if cuda_graph:
+            options["enable_cuda_graph"] = "1"
+        return [("CUDAExecutionProvider", options), "CPUExecutionProvider"]
     raise ValueError(f"This ONNX Runtime build cannot run on {device} (providers: {available}).")
 
 
@@ -152,28 +158,35 @@ class OnnxModelRunner(ModelRunner):
     ) -> OnnxModelRunner:
         """A loaded graph opens its saved file (`meta["path"]`), ONNX Runtime reading the weights from beside it; a
         fresh one opens serialized, or from a temporary file past protobuf's size limit. `providers`, ONNX Runtime's
-        own list (TensorRT with its options, say), replaces the ones picked for `device`; `session_options` open the
-        session (`intra_op_num_threads`: ONNX Runtime sizes its thread pool from every core of the machine, not the
-        ones the process may run on)."""
+        own list (TensorRT with its options, say), replaces the ones picked for `device`, which replay a CUDA graph
+        for a static export; `session_options` open the session (`intra_op_num_threads`: ONNX Runtime sizes its thread
+        pool from every core of the machine, not the ones the process may run on)."""
         if device is not None and providers is not None:
             raise ValueError(
                 "Pass either `device` or `providers`: the providers choose the device (`device_id` in the CUDA or "
                 "TensorRT provider's options)."
             )
-        providers = _with_calibration_table(program, providers or _execution_providers(device))
+        # A CUDA graph replays one input shape: a static export's.
+        config = metadata.export_config
+        static = not (config.get("dynamic") or config.get("dynamic_shapes"))
+        if providers is None:
+            providers = _execution_providers(device, cuda_graph=static)
+        elif not static:
+            providers = _without_cuda_graph(providers)
+        providers = _with_calibration_table(program, providers)
         if "path" in program.meta:
-            return cls(metadata, ort.InferenceSession(program.meta["path"], session_options, providers=providers))
+            return cls(metadata, _open_session(program.meta["path"], session_options, providers))
 
         weights = sum(
             value.const_value.nbytes for value in program.graph.initializers.values() if value.const_value is not None
         )
         if weights < _SERIALIZED_WEIGHTS_LIMIT:
             serialized = onnx_ir.to_proto(program).SerializeToString()
-            return cls(metadata, ort.InferenceSession(serialized, session_options, providers=providers))
+            return cls(metadata, _open_session(serialized, session_options, providers))
         directory = tempfile.TemporaryDirectory()
         path = os.path.join(directory.name, "model.onnx")
         onnx_ir.save(program, path, external_data="model.onnx.data")
-        session = ort.InferenceSession(path, session_options, providers=providers)
+        session = _open_session(path, session_options, providers)
         # The CPU provider maps the weights file for as long as the session lives.
         weakref.finalize(session, directory.cleanup)
         return cls(metadata, session)
@@ -251,6 +264,29 @@ class OnnxModelRunner(ModelRunner):
         """The bound outputs as torch tensors on ORT's memory."""
         outputs = [torch.from_dlpack(value._ortvalue.to_dlpack()) for value in binding.get_outputs()]
         return [output.view(torch.bool) if is_bool else output for output, is_bool in zip(outputs, self.bool_outputs)]
+
+
+def _open_session(source, session_options, providers: list) -> ort.InferenceSession:
+    """An ONNX Runtime session on `source`, opened again without the CUDA graph the providers ask for if ONNX Runtime
+    refuses to capture one (a node it places on the CPU)."""
+    try:
+        return ort.InferenceSession(source, session_options, providers=providers)
+    except Exception as error:
+        if "graph capture" not in str(error):
+            raise
+    return ort.InferenceSession(source, session_options, providers=_without_cuda_graph(providers))
+
+
+def _without_cuda_graph(providers: list) -> list:
+    """`providers` with their CUDA graph options (CUDA's `enable_cuda_graph`, TensorRT's `trt_cuda_graph_enable`)
+    removed."""
+    graph_options = ("enable_cuda_graph", "trt_cuda_graph_enable")
+    return [
+        (entry[0], {key: value for key, value in entry[1].items() if key not in graph_options})
+        if isinstance(entry, tuple)
+        else entry
+        for entry in providers
+    ]
 
 
 def _bind_input(binding: ort.IOBinding, name: str, tensor: torch.Tensor, data_ptr: int) -> None:

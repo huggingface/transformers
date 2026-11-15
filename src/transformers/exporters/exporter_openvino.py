@@ -797,7 +797,7 @@ def _deduplicate_output_args(graph_module) -> None:
     decoding the debug alias on the second. Repeats arise when decomposition collapses the
     distinction between two output nodes (and ``aten.clone`` is no protection — OV folds it to
     identity). The copy must survive OV's neutral-constant elimination: ``add(x, 0)`` gets folded
-    back to ``x`` (so a duplicate output re-aliases the original — e.g. moshi's ``depth_past_key_values``
+    back to ``x`` (so a duplicate output re-aliases the original — e.g. moshi's ``depth_cache``
     ports collapsing onto the main-cache state buffer and losing their names), whereas ``maximum(x, x)``
     is a self-identity with no neutral constant and survives as a distinct tensor (mirroring the
     ``logical_and(x, x)`` used for the bool branch).
@@ -951,6 +951,31 @@ def _fix_to_dtype_layout_in_subgraphs(exported_program):
                 node.args = (node.args[0],)
                 node.kwargs = {"dtype": dtype} if dtype is not None else {}
         gm_or_submod.recompile()
+
+
+@register_fx_program_fix("openvino")
+def _fix_while_loop_additional_inputs(exported_program):
+    """Carry each ``while_loop``'s additional inputs through the loop, the body handing them back unchanged.
+
+    ``torch.export`` lifts the tensors a loop body reads without updating (Mamba's discretized states) out of its
+    closure as additional inputs. OV's frontend takes every input as carried, and rejects the loop when its body
+    returns fewer outputs (``body_fn must return same number of outputs as carried inputs``)."""
+    graph_module = exported_program.graph_module
+    for node in list(graph_module.graph.nodes):
+        if node.op != "call_function" or node.target is not torch.ops.higher_order.while_loop:
+            continue
+        cond, body, carried, additional = node.args
+        if not additional:
+            continue
+        body_module = getattr(graph_module, body.target)
+        placeholders = [n for n in body_module.graph.nodes if n.op == "placeholder"]
+        output = next(n for n in body_module.graph.nodes if n.op == "output")
+        output.args = ((*output.args[0], *placeholders[len(carried) :]),)
+        body_module.recompile()
+        node.args = (cond, body, (*carried, *additional), ())
+        if "val" in node.meta:
+            node.meta["val"] = (*node.meta["val"], *(value.meta["val"] for value in additional))
+    graph_module.recompile()
 
 
 @register_fx_node_fix("openvino")
@@ -1865,6 +1890,22 @@ def _patch_embedding_bag(original):
     return patch
 
 
+@register_patch("openvino", "torch.index_copy", "torch.Tensor.index_copy")
+def _patch_index_copy(original):
+    """``index_copy`` as a ``scatter`` of the source along ``dim``.
+
+    OV has no translator for ``aten.index_copy``: its decompositions rewrite it in the top-level graph, but not in a
+    ``while_loop``'s body (Mamba's recurrence under export), which then fails to convert."""
+
+    def patch(input, dim, index, source):
+        dim = dim % source.dim()
+        shape = [1] * source.dim()
+        shape[dim] = -1
+        return input.scatter(dim, index.reshape(shape).expand_as(source), source)
+
+    return patch
+
+
 @register_patch("openvino", "torch.cumsum", "torch.Tensor.cumsum")
 def _patch_cumsum(original):
     """Promote integral inputs to `int64` the way torch does before summing.
@@ -2084,6 +2125,38 @@ def _patch_scatter_reduce(original):
                 self.zero_()
             return self.scatter_add_(dim, index, src)
         return original(self, dim, index, src, reduce=reduce, include_self=include_self)
+
+    return patch
+
+
+@register_patch("openvino", "transformers.exporters.exporter_dynamo._scan")
+def _patch_scan(_original):
+    """The gated delta rule's ``scan`` as a ``while_loop``, which OV's frontend lowers to a ``Loop``: it has no ``scan``
+    conversion.
+
+    Every tensor the body reads is carried through the loop, the scanned ones included: OV's ``while_loop``
+    conversion takes the inputs a closure lifts for carried ones, and fails on the count. The ``while_loop`` operator
+    itself, not ``torch``'s wrapper, whose dynamo cache hands a later export the body an earlier one traced.
+    """
+    from torch._higher_order_ops.while_loop import while_loop_op
+
+    def patch(combine_fn, init, xs):
+        # The per-step output's shape, from one step: nothing reads its values, so the trace drops it.
+        _, first = combine_fn(init, [x[0] for x in xs])
+        outputs = first.new_zeros(xs[0].shape[0], *first.shape)
+
+        def cond(index, carry, outputs, *xs):
+            return index < xs[0].shape[0]
+
+        def body(index, carry, outputs, *xs):
+            position = index.reshape(1)
+            carry, output = combine_fn(carry, [x.index_select(0, position).squeeze(0) for x in xs])
+            outputs = outputs.index_copy(0, position, output.unsqueeze(0))
+            return index + 1, carry, outputs, *(x.clone() for x in xs)
+
+        index = torch.zeros((), dtype=torch.int64, device=init.device)
+        _, carry, outputs, *_ = while_loop_op(cond, body, (index, init, outputs, *xs), ())
+        return carry, outputs
 
     return patch
 

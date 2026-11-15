@@ -27,6 +27,7 @@ _import_structure = {
         "ExportFormat",
         "OnnxConfig",
         "OpenVINOConfig",
+        "OrtFusionConfig",
     ],
     "exporter_dynamo": ["DynamoExporter"],
     "exporter_executorch": ["ExecutorchExporter"],
@@ -54,7 +55,15 @@ _import_structure = {
 if TYPE_CHECKING:
     from .auto import AutoExportConfig, AutoHfExporter, register_backend
     from .base import ExportedComponent, ExportedModel, HfExporter
-    from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
+    from .configs import (
+        DynamoConfig,
+        ExecutorchConfig,
+        ExportConfigMixin,
+        ExportFormat,
+        OnnxConfig,
+        OpenVINOConfig,
+        OrtFusionConfig,
+    )
     from .exporter_dynamo import DynamoExporter
     from .exporter_executorch import ExecutorchExporter
     from .exporter_onnx import OnnxExporter

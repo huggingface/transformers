@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 from functools import partial
+from typing import TYPE_CHECKING
 
 import numpy as np
 import onnx_ir as ir
@@ -35,6 +36,10 @@ from onnxscript.rewriter.ort_fusions.skip_normalization import fuse_skip_rms_nor
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxruntime_available
+
+
+if TYPE_CHECKING:
+    from .configs import OrtFusionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -358,11 +363,78 @@ def _rotate_with_token_cache(op, x, cos, sin, rotated):
     return _rotate(op, x, layout, op.Reshape(tokens, op.Concat(batch, length, axis=0)), caches, rotated)
 
 
+def _section_frequencies(cos_or_sin: ir.Value) -> tuple[ir.Value, int | None] | None:
+    """`(freqs, cast)` if `cos_or_sin` is one section of a multidimensional rotary table (Gemma 4's vision tower: a
+    row half and a column half of each head): `Unsqueeze(Split(Concat(..., freqs, freqs, ...))[k])` over the heads,
+    an optional `Cast` before the `Split`, where section `k` of the `Concat` is `cat(freqs, freqs)`. `freqs`,
+    `[batch, length, head_dim / 2]`, is that section's per-token table."""
+    unsqueeze = _producer(cos_or_sin, "Unsqueeze")
+    split = _producer(unsqueeze.inputs[0], "Split") if unsqueeze is not None else None
+    if split is None or len(split.inputs) < 2:
+        return None
+    node, cast = split.inputs[0].producer(), None
+    if node is not None and node.op_type == "Cast":
+        cast = node.attributes.get_int("to")
+        node = node.inputs[0].producer()
+    sizes = _constant(split.inputs[1])
+    if node is None or node.op_type != "Concat" or sizes is None or split.inputs[0].shape is None:
+        return None
+    rank = len(split.inputs[0].shape)
+    if split.attributes.get_int("axis", 0) % rank != rank - 1 or node.attributes.get_int("axis", 0) % rank != rank - 1:
+        return None
+    index = list(split.outputs).index(unsqueeze.inputs[0])
+    start, end = int(sizes[:index].sum()), int(sizes[: index + 1].sum())
+    members, offset = [], 0
+    for value in node.inputs:
+        if value.shape is None or not isinstance(value.shape[-1], int):
+            return None
+        if start <= offset and offset + value.shape[-1] <= end:
+            members.append(value)
+        offset += value.shape[-1]
+    if len(members) != 2 or members[0] is not members[1] or 2 * members[0].shape[-1] != end - start:
+        return None
+    return members[0], cast
+
+
+def _has_section_cache(context, x, cos, sin, rotated, **_) -> bool:
+    # `cos` / `sin` one section of a multidimensional table, read per token.
+    cos_frequencies, sin_frequencies = _section_frequencies(cos), _section_frequencies(sin)
+    if cos_frequencies is None or sin_frequencies is None:
+        return False
+    if cos.shape is None or (layout := _rotary_layout(x, cos.shape)) is None:
+        return False
+    for freqs, _ in (cos_frequencies, sin_frequencies):
+        if freqs.shape is None or len(freqs.shape) != 3 or freqs.shape[-1] * 2 != x.shape[-1]:
+            return False
+        # One row of the table per token of `x`
+        if freqs.shape[0] != x.shape[0] or freqs.shape[1] != x.shape[layout]:
+            return False
+    return True
+
+
+def _rotate_with_section_cache(op, x, cos, sin, rotated):
+    # Each token's own frequencies in its section form the cache, `[batch * length, head_dim / 2]`, read at position
+    # `b * length + s`.
+    layout = _rotary_layout(x, cos.shape)
+    caches = []
+    for value in (cos, sin):
+        freqs, cast = _section_frequencies(value)
+        cache = op.Reshape(freqs, op.Constant(value_ints=[-1, freqs.shape[-1]]))
+        caches.append(op.Cast(cache, to=cast) if cast is not None else cache)
+    batch, length = op.Shape(x, start=0, end=1), op.Shape(x, start=layout, end=layout + 1)
+    tokens = op.Range(op.Constant(value_int=0), op.Squeeze(op.Mul(batch, length)), op.Constant(value_int=1))
+    return _rotate(op, x, layout, op.Reshape(tokens, op.Concat(batch, length, axis=0)), caches, rotated)
+
+
 _ROTARY_ANY_LAYOUT = pattern.RewriteRuleSet([_RotaryEmbeddingAnyLayoutFusion.rule()])
 _ROTARY_CONSTANT_CACHE = pattern.RewriteRule(_rotary_match, _rotate_with_constant_cache, _has_constant_cache)
 # `cos` / `sin` are every layer's: kept for the other rotary embeddings.
 _ROTARY_TOKEN_CACHE = pattern.RewriteRule(
     _rotary_match, _rotate_with_token_cache, _has_computed_cache, remove_nodes=False
+)
+# The table is every head's and every layer's: kept for the other rotary embeddings.
+_ROTARY_SECTION_CACHE = pattern.RewriteRule(
+    _rotary_match, _rotate_with_section_cache, _has_section_cache, remove_nodes=False
 )
 
 
@@ -371,6 +443,7 @@ def _fuse_rotary_embeddings(model: ir.Model) -> None:
     _ROTARY_ANY_LAYOUT.apply_to_model(model)
     _ROTARY_CONSTANT_CACHE.apply_to_model(model)
     _ROTARY_TOKEN_CACHE.apply_to_model(model)
+    _ROTARY_SECTION_CACHE.apply_to_model(model)
 
 
 def _fuse_shared_key_attentions(model: ir.Model) -> None:
@@ -829,14 +902,16 @@ def _padded_rotary_caches(tape, constant, caches, total, dtype):
 
 
 def _fuse_group_query_attention(
-    model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True
+    model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True, causal: bool = True
 ) -> None:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
     without repeating them. Its mask stays the attention's own bias, so every row's `seqlens_k` is the whole length:
     exact whatever the padding. `prefill` sets whether a prefill, starting the cache, is fused too; `head_norms`
     whether per-head query and key norms are folded in too (CUDA only); `rotary` whether the rotary embedding is
-    (WebGPU's reads its positions off `seqlens_k`, not `position_ids`)."""
+    (WebGPU's reads its positions off `seqlens_k`, not `position_ids`). `GroupQueryAttention` masks the future on top
+    of the bias: without `causal` (a model attending bidirectionally within blocks, PaliGemma's prefix), only
+    attentions of one query token, which have no future, are fused."""
     graph = model.graph
     # A cache update several attentions read (layers sharing another layer's cache, Gemma 4's): its own layer's,
     # fused once; the others, reading it, stay as they are.
@@ -878,7 +953,7 @@ def _fuse_group_query_attention(
             if expand is None or _static_dim(expand.inputs[0], 2) != 1 or _static_dim(expand.inputs[0], 1) != 1:
                 continue
             bias, num_heads = expand.inputs[0], kv_heads * groups
-        if new_length != query_length:
+        if new_length != query_length or (not causal and query_length != 1):
             continue
         # After a past, it takes several new tokens for one sequence only (part of its contract): a decode graph that
         # takes any number of tokens is fused only for a batch of one.
@@ -1190,13 +1265,23 @@ def _replace_by_swapped_heads(node: ir.Node, x: ir.Value) -> None:
 
 def _sink_head_transposes(model: ir.Model) -> None:
     """Move the transposes between `[batch, length, heads, head_dim]` and `[batch, heads, length, head_dim]` past the
-    ops that read either layout alike, the rotary embeddings, the repeat of the key-value heads and the zeroing of
-    unattended rows, until they meet the transpose back and cancel: `MultiHeadAttention` reads and writes the first
+    ops that read either layout alike, the per-head norms, the rotary embeddings, the repeat of the key-value heads and
+    the zeroing of unattended rows, until they meet the transpose back and cancel: `MultiHeadAttention` reads and writes the first
     layout, so each attention copied its query, keys, values and output there and back."""
     graph = model.graph
     for index, node in enumerate(list(graph)):
         name = f"head_transposes_{index}"
-        if node.op_type == "RotaryEmbedding" and node.domain == "com.microsoft":
+        if node.op_type == "SimplifiedLayerNormalization" and (x := _swapped_heads(node.inputs[0])) is not None:
+            # A norm over each head (Gemma's query, key and value norms) reads either layout alike.
+            if node.attributes.get_int("axis", -1) not in (-1, 3) or any(o.uses() for o in node.outputs[1:]):
+                continue
+            attributes = {key: attribute.value for key, attribute in node.attributes.items()}
+            dtype = node.outputs[0].dtype
+            normed = _add_node(
+                graph, node, node.op_type, [x, *node.inputs[1:]], x.shape, dtype, node.domain, **attributes
+            )
+            _replace_by_swapped_heads(node, normed)
+        elif node.op_type == "RotaryEmbedding" and node.domain == "com.microsoft":
             # Rotated in `[batch, length, heads * head_dim]`, which it takes given the heads.
             x = _swapped_heads(node.inputs[0])
             heads, head_size = (_static_dim(x, 2), _static_dim(x, 3)) if x is not None else (None, None)
@@ -1392,59 +1477,65 @@ def _merge_equal_computations(model: ir.Model) -> None:
     common_passes.RemoveUnusedNodesPass()(model)
 
 
-# The pipeline, step by step: `(step(model), the providers it's for, or None for all)`.
+# The pipeline, step by step: `(step(model), the providers it's for or None for all, the OrtFusionConfig toggle it
+# needs or None)`.
 _STEPS = (
     # 1. Prepare.
-    (_type_loop_sequences, None),
-    (_RSQRT_FROM_POW.apply_to_model, None),
-    (_KEY_TRANSPOSE.apply_to_model, None),
+    (_type_loop_sequences, None, None),
+    (_RSQRT_FROM_POW.apply_to_model, None, None),
+    (_KEY_TRANSPOSE.apply_to_model, None, None),
     # 2. Rotary embeddings, and attentions sharing a key.
-    (_fuse_rotary_embeddings, None),
-    (_fuse_shared_key_attentions, None),
+    (_fuse_rotary_embeddings, None, "rotary_embeddings"),
+    (_fuse_shared_key_attentions, None, None),
     # 3. onnxscript's ORT fusions: norms, skip norms, attention, GELU.
-    (optimize_for_ort, None),
+    (optimize_for_ort, None, None),
     # 4. Repair.
-    (_unfuse_mixed_dtype_skip_norms, None),
-    (_set_partial_rotary_heads, None),
-    (_unfuse_leftover_attentions, None),
-    (_unfuse_attention_activation_biases, None),
-    (_unfuse_group_norms, None),
-    (_untranspose_batch_matmuls, ("cuda", "dml")),
-    (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",)),
+    (_unfuse_mixed_dtype_skip_norms, None, None),
+    (_set_partial_rotary_heads, None, None),
+    (_unfuse_leftover_attentions, None, None),
+    (_unfuse_attention_activation_biases, None, None),
+    (_unfuse_group_norms, None, None),
+    (_untranspose_batch_matmuls, ("cpu", "cuda", "dml"), None),
+    (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",), None),
     # 5. More fusions.
-    (_WEIGHTLESS_RMS_NORMS.apply_to_model, None),
-    (_narrow_norms, None),
-    # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
-    (fuse_skip_rms_normalization, None),
+    (_WEIGHTLESS_RMS_NORMS.apply_to_model, None, None),
+    (_narrow_norms, None, None),
+    # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again, and those a float32
+    # scale still keeps apart (Qwen3.5's `1 + weight`) undone again.
+    (fuse_skip_rms_normalization, None, None),
+    (_unfuse_mixed_dtype_skip_norms, None, None),
     # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
     # `MultiHeadAttention`'s (microsoft/onnxruntime#33869).
-    (_fuse_group_query_attention, ("cpu",)),
-    (partial(_fuse_group_query_attention, prefill=False, head_norms=True), ("cuda",)),
+    (_fuse_group_query_attention, ("cpu",), "group_query_attention"),
+    (partial(_fuse_group_query_attention, prefill=False, head_norms=True), ("cuda",), "group_query_attention"),
     # WebGPU's rotates at the positions after the past, ignoring `position_ids`: rotary stays its own op.
-    (partial(_fuse_group_query_attention, rotary=False), ("webgpu",)),
+    (partial(_fuse_group_query_attention, rotary=False), ("webgpu",), "group_query_attention"),
     # DirectML's ignores rotary and `attention_bias` and needs unpacked q/k/v: it keeps `MultiHeadAttention`.
-    (_fuse_mixture_of_experts, ("cuda",)),
+    (_fuse_mixture_of_experts, ("cuda",), "mixture_of_experts"),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused (microsoft/onnxruntime#33873): the ones
     # left, unfused.
-    (_unfuse_attentions, ("cpu",)),
-    (_sink_head_transposes, None),
-    (_pack_sibling_matmuls, None),
-    (_pack_group_query_attention_inputs, None),
+    (_unfuse_attentions, ("cpu",), None),
+    (_sink_head_transposes, None, None),
+    (_pack_sibling_matmuls, None, "packed_projections"),
+    (_pack_group_query_attention_inputs, None, "packed_projections"),
     # 6. CUDA provider.
-    (_CONSTANT_GATHER_ND.apply_to_model, ("cuda",)),
+    (_CONSTANT_GATHER_ND.apply_to_model, ("cuda",), None),
     # What every layer computes alike (its mask's unattended rows), computed once.
-    (_merge_equal_computations, None),
+    (_merge_equal_computations, None, None),
 )
 
 
-def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str) -> None:
-    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, `ort_fusions` (`"cpu"`, `"cuda"`,
-    `"webgpu"` or `"dml"`)."""
-    if ort_fusions == "cuda" and not is_onnxruntime_available("1.28.0"):
+def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig, causal: bool = True) -> None:
+    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks.
+    `causal=False` for a model attending bidirectionally within blocks of its sequence."""
+    if fusions.provider == "cuda" and not is_onnxruntime_available("1.28.0"):
         logger.warning(
             "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "
             "has no query and key norms and float16 skip norms overflow on large activations."
         )
-    for step, providers in _STEPS:
-        if providers is None or ort_fusions in providers:
-            step(model)
+    for step, providers, toggle in _STEPS:
+        if (providers is None or fusions.provider in providers) and (toggle is None or getattr(fusions, toggle)):
+            if getattr(step, "func", step) is _fuse_group_query_attention:
+                step(model, causal=causal)
+            else:
+                step(model)

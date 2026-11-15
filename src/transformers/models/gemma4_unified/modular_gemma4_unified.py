@@ -30,7 +30,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ...utils.generic import is_flash_attention_requested
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -550,11 +551,11 @@ class Gemma4UnifiedCausalLMOutputWithPast(Gemma4CausalLMOutputWithPast):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
@@ -571,11 +572,11 @@ class Gemma4UnifiedCausalLMOutputWithPast(Gemma4CausalLMOutputWithPast):
 
 class Gemma4UnifiedModelOutputWithPast(Gemma4ModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -614,6 +615,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -621,7 +623,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -633,7 +635,7 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
             attention_mask=attention_mask,
             shared_kv_states=shared_kv_states,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -706,12 +708,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         self.unique_layer_types = set(self.config.layer_types)
         self.first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -723,11 +726,11 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -738,7 +741,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             # Create the masks
@@ -769,7 +772,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                     position_embeddings,
                     causal_mask_mapping,
                     logits_to_keep,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     **kwargs,
                 )
 
@@ -779,7 +782,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -787,7 +790,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
 
         return Gemma4UnifiedTextModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
         )
 
@@ -797,7 +800,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         position_embeddings,
         causal_mask_mapping,
         logits_to_keep,
-        past_key_values,
+        cache,
         **kwargs,
     ):
         """
@@ -820,10 +823,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         # Flex cannot slice mask
         elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
             can_optimize = False
+        # Flash cannot slice mask
+        elif is_flash_attention_requested(self.config):
+            can_optimize = False
         # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
         elif (
             self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
-            and (logits_to_keep > 1 or getattr(past_key_values, "is_compileable", False))
+            and (logits_to_keep > 1 or getattr(cache, "is_compileable", False))
             and any(mask is None for mask in causal_mask_mapping.values())
         ):
             can_optimize = False
@@ -845,12 +851,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
 
 
 class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -879,7 +886,7 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
@@ -903,7 +910,7 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         return Gemma4UnifiedCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             shared_kv_states=outputs.shared_kv_states,
@@ -1031,13 +1038,15 @@ class Gemma4UnifiedModel(Gemma4Model):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects raw pixel patches into language model space via the unified pipeline.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
@@ -1051,13 +1060,31 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
         pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        vision_outputs.pooler_output = pooler_output
+        return vision_outputs
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects raw pixel patches into language model space via the unified pipeline.")
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True, **kwargs)
+        pooler_output = vision_outputs.pooler_output
+        non_pad_mask = (image_position_ids != -1).all(dim=-1)
         split_sizes = non_pad_mask.sum(dim=-1).tolist()
         vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
@@ -1065,6 +1092,8 @@ class Gemma4UnifiedModel(Gemma4Model):
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
+        All videos' features as one tensor; `get_video_features` splits them per video.
+
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
             on a separate video axis, so that videos of different lengths can be batched together.
@@ -1087,7 +1116,32 @@ class Gemma4UnifiedModel(Gemma4Model):
 
         # Flatten valid patches: keep only non-padding patches across all frames
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
+        vision_outputs.pooler_output = pooler_output
+        return vision_outputs
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+            The frames of every video in the batch, concatenated along the frame axis rather than stacked
+            on a separate video axis, so that videos of different lengths can be batched together.
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
+            2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
+            Number of frames belonging to each video, used to split the flat frame sequence back per video.
+        """
+        vision_outputs = self.get_video_embeddings(
+            pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True, **kwargs
+        )
+        pooler_output = vision_outputs.pooler_output
+        non_pad_mask = (video_position_ids != -1).all(dim=-1)
         num_tokens_per_frame = non_pad_mask.sum(dim=-1)
         split_sizes = [
             int(video_frames.sum())
@@ -1126,6 +1180,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             attention_mask=input_features_mask.to(audio_outputs.device) if input_features_mask is not None else None,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1135,7 +1190,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -1179,12 +1234,13 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and images
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1200,14 +1256,15 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video, return_dict=True
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output
+            if not isinstance(video_features, torch.Tensor):
+                video_features = torch.cat(video_features, dim=0)
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1245,7 +1302,7 @@ class Gemma4UnifiedModel(Gemma4Model):
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1254,7 +1311,7 @@ class Gemma4UnifiedModel(Gemma4Model):
                 "config": self.config.get_text_config(),
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
 
@@ -1275,7 +1332,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
@@ -1284,7 +1341,7 @@ class Gemma4UnifiedModel(Gemma4Model):
 
         return Gemma4UnifiedModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
@@ -1294,6 +1351,7 @@ class Gemma4UnifiedModel(Gemma4Model):
 
 
 class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1306,7 +1364,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1336,7 +1394,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             attention_mask=attention_mask,
             input_features_mask=input_features_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
             labels=labels,
@@ -1367,7 +1425,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         return Gemma4UnifiedCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
@@ -1381,6 +1439,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
     def set_per_layer_input_embeddings(self, value):
         raise AttributeError("PLE is not used")
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs

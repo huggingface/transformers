@@ -85,6 +85,10 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.configs.OnnxConfig
 
+## OrtFusionConfig
+
+[[autodoc]] exporters.configs.OrtFusionConfig
+
 ## ExecutorchConfig
 
 [[autodoc]] exporters.configs.ExecutorchConfig

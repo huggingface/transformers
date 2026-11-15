@@ -54,7 +54,7 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_5_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -185,7 +185,7 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
         "vision_config": Qwen3_5MoeVisionConfig,
         "text_config": Qwen3_5MoeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

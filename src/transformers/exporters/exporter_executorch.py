@@ -42,6 +42,7 @@ import math
 import operator
 import re
 import shutil
+import sys
 from collections.abc import MutableMapping
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,7 @@ from .utils import (
     apply_fx_program_fixes,
     apply_patches,
     module_dtype,
+    patch_attributes,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -329,6 +331,42 @@ _BACKEND_PREPARE = {
 # `@register_patch("executorch", "dotted.path")` and installed through `apply_patches`.
 
 
+def _narrow_split(input, sizes, dim):
+    """`torch.split` by sections as a chain of `narrow`s."""
+    pieces, start = [], 0
+    for size in sizes:
+        pieces.append(input.narrow(dim, start, size))
+        start = start + size
+    return tuple(pieces)
+
+
+def _has_unbacked_sizes(split_size_or_sections) -> bool:
+    """Whether a `split` sections argument carries a data-dependent size."""
+    from torch.fx.experimental.symbolic_shapes import free_unbacked_symbols
+
+    return isinstance(split_size_or_sections, (list, tuple)) and any(
+        isinstance(size, torch.SymInt) and bool(free_unbacked_symbols(size.node.expr))
+        for size in split_size_or_sections
+    )
+
+
+@register_patch("executorch", "torch.split", "torch.Tensor.split")
+def _patch_unbacked_split(original):
+    """Split with data-dependent sizes as a chain of `narrow`s.
+
+    `split_with_sizes_copy` with unbacked sizes fails to lower ("Could not extract specialized integer"), e.g. grid
+    VLMs splitting vision output per image. Gated on *unbacked* sizes: `aten.split.Tensor`'s decomposition re-enters
+    `torch.split` with backed-symbolic sizes, which stay with the original.
+    """
+
+    def patch(input, split_size_or_sections, dim=0):
+        if _has_unbacked_sizes(split_size_or_sections):
+            return _narrow_split(input, split_size_or_sections, dim)
+        return original(input, split_size_or_sections, dim)
+
+    return patch
+
+
 @register_patch("executorch.cuda", "torch.split", "torch.Tensor.split")
 def _patch_split(original):
     """Narrow-based split for the CUDA backend, which can't lower `split_copy`.
@@ -338,23 +376,15 @@ def _patch_split(original):
     """
 
     def patch(input, split_size_or_sections, dim=0):
-        if isinstance(split_size_or_sections, int):
-            splits = []
-            total = input.size(dim)
-            for i in range(0, total, split_size_or_sections):
-                splits.append(input.narrow(dim, i, min(split_size_or_sections, total - i)))
-            return tuple(splits)
-        elif isinstance(split_size_or_sections, torch.SymInt):
-            # Dynamic split size: `range(0, total, sym_int)` needs a concrete step, so
-            # the narrow-based loop above doesn't apply. Defer to the original torch.split.
+        if isinstance(split_size_or_sections, torch.SymInt):
+            # `range(0, total, sym_int)` needs a concrete step: the original handles a dynamic split size.
             return original(input, split_size_or_sections, dim)
-        else:
-            splits = []
-            start = 0
-            for size in split_size_or_sections:
-                splits.append(input.narrow(dim, start, size))
-                start += size
-            return tuple(splits)
+        if isinstance(split_size_or_sections, int):
+            total = input.size(dim)
+            split_size_or_sections = [
+                min(split_size_or_sections, total - start) for start in range(0, total, split_size_or_sections)
+            ]
+        return _narrow_split(input, split_size_or_sections, dim)
 
     return patch
 
@@ -636,6 +666,46 @@ def _patch_expand(original):
         if 0 in result.stride():
             return result.clone(memory_format=torch.contiguous_format)
         return result
+
+    return patch
+
+
+@register_patch(
+    "executorch",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(original):
+    """Run Mamba's recurrence as its Python loop, unrolled for the traced length: ExecuTorch lowers neither the
+    `while_loop` an export runs it as ("Unsupported control flow operator") nor `associative_scan`."""
+    module = sys.modules[original.__module__]
+
+    def patch(*args, **kwargs):
+        not_tracing = lambda _original: lambda: False  # noqa: E731
+        with patch_attributes(
+            [(module, "is_torchdynamo_exporting", not_tracing), (module, "is_torchdynamo_compiling", not_tracing)]
+        ):
+            return original(*args, **kwargs)
+
+    return patch
+
+
+@register_patch("executorch", "transformers.exporters.exporter_dynamo._scan")
+def _patch_scan(_original):
+    """Run the chunked gated delta rule's `scan` as a Python loop, unrolled for the traced chunk count.
+
+    With a dynamic batch, the loop's carry reaches `to_executorch`'s replay of the `scan` with its symbolic shape made
+    concrete, and the replay refuses it ("did not preserve symbolic metadata across pass replay").
+    """
+
+    def patch(combine_fn, init, xs):
+        outputs = []
+        for index in range(xs[0].shape[0]):
+            init, output = combine_fn(init, [x[index] for x in xs])
+            outputs.append(output)
+        return init, torch.stack(outputs)
 
     return patch
 

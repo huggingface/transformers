@@ -406,7 +406,7 @@ class DiffusionGemmaVisionText2TextModelTest(
             _ = model.model.decoder.create_diffusion_decoder_attention_mask(
                 config=config.text_config,
                 inputs_embeds=dummy_canvas.unsqueeze(-1),
-                past_key_values=None,  # this will trigger an exception
+                cache=None,  # this will trigger an exception
             )
 
     def test_diffusion_decoder_mask_dynamic_cache(self):
@@ -424,9 +424,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (smaller than sliding window)
-        past_key_values = DynamicCache(config=config)
+        cache = DynamicCache(config=config)
         prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
 
         # Get the mask
         decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
@@ -434,7 +434,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config.text_config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=decoder_attention_mask,
         )
         self.assertIsNone(mask_mapping["full_attention"])
@@ -444,7 +444,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config.text_config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=None,
         )
         self.assertIsNone(mask_mapping["full_attention"])
@@ -471,9 +471,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (smaller than sliding window)
-        past_key_values = DynamicCache(config=config)
+        cache = DynamicCache(config=config)
         prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
 
         # Get the mask
         decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
@@ -482,7 +482,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config.text_config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape)
@@ -513,9 +513,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (smaller than sliding window)
-        past_key_values = DynamicCache(config=config)
+        cache = DynamicCache(config=config)
         prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
 
         # Get the mask
         decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.long, device=torch_device)
@@ -524,7 +524,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config.text_config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=decoder_attention_mask,
         )
         for layer_pattern in ("full_attention", "sliding_attention"):
@@ -568,9 +568,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (LARGER than sliding window)
-        past_key_values = DynamicCache(config=config)
+        cache = DynamicCache(config=config)
         prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
 
         # Get the mask
         decoder_attention_mask = torch.ones((batch_size, concat_kv_length_full), dtype=torch.bool, device=torch_device)
@@ -579,7 +579,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config.text_config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape_full)
@@ -614,9 +614,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (smaller than sliding window)
-        past_key_values = StaticCache(config=config, max_cache_len=static_cache_length)
+        cache = StaticCache(config=config, max_cache_len=static_cache_length)
         prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
 
         # Get the mask (correctly designed for the static cache)
         decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
@@ -624,7 +624,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape)
@@ -672,9 +672,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
 
         # Apply prefill (LARGER than sliding window)
-        past_key_values = StaticCache(config=config, max_cache_len=static_cache_length)
+        cache = StaticCache(config=config, max_cache_len=static_cache_length)
         prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
-        past_key_values = model.model.encoder(prefill_input_ids, past_key_values=past_key_values).past_key_values
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
 
         # Get the mask (correctly designed for the static cache)
         decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
@@ -683,7 +683,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
             config=config,
             inputs_embeds=dummy_canvas.unsqueeze(-1),
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_attention_mask=decoder_attention_mask,
         )
         self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape_full)
@@ -781,9 +781,9 @@ class DiffusionGemmaVisionText2TextModelTest(
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
         self.assertEqual(generation_outputs.sequences.shape, expected_shape)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         """
-        Tests that we can pass in past_key_values outputted from a previous `generate` into a subsequent call.
+        Tests that we can pass in cache outputted from a previous `generate` into a subsequent call.
         This pattern is used in chat sessions.
         """
         config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -792,7 +792,7 @@ class DiffusionGemmaVisionText2TextModelTest(
 
         # 1st generate call, without KV cache
         generation_1_outputs = model.generate(**model_inputs, max_new_tokens=16, max_denoising_steps=2)
-        self.assertIsInstance(generation_1_outputs.past_key_values, Cache)
+        self.assertIsInstance(generation_1_outputs.cache, Cache)
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
         self.assertEqual(generation_1_outputs.sequences.shape, expected_shape)
@@ -802,7 +802,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         new_input_ids = torch.cat((generation_1_outputs.sequences, model_inputs["input_ids"]), dim=-1)
         generation_2_outputs = model.generate(
             input_ids=new_input_ids,
-            past_key_values=generation_1_outputs.past_key_values,
+            cache=generation_1_outputs.cache,
             max_new_tokens=16,
             max_diffusion_steps=2,
         )

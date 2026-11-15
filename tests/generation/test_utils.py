@@ -1088,7 +1088,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
-    def test_past_key_values_format(self):
+    def test_cache_format(self):
         """
         Test that the KV cache is formatted correctly.
         Having a standard KV cache format is important for a consistent API (and for advanced generation methods).
@@ -1107,17 +1107,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 inputs["use_cache"] = True
             outputs = model(**inputs)
 
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
-            cache = outputs["past_key_values"]
+            cache = outputs["cache"]
             if config.is_encoder_decoder:
                 batch_size, seq_length = inputs["decoder_input_ids"].shape[:2]
             else:
                 batch_size, seq_length = inputs["input_ids"].shape[:2]
 
             # Check the format
-            self._check_past_key_values_for_generate(batch_size, cache, seq_length, decoder_config)
+            self._check_cache_for_generate(batch_size, cache, seq_length, decoder_config)
 
     @pytest.mark.generate
     def test_generate_from_random_inputs_embeds(self):
@@ -1286,7 +1286,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
+                "return_dict_in_generate": True,  # Required to return `cache`
             }
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
@@ -1296,11 +1296,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # -1 because the last generated token isn't yet in the cache.
             text_config = model.config.get_text_config()
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
-            self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self._check_past_key_values_for_generate(batch_size, outputs.past_key_values, max_length, text_config)
+            self.assertIsInstance(outputs.cache, StaticCache)
+            self._check_cache_for_generate(batch_size, outputs.cache, max_length, text_config)
 
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
@@ -1346,10 +1346,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs or all(outputs.cache.is_linear):
+                self.skipTest(reason="This model doesn't return `cache` or all the layers are linear")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -1370,7 +1370,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
             if config.is_encoder_decoder:
                 inputs["decoder_input_ids"] = outputs_cached.sequences
@@ -1413,7 +1413,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             else:
                 atol = rtol = 1e-5
             assert_similar_generate_outputs(outputs, outputs_cached, atol=atol, rtol=rtol)
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     @pytest.mark.generate
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
@@ -1465,10 +1465,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     position_ids=position_ids[:, :turn1_len],
                     use_cache=True,
                 )
-                # Models name their cache output differently (e.g. Mamba-family `cache_params`)
                 cache_kwarg, cache = next(
                     ((name, getattr(out1, name)) for name in ALL_CACHE_NAMES if getattr(out1, name, None) is not None),
-                    ("past_key_values", None),
+                    ("cache", None),
                 )
                 out2 = model(
                     input_ids=turn2,
@@ -1508,10 +1507,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters:
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs_dict)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs or all(outputs.cache.is_linear):
+                self.skipTest(reason="This model doesn't return `cache` or all the layers are linear")
 
             input_ids = inputs_dict.pop("input_ids")
 
@@ -1537,7 +1536,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             cached_output = model.generate(
                 inputs_embeds=continued_embeds,
                 max_new_tokens=1,
-                past_key_values=initial_output.past_key_values,
+                cache=initial_output.cache,
                 **generation_kwargs,
             )
 
@@ -1545,7 +1544,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
             # The two sets of past kv should be equal to each other
-            self._check_caches_are_equal(outputs.past_key_values, cached_output.past_key_values)
+            self._check_caches_are_equal(outputs.cache, cached_output.cache)
 
     @pytest.mark.generate
     def test_generate_from_multimodal_encoder_outputs(self):
@@ -1660,7 +1659,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
-                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "return_dict_in_generate": True,  # Required to return `cache`
                     "output_scores": True,
                     "use_cache": True,
                 }
@@ -1672,10 +1671,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # Check 1: The cache shapes must match the expected shapes
                 text_config = model.config.get_text_config()
                 max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
-                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self._check_past_key_values_for_generate(
-                    batch_size, static_cache_generation.past_key_values, max_cache_len, text_config
-                )
+                self.assertTrue(isinstance(static_cache_generation.cache, StaticCache))
+                self._check_cache_for_generate(batch_size, static_cache_generation.cache, max_cache_len, text_config)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
@@ -1713,12 +1710,12 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "cache_implementation": "quantized",
                 # careful with group size, should be divisor of model's hidden size
                 "cache_config": {"backend": "quanto", "nbits": 2, "q_group_size": 8, "residual_length": 128},
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
+                "return_dict_in_generate": True,  # Required to return `cache`
                 "use_cache": True,
             }
 
             results = model.generate(**generation_kwargs, **inputs_dict)
-            self.assertTrue(all(isinstance(layer, QuantoQuantizedLayer) for layer in results.past_key_values.layers))
+            self.assertTrue(all(isinstance(layer, QuantoQuantizedLayer) for layer in results.cache.layers))
 
             # passing past key values of different type should raise Error
             with self.assertRaises(ValueError):
@@ -1798,9 +1795,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # sanity checks for the default cache implementation
                     if not has_defined_cache_implementation:
                         decoder_cache = (
-                            gen_out.past_key_values.self_attention_cache
-                            if config.is_encoder_decoder
-                            else gen_out.past_key_values
+                            gen_out.cache.self_attention_cache if config.is_encoder_decoder else gen_out.cache
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
                         # Recurrent / hybrid SSM models (mamba2, lfm2, ...) populate the default DynamicCache
@@ -1828,9 +1823,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                         compiled_outputs.append(gen_out)
                         # sanity checks
                         decoder_cache = (
-                            gen_out.past_key_values.self_attention_cache
-                            if config.is_encoder_decoder
-                            else gen_out.past_key_values
+                            gen_out.cache.self_attention_cache if config.is_encoder_decoder else gen_out.cache
                         )
                         self.assertFalse(isinstance(decoder_cache, DynamicCache))
                         self.assertTrue(decoder_cache.is_compileable)
@@ -2240,8 +2233,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
                 # Store cache for the input prompt
                 output = model(dummy_input_ids, position_ids=dummy_position_ids, use_cache=True)
-                if "past_key_values" not in output:
-                    self.skipTest("This model doesn't return `past_key_values`")
+                if "cache" not in output:
+                    self.skipTest("This model doesn't return `cache`")
 
                 # create new input_ids and position_ids to continue generation re-using the cache
                 new_input_ids = output.logits[:, -1, :].float().argmax(-1)[:, None]
@@ -2251,7 +2244,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
                 output = model(
                     input_ids=new_input_ids,
-                    past_key_values=output.past_key_values,
+                    cache=output.cache,
                     position_ids=position_ids,
                     use_cache=True,
                 )
@@ -2691,6 +2684,59 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     # since the mtp model was randomly created)
                     _ = reloaded_model.generate(**inputs_dict, use_mtp=True, do_sample=False, max_new_tokens=10)
 
+    def test_bc_cache_name_generate(self):
+        """Test that BC is correctly handled in `generate` for the cache name."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Those models fail for random reason not related to this BC test
+        broken_model_types = [
+            "higgs_audio_v2",
+            "kyutai_speech_to_text",
+            "pp_formulanet",
+            "switch_transformers",
+            "vibevoice",
+            "voxtral_realtime",
+        ]
+        if config.model_type in broken_model_types:
+            self.skipTest("Fails for random reasons not related to the actual test")
+
+        for model_class in self.all_generative_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(config)
+                model.eval()
+
+                generate_kwarg = {
+                    "do_sample": False,
+                    "max_new_tokens": 5,
+                    "min_new_tokens": 5,
+                    "return_dict_in_generate": True,
+                }
+
+                inputs_dict["use_cache"] = True
+                output = model(**inputs_dict)
+                if "cache" not in output or type(output.cache) not in (DynamicCache, EncoderDecoderCache):
+                    self.skipTest("Not returning cache or non standard Cache")
+
+                old_name = "cache_params" if all(output.cache.is_linear) else "past_key_values"
+                empty_cache = DynamicCache(config=config.get_text_config(decoder=True))
+                if isinstance(output.cache, EncoderDecoderCache):
+                    empty_cache = EncoderDecoderCache(empty_cache, copy.deepcopy(empty_cache))
+
+                generate_kwarg[old_name] = copy.deepcopy(empty_cache)
+                # Make sure we raise the deprecation warning
+                with warnings.catch_warnings(record=True) as warning_list:
+                    output_old_name = model.generate(**inputs_dict, **generate_kwarg)
+                self.assertTrue(any(f"`{old_name}` is deprecated" in str(warn.message) for warn in warning_list))
+
+                generate_kwarg.pop(old_name)
+                generate_kwarg["cache"] = copy.deepcopy(empty_cache)
+                output_new_name = model.generate(**inputs_dict, **generate_kwarg)
+
+                self.assertTrue(output_old_name.cache is not None)
+                self.assertTrue(output_new_name.cache is not None)
+                self._check_caches_are_equal(output_old_name.cache, output_new_name.cache)
+                torch.testing.assert_close(output_old_name.sequences, output_new_name.sequences)
+
     def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
         internal_batch_size = (
@@ -2707,8 +2753,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             output.sequences.shape[1] - 1 if config.is_encoder_decoder else output.sequences.shape[1] - prompt_length
         )
 
-        cache = getattr(output, "past_key_values", None)
-        decoder_past_key_values = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
+        cache = getattr(output, "cache", None)
+        decoder_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
 
         # in some models we subsample the sequence length in inner layers
         if hasattr(self.model_tester, "get_subsampled_output_lengths"):
@@ -2739,7 +2785,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     prompt_length=1,  # the BOS token
                     output_length=output.sequences.shape[1],
                     config=config,
-                    decoder_past_key_values=decoder_past_key_values,
+                    decoder_cache=decoder_cache,
                 )
             else:
                 self._check_attentions_for_generate(
@@ -2748,7 +2794,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     prompt_length=prompt_length,
                     output_length=output.sequences.shape[1],
                     config=config,
-                    decoder_past_key_values=decoder_past_key_values,
+                    decoder_cache=decoder_cache,
                 )
 
         # Hidden States
@@ -2782,9 +2828,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # Check the cache shape
         if use_cache:
             cache_length = output.sequences.shape[1] - 1
-            self._check_past_key_values_for_generate(
+            self._check_cache_for_generate(
                 batch_size=internal_batch_size,
-                past_key_values=cache,
+                cache=cache,
                 seq_length=cache_length,
                 config=config,
             )
@@ -2809,7 +2855,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         self.assertListEqual([vocab_size - score.shape[-1] for score in logits], [vocab_diff] * len(logits))
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -2817,8 +2863,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         )
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+        use_cache = decoder_cache is not None
+        has_static_cache = isinstance(decoder_cache, StaticCache)
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
@@ -2836,9 +2882,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # real length; that's the one whose attention shape we're checking against.
                 query_length = next(
                     (
-                        decoder_past_key_values.get_max_length(i)
-                        for i in range(len(decoder_past_key_values))
-                        if decoder_past_key_values.get_max_length(i) != -1
+                        decoder_cache.get_max_length(i)
+                        for i in range(len(decoder_cache))
+                        if decoder_cache.get_max_length(i) != -1
                     ),
                     prompt_length + generated_length,
                 )
@@ -2924,18 +2970,16 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         self.assertEqual(keys.shape, k_shape)
         self.assertEqual(values.shape, v_shape)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
-        if not isinstance(past_key_values, Cache):
-            raise ValueError("The cache is not standard! Please overwrite `_check_past_key_values_for_generate`")
+        if not isinstance(cache, Cache):
+            raise ValueError("The cache is not standard! Please overwrite `_check_cache_for_generate`")
 
         # In this case, we simply call recursively the function on both internal caches
-        if isinstance(past_key_values, EncoderDecoderCache):
-            self._check_past_key_values_for_generate(
-                batch_size, past_key_values.self_attention_cache, seq_length, config
-            )
+        if isinstance(cache, EncoderDecoderCache):
+            self._check_cache_for_generate(batch_size, cache.self_attention_cache, seq_length, config)
             # For cross attention cache, the seq_length depends on the model, so we remove that dim
-            self._check_past_key_values_for_generate(batch_size, past_key_values.cross_attention_cache, None, config)
+            self._check_cache_for_generate(batch_size, cache.cross_attention_cache, None, config)
             return
 
         # Use the correct config
@@ -2943,7 +2987,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
-        self.assertEqual(num_hidden_layers, len(past_key_values))
+        self.assertEqual(num_hidden_layers, len(cache))
 
         def check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape):
             # assert we have as many conv states as necessary
@@ -2966,7 +3010,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     self.assertEqual(layer.recurrent_states[i].shape, recurrent_shape)
 
         # Check each layer has the correct shape
-        for layer_idx, layer in enumerate(past_key_values.layers):
+        for layer_idx, layer in enumerate(cache.layers):
             # Fields may vary by layer on a heterogeneous config, so resolve the shapes per layer.
             layer_config = config.per_layer_config[layer_idx]
             num_conv_states = getattr(layer_config, "number_of_conv_states", 1)
@@ -3497,7 +3541,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         model_inputs = model.prepare_inputs_for_generation(
             input_ids,
-            past_key_values=StaticCache(config=config, max_cache_len=32),
+            cache=StaticCache(config=config, max_cache_len=32),
             attention_mask=attention_mask,
         )
         self.assertIsInstance(model_inputs["attention_mask"], dict)
@@ -4736,19 +4780,19 @@ class GenerationIntegrationTests(unittest.TestCase):
         generation_kwargs = {
             "max_new_tokens": 20,
             "cache_implementation": "static",
-            "return_dict_in_generate": True,  # Required to return `past_key_values`
+            "return_dict_in_generate": True,  # Required to return `cache`
         }
 
         results = model.generate(input_ids, **generation_kwargs)
-        self.assertTrue(isinstance(results.past_key_values, StaticCache))
+        self.assertTrue(isinstance(results.cache, StaticCache))
 
         # check device of each layer
-        keys_0 = results.past_key_values.layers[0].keys
-        values_0 = results.past_key_values.layers[0].values
+        keys_0 = results.cache.layers[0].keys
+        values_0 = results.cache.layers[0].values
         self.assertTrue(keys_0.device == values_0.device == torch.device(0))
 
-        keys_1 = results.past_key_values.layers[1].keys
-        values_1 = results.past_key_values.layers[1].values
+        keys_1 = results.cache.layers[1].keys
+        values_1 = results.cache.layers[1].values
         self.assertTrue(keys_1.device == values_1.device == torch.device(1))
 
     @pytest.mark.generate
@@ -4798,26 +4842,27 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         generation_kwargs = {
             "max_new_tokens": 20,
-            "return_dict_in_generate": True,  # Required to return `past_key_values`
+            "return_dict_in_generate": True,  # Required to return `cache`
         }
 
+        # noqa: NC001
         # TODO: We need to raise a warning in case the cache is not set correctly
         # with self.assertRaisesRegex(ValueError, "If you are manually initializing the cache"):
-        #     past_key_values = StaticCache(
+        #     cache = StaticCache(
         #         config=model.config, max_batch_size=1, max_cache_len=30, device=torch_device, dtype=model.dtype
         #     )
-        #     results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
+        #     results = model.generate(input_ids, cache=cache, **generation_kwargs)
 
-        past_key_values = StaticCache(config=model.config, max_cache_len=30)
-        results = model.generate(input_ids, past_key_values=past_key_values, **generation_kwargs)
+        cache = StaticCache(config=model.config, max_cache_len=30)
+        results = model.generate(input_ids, cache=cache, **generation_kwargs)
 
         # check device of each layer
-        keys_0 = results.past_key_values.layers[0].keys
-        values_0 = results.past_key_values.layers[0].values
+        keys_0 = results.cache.layers[0].keys
+        values_0 = results.cache.layers[0].values
         self.assertTrue(keys_0.device == values_0.device == torch.device(0))
 
-        keys_1 = results.past_key_values.layers[1].keys
-        values_1 = results.past_key_values.layers[1].values
+        keys_1 = results.cache.layers[1].keys
+        values_1 = results.cache.layers[1].values
         self.assertTrue(keys_1.device == values_1.device == torch.device(1))
 
     def test_prepare_inputs_for_generation_decoder_llm(self):
@@ -4847,14 +4892,14 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # 4. We never discard data from input ids and expect it to be already slice
         init_input_ids = input_ids[:, :2]
-        init_dynamic_cache = model(init_input_ids, past_key_values=dynamic_cache).past_key_values
+        init_dynamic_cache = model(init_input_ids, cache=dynamic_cache).cache
         model_inputs = model.prepare_inputs_for_generation(
             input_ids,
-            past_key_values=init_dynamic_cache,
+            cache=init_dynamic_cache,
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
-        self.assertTrue("past_key_values" in model_inputs)
+        self.assertTrue("cache" in model_inputs)
         self.assertEqual(model_inputs["input_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], input_ids.shape[1])
@@ -4862,11 +4907,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Data is sliced based on input ids length
         model_inputs = model.prepare_inputs_for_generation(
             init_input_ids,
-            past_key_values=init_dynamic_cache,
+            cache=init_dynamic_cache,
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
-        self.assertTrue("past_key_values" in model_inputs)
+        self.assertTrue("cache" in model_inputs)
         self.assertEqual(model_inputs["input_ids"].shape[-1], init_input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], init_input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], 3)  # attn mask is never sliced, we need PAD mask
@@ -4874,13 +4919,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 5. If we pass a `static_cache`, the attention mask will be prepared as a static shape 4D mask
         max_cache_len = 10
         static_cache = StaticCache(config=config, max_cache_len=max_cache_len)
-        static_cache = model(init_input_ids, past_key_values=static_cache).past_key_values
+        static_cache = model(init_input_ids, cache=static_cache).cache
         model_inputs = model.prepare_inputs_for_generation(
             init_input_ids,
-            past_key_values=static_cache,
+            cache=static_cache,
             attention_mask=attention_mask,
         )
-        self.assertTrue("past_key_values" in model_inputs)
+        self.assertTrue("cache" in model_inputs)
         self.assertListEqual(
             list(model_inputs["attention_mask"].shape), [2, 1, init_input_ids.shape[1], max_cache_len]
         )
@@ -4901,7 +4946,7 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         # After prompt processing, i.e. decoding loop
         model_inputs = model.prepare_inputs_for_generation(
-            input_ids, past_key_values=dynamic_cache, inputs_embeds=init_inputs_embeds
+            input_ids, cache=dynamic_cache, inputs_embeds=init_inputs_embeds
         )
         self.assertTrue(model_inputs["input_ids"] is not None)
         self.assertTrue("inputs_embeds" not in model_inputs)
@@ -5487,7 +5532,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         generation_config = GenerationConfig()
         generation_config.compile_config = CompileConfig()
         generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
-        self.assertFalse(model._valid_auto_compile_criteria({"past_key_values": cache}, generation_config))
+        self.assertFalse(model._valid_auto_compile_criteria({"cache": cache}, generation_config))
 
     def test_custom_generate_from_argument_in_generate(self):
         """Tests that the `custom_generate` argument is used when passed to `generate`"""
@@ -5643,7 +5688,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         full_sequence_inputs = copy.deepcopy(initial_inputs)
         full_sequence_inputs["input_ids"] = truncated_outputs.sequences
         full_sequence_inputs["attention_mask"] = new_full_mask
-        full_sequence_inputs["past_key_values"] = copy.deepcopy(truncated_outputs.past_key_values)
+        full_sequence_inputs["cache"] = copy.deepcopy(truncated_outputs.cache)
         full_sequence_outputs = model.generate(
             **full_sequence_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2
         )
@@ -5654,7 +5699,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         else:
             atol = rtol = 1e-5
         assert_similar_generate_outputs(full_outputs, full_sequence_outputs, atol=atol, rtol=rtol)
-        cache1, cache2 = full_outputs.past_key_values, full_sequence_outputs.past_key_values
+        cache1, cache2 = full_outputs.cache, full_sequence_outputs.cache
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):
                 for subcache in ["self_attention_cache", "cross_attention_cache"]:
@@ -5672,7 +5717,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         single_token_inputs = copy.deepcopy(initial_inputs)
         single_token_inputs["input_ids"] = truncated_outputs.sequences[:, -1:]
         single_token_inputs["attention_mask"] = new_full_mask
-        single_token_inputs["past_key_values"] = copy.deepcopy(truncated_outputs.past_key_values)
+        single_token_inputs["cache"] = copy.deepcopy(truncated_outputs.cache)
         single_token_outputs = model.generate(
             **single_token_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2
         )
@@ -5680,7 +5725,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         # Of course we get only the new tokens as outputs here, so slice before performing the check
         full_outputs["sequences"] = full_outputs["sequences"][:, -3:]
         assert_similar_generate_outputs(full_outputs, single_token_outputs, atol=atol, rtol=rtol)
-        cache1, cache2 = full_outputs.past_key_values, single_token_outputs.past_key_values
+        cache1, cache2 = full_outputs.cache, single_token_outputs.cache
         for idx in range(len(cache1)):
             if isinstance(cache1, EncoderDecoderCache):
                 for subcache in ["self_attention_cache", "cross_attention_cache"]:

@@ -24,6 +24,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
@@ -131,13 +132,15 @@ class SmolVLMModel(Idefics3Model):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         pixel_attention_mask (`torch.LongTensor`, *optional*):
@@ -153,7 +156,6 @@ class SmolVLMModel(Idefics3Model):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
-        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -180,9 +182,33 @@ class SmolVLMModel(Idefics3Model):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [
-            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
-        ]
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
+    )
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
+        # Padding images are all zeros (one is kept when all are)
+        real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
+        real_images.view(-1)[0] |= ~torch.any(real_images)
+        num_real_images_per_batch = real_images.sum(dim=1)
+        tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)
+        split_sizes = (num_real_images_per_batch * tokens_per_image).tolist()
+        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, split_sizes))
 
         return image_outputs
 
@@ -199,12 +225,13 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
@@ -215,8 +242,8 @@ class SmolVLMModel(Idefics3Model):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
@@ -227,7 +254,7 @@ class SmolVLMModel(Idefics3Model):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
-                mm_encoder_outputs["image"] = self.get_image_features(
+                mm_encoder_outputs["image"] = self.get_image_embeddings(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output
@@ -255,14 +282,14 @@ class SmolVLMModel(Idefics3Model):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
         return SmolVLMBaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=mm_encoder_outputs.get("image"),
@@ -278,6 +305,23 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         self.model.text_model.generation_config = GenerationConfig.from_model_config(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
+        """
+        return self.model.get_image_embeddings(
+            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
+        )
 
     def forward(self, **super_kwargs):
         r"""

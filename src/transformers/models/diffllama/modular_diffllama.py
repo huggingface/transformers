@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import GemmaForCausalLM
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -94,12 +95,13 @@ class DiffLlamaAttention(LlamaAttention):
         self.lambda_k2 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
         self.groupnorm = nn.RMSNorm(2 * self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -112,8 +114,8 @@ class DiffLlamaAttention(LlamaAttention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         # Split V into two halves and broadcast each back to ``num_kv_heads`` heads (the dispatch's
         # ``repeat_kv`` will then expand them to ``num_heads`` like K).

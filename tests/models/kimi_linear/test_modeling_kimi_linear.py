@@ -177,8 +177,8 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         # Reference: prefill, then forward the next token alone against the populated cache.
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         # Under test: same prefill, then forward [next_token, *distractors] in one call. The first position
@@ -186,8 +186,8 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=torch.cat([next_token, distractors], dim=1), past_key_values=cache_multi)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=torch.cat([next_token, distractors], dim=1), cache=cache_multi)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         # The FLA kernels run their matmuls in TF32, so the chunked and the recurrent kernels drift apart by ~1e-4 on

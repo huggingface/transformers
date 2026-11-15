@@ -59,7 +59,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
@@ -190,7 +190,7 @@ class Molmo2TextConfig(PreTrainedConfig):
 
     model_type = "molmo2_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -1125,12 +1125,13 @@ class Molmo2Attention(Olmo2Attention):
             eps=config.rms_norm_eps,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -1157,8 +1158,8 @@ class Molmo2Attention(Olmo2Attention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1189,13 +1190,14 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.norm_after = config.norm_after
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -1210,7 +1212,7 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1430,12 +1432,13 @@ class Molmo2TextModel(LlamaModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1446,11 +1449,11 @@ class Molmo2TextModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1458,7 +1461,7 @@ class Molmo2TextModel(LlamaModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -1473,7 +1476,7 @@ class Molmo2TextModel(LlamaModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings[self.rope_types[layer_idx]],
                 **kwargs,
@@ -1482,7 +1485,7 @@ class Molmo2TextModel(LlamaModel):
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1505,16 +1508,19 @@ class Molmo2Model(LlavaModel):
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring(
-        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is a "
-        "tuple with one `(num_image_tokens, hidden_size)` tensor per image."
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
+        "one `(num_image_tokens, hidden_size)` tensor for all images."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]
@@ -1532,15 +1538,46 @@ class Molmo2Model(LlavaModel):
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
         pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        image_outputs.pooler_output = pooled_features
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is a "
+        "tuple with one `(num_image_tokens, hidden_size)` tensor per image."
+    )
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.get_image_embeddings(
+            pixel_values, image_token_pooling, image_grids, return_dict=True, **kwargs
+        )
+        pooled_features = image_outputs.pooler_output
         split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
         image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
         return image_outputs
 
     @can_return_tuple
     @auto_docstring(
-        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "
-        "tuple with one `(num_video_tokens, hidden_size)` tensor per video."
+        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is "
+        "one `(num_video_tokens, hidden_size)` tensor for all videos."
     )
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
+        num_frames, rows, cols = video_grids.unbind(-1)
+        image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
+        return self.get_image_embeddings(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
+
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1555,6 +1592,7 @@ class Molmo2Model(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1567,7 +1605,7 @@ class Molmo2Model(LlavaModel):
         video_grids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -1590,9 +1628,9 @@ class Molmo2Model(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_token_pooling, image_grids)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_token_pooling, image_grids)
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_token_pooling, video_grids
             )
 
@@ -1603,7 +1641,9 @@ class Molmo2Model(LlavaModel):
             image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device)
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device)
             # `get_placeholder_mask` returns a [batch, seq, 1] mask; Molmo2 *adds* the image features onto
             # the placeholder-token embeddings (residual), which means we index `inputs_embeds` directly.
             # Boolean indexing does not broadcast, so the mask must be expanded to the hidden dim first.
@@ -1619,10 +1659,10 @@ class Molmo2Model(LlavaModel):
             "config": self.config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
-        is_prefill = past_key_values is None or not past_key_values.is_initialized or image_features is not None
+        is_prefill = cache is None or not cache.is_initialized or image_features is not None
         if mm_token_type_ids is not None and is_prefill:
             # every image or frame token attends to every other one, so they all share a single block
             mask_kwargs["block_sequence_ids"] = torch.where(mm_token_type_ids.to(inputs_embeds.device) == 1, 0, -1)
@@ -1631,7 +1671,7 @@ class Molmo2Model(LlavaModel):
         outputs = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1639,7 +1679,7 @@ class Molmo2Model(LlavaModel):
 
         return Molmo2ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features,
@@ -1667,6 +1707,16 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_embeddings(pixel_values, image_token_pooling, image_grids, **kwargs)
+
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -1675,6 +1725,16 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
+
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_token_pooling: torch.Tensor,
+        video_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_video_embeddings(pixel_values_videos, video_token_pooling, video_grids, **kwargs)
 
     @auto_docstring
     def get_video_features(
@@ -1688,6 +1748,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1700,7 +1761,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         video_grids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
+        cache: list[torch.Tensor] | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1745,7 +1806,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             video_grids=video_grids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1765,12 +1826,13 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         return Molmo2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self, input_ids, inputs_embeds=None, use_cache=True, is_first_iteration=False, **kwargs
     ):
@@ -1789,11 +1851,12 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         return model_inputs
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         position_ids: torch.Tensor | None,
         mm_token_type_ids: torch.Tensor | None = None,
         **kwargs,
@@ -1802,7 +1865,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
         if mm_token_type_ids is not None and inputs_embeds.shape[1] != 1:

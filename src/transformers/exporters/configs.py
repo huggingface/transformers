@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -82,7 +82,7 @@ class ExportConfigMixin:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         values = {name: value for name, value in self.__dict__.items() if name != "quantizer"}
-        return json.dumps(values, indent=2, sort_keys=True, default=repr)
+        return json.dumps(values, indent=2, sort_keys=True, default=lambda v: vars(v) if is_dataclass(v) else repr(v))
 
     def __iter__(self):
         yield from self.__dict__.items()
@@ -131,6 +131,41 @@ class DynamoConfig(ExportConfigMixin):
     quantizer: ExportQuantizer | None = None
 
 
+ORT_PROVIDERS = ("cpu", "cuda", "webgpu", "dml")
+
+
+@dataclass
+class OrtFusionConfig:
+    """
+    Which of ONNX Runtime's fusions `OnnxConfig(ort_fusions=...)` applies. onnxscript's norm, attention and GELU
+    fusions always do.
+
+    Args:
+        provider (`str`):
+            The execution provider the fused graph runs on: `"cpu"`, `"cuda"`, `"webgpu"` or `"dml"`.
+        rotary_embeddings (`bool`, *optional*, defaults to `True`):
+            Fuse rotary embeddings into `RotaryEmbedding`, folded into `GroupQueryAttention` where it takes them.
+        group_query_attention (`bool`, *optional*, defaults to `True`):
+            Fuse attentions reading a key-value cache into `GroupQueryAttention` (DirectML keeps `MultiHeadAttention`).
+        mixture_of_experts (`bool`, *optional*, defaults to `False`):
+            Fuse mixture-of-experts blocks into `MoE` (CUDA only), whose kernels need a Hopper or newer GPU.
+        packed_projections (`bool`, *optional*, defaults to `True`):
+            Pack the projections reading one input (query, key and value; gate and up) into one `MatMul`.
+    """
+
+    provider: Literal["cpu", "cuda", "webgpu", "dml"]
+    rotary_embeddings: bool = True
+    group_query_attention: bool = True
+    mixture_of_experts: bool = False
+    packed_projections: bool = True
+
+    def __post_init__(self):
+        if self.provider not in ORT_PROVIDERS:
+            raise ValueError(f"`provider` must be 'cpu', 'cuda', 'webgpu' or 'dml', got {self.provider!r}")
+        if self.mixture_of_experts and self.provider != "cuda":
+            raise ValueError("`mixture_of_experts` fuses ONNX Runtime's CUDA `MoE`: it needs `provider='cuda'`.")
+
+
 @dataclass
 class OnnxConfig(DynamoConfig):
     """
@@ -141,31 +176,40 @@ class OnnxConfig(DynamoConfig):
 
     Args:
         opset_version (`int`, *optional*):
-            ONNX opset version to target. Defaults to the latest opset
-            supported by the installed `onnxscript` version.
+            ONNX opset version to target. By default, 23, the first with `Attention`, `RMSNormalization` and
+            `RotaryEmbedding`, which `torch.onnx` exports SDPA, RMS norms and rotary embeddings to instead of their
+            decompositions; with `ort_fusions` or a `quantizer`, 20, as ONNX Runtime's fusions rewrite those
+            decompositions into its own ops and quantizers write opset-20 quantization nodes. ONNX Runtime's TensorRT provider takes 22 at most: TensorRT builds `Attention` only into a
+            strongly typed network, which the provider doesn't make.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that
             hit upstream `onnxscript` optimiser bugs.
-        ort_fusions (`str`, *optional*):
+        ort_fusions (`str` or [`OrtFusionConfig`], *optional*):
             Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
-            `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`. `"tensorrt"`
-            prepares it for the TensorRT provider instead: no fusions (TensorRT fuses the graph itself), and attention
-            masks kept boolean, which TensorRT builds a faster engine from.
+            `"webgpu"` or `"dml"` for its default fusions, or an [`OrtFusionConfig`] picking them. The fused graph only
+            runs on ONNX Runtime. Requires `optimize=True`.
+        for_tensorrt (`bool`, *optional*, defaults to `False`):
+            Prepare the graph for ONNX Runtime's TensorRT provider: attention masks kept boolean, which TensorRT builds
+            a faster engine from, at opset 22 by default. Takes no `ort_fusions`: TensorRT fuses the graph itself.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
     opset_version: int | None = None
     optimize: bool = True
-    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml", "tensorrt"] | None = None
+    ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | OrtFusionConfig | None = None
+    for_tensorrt: bool = False
 
     def __post_init__(self):
-        if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml", "tensorrt"):
-            raise ValueError(
-                f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu', 'dml' or 'tensorrt', got {self.ort_fusions!r}"
-            )
-        if self.ort_fusions not in (None, "tensorrt") and not self.optimize:
+        # A provider for its default fusions; a dict as saved with an export.
+        if isinstance(self.ort_fusions, str):
+            self.ort_fusions = OrtFusionConfig(provider=self.ort_fusions)
+        elif isinstance(self.ort_fusions, dict):
+            self.ort_fusions = OrtFusionConfig(**self.ort_fusions)
+        if self.for_tensorrt and self.ort_fusions is not None:
+            raise ValueError("`for_tensorrt` takes no `ort_fusions`: TensorRT fuses the graph itself.")
+        if self.ort_fusions is not None and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 
 
