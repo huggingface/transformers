@@ -355,7 +355,8 @@ def _exported_model_class(component_names, generation: bool = False) -> type[Exp
     from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM
     from .multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
-    names = set(component_names) - {PREFILL_GRAPH}
+    # Beside a prompt graph, the language model is `decode_model`.
+    names = {"language_model" if name == DECODE_GRAPH else name for name in component_names if name != PREFILL_GRAPH}
     multimodal = {"language_model", "text_embeddings_model"} <= names <= MULTIMODAL_COMPONENTS
     if generation:
         if "encoder_model" in component_names:

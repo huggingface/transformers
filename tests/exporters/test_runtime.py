@@ -809,7 +809,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
             model, copy.deepcopy(inputs), config or OnnxConfig(dynamic=False), generation_config=generation_config
         )
         exported.to(providers=providers)
-        decode, prefill = exported.runners["model"], exported.runners["prefill_model"]
+        decode, prefill = exported.runners["decode_model"], exported.runners["prefill_model"]
         # ONNX Runtime lists an execution provider whose libraries are missing (TensorRT's), and falls back past it.
         if decode.session.get_providers()[0] != providers[0][0]:
             self.skipTest(f"{providers[0][0]} could not load its libraries")
@@ -865,7 +865,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         generation_config = GenerationConfig(
             max_new_tokens=6, do_sample=False, eos_token_id=None, cache_implementation="static", max_cache_len=48
         )
-        for dynamic, expected in ((False, {"model": True, "prefill_model": False}), (True, {"model": False})):
+        for dynamic, expected in ((False, {"decode_model": True, "prefill_model": False}), (True, {"model": False})):
             exported = (
                 OnnxExporter()
                 .export_for_generation(
