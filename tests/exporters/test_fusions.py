@@ -233,7 +233,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         # The CUDA fusions' kernels run on CUDA only.
         model = _ort_model(ort_fusions="cuda")
         inputs = _padded_inputs(model)
-        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cuda", None))
+        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["model"] for fusions in ("cuda", None))
         self.assert_fused(model, fused, ORT_FUSIONS["cuda"])
         feeds = _decode_feeds(plain, model.config.vocab_size)
         outputs = (_run(program, feeds, "CUDAExecutionProvider") for program in (fused, plain))
@@ -269,7 +269,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_projections_left_unpacked(self):
         model = _ort_model()
         fusions = OrtFusionConfig(provider="cpu", packed_projections=False)
-        attentions = _group_query_attentions(_export_for_ort(model, fusions)["decode"])
+        attentions = _group_query_attentions(_export_for_ort(model, fusions)["model"])
         self.assertTrue(attentions and all(node.inputs[1] is not None for node in attentions))
 
 
