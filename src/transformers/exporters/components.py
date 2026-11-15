@@ -65,15 +65,38 @@ def _flat(features):
     return features.reshape(-1, features.shape[-1])
 
 
+class PaddedSequenceClassifier(_ModelComponent):
+    """A sequence classifier on `inputs_embeds` that takes `input_ids` too: its base model runs on the embeddings, and
+    its head pools at the last token that isn't padding, which it finds in the ids. On the embeddings alone it pools
+    the last position, padding or not."""
+
+    def forward(self, input_ids, **kwargs):
+        # `utils` re-exports the decomposition, which imports this module
+        from .utils import patch_attribute
+
+        def on_embeddings(original):
+            # The head hands the base model `input_ids` first, beside the `inputs_embeds` it already takes.
+            def forward(input_ids=None, *args, **kwargs):
+                return original(*args, **kwargs)
+
+            return forward
+
+        with patch_attribute(getattr(self.model, self.model.base_model_prefix), "forward", on_embeddings):
+            return self.model(input_ids=input_ids, **kwargs)
+
+
 class ModalityEncoder(_ModelComponent):
     """Runs one modality's getter (`get_<modality>_embeddings`, or `get_<modality>_features` where a model has no
     flat one) and returns a single `[num_tokens, hidden]` tensor, or, for a deepstack tower (Qwen3-VL),
-    `{"features": ..., "deepstack_features": [one per decoder layer]}`."""
+    `{"features": ..., "deepstack_features": [one per decoder layer]}`. With `flatten=False`, a getter's
+    `[num_items, num_tokens, hidden]` tensor keeps its shape: the model returns it so (Gemma3's
+    `image_hidden_states`)."""
 
-    def __init__(self, model: PreTrainedModel, getter: str, grid_kwarg: str | None = None):
+    def __init__(self, model: PreTrainedModel, getter: str, grid_kwarg: str | None = None, flatten: bool = True):
         super().__init__(model)
         self._getter = getter
         self._grid_kwarg = grid_kwarg
+        self._flatten = flatten
 
     def forward(self, **kwargs):
         if self._grid_kwarg is not None and "grid_thw" in kwargs:
@@ -86,7 +109,8 @@ class ModalityEncoder(_ModelComponent):
         outputs = getter(**kwargs)
         # Some outputs declare both fields and fill neither (granite4_vision), so fall through on `None`.
         fields = (getattr(outputs, name, None) for name in ("pooler_output", "last_hidden_state"))
-        features = _flat(next((value for value in fields if value is not None), outputs))
+        features = next((value for value in fields if value is not None), outputs)
+        features = _flat(features) if self._flatten or isinstance(features, (tuple, list)) else features
         deepstack_features = getattr(outputs, "deepstack_features", None)
         if deepstack_features is None:
             return features
