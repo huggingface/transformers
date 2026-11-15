@@ -536,6 +536,23 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             )
         torch.testing.assert_close(output.logits, expected.logits)
 
+    def test_vision_pooler_compiles_with_dynamic_shapes(self):
+        """The pooler's kernel size, the square root of the patches per soft token, holds under dynamic shapes: there,
+        `int(x ** 0.5)` truncates a symbolic 2.999... to 2 (2520 patches pooled to 280)."""
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4VisionPooler
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        pooler = Gemma4VisionPooler(config.vision_config).to(torch_device)
+        width, height = 60, 42
+        y, x = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
+        positions = torch.stack([x.flatten(), y.flatten()], dim=-1)[None].to(torch_device)
+        hidden_states = torch.randn(1, width * height, config.vision_config.hidden_size, device=torch_device)
+        length = width * height // 9
+        expected = pooler._avg_pool_by_positions(hidden_states, positions, length)
+        actual = torch.compile(pooler._avg_pool_by_positions, dynamic=True)(hidden_states, positions, length)
+        for output, reference in zip(actual, expected):
+            torch.testing.assert_close(output, reference)
+
     def test_vision_axial_rope(self):
         # override -> model shipped weirdly to from the start, pos IDs have actual batch dim
 
