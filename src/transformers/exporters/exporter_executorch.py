@@ -668,6 +668,24 @@ def _patch_expand(original):
     return patch
 
 
+@register_patch("executorch", "transformers.exporters.exporter_dynamo._scan")
+def _patch_scan(_original):
+    """Run the chunked gated delta rule's `scan` as a Python loop, unrolled for the traced chunk count.
+
+    With a dynamic batch, the loop's carry reaches `to_executorch`'s replay of the `scan` with its symbolic shape made
+    concrete, and the replay refuses it ("did not preserve symbolic metadata across pass replay").
+    """
+
+    def patch(combine_fn, init, xs):
+        outputs = []
+        for index in range(xs[0].shape[0]):
+            init, output = combine_fn(init, [x[index] for x in xs])
+            outputs.append(output)
+        return init, torch.stack(outputs)
+
+    return patch
+
+
 # ── Stage 3: ExecuTorch patches ───────────────────────────────────────────────
 # Reversible swaps of ExecuTorch internals (passes, verifiers, op dicts) that crash
 # on legitimate dynamic-shape patterns: `SpecPropPass.update_placeholder_tensor_specs`,
