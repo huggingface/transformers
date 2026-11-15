@@ -33,12 +33,10 @@ if is_torchvision_available():
 class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Ovis2_5Processor
     model_id = "ovis-community/Ovis2.5-2B"
-
-    @classmethod
-    def _setup_from_pretrained(cls, model_id, **kwargs):
-        return super()._setup_from_pretrained(
-            model_id, size={"shortest_edge": 64 * 64, "longest_edge": 64 * 1024}, **kwargs
-        )
+    images_text_kwargs_max_length = 256
+    images_unstructured_max_length = 256
+    videos_text_kwargs_max_length = 2048
+    videos_unstructured_max_length = 2048
 
     def _test_apply_chat_template(self, modality, batch_size, return_tensors, input_name, processor_name, input_data):
         if modality == "video":
@@ -53,8 +51,8 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expectations = super().video_sampling_expectations
         for expectation in expectations:
             expectation["expected_dim"] = 0
-            # Each 240x320 fixture frame resizes to 192x288, yielding 12x18 patches.
-            expectation["output_length"] *= 216
+            # Each 240x320 fixture frame resizes to 416x544, yielding 26x34 patches.
+            expectation["output_length"] *= 884
         return expectations
 
     @require_torchcodec
