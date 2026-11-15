@@ -44,6 +44,7 @@ from transformers.testing_utils import (
     require_onnxscript,
     require_openvino,
     require_torch,
+    require_torch_gpu,
     slow,
 )
 
@@ -138,11 +139,12 @@ def _decode_feeds(program, vocab_size):
     """Inputs for one new token after a random past cache."""
     generator = np.random.default_rng(0)
     inputs = {value.name: [int(dim) for dim in value.shape] for value in program.graph.inputs}
+    dtypes = {value.name: value.dtype.numpy() for value in program.graph.inputs}
     past_length = next(shape[2] for name, shape in inputs.items() if "cache" in name)
     feeds = {}
     for name, shape in inputs.items():
         if "cache" in name:
-            feeds[name] = generator.standard_normal(shape).astype(np.float32)
+            feeds[name] = generator.standard_normal(shape).astype(dtypes[name])
         elif "mask" in name:
             feeds[name] = np.ones(shape, dtype=np.int64)
         elif "position" in name:
@@ -152,11 +154,11 @@ def _decode_feeds(program, vocab_size):
     return feeds
 
 
-def _run(program, feeds):
+def _run(program, feeds, provider="CPUExecutionProvider"):
     import onnx_ir as ir
     import onnxruntime as ort
 
-    session = ort.InferenceSession(ir.to_proto(program).SerializeToString(), providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(ir.to_proto(program).SerializeToString(), providers=[provider])
     return session.run(None, {item.name: feeds[item.name] for item in session.get_inputs()})
 
 
@@ -225,6 +227,18 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         feeds = _decode_feeds(plain, model.config.vocab_size)
         for fused_output, plain_output in zip(_run(fused, feeds), _run(plain, feeds)):
             np.testing.assert_allclose(fused_output, plain_output, atol=1e-4, rtol=1e-4)
+
+    @require_torch_gpu
+    def test_cuda_decode_matches_plain_export(self):
+        # The CUDA fusions' kernels run on CUDA only.
+        model = _ort_model(ort_fusions="cuda")
+        inputs = _padded_inputs(model)
+        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cuda", None))
+        self.assert_fused(model, fused, ORT_FUSIONS["cuda"])
+        feeds = _decode_feeds(plain, model.config.vocab_size)
+        outputs = (_run(program, feeds, "CUDAExecutionProvider") for program in (fused, plain))
+        for fused_output, plain_output in zip(*outputs):
+            np.testing.assert_allclose(fused_output.astype(np.float32), plain_output, atol=2e-2, rtol=2e-2)
 
     def test_decode_group_query_attention_rotates_and_reads_packed_projection(self):
         model = _ort_model()
