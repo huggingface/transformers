@@ -794,7 +794,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
     def test_executorch(self):
         self._check_backend(ExecutorchExporter(), ExecutorchConfig)
 
-    def _check_cuda_graphs(self, providers):
+    def _check_cuda_graphs(self, providers, config=None):
         """A static export generates as eager does with its decode graph replaying a CUDA graph, its prompt graph
         (dynamic) not: a second `generate` replays the decode graph's capture."""
         torch.manual_seed(0)
@@ -806,7 +806,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         with torch.no_grad():
             expected = model.generate(**copy.deepcopy(inputs), generation_config=generation_config)
         exported = OnnxExporter().export_for_generation(
-            model, copy.deepcopy(inputs), OnnxConfig(dynamic=False), generation_config=generation_config
+            model, copy.deepcopy(inputs), config or OnnxConfig(dynamic=False), generation_config=generation_config
         )
         exported.to(providers=providers)
         decode, prefill = exported.runners["model"], exported.runners["prefill_model"]
@@ -897,4 +897,9 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         if "TensorrtExecutionProvider" not in onnxruntime.get_available_providers():
             self.skipTest("test requires ONNX Runtime's TensorRT execution provider")
         tensorrt = {"device_id": 0, "trt_cuda_graph_enable": True}
-        self._check_cuda_graphs([("TensorrtExecutionProvider", tensorrt), ("CUDAExecutionProvider", {"device_id": 0})])
+        # Opset 22: TensorRT builds opset 23's `Attention` only into a strongly typed network, which its provider doesn't
+        # request.
+        self._check_cuda_graphs(
+            [("TensorrtExecutionProvider", tensorrt), ("CUDAExecutionProvider", {"device_id": 0})],
+            OnnxConfig(dynamic=False, opset_version=22),
+        )

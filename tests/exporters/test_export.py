@@ -506,6 +506,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     "executorch.generate": {},
     "executorch.beams": {
         "Qwen3_5ForCausalLM": "ExecuTorch's runtime refuses the beam-expanded batch's inputs (`set_inputs`: 0x10).",
+        "OlmoHybridForCausalLM": "Same beam-expanded inputs as `Qwen3_5ForCausalLM`.",
     },
     "executorch.dynamic": {
         "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),

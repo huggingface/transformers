@@ -117,7 +117,8 @@ class DynamoConfig(ExportConfigMixin):
             [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
             [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
             [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
-            converted OpenVINO / ONNX model.
+            converted OpenVINO / ONNX model, or [`~exporters.quantizers.ModelOptOnnxQuantizer`] on the converted ONNX
+            model for TensorRT.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -175,8 +176,11 @@ class OnnxConfig(DynamoConfig):
 
     Args:
         opset_version (`int`, *optional*):
-            ONNX opset version to target. Defaults to the latest opset
-            supported by the installed `onnxscript` version.
+            ONNX opset version to target. By default, 23, the first with `Attention`, `RMSNormalization` and
+            `RotaryEmbedding`, which `torch.onnx` exports SDPA, RMS norms and rotary embeddings to instead of their
+            decompositions; with `ort_fusions` or a `quantizer`, 20, as ONNX Runtime's fusions rewrite those
+            decompositions into its own ops and quantizers write opset-20 quantization nodes. ONNX Runtime's TensorRT provider takes 22 at most: TensorRT builds `Attention` only into a
+            strongly typed network, which the provider doesn't make.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that
@@ -185,6 +189,9 @@ class OnnxConfig(DynamoConfig):
             Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
             `"webgpu"` or `"dml"` for its default fusions, or an [`OrtFusionConfig`] picking them. The fused graph only
             runs on ONNX Runtime. Requires `optimize=True`.
+        for_tensorrt (`bool`, *optional*, defaults to `False`):
+            Prepare the graph for ONNX Runtime's TensorRT provider: attention masks kept boolean, which TensorRT builds
+            a faster engine from, at opset 22 by default. Takes no `ort_fusions`: TensorRT fuses the graph itself.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -192,6 +199,7 @@ class OnnxConfig(DynamoConfig):
     opset_version: int | None = None
     optimize: bool = True
     ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | OrtFusionConfig | None = None
+    for_tensorrt: bool = False
 
     def __post_init__(self):
         # A provider for its default fusions; a dict as saved with an export.
@@ -199,6 +207,8 @@ class OnnxConfig(DynamoConfig):
             self.ort_fusions = OrtFusionConfig(provider=self.ort_fusions)
         elif isinstance(self.ort_fusions, dict):
             self.ort_fusions = OrtFusionConfig(**self.ort_fusions)
+        if self.for_tensorrt and self.ort_fusions is not None:
+            raise ValueError("`for_tensorrt` takes no `ort_fusions`: TensorRT fuses the graph itself.")
         if self.ort_fusions is not None and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 
