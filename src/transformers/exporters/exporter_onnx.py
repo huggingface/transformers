@@ -338,13 +338,12 @@ def _patch_sdpa(original):
 
 
 def _additive_sdpa_mask(original):
-    """Turn a boolean attention mask into an additive one, unless the export is for TensorRT
-    (`OnnxConfig(for_tensorrt=True)`).
+    """A boolean attention mask as an additive one, for every export but TensorRT's.
 
     torchlib's boolean softmax guards every attention with an `IsNaN`/`Where` over the scores, which `_patch_sdpa`
     makes redundant and which ONNX Runtime pays for (2x on a 2520-patch vision attention on its CPU provider).
-    TensorRT, on the other hand, builds a faster engine from the boolean form (2.53 ms against 3.00 ms on EmbeddingGemma2
-    in bf16 on a B200).
+    TensorRT builds a faster engine from the boolean form (2.53 ms against 3.00 ms on EmbeddingGemma2 in bf16 on a
+    B200).
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
