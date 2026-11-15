@@ -504,6 +504,9 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "EfficientNetForImageClassification": "Same `timeout` as `EfficientNetModel`.",
     },
     "executorch.generate": {},
+    "executorch.beams": {
+        "Qwen3_5ForCausalLM": "ExecuTorch's runtime refuses the beam-expanded batch's inputs (`set_inputs`: 0x10).",
+    },
     "executorch.dynamic": {
         "Mask2FormerModel": ("Lowering exceeds the 10-minute test timeout under dynamic shapes."),
         "Mask2FormerForUniversalSegmentation": "Same `timeout` failure as `Mask2FormerModel`.",
@@ -950,12 +953,15 @@ class ExportTesterMixin:
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
-    def _export_scopes(self, generate=False, dynamic=False, backend=None, static_cache=False) -> list[str]:
+    def _export_scopes(
+        self, generate=False, dynamic=False, backend=None, static_cache=False, beams=False
+    ) -> list[str]:
         """The ``EXPORT_SKIPS`` scopes matching the current test, broad to specific.
 
         ``"all"`` always applies, ``"generate"`` only for generate tests, ``"dynamic"`` / ``"static"``
         for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
-        ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
+        ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache, ``"beams"`` for one
+        searching several beams,
         ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
         ``"<backend>.static-cache"``) for the more-specific intersections.
         """
@@ -967,6 +973,8 @@ class ExportTesterMixin:
         scopes.append("dynamic" if dynamic else "static")
         if static_cache:
             scopes.append("static-cache")
+        if beams:
+            scopes.append("beams")
         if backend:
             scopes.append(backend)
             if generate:
@@ -974,6 +982,8 @@ class ExportTesterMixin:
             scopes.append(f"{backend}.dynamic" if dynamic else f"{backend}.static")
             if static_cache:
                 scopes.append(f"{backend}.static-cache")
+            if beams:
+                scopes.append(f"{backend}.beams")
         return scopes
 
     def _should_skip(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):
@@ -987,7 +997,10 @@ class ExportTesterMixin:
         static_cache = _needs_static_cache(generation_config)
         if static_cache and not model_class._can_compile_fullgraph:
             return True
-        scopes = self._export_scopes(generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache)
+        beams = generation_config is not None and (generation_config.num_beams or 1) > 1
+        scopes = self._export_scopes(
+            generate=generate, dynamic=dynamic, backend=backend, static_cache=static_cache, beams=beams
+        )
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
     def _should_skip_exactness(self, model_class, generate=False, dynamic=False, backend=None, generation_config=None):

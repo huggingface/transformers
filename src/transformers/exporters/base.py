@@ -499,6 +499,9 @@ class HfExporter(ABC):
         exported: dict[str, ExportedComponent] = {}
         for name, component in components.items():
             component_config = config[name] if isinstance(config, dict) else config
+            # A single config's prompt graph is dynamic, taking any prompt, even behind a static decode graph.
+            if name == PREFILL_GRAPH and not isinstance(config, dict):
+                component_config = dataclasses.replace(config, dynamic=True)
             try:
                 exported[name] = self._export_component(component.module, component.inputs, component_config)
             except Exception as e:
@@ -591,8 +594,9 @@ class HfExporter(ABC):
         ([`~exporters.decompose.decompose_for_generation`]). A decode graph taking several tokens
         (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or with
         `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
-        prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights, and a static prompt
-        graph takes prompts of the captured length only (another raises). A stateful export (OpenVINO's) keeps the
+        prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights. With a single static
+        config, the prompt graph is dynamic all the same; a static one (a per-component config) takes prompts of the
+        captured length only (another raises). A stateful export (OpenVINO's) keeps the
         cache as each graph's state: the decode graph continues from a copy of the prompt graph's.
 
         Args:
@@ -625,8 +629,6 @@ class HfExporter(ABC):
         generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
         )
-        # A decode graph taking one token leaves the prompt to a graph of its own.
-        disaggregated = not multi_token_decode
         components = decompose_for_generation(
             model,
             sample_inputs,
@@ -635,7 +637,8 @@ class HfExporter(ABC):
             decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
         prefill = components.pop("prefill")
-        if disaggregated:
+        # A decode graph taking one token leaves the prompt to a graph of its own.
+        if not multi_token_decode:
             components[PREFILL_GRAPH] = prefill
         if keep_all_logits:
             # Without the captured `logits_to_keep` the forward defaults to 0, i.e. every position.
@@ -650,7 +653,6 @@ class HfExporter(ABC):
                 generation_config=generation_config,
                 multi_token_decode=multi_token_decode,
                 decoder_writes_cross_cache=decoder_writes_cross_cache,
-                disaggregated=disaggregated,
             )
 
         return _exported_model_class(components, generation=True)(
