@@ -322,6 +322,27 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(valid_positions, {"s": [3], "last": [2]})
         self.assertEqual(end_overlaps, {"top": [3], "topper": [3], "p": [1]})
 
+    def test_stop_string_matching_positions_repeated_overlaps(self):
+        for as_bytes in (False, True):
+            with self.subTest(as_bytes=as_bytes):
+                tokens = ["a", "ba", "aba", "ababa", "zzabaX", "", "xab", "b", "baaba"]
+                stop_string = "aba"
+                if as_bytes:
+                    tokens = [token.encode("utf-8") for token in tokens]
+                    stop_string = stop_string.encode("utf-8")
+                token_indices = [2 * i for i in range(len(tokens))]
+                positions, overlaps = StopStringCriteria._stop_string_get_matching_positions(
+                    tokens, token_indices, [stop_string]
+                )
+                self.assertEqual(
+                    positions[stop_string],
+                    {0: [2], 2: [2], 4: [2], 6: [2], 10: [1, 2], 12: [1], 14: [1], 16: [2]},
+                )
+                self.assertEqual(
+                    overlaps[stop_string],
+                    {0: [1], 2: [2], 4: [1, 3], 6: [1, 3, 3], 8: [3], 16: [2, 3]},
+                )
+
     def test_stop_string_embedding_vecs(self):
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
