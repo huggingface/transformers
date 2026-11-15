@@ -56,24 +56,30 @@ def _with_calibration_table(program: onnx_ir.Model, providers: list) -> list:
     for provider in providers:
         name, options = provider if isinstance(provider, tuple) else (provider, {})
         int8 = str(options.get("trt_int8_enable", False)).lower() in ("1", "true")
-        own_table = "trt_int8_calibration_table_name" in options
-        if name == "TensorrtExecutionProvider" and int8 and not own_table and table is None and not quantized:
-            # Nothing to take int8 scales from (an export's embedding graph, left out by its quantizer): TensorRT
-            # would refuse to build it
-            provider = (name, {**options, "trt_int8_enable": False})
-        elif name == "TensorrtExecutionProvider" and int8 and not own_table and table is not None:
+        if name != "TensorrtExecutionProvider" or not int8 or "trt_int8_calibration_table_name" in options:
+            resolved.append(provider)
+        elif table is not None:
             cache = options.get("trt_engine_cache_path") or tempfile.mkdtemp()
             os.makedirs(cache, exist_ok=True)
             file = f"calibration-{hashlib.sha256(table.encode()).hexdigest()[:16]}.flatbuffers"
             _write_tensorrt_table(json.loads(table), os.path.join(cache, file))
-            options = {
-                **options,
-                "trt_engine_cache_path": cache,
-                "trt_int8_calibration_table_name": file,
-                "trt_int8_use_native_calibration_table": False,
-            }
-            provider = (name, options)
-        resolved.append(provider)
+            resolved.append(
+                (
+                    name,
+                    {
+                        **options,
+                        "trt_engine_cache_path": cache,
+                        "trt_int8_calibration_table_name": file,
+                        "trt_int8_use_native_calibration_table": False,
+                    },
+                )
+            )
+        elif quantized:
+            resolved.append(provider)
+        else:
+            # Nothing to take int8 scales from (an export's embedding graph, left out by its quantizer): TensorRT
+            # would refuse to build it
+            resolved.append((name, {**options, "trt_int8_enable": False}))
     return resolved
 
 

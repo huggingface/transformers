@@ -15,8 +15,8 @@
 
 Each backend quantizes every architecture family (dense / MoE / SSM) with the quantizers it supports:
 `PT2EQuantizer` and `NNCFTorchFXQuantizer` on the FX graph (x86 for dynamo/ONNX/OpenVINO, XNNPACK for ExecuTorch),
-and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`, `ModelOptOnnxQuantizer`) and OpenVINO
-(`NNCFOpenVINOQuantizer`). Calibration and per-component recipes go through `export_for_generation`, whose components
+and the converted model's own toolchain on ONNX (`OnnxRuntimeQuantizer`, `NNCFOnnxQuantizer`,
+`ModelOptOnnxQuantizer`) and OpenVINO (`NNCFOpenVINOQuantizer`). Calibration and per-component recipes go through `export_for_generation`, whose components
 take the attention mask as an input (PT2E's retrace trips on in-graph mask construction).
 """
 
