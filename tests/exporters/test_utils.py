@@ -362,7 +362,7 @@ class ChunkedVisionAttentionPatchTest(unittest.TestCase):
 @require_torch
 class GatedDeltaRulePatchTest(unittest.TestCase):
     def test_dynamic_export_takes_other_chunk_counts(self):
-        # The chunked gated delta rule loops over 64-token chunks: traced on two, the export must serve one and four
+        # The chunked gated delta rule loops over 64-token chunks: traced on two, the export must serve one, two and four
         from transformers import Qwen3_5ForCausalLM, Qwen3_5TextConfig
         from transformers.exporters import DynamoConfig, DynamoExporter
 
@@ -398,8 +398,9 @@ class GatedDeltaRulePatchTest(unittest.TestCase):
 
         for exporter, config_class in exporters:
             with self.subTest(exporter.__name__):
-                exported = exporter().export(model, prompt(100), config_class(dynamic=True))
-                for length in (30, 250):
+                # Traced on a whole number of chunks, which pads by none
+                exported = exporter().export(model, prompt(128), config_class(dynamic=True))
+                for length in (30, 100, 250):
                     inputs = prompt(length)
                     with torch.no_grad():
                         expected = model(**inputs).logits
