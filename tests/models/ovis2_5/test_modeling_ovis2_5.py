@@ -22,7 +22,6 @@ from transformers import (
     Ovis2_5ForConditionalGeneration,
     Ovis2_5Model,
     Ovis2_5Processor,
-    Ovis2_5VisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -59,7 +58,7 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault(
             "num_image_tokens",
-            (kwargs["image_size"] // kwargs["patch_size"] // Ovis2_5VisionConfig.spatial_merge_size) ** 2,
+            (kwargs["image_size"] // kwargs["patch_size"] // 2) ** 2,
         )
         kwargs.setdefault("image_token_id", 4)
         kwargs.setdefault("video_token_id", 4)
@@ -69,8 +68,8 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("video_end_token_id", 8)
         kwargs.setdefault("vision_vocab_size", 12)
         kwargs.setdefault("vision_window_size", kwargs["image_size"])
-        kwargs.setdefault("vision_hidden_act", Ovis2_5VisionConfig.hidden_act)
-        kwargs.setdefault("vision_max_position_embeddings", Ovis2_5VisionConfig.max_position_embeddings)
+        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
+        kwargs.setdefault("vision_max_position_embeddings", 1024)
         super().__init__(parent, **kwargs)
         self.num_image_patches = (self.image_size // self.patch_size) ** 2
 
