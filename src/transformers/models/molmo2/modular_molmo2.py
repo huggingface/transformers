@@ -1578,6 +1578,10 @@ class Molmo2Model(LlavaModel):
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
         return self.get_image_embeddings(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
 
+    @auto_docstring(
+        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "
+        "tuple with one `(num_video_tokens, hidden_size)` tensor per video."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
