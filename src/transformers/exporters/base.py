@@ -364,6 +364,12 @@ def _is_dynamic(config) -> bool:
     return bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
 
 
+def _is_dynamic(config) -> bool:
+    """Whether the decode graph's export config (or the single config) exports dynamic shapes."""
+    decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
+    return bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
+
+
 def _switches_kernels_on_query_length(model) -> bool:
     """Whether the model's linear attention runs the chunked gated delta rule beyond one token and the recurrent one
     for a single token (Qwen3.5's, Qwen3-Next's): a decode graph traced on several tokens keeps the chunked kernel,

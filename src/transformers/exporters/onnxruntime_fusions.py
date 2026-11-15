@@ -902,14 +902,16 @@ def _padded_rotary_caches(tape, constant, caches, total, dtype):
 
 
 def _fuse_group_query_attention(
-    model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True
+    model: ir.Model, prefill: bool = True, head_norms: bool = False, rotary: bool = True, causal: bool = True
 ) -> None:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
     without repeating them. Its mask stays the attention's own bias, so every row's `seqlens_k` is the whole length:
     exact whatever the padding. `prefill` sets whether a prefill, starting the cache, is fused too; `head_norms`
     whether per-head query and key norms are folded in too (CUDA only); `rotary` whether the rotary embedding is
-    (WebGPU's reads its positions off `seqlens_k`, not `position_ids`)."""
+    (WebGPU's reads its positions off `seqlens_k`, not `position_ids`). `GroupQueryAttention` masks the future on top
+    of the bias: without `causal` (a model attending bidirectionally within blocks, PaliGemma's prefix), only
+    attentions of one query token, which have no future, are fused."""
     graph = model.graph
     # A cache update several attentions read (layers sharing another layer's cache, Gemma 4's): its own layer's,
     # fused once; the others, reading it, stay as they are.
@@ -951,7 +953,7 @@ def _fuse_group_query_attention(
             if expand is None or _static_dim(expand.inputs[0], 2) != 1 or _static_dim(expand.inputs[0], 1) != 1:
                 continue
             bias, num_heads = expand.inputs[0], kv_heads * groups
-        if new_length != query_length:
+        if new_length != query_length or (not causal and query_length != 1):
             continue
         # After a past, it takes several new tokens for one sequence only (part of its contract): a decode graph that
         # takes any number of tokens is fused only for a batch of one.
@@ -1493,7 +1495,7 @@ _STEPS = (
     (_unfuse_leftover_attentions, None, None),
     (_unfuse_attention_activation_biases, None, None),
     (_unfuse_group_norms, None, None),
-    (_untranspose_batch_matmuls, ("cuda", "dml"), None),
+    (_untranspose_batch_matmuls, ("cpu", "cuda", "dml"), None),
     (partial(_untranspose_batch_matmuls, matmuls=True), ("webgpu",), None),
     # 5. More fusions.
     (_WEIGHTLESS_RMS_NORMS.apply_to_model, None, None),
@@ -1523,8 +1525,9 @@ _STEPS = (
 )
 
 
-def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig) -> None:
-    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks."""
+def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig, causal: bool = True) -> None:
+    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks.
+    `causal=False` for a model attending bidirectionally within blocks of its sequence."""
     if fusions.provider == "cuda" and not is_onnxruntime_available("1.28.0"):
         logger.warning(
             "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "
@@ -1532,4 +1535,7 @@ def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig) -> None:
         )
     for step, providers, toggle in _STEPS:
         if (providers is None or fusions.provider in providers) and (toggle is None or getattr(fusions, toggle)):
-            step(model)
+            if getattr(step, "func", step) is _fuse_group_query_attention:
+                step(model, causal=causal)
+            else:
+                step(model)
