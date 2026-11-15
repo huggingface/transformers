@@ -14,6 +14,7 @@
 
 import time
 import unittest
+from unittest.mock import patch
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
@@ -307,6 +308,23 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # This should not raise an error and should return False since no stop string is matched
         self.assertFalse(criteria(input_ids, scores))
+
+    def test_stop_string_cache_vocab_order(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        vocab = tokenizer.get_vocab()
+        reordered_vocab = dict(reversed(vocab.items()))
+        STOP_STRING_EMBEDDING_CACHE.clear()
+        with patch.object(tokenizer, "get_vocab", side_effect=[vocab, vocab, reordered_vocab, reordered_vocab]):
+            first = StopStringCriteria(tokenizer, ["stop"])
+            second = StopStringCriteria(tokenizer, ["stop"])
+        self.assertIs(first.embedding_vec, second.embedding_vec)
+        self.assertEqual(len(STOP_STRING_EMBEDDING_CACHE), 1)
+
+        tokenizer.add_tokens(["new_stop_string_cache_token"])
+        updated = StopStringCriteria(tokenizer, ["stop"])
+        self.assertIsNot(first.embedding_vec, updated.embedding_vec)
+        self.assertEqual(len(STOP_STRING_EMBEDDING_CACHE), 2)
+        STOP_STRING_EMBEDDING_CACHE.clear()
 
     def test_stop_string_matching_positions(self):
         stop_string = "stop"

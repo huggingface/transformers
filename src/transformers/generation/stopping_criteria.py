@@ -249,7 +249,9 @@ class StopStringCriteria(StoppingCriteria):
             self.stop_strings, self._stop_string_matching_mode
         )
         vocab = tokenizer.get_vocab()
-        token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
+        # Tokenizers may return the same vocabulary in a different order on each call.
+        token_list = tuple(sorted(vocab))
+        token_indices = tuple(vocab[token] for token in token_list)
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
             token_list, token_indices, tokenizer
         )
