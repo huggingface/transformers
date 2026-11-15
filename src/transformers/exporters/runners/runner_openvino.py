@@ -106,13 +106,15 @@ class OpenVINOModelRunner(ModelRunner):
                 defaults["INFERENCE_NUM_THREADS"] = max(1, _physical_cores() - torch_threads)
                 defaults["ENABLE_CPU_PINNING"] = True
         # The precision the export recorded (`runtime_options` in the model's rt_info): OpenVINO doesn't apply it on
-        # its own, and the CPU plugin otherwise runs an fp32 model in bf16 where the CPU has it (AMX).
+        # its own, and the CPU plugin otherwise runs an fp32 model in bf16 where the CPU has it (AMX). Only the options
+        # the device takes: optimum-intel records GPU ones (`ACTIVATIONS_SCALE_FACTOR`), which the CPU plugin refuses.
+        core = openvino.Core()
         recorded = {}
         if program.has_rt_info("runtime_options"):
-            recorded = dict(program.get_rt_info("runtime_options").value)
-        return cls(
-            openvino.Core().compile_model(program, device, {**recorded, **defaults, **(config or {})}), metadata
-        )
+            supported = set(core.get_property(device, "SUPPORTED_PROPERTIES"))
+            options = program.get_rt_info("runtime_options").value
+            recorded = {name: value for name, value in dict(options).items() if name in supported}
+        return cls(core.compile_model(program, device, {**recorded, **defaults, **(config or {})}), metadata)
 
     @property
     def stateful(self) -> bool:
