@@ -143,12 +143,12 @@ class OnnxExporter(DynamoExporter):
         quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
-        experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
+        experts_implementation = "batched_mm" if ort_fusions is not None and ort_fusions.mixture_of_experts else None
 
         with (
-            patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
             apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
+            patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -166,7 +166,7 @@ class OnnxExporter(DynamoExporter):
         _name_graph_outputs(onnx_program.model.graph, outputs_names)
         apply_onnx_ir_fixes(onnx_program)
 
-        if ort_fusions:
+        if ort_fusions is not None:
             fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
