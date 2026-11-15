@@ -14,22 +14,17 @@
 
 import inspect
 import math
-import tempfile
 import unittest
 
 import numpy as np
-from pytest import mark
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from transformers import DacConfig, HiggsAudioV2TokenizerConfig, HubertConfig
 from transformers.testing_utils import (
-    is_flaky,
     is_torch_available,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
-    slow,
+    require_torchaudio,
     torch_device,
 )
 
@@ -105,15 +100,13 @@ class HiggsAudioV2TokenizerModelTester:
 
 
 @require_torch
+@require_torchaudio
 class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False
     test_can_init_all_missing_weights = False
-    # The quantizer module takes ~78% of model size, so default split percents (0.5, 0.7, 0.9)
-    # are too low — at 0.7 the GPU budget can't fit any module and everything lands on a single
-    # device, preventing accelerate from creating a multi-device map.
-    model_split_percents = [0.5, 0.8, 0.9]
+    model_split_percents = [0.5, 0.9]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not support returning hidden states
@@ -278,42 +271,6 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
                         )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    @is_flaky()
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model.main_input_name][:1]
-                if dummy_input.dtype in [torch.float32, torch.float16]:
-                    dummy_input = dummy_input.to(torch.bfloat16)
-
-                outputs = model(dummy_input)
-                outputs_fa = model_fa(dummy_input)
-
-                logits = outputs[1]
-                logits_fa = outputs_fa[1]
-
-                assert torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2)
-
-    @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not support right padding")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
 
     @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):

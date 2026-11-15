@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
@@ -280,12 +281,13 @@ class ChameleonAttention(nn.Module):
         self.q_norm = ChameleonLayerNorm((self.num_heads, self.head_dim))
         self.k_norm = ChameleonLayerNorm((self.num_key_value_heads, self.head_dim))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         position_embeddings: torch.Tensor | None = None,
@@ -310,8 +312,8 @@ class ChameleonAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -346,12 +348,13 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
         position_embeddings: torch.Tensor | None = None,
@@ -367,9 +370,9 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            cache (`Cache`, *optional*): cached past key and value projection states
             kwargs (`dict`, *optional*):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
@@ -383,7 +386,7 @@ class ChameleonDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             output_attentions=output_attentions,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
@@ -416,12 +419,13 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = False,
         position_embeddings: torch.Tensor | None = None,
@@ -436,13 +440,13 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
                 query_sequence_length, key_sequence_length)` if default attention is used.
             position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Indices of positions of each input sequence tokens in the position embeddings
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            cache (`Cache`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
 
         residual = hidden_states
@@ -452,7 +456,7 @@ class ChameleonSwinDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             output_attentions=output_attentions,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
@@ -762,7 +766,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["ChameleonDecoderLayer", "ChameleonSwinDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _skip_keys_device_placement = ["cache", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -902,13 +906,14 @@ class ChameleonModel(ChameleonPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -935,11 +940,11 @@ class ChameleonModel(ChameleonPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # torch.jit.trace() doesn't support cache objects in the output
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None and not torch.jit.is_tracing():
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -947,7 +952,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -961,7 +966,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -973,7 +978,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1005,13 +1010,14 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1051,7 +1057,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1073,7 +1079,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

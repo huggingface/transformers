@@ -115,7 +115,7 @@ Verifică forma lui _no_split_modules când este prezent. Valorile malformate po
 Verifică forward signatures care expun argumente de cache pentru utilizarea acelor argumente în corpul metodei. Argumentele de cache neutilizate pot indica suport de caching incomplet și comportament inconsistent al API-ului.
 
 ```diff
-def forward(self, x, past_key_values=None, use_cache=False):
+def forward(self, x, cache=None, use_cache=False):
 +    if use_cache:
 +        ...
      return x

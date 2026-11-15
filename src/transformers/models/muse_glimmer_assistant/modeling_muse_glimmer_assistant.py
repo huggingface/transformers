@@ -34,6 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_muse_glimmer_assistant import MuseGlimmerAssistantConfig
 
 
@@ -157,13 +158,14 @@ class MuseGlimmerAssistantAttention(nn.Module):
         self.q_norm = MuseGlimmerAssistantRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MuseGlimmerAssistantRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         context_hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: DFlashCache | None = None,
+        cache: DFlashCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -172,7 +174,7 @@ class MuseGlimmerAssistantAttention(nn.Module):
 
         # The total k/v states in Dflash are the concatenation of the previous `context_hidden_states` (same for every layer)
         # and the actual projections on the diffusion window (the actual `hidden_states` input). Everything gets appended to the
-        # `past_key_values`, and then the diffusion window will be evicted from it so that the cache is effectively only the context
+        # `cache`, and then the diffusion window will be evicted from it so that the cache is effectively only the context
         # from the main model
         if context_hidden_states is not None:
             kv_hidden_states = torch.cat([context_hidden_states, hidden_states], dim=1)
@@ -191,8 +193,8 @@ class MuseGlimmerAssistantAttention(nn.Module):
         # will take care of slicing for latest positions for q_states
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -241,13 +243,14 @@ class MuseGlimmerAssistantDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MuseGlimmerAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.input_layernorm = MuseGlimmerAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         context_hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: DFlashCache | None = None,
+        cache: DFlashCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -257,7 +260,7 @@ class MuseGlimmerAssistantDecoderLayer(GradientCheckpointingLayer):
             context_hidden_states=context_hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -275,7 +278,7 @@ class MuseGlimmerAssistantPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MuseGlimmerAssistantDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -371,13 +374,14 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         noise_embeds: torch.Tensor,
         context_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: DFlashCache | None = None,
+        cache: DFlashCache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -397,14 +401,14 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
             k/v states do not have the same length as q_states, even before the `cache.update()` call. Thus the `position_ids` and the derived
             `position_embeddings` need to span all the additional positions.
         """
-        if use_cache and past_key_values is None:
-            past_key_values = DFlashCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DFlashCache(config=self.config)
 
         # project targets to the same hidden dim as the model
         context_hidden_states = self.encoder(context_hidden_states)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = (
                 torch.arange(noise_embeds.shape[1] + context_hidden_states.shape[1], device=noise_embeds.device)
                 + past_seen_tokens
@@ -416,7 +420,7 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": noise_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
             }
             # The queries corresponding to `noise_embeds` must attend bi-directionally to each other, and causally to previous k/v states
             # derived from the main model's `context_hidden_states`. However, since they strictly correspond to positions larger than
@@ -436,13 +440,13 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
                 context_hidden_states=context_hidden_states,
                 position_embeddings=position_embeddings,
                 attention_mask=mask_mapping[layer_type],
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 __all__ = ["MuseGlimmerAssistantModel", "MuseGlimmerAssistantPreTrainedModel"]

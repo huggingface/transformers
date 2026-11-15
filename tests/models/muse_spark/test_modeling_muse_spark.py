@@ -29,9 +29,8 @@ from transformers import (
 from transformers.models.muse_spark.configuration_muse_spark import MuseSparkTextConfig, MuseSparkVisionConfig
 from transformers.testing_utils import (
     Expectations,
+    require_audio,
     require_deterministic_for_xpu,
-    require_librosa,
-    require_soundfile,
     require_torch,
     require_torch_accelerator,
     require_torch_accelerator_memory,
@@ -536,8 +535,7 @@ class MuseSparkIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         self.assertIn(EXPECTED_TEXT_2.get_expectation(), message["content"])
 
-    @require_librosa
-    @require_soundfile
+    @require_audio
     def test_integration_audio(self):
         messages = [
             {

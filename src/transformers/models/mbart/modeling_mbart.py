@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mbart import MBartConfig
@@ -88,15 +89,13 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(
-        self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
-    ):
+    def forward(self, input_ids: torch.Tensor, cache_length: int = 0, position_ids: torch.Tensor | None = None):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
         if position_ids is None:
             bsz, seq_len = input_ids.shape[:2]
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+                cache_length, cache_length + seq_len, dtype=torch.long, device=self.weight.device
             ).expand(bsz, -1)
         else:
             position_ids = position_ids.unsqueeze(0)
@@ -190,11 +189,12 @@ class MBartAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -215,22 +215,22 @@ class MBartAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -238,11 +238,11 @@ class MBartAttention(nn.Module):
             key_states = key_states.view(kv_shape).transpose(1, 2)
             value_states = value_states.view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -353,13 +353,14 @@ class MBartDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -372,7 +373,7 @@ class MBartDecoderLayer(GradientCheckpointingLayer):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            past_key_values (`Cache`): cached past key and value projection states
+            cache (`Cache`): cached past key and value projection states
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -380,7 +381,7 @@ class MBartDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -396,7 +397,7 @@ class MBartDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -626,13 +627,14 @@ class MBartDecoder(MBartPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -665,13 +667,13 @@ class MBartDecoder(MBartPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+                cross-attention blocks) that can be used (see `cache` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                If `cache` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -685,34 +687,30 @@ class MBartDecoder(MBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # initialize `past_key_values`
-        if use_cache and past_key_values is None:
-            past_key_values = (
+        # initialize `cache`
+        if use_cache and cache is None:
+            cache = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+        cache_length = cache.get_seq_length() if cache is not None else 0
+        position_ids = torch.arange(seq_length, device=inputs_embeds.device) + cache_length
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
+            mask_seq_length = cache_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
-        self_attn_cache = (
-            past_key_values.self_attention_cache
-            if isinstance(past_key_values, EncoderDecoderCache)
-            else past_key_values
-        )
+        self_attn_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=self_attn_cache,
+            cache=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -722,7 +720,7 @@ class MBartDecoder(MBartPreTrainedModel):
         )
 
         # embed positions
-        position_ids = self.embed_positions(input_ids, past_key_values_length, position_ids=position_ids)
+        position_ids = self.embed_positions(input_ids, cache_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + position_ids.to(inputs_embeds.device)
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -741,7 +739,7 @@ class MBartDecoder(MBartPreTrainedModel):
                 causal_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -750,7 +748,7 @@ class MBartDecoder(MBartPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -784,6 +782,7 @@ class MBartModel(MBartPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -791,7 +790,7 @@ class MBartModel(MBartPreTrainedModel):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -809,8 +808,8 @@ class MBartModel(MBartPreTrainedModel):
 
             MBart uses a specific language id token as the starting token for `decoder_input_ids` generation that
             varies according to source and target language, *e.g.* 25004 for *en_XX*, and 25003 for *de_DE*. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            `cache` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `cache`).
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
             `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
@@ -842,13 +841,13 @@ class MBartModel(MBartPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, cache, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             return_dict=return_dict,
@@ -860,7 +859,7 @@ class MBartModel(MBartPreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -906,6 +905,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         self.final_logits_bias = nn.Buffer(new_bias)
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -913,7 +913,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -932,8 +932,8 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
 
             MBart uses a specific language id token as the starting token for `decoder_input_ids` generation that
             varies according to source and target language, *e.g.* 25004 for *en_XX*, and 25003 for *de_DE*. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            `cache` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `cache`).
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
             `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
@@ -996,7 +996,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1017,7 +1017,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         return Seq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1075,8 +1075,8 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `cache`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `cache`).
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
             `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
@@ -1151,7 +1151,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         return Seq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1201,8 +1201,8 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `cache`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `cache`).
 
             For translation and summarization training, `decoder_input_ids` should be provided. If no
             `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
@@ -1258,7 +1258,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1309,13 +1309,14 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1323,6 +1324,15 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+            The labels are **not shifted** inside the model. `labels[..., i]` is the target for `logits[..., i, :]`,
+            so for next-token prediction the labels must already be shifted one position to the left relative to
+            `input_ids`.
+
         Example:
 
         ```python
@@ -1345,7 +1355,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1364,7 +1374,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,

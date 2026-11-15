@@ -160,8 +160,8 @@ class GPTNeoModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        # past_key_values is not implemented
-        # self.parent.assertEqual(len(result.past_key_values), config.n_layer)
+        # cache is not implemented
+        # self.parent.assertEqual(len(result.cache), config.n_layer)
 
     def create_and_check_gpt_neo_model_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = GPTNeoModel(config=config)
@@ -187,9 +187,7 @@ class GPTNeoModelTester:
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -229,7 +227,7 @@ class GPTNeoModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -263,7 +261,7 @@ class GPTNeoModelTester:
             next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, cache=past
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
