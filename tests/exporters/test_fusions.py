@@ -37,7 +37,7 @@ from tests.models.qwen3.test_modeling_qwen3 import Qwen3ModelTester
 from tests.models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
 from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import AutoModelForCausalLM, GenerationConfig, set_seed
-from transformers.exporters import OnnxConfig, OnnxExporter, OpenVINOConfig, OpenVINOExporter
+from transformers.exporters import OnnxConfig, OnnxExporter, OpenVINOConfig, OpenVINOExporter, OrtFusionConfig
 from transformers.testing_utils import (
     require_nncf,
     require_onnxruntime,
@@ -85,10 +85,11 @@ ORT_FUSIONS = {
     # DirectML's `GroupQueryAttention` reads neither rotary, the mask, nor packed q/k/v: `MultiHeadAttention` stays.
     "dml": {"MultiHeadAttention": 1, "GroupQueryAttention": 0, "MoE": 0, "RotaryEmbedding": 2, **ORT_UNFUSED},
 }
-# Only CUDA has `MoE`: elsewhere the router keeps its softmax (microsoft/onnxruntime#33866).
+# Only CUDA has `MoE`, opted into (`test_cuda_mixture_of_experts_fuses_when_picked`): the router keeps its softmax
+# (microsoft/onnxruntime#33866).
 ORT_MOE_FUSIONS = {
     "cpu": {**ORT_FUSIONS["cpu"], "Softmax": 1},
-    "cuda": {**ORT_FUSIONS["cuda"], "MoE": 1},
+    "cuda": {**ORT_FUSIONS["cuda"], "MoE": 0, "Softmax": 1},
     "webgpu": {**ORT_FUSIONS["webgpu"], "Softmax": 1},
     "dml": {**ORT_FUSIONS["dml"], "Softmax": 1},
 }
@@ -237,6 +238,25 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         for component, program in _export_for_ort(model, "webgpu").items():
             attentions = _group_query_attentions(program)
             self.assertFalse(any(node.attributes.get_int("do_rotary", 0) for node in attentions), component)
+
+    def test_cuda_mixture_of_experts_fuses_when_picked(self):
+        # Opt-in: ONNX Runtime's CUDA `MoE` runs on Hopper or newer only.
+        model = _ort_model("qwen3_moe", "cuda")
+        fusions = OrtFusionConfig(provider="cuda", mixture_of_experts=True)
+        for component, program in _export_for_ort(model, fusions).items():
+            self.assert_fused(model, program, {"MoE": 1, "Softmax": 0}, component)
+
+    @parameterized.expand([("rotary_embeddings", "RotaryEmbedding"), ("group_query_attention", "GroupQueryAttention")])
+    def test_fusion_left_out(self, toggle, op):
+        model = _ort_model()
+        for component, program in _export_for_ort(model, OrtFusionConfig(provider="cpu", **{toggle: False})).items():
+            self.assert_fused(model, program, {op: 0}, component)
+
+    def test_projections_left_unpacked(self):
+        model = _ort_model()
+        fusions = OrtFusionConfig(provider="cpu", packed_projections=False)
+        attentions = _group_query_attentions(_export_for_ort(model, fusions)["decode"])
+        self.assertTrue(attentions and all(node.inputs[1] is not None for node in attentions))
 
 
 # The fused kernels OpenVINO's CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls
