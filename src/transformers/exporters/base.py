@@ -606,11 +606,11 @@ class HfExporter(ABC):
         The model is run on **generate** kwargs to capture what each component is called with
         ([`~exporters.decompose.decompose_for_generation`]). A decode graph taking several tokens
         (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or with
-        `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
-        prompt, and is named `"decode_model"`: prefill and decode are disaggregated, at the cost of a second copy of the weights. With a single static
-        config, the prompt graph is dynamic all the same; a static one (a per-component config) takes prompts of the
-        captured length only (another raises). A stateful export (OpenVINO's) keeps the
-        cache as each graph's state: the decode graph continues from a copy of the prompt graph's.
+        `multi_token_decode=False`) is named `"decode_model"` and leaves the prompt to a graph of its own,
+        `"prefill_model"`: prefill and decode are disaggregated, at the cost of a second copy of the weights. With a
+        single static config, the prompt graph is dynamic all the same; a static one (a per-component config) takes
+        prompts of the captured length only (another raises). A stateful export (OpenVINO's) keeps the cache as each
+        graph's state: the decode graph continues from a copy of the prompt graph's.
 
         Args:
             model ([`PreTrainedModel`]):
