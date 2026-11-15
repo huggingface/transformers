@@ -93,7 +93,7 @@ they should appear in the prompt.
 
 ### Video inference
 
-The official example uniformly samples eight frames. Pass the video path directly in the conversation and let the
+The official example uniformly samples eight frames. Pass the video URL directly in the conversation and let the
 processor load and sample it. The processor prepares the inputs needed for generation.
 
 ```python
@@ -101,7 +101,10 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "video", "path": "path/to/video.mp4"},
+            {
+                "type": "video",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+            },
             {"type": "text", "text": "Describe what happens in this video."},
         ],
     }
