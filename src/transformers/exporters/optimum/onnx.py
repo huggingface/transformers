@@ -428,8 +428,8 @@ class _OnnxGenerationMixin:
     """optimum-onnx's merged decoder returns placeholders for the cross-attention cache once it has filled it: the
     cache it was given is kept over them."""
 
-    def _call(self, **kwargs) -> Any:
-        outputs = super()._call(**kwargs)
+    def _call(self, runner, **kwargs) -> Any:
+        outputs = super()._call(runner, **kwargs)
         given, cache = kwargs.get("cache"), getattr(outputs, "cache", None)
         if hasattr(given, "cross_attention_cache") and hasattr(cache, "cross_attention_cache"):
             for layer, given_layer in zip(cache.cross_attention_cache.layers, given.cross_attention_cache.layers):

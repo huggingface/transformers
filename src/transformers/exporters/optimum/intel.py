@@ -690,12 +690,12 @@ class _OpenVINOGenerationMixin:
             kwargs["input_ids"] = input_ids.masked_fill(input_ids < 0, self.config.image_token_id)
         return super().embed(**kwargs)
 
-    def _call(self, **kwargs) -> Any:
+    def _call(self, runner, **kwargs) -> Any:
         deepstack = kwargs.get("deepstack_visual_embeds")
         if isinstance(deepstack, (list, tuple)):
             # optimum-intel's language model takes the layers stacked
             kwargs["deepstack_visual_embeds"] = torch.stack(list(deepstack))
-        return super()._call(**kwargs)
+        return super()._call(runner, **kwargs)
 
     def _validate_model_kwargs(self, model_kwargs: dict):
         """Also accept MiniCPM-V 4.5's crop inputs, for a vision graph fused with its resampler, and
