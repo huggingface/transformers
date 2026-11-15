@@ -176,12 +176,6 @@ class AudioClassificationPipeline(Pipeline):
         if isinstance(inputs, bytes):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
-        if is_torch_available():
-            import torch
-
-            if isinstance(inputs, torch.Tensor):
-                inputs = inputs.cpu().numpy()
-
         # An `AudioDecoder` input means torchcodec is already imported: no need to check (or load) it otherwise
         if torchcodec := sys.modules.get("torchcodec"):
             if isinstance(inputs, torchcodec.decoders.AudioDecoder):
@@ -223,6 +217,12 @@ class AudioClassificationPipeline(Pipeline):
                     in_sampling_rate,
                     self.feature_extractor.sampling_rate,
                 ).numpy()
+
+        if is_torch_available():
+            import torch
+
+            if isinstance(inputs, torch.Tensor):
+                inputs = inputs.cpu().numpy()
 
         if not isinstance(inputs, np.ndarray):
             raise TypeError("We expect a numpy ndarray or torch tensor as input")
