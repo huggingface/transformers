@@ -25,6 +25,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -181,26 +182,48 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         cls.processor = Ovis2_5Processor.from_pretrained(cls.model_id)
         cls.model = Ovis2_5ForConditionalGeneration.from_pretrained(cls.model_id, device_map=torch_device)
 
-    @parameterized.expand(
-        [
-            ("image", 1, "What animals are visible? Answer in one short sentence.", "cats"),
-            (
-                "video",
-                4,
-                "What remains visible throughout all four frames? Answer in one short sentence.",
-                "The two cats and the pink blanket remain visible throughout all four frames.",
-            ),
-        ]
-    )
-    def test_generation(self, modality, num_frames, prompt, expected_text):
+    def test_image_generation(self):
         image = load_coco_image("000000039769.jpg").convert("RGB")
-        visual_input = image if modality == "image" else [image.copy() for _ in range(num_frames)]
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": modality, modality: visual_input},
-                    {"type": "text", "text": prompt},
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": "What animals are visible? Answer in one short sentence."},
+                ],
+            }
+        ]
+        inputs = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
+        ).to(torch_device, dtype=self.model.dtype)
+
+        self.assertEqual(inputs.image_grid_thw.tolist(), [[1, 30, 40]])
+        output = self.model.generate(**inputs, max_new_tokens=16, do_sample=False)
+        generated_text = self.processor.decode(
+            output[0, inputs.input_ids.shape[1] :],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        ).strip()
+        expected_text = Expectations({(None, None): "cats"}).get_expectation()
+        self.assertEqual(generated_text, expected_text)
+
+    def test_video_generation(self):
+        image = load_coco_image("000000039769.jpg").convert("RGB")
+        video = [image.copy() for _ in range(4)]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video", "video": video},
+                    {
+                        "type": "text",
+                        "text": "What remains visible throughout all four frames? Answer in one short sentence.",
+                    },
                 ],
             }
         ]
@@ -214,11 +237,14 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             processor_kwargs={"videos_kwargs": {"do_sample_frames": False}},
         ).to(torch_device, dtype=self.model.dtype)
 
-        self.assertEqual(getattr(inputs, f"{modality}_grid_thw").tolist(), [[num_frames, 30, 40]])
+        self.assertEqual(inputs.video_grid_thw.tolist(), [[4, 30, 40]])
         output = self.model.generate(**inputs, max_new_tokens=16, do_sample=False)
         generated_text = self.processor.decode(
             output[0, inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         ).strip()
+        expected_text = Expectations(
+            {(None, None): "The two cats and the pink blanket remain visible throughout all four frames."}
+        ).get_expectation()
         self.assertEqual(generated_text, expected_text)
