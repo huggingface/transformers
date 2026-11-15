@@ -695,7 +695,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
                 config=self.config,
                 inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
-                past_key_values=None,
+                cache=None,
             )
 
         for layer in self.layers:

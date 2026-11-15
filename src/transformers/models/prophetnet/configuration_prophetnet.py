@@ -40,7 +40,7 @@ class ProphetNetConfig(PreTrainedConfig):
     """
 
     model_type = "prophetnet"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_attention_heads": "num_encoder_attention_heads",
     }

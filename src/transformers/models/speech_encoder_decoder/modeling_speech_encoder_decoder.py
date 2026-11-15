@@ -23,6 +23,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -306,6 +307,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         return cls(encoder=encoder, decoder=decoder, config=config)
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         inputs: torch.Tensor | None = None,
@@ -313,7 +315,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
         encoder_outputs: tuple[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -340,8 +342,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
             [What are input IDs?](../glossary#input-ids)
 
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
+            If `cache` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `cache`).
 
             For training, `decoder_input_ids` are automatically created by the model by shifting the `labels` to the
             right, replacing -100 by the `pad_token_id` and prepending them with the `decoder_start_token_id`.
@@ -452,7 +454,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            past_key_values=past_key_values,
+            cache=cache,
             return_dict=return_dict,
             **kwargs_decoder,
         )
@@ -473,7 +475,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         return Seq2SeqLMOutput(
             loss=loss,
             logits=decoder_outputs.logits,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,

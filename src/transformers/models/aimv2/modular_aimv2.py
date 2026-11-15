@@ -430,7 +430,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
                 inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
-                past_key_values=None,
+                cache=None,
             )
 
         encoder_outputs = self.encoder(
