@@ -172,9 +172,11 @@ class OnnxModelRunner(ModelRunner):
                 "Pass either `device` or `providers`: the providers choose the device (`device_id` in the CUDA or "
                 "TensorRT provider's options)."
             )
-        # A CUDA graph replays one input shape: a static export's.
+        # A CUDA graph replays one shape: a static export's, unless an output's size depends on the data.
         config = metadata.export_config
-        static = not (config.get("dynamic") or config.get("dynamic_shapes"))
+        static = not (config.get("dynamic") or config.get("dynamic_shapes")) and all(
+            output.shape is not None and output.shape.is_static() for output in program.graph.outputs
+        )
         if providers is None:
             providers = _execution_providers(device, cuda_graph=static)
         elif not static:
