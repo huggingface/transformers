@@ -711,8 +711,8 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
         static = GenerationConfig(
             max_new_tokens=6, do_sample=False, eos_token_id=None, cache_implementation="static", max_cache_len=48
         )
-        # A static export's decode graph takes one token, so the prompt goes through it a token at a time; it bakes
-        # the cache's length too, so it needs a static cache.
+        # A static export's decode graph takes one token, so the prompt goes through a prompt graph of its own; it
+        # bakes the cache's length too, so it needs a static cache.
         return [
             ("llama", self._llama, dynamic, True),
             ("llama static cache", self._llama, static, True),

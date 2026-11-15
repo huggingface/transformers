@@ -234,7 +234,13 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         text_name = _text_name(kwargs, traced)
         query_length = kwargs[text_name].shape[1]
         if (prefill := self._prefill_runner(text_name, query_length)) is not None:
-            return self._call(prefill, **kwargs)
+            if not prefill.stateful:
+                return self._call(prefill, **kwargs)
+            # A cache kept as state is the prompt graph's own: the decode graph continues from a copy of it.
+            prefill.reset_state()
+            outputs = self._call(prefill, **kwargs)
+            self.runner.load_state(prefill)
+            return outputs
         # A multi-token decode graph is traced on two tokens; one traced on a single token (any static export, or a
         # dynamic one whose model can't decode several at once) takes the prompt a token at a time.
         if query_length == 1 or traced[text_name].get("shape", [0, 0])[1] != 1:

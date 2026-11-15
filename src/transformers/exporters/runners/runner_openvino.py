@@ -116,6 +116,13 @@ class OpenVINOModelRunner(ModelRunner):
         """Start the state a stateful model keeps (its cache) over, for a new sequence."""
         self.request.reset_state()
 
+    def load_state(self, other: OpenVINOModelRunner) -> None:
+        """Take over the state `other` holds, under the same variable names: the cache a prompt graph left, for the
+        decode graph to continue from."""
+        states = {state.name: state for state in self.request.query_state()}
+        for state in other.request.query_state():
+            states[state.name].state = state.state
+
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
         outputs = self.request.infer(feed, share_inputs=share_inputs, share_outputs=share_outputs)

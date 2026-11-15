@@ -685,6 +685,37 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
     ov_model.validate_nodes_and_infer_types()
 
 
+def _read_overwritten_states(ov_model: openvino.Model, init_dims: dict[str, list]) -> None:
+    """Make every growing state's update read its variable.
+
+    A graph that overwrites a state without reading it (a prompt graph's KV cache, whose concatenation with the empty
+    cache folds away) runs, but OpenVINO's IR reader drops the unread ``ReadValue`` and can't resolve the ``Assign``'s
+    variable when the model is loaded back. Concatenating an empty slice of the variable to the update keeps the read.
+    """
+    reads = {op.get_variable_id(): op for op in ov_model.get_ops() if op.get_type_name() == "ReadValue"}
+    for sink in ov_model.get_sinks():
+        variable_id = sink.get_variable_id()
+        dims = init_dims.get(variable_id) or []
+        if "grow" not in dims:
+            continue
+        read = reads[variable_id]
+        update = sink.input_value(0)
+        # By name: OpenVINO hands out a new Python wrapper for a node on every access.
+        seen, stack = set(), [update.get_node()]
+        while stack:
+            node = stack.pop()
+            if node.get_name() == read.get_name():
+                break
+            if node.get_name() not in seen:
+                seen.add(node.get_name())
+                stack.extend(value.get_node() for value in node.input_values())
+        else:
+            axis = dims.index("grow")
+            empty = ov_ops.slice(read.output(0), [0], [0], [1], [axis])
+            sink.set_arguments([ov_ops.concat([empty, update], axis)])
+    ov_model.validate_nodes_and_infer_types()
+
+
 def _align_state_pair_types(ov_model: openvino.Model, pairs: dict[str, str]) -> None:
     """Give each state pair one CPU-friendly storage type, converting at the boundaries.
 
@@ -801,6 +832,7 @@ def _make_stateful(
     _build_state_initializers(ov_model, init_dims)
     _initialize_cross_state_from_its_write(ov_model, sample_inputs)
     _pin_state_update_shapes(ov_model)
+    _read_overwritten_states(ov_model, init_dims)
 
 
 def _cross_cache_paths(sample_inputs: MutableMapping[str, Any]) -> set[str]:
