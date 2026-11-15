@@ -86,7 +86,8 @@ processor.save_audio(audio, "zonos3_mini.wav")
 ```
 
 Pass `speaker_embeddings=voice["embedding"][None]` instead of `speaker_reference_codes` to condition on the voice's
-speaker embedding.
+speaker embedding. With reference codes, `processor.decode(sequences, speaker_reference_codes=[voice["codes"]])` also
+decodes the last `decode_context_frames` reference frames before the speech and drops them, for a smoother start.
 
 ### Voice cloning from a clip
 
@@ -178,13 +179,17 @@ speech = pipe("Hello from the pipeline.")
 
 ### `torch.compile`
 
-The gated DeltaNet chunk loop and the MoE expert dispatch are data-dependent, so the language model does not compile
-to a full graph and `generate` runs without a static cache (leave `cache_implementation` unset). The codec decoder
-runs on fixed-size tensors and compiles:
+The language model compiles to a full graph, so `generate` can run with a static cache and a compiled forward:
 
 ```python
-processor.audio_tokenizer.decoder = torch.compile(processor.audio_tokenizer.decoder)
-audio = processor.decode(model.generate(**inputs))
+sequences = model.generate(**inputs, cache_implementation="static")
+```
+
+The codec decoder also runs on fixed-size tensors and compiles:
+
+```python
+processor.audio_tokenizer.decode = torch.compile(processor.audio_tokenizer.decode, fullgraph=True)
+audio = processor.decode(sequences)
 ```
 
 ### Training

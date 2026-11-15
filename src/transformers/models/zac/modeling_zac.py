@@ -1064,8 +1064,6 @@ class ZacModel(ZacPreTrainedModel):
         audio_codes (`torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)`):
             Discrete codes computed with `model.encode`, in `[0, config.codebook_size)`.
         """
-        if bool(((audio_codes < 0) | (audio_codes >= self.config.codebook_size)).any()):
-            raise ValueError(f"`audio_codes` must be in [0, {self.config.codebook_size}).")
         semantic = self.semantic_quantizer.from_codes(audio_codes[:, :1])[0]
         latents = self.semantic_head(semantic) + self.acoustic_quantizer.from_codes(audio_codes[:, 1:])[0]
         audio_values = self.decoder_resampler(self.decoder(latents, **kwargs))

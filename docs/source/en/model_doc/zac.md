@@ -65,13 +65,11 @@ dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sam
 audio = dataset[0]["audio"]["array"]
 
 inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
-with torch.no_grad():
-    audio_codes = model.encode(**inputs).audio_codes  # (batch_size, 10, num_frames)
-    audio_values = model.decode(audio_codes).audio_values  # (batch_size, 1, num_frames * 2940)
+audio_codes = model.encode(**inputs).audio_codes  # (batch_size, 10, num_frames)
+audio_values = model.decode(audio_codes).audio_values  # (batch_size, 1, num_frames * 2940)
 
 # or both at once
-with torch.no_grad():
-    outputs = model(**inputs)
+outputs = model(**inputs)
 audio_codes, audio_values = outputs.audio_codes, outputs.audio_values
 
 # playback level
@@ -85,22 +83,20 @@ The feature extractor pads the clips; `audio_codes_mask` marks each clip's frame
 ```python
 audios = [dataset[i]["audio"]["array"] for i in range(3)]
 inputs = feature_extractor(audios, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
-with torch.no_grad():
-    encoded = model.encode(**inputs)
+encoded = model.encode(**inputs)
 for codes, mask in zip(encoded.audio_codes, encoded.audio_codes_mask):
     codes = codes[:, mask.bool()]  # (10, num_frames)
-    with torch.no_grad():
-        audio_values = model.decode(codes[None]).audio_values
+    audio_values = model.decode(codes[None]).audio_values
 ```
 
 ### `torch.compile`
 
-The decoder runs on fixed-size tensors and can be compiled; the encoder's lane schedule depends on the audio length.
+The decoder runs on fixed-size tensors and compiles to a full graph; the encoder's lane schedule depends on the audio
+length.
 
 ```python
-model.decoder = torch.compile(model.decoder)
-with torch.no_grad():
-    audio_values = model.decode(audio_codes).audio_values
+model.decode = torch.compile(model.decode, fullgraph=True)
+audio_values = model.decode(audio_codes).audio_values
 ```
 
 The encoder runs in the model's dtype. In bfloat16, the Wav2Vec2-BERT teacher's features differ slightly from the

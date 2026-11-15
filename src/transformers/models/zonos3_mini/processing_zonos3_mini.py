@@ -34,6 +34,9 @@ if is_torch_available():
 if is_soundfile_available():
     import soundfile as sf
 
+if is_zyphra_textnorm_available():
+    import zyphra_textnorm
+
 
 logger = logging.get_logger(__name__)
 
@@ -250,8 +253,6 @@ class Zonos3MiniProcessor(ProcessorMixin):
                     "`pip install zyphra-textnorm` reads numbers, dates, currencies and units as the model was trained."
                 )
                 return text
-            import zyphra_textnorm
-
             self._normalizer = zyphra_textnorm.Normalizer(list(self.markup_tags))
         return self._normalizer.normalize(text, grammar)
 
@@ -596,7 +597,7 @@ class Zonos3MiniProcessor(ProcessorMixin):
         sequences: "torch.Tensor",
         silence_prefill_frames: int | None = None,
         speaker_reference_codes: "list[torch.Tensor] | None" = None,
-        decode_context_frames: int = 0,
+        decode_context_frames: int | None = None,
         headroom_db: float | None = None,
         fade_out_ms: float = 0.0,
     ) -> list["torch.Tensor"]:
@@ -611,9 +612,11 @@ class Zonos3MiniProcessor(ProcessorMixin):
             silence_prefill_frames (`int`, *optional*):
                 The number of silence frames of the prompts, the processor's default if not given.
             speaker_reference_codes (`list[torch.Tensor]`, *optional*):
-                The reference codes of each item, to decode the speech after `decode_context_frames` of them.
-            decode_context_frames (`int`, *optional*, defaults to 0):
-                Number of reference frames decoded before the speech (and dropped), for a smoother start.
+                The reference codes of each item: when given, the last `decode_context_frames` of them are decoded
+                before the speech (and dropped), for a smoother start.
+            decode_context_frames (`int`, *optional*):
+                Number of reference frames decoded before the speech, the processor's `decode_context_frames` if not
+                given.
             headroom_db (`float`, *optional*):
                 Attenuation in dB, the processor's `headroom_db` if not given.
             fade_out_ms (`float`, *optional*, defaults to 0.0):
@@ -632,6 +635,8 @@ class Zonos3MiniProcessor(ProcessorMixin):
         if silence_prefill_frames is None:
             silence_prefill_frames = self.silence_prefill_frames
         headroom_db = self.headroom_db if headroom_db is None else headroom_db
+        if decode_context_frames is None:
+            decode_context_frames = self.decode_context_frames
         hop_length = audio_tokenizer.config.hop_length
 
         waveforms = []

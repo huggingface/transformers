@@ -21,11 +21,13 @@ from pathlib import Path
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import ZacConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import is_torch_available
+
+from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -179,13 +181,14 @@ class ZacModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "internal_hop_length"):
             ZacConfig(encoder_strides=[2, 2])
 
-    def test_decode_rejects_out_of_range_codes(self):
+    def test_decode_compiles_fullgraph(self):
         config = self.model_tester.get_config()
         model = ZacModel(config).to(torch_device).eval()
         codes = ids_tensor([1, config.num_quantizers, 2], config.codebook_size)
-        codes[0, 3, 1] = config.codebook_size
-        with self.assertRaises(ValueError):
-            model.decode(codes)
+        with torch.no_grad():
+            expected = model.decode(codes).audio_values
+            compiled = torch.compile(model.decode, fullgraph=True, backend="eager")(codes).audio_values
+        torch.testing.assert_close(compiled, expected)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -238,9 +241,8 @@ class ZacModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 @require_torch
 @require_torchaudio
-class ZacIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/zac"
+class ZacIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    fixtures_path = Path(__file__).parent.parent.parent / "fixtures/zac"
 
     def test_decode(self):
         """

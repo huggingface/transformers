@@ -88,11 +88,11 @@ class Zonos3MiniSpeakerEncoderConfig(PreTrainedConfig):
         Epsilon of the channel layer norm of each block.
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):
         Epsilon of the batch norms.
+    activation_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability after the activation of the feed-forward layers.
     stage_block_specs (`list[list[list[int]]]`, *optional*):
         The blocks of each stage, as `[num_res_blocks, out_channels, freq_stride, time_stride, expansion]`. Defaults
         to the release's MECT-B2 stages.
-    activation_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability after the activation of the feed-forward layers.
 
     Example:
 
@@ -683,8 +683,7 @@ class Zonos3MiniPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _is_stateful = True
-    # the MoE expert loop and the gated DeltaNet chunk loop are data-dependent
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": OutputRecorder(Zonos3MiniDecoderLayer, index=1),
         "attentions": Zonos3MiniAttention,
@@ -996,8 +995,13 @@ class Zonos3MiniForConditionalGeneration(Zonos3MiniPreTrainedModel, Zonos3MiniGe
 
         loss = None
         if labels is not None:
-            loss = F.cross_entropy(
-                logits[:, :-1].float().flatten(0, 2), labels[:, 1:].flatten().to(logits.device), ignore_index=-100
+            # row `t` predicts the audio columns of row `t + 1`
+            loss = self.loss_function(
+                logits=logits[:, :-1].contiguous(),
+                labels=None,
+                vocab_size=self.config.audio_vocab_size,
+                shift_labels=labels[:, 1:].contiguous(),
+                **kwargs,
             )
 
         return Zonos3MiniOutputWithPast(

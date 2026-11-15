@@ -27,6 +27,7 @@ from transformers.testing_utils import require_torch, require_torchaudio, slow, 
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -291,6 +292,25 @@ class Zonos3MiniForConditionalGenerationTest(ModelTesterMixin, GenerationTesterM
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass
 
+    def test_custom_4d_attention_mask(self):
+        """Three sequences sharing a 3-row prefix give the same last-row logits when packed under a 4D mask."""
+        config = self.model_tester.get_config()
+        # attention layers only: a packed prefix cannot be shared through the gated DeltaNet's recurrent state
+        config.layer_types = ["full_attention"] * config.num_hidden_layers
+        model = Zonos3MiniForConditionalGeneration(config).to(torch_device, dtype=torch.float32).eval()
+        input_ids = ids_tensor([3, 4, config.num_codebooks + 1], config.codebook_size)
+        input_ids[:, :3] = input_ids[0, :3]
+        position_ids = torch.arange(4, device=torch_device).expand(3, -1)
+        packed_ids = torch.cat([input_ids[0, :3], input_ids[:, 3]])[None]
+        mask = torch.tril(torch.ones(6, 6, device=torch_device))
+        mask[3:, 3:] = torch.eye(3, device=torch_device)
+        mask = (1.0 - mask)[None, None] * torch.finfo(torch.float32).min
+        packed_position_ids = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device)
+        with torch.no_grad():
+            logits = model(input_ids, position_ids=position_ids).logits[:, -1]
+            packed_logits = model(packed_ids, attention_mask=mask, position_ids=packed_position_ids).logits[0, -3:]
+        torch.testing.assert_close(packed_logits.softmax(-1), logits.softmax(-1), rtol=1e-3, atol=1e-3)
+
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip(reason="The common test builds 2D token inputs; ZONOS3-Mini takes rows of audio and text columns.")
     def test_model_rope_scaling_from_config(self, scaling_type):
@@ -383,9 +403,8 @@ class Zonos3MiniForConditionalGenerationTest(ModelTesterMixin, GenerationTesterM
 @slow
 @require_torch
 @require_torchaudio
-class Zonos3MiniForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/zonos3_mini"
+class Zonos3MiniForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    fixtures_path = Path(__file__).parent.parent.parent / "fixtures/zonos3_mini"
 
     def _load(self, name):
         with open(self.fixtures_path / name, encoding="utf-8") as f:
