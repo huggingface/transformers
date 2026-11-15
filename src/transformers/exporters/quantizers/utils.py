@@ -19,7 +19,7 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from ..decompose import PREFILL_GRAPH, decode_graph_name, decompose_for_generation
+from ..decompose import DECODE_GRAPH, PREFILL_GRAPH, decode_graph_name, decompose_for_generation
 
 
 if TYPE_CHECKING:
@@ -48,12 +48,15 @@ def capture_calibration_inputs(
             decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
         prefill = components.pop("prefill")
+        decode_name = decode_graph_name(components)
         for name, component in components.items():
-            calibration.setdefault(name, []).append(component.inputs)
+            # Beside a prompt graph, the decode graph is `decode_model`.
+            key = DECODE_GRAPH if name == decode_name and not multi_token_decode else name
+            calibration.setdefault(key, []).append(component.inputs)
         # A multi-token decode graph also runs the prefill step, so it calibrates on that call too; a single-token
         # one leaves it to the prompt graph.
         if multi_token_decode:
-            calibration[decode_graph_name(components)].append(prefill.inputs)
+            calibration[decode_name].append(prefill.inputs)
         else:
             calibration.setdefault(PREFILL_GRAPH, []).append(prefill.inputs)
     return calibration

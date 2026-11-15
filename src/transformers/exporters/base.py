@@ -36,7 +36,13 @@ from ..utils.hub import cached_file, cached_files, hf_api
 from ..utils.import_utils import is_torch_available
 from .components import Component
 from .configs import ExportConfigMixin, ExportFormat
-from .decompose import PREFILL_GRAPH, decode_graph_name, decompose_for_generation, decompose_multimodal
+from .decompose import (
+    DECODE_GRAPH,
+    PREFILL_GRAPH,
+    decode_graph_name,
+    decompose_for_generation,
+    decompose_multimodal,
+)
 from .metadata import ExportMetadata, register_treespec_types
 from .precompute import precompute_export_inputs
 from .quantizers.utils import capture_calibration_inputs
@@ -361,7 +367,8 @@ def _exported_model_class(component_names, generation: bool = False) -> type[Exp
     from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM
     from .multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
-    names = set(component_names) - {PREFILL_GRAPH}
+    # Beside a prompt graph, the language model is `decode_model`.
+    names = {"language_model" if name == DECODE_GRAPH else name for name in component_names if name != PREFILL_GRAPH}
     multimodal = {"language_model", "text_embeddings_model"} <= names <= MULTIMODAL_COMPONENTS
     if generation:
         if "encoder_model" in component_names:
@@ -600,7 +607,7 @@ class HfExporter(ABC):
         ([`~exporters.decompose.decompose_for_generation`]). A decode graph taking several tokens
         (`multi_token_decode`) also serves the prompt. One taking a single token (a static export's, or with
         `multi_token_decode=False`) leaves the prompt to a graph of its own, `"prefill_model"`, traced on the whole
-        prompt: prefill and decode are disaggregated, at the cost of a second copy of the weights. With a single static
+        prompt, and is named `"decode_model"`: prefill and decode are disaggregated, at the cost of a second copy of the weights. With a single static
         config, the prompt graph is dynamic all the same; a static one (a per-component config) takes prompts of the
         captured length only (another raises). A stateful export (OpenVINO's) keeps the
         cache as each graph's state: the decode graph continues from a copy of the prompt graph's.
@@ -630,7 +637,8 @@ class HfExporter(ABC):
         Returns:
             [`ExportedModel`]: One [`ExportedComponent`] per component, named as optimum-intel does: a causal LM's
             `"model"`; an encoder-decoder's `"encoder_model"` and `"decoder_model"`; a multi-modal model's
-            `"language_model"`, `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per modality.
+            `"language_model"`, `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per modality. Beside
+            a prompt graph, `"prefill_model"`, the decode graph is `"decode_model"`.
         """
         generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
@@ -643,8 +651,9 @@ class HfExporter(ABC):
             decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
         prefill = components.pop("prefill")
-        # A decode graph taking one token leaves the prompt to a graph of its own.
+        # A decode graph taking one token leaves the prompt to a graph of its own: `prefill_model` and `decode_model`.
         if not multi_token_decode:
+            components[DECODE_GRAPH] = components.pop(decode_graph_name(components))
             components[PREFILL_GRAPH] = prefill
         if keep_all_logits:
             # Without the captured `logits_to_keep` the forward defaults to 0, i.e. every position.

@@ -23,6 +23,7 @@ from .decompose import (
     _MODALITY_SPECS,
     DEEPSTACK_INPUTS,
     ModalitySpec,
+    decode_graph_name,
     dense_deepstack,
     flatten_anyres_patches,
     pack_anyres_features,
@@ -120,7 +121,7 @@ class ExportedMultimodalModel(ExportedModel):
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
         """What a deepstack decoder adds inside its layers, from each modality's `(rows, features by layer)`, in the
         dense form its graph was traced with (`dense_deepstack`): zeros on a step without images."""
-        traced = self.runners["language_model"].metadata.kwargs
+        traced = self.runners[decode_graph_name(self.runners)].metadata.kwargs
         for mask_name, spec in DEEPSTACK_INPUTS.items():
             if spec.features in traced:
                 recorded = traced[spec.features]
