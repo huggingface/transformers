@@ -145,8 +145,8 @@ class OnnxExporter(DynamoExporter):
         quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
         # Opset 23 exports attention, RMS norms and rotary embeddings as single ops. ONNX Runtime's fusions match their
-        # decompositions instead, and NNCF quantizes at 20 (at 23 its `QuantizeLinear` outputs mismatch their zero point).
-        # TensorRT builds opset 23's `Attention` only into a strongly typed network, which ONNX Runtime doesn't request.
+        # decompositions, and NNCF's `QuantizeLinear` mismatches its zero point at 23. TensorRT builds opset 23's
+        # `Attention` only into a strongly typed network, which ONNX Runtime doesn't request.
         if config.opset_version is not None:
             opset_version = config.opset_version
         elif config.for_tensorrt:
