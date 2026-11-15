@@ -214,3 +214,31 @@ class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         )
         # fmt: on
         self.assertEqual(completion, expected.get_expectation())
+
+
+@require_torch
+class MuseGlimmerAssistantSlidingWindowTest(unittest.TestCase):
+    def test_no_cache_sliding_window_offset(self):
+        torch.manual_seed(0)
+        config = MuseGlimmerAssistantConfig(
+            hidden_size=64,
+            intermediate_size=128,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            attn_implementation="eager",
+        )
+        model = MuseGlimmerAssistantModel(config).eval()
+        C, N, W = 4096, config.block_size, config.sliding_window
+        noise = torch.randn(1, N, config.hidden_size)
+        context = torch.randn(1, C, config.hidden_size * len(config.target_layer_ids))
+        visible = (torch.arange(C, C + N)[:, None] - torch.arange(C + N)).abs() <= W
+        correct_mask = torch.zeros(1, 1, N, C + N).masked_fill(~visible, float("-inf"))
+
+        with torch.no_grad():
+            reference = model(noise, context, attention_mask=correct_mask, use_cache=False).last_hidden_state
+            actual_2d = model(noise, context, attention_mask=torch.ones(1, C + N), use_cache=False).last_hidden_state
+            actual_none = model(noise, context, use_cache=False).last_hidden_state
+
+        torch.testing.assert_close(actual_2d, reference, rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(actual_none, reference, rtol=1e-5, atol=1e-6)

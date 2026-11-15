@@ -173,6 +173,7 @@ class MuseGlimmerAssistantDecoderLayer(Exaone4DecoderLayer):
 
 class MuseGlimmerAssistantPreTrainedModel(Exaone4PreTrainedModel):
     main_input_name = "noise_embeds"
+    _skip_keys_device_placement = ["cache"]
 
 
 class MuseGlimmerAssistantContextProjection(nn.Module):
@@ -233,8 +234,11 @@ class MuseGlimmerAssistantModel(Exaone4Model):
             k/v states do not have the same length as q_states, even before the `cache.update()` call. Thus the `position_ids` and the derived
             `position_embeddings` need to span all the additional positions.
         """
-        if use_cache and cache is None:
+        if cache is not None and getattr(cache, "_previous_number_of_accepted_tokens", 0) == 0:
+            cache.set_previous_accepted_tokens(context_hidden_states.shape[1])
+        elif use_cache and cache is None:
             cache = DFlashCache(config=self.config)
+            cache.set_previous_accepted_tokens(context_hidden_states.shape[1])
 
         # project targets to the same hidden dim as the model
         context_hidden_states = self.encoder(context_hidden_states)
@@ -248,11 +252,16 @@ class MuseGlimmerAssistantModel(Exaone4Model):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(mask_mapping := attention_mask, dict):
+            mask_cache = cache
+            if mask_cache is None:
+                mask_cache = DFlashCache(config=self.config)
+                mask_cache.set_previous_accepted_tokens(context_hidden_states.shape[1])
+
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": noise_embeds,
                 "attention_mask": attention_mask,
-                "cache": cache,
+                "cache": mask_cache,
             }
             # The queries corresponding to `noise_embeds` must attend bi-directionally to each other, and causally to previous k/v states
             # derived from the main model's `context_hidden_states`. However, since they strictly correspond to positions larger than
