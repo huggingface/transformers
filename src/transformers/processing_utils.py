@@ -73,6 +73,8 @@ from .utils.chat_template_utils import (
     _CONTROL_TOKEN_END,
     _CONTROL_TOKEN_START,
     _get_template_variables,
+    _is_chat_message_object,
+    _normalize_chat_conversations,
     render_jinja_template,
 )
 from .utils.type_validators import (
@@ -2246,7 +2248,8 @@ class ProcessorMixin(PushToHubMixin):
         """Batch a single conversation if needed, drop the keys whose value is None, and convert OpenAI image_url
         blocks to HF image blocks."""
         if isinstance(conversation, (list, tuple)) and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+            isinstance(conversation[0], (list, tuple))
+            or (hasattr(conversation[0], "content") and not _is_chat_message_object(conversation[0]))
         ):
             is_batched = True
             conversations = conversation
@@ -2257,9 +2260,7 @@ class ProcessorMixin(PushToHubMixin):
         # Normalize: drop the keys whose value is None.
         # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
         # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
-        conversations = [
-            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
-        ]
+        conversations = _normalize_chat_conversations(conversations)
 
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}

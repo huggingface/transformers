@@ -688,6 +688,30 @@ def _alias_reasoning_fields(chat: ChatType) -> ChatType:
     return aliased_chat
 
 
+def _is_chat_message_object(value: Any) -> bool:
+    return (dataclasses.is_dataclass(value) and not isinstance(value, type)) or callable(
+        getattr(value, "model_dump", None)
+    )
+
+
+def _normalize_chat_message(message: Any) -> Any:
+    """Convert supported message objects to dicts and drop keys whose value is None."""
+    if isinstance(message, Mapping):
+        items = message.items()
+    elif dataclasses.is_dataclass(message) and not isinstance(message, type):
+        items = ((field.name, getattr(message, field.name)) for field in dataclasses.fields(message))
+    elif callable(getattr(message, "model_dump", None)):
+        items = message.model_dump().items()
+    else:
+        return message
+    return {k: v for k, v in items if v is not None}
+
+
+def _normalize_chat_conversations(conversations: list[Any]) -> list[list[Any]]:
+    """Drop None-valued keys from chat messages across batched conversations."""
+    return [[_normalize_chat_message(msg) for msg in conversation] for conversation in conversations]
+
+
 def _plain_template_data(value: Any) -> Any:
     # Chat templates come from the Hub, but callers often put rich objects in their inputs, like the decoded images,
     # arrays and tensors in multimodal content blocks. Those objects have methods that the sandbox doesn't know are

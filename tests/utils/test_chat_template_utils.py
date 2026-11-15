@@ -1082,3 +1082,51 @@ class TemplateSandboxTest(unittest.TestCase):
         )
         self.assertEqual(rendered[0], "Hi|Hello")
         self.assertEqual(chat, original_chat)
+
+    def test_apply_chat_template_with_message_objects_and_none_fields(self):
+        from pydantic import BaseModel
+        from tokenizers import Tokenizer, models
+
+        from transformers import PreTrainedTokenizerFast
+        from transformers.processing_utils import ProcessorMixin
+
+        @dataclasses.dataclass
+        class DataclassMessage:
+            role: str
+            content: str
+            refusal: str | None = None
+
+        class PydanticMessage(BaseModel):
+            role: str
+            content: str | None = None
+            tool_calls: list[dict[str, str]] | None = None
+
+        tokenizer = PreTrainedTokenizerFast(
+            tokenizer_object=Tokenizer(models.WordLevel({"[UNK]": 0}, unk_token="[UNK]"))
+        )
+        tokenizer.chat_template = (
+            "{% for m in messages %}{{ m.role }}: "
+            "{% if 'content' in m %}{{ m.content }}{% else %}<no-content>{% endif %}|{% endfor %}"
+        )
+
+        rendered = tokenizer.apply_chat_template(
+            [
+                DataclassMessage("user", "Hi"),
+                PydanticMessage(role="assistant", content=None, tool_calls=[{"name": "get_weather"}]),
+            ],
+            tokenize=False,
+        )
+        self.assertEqual(rendered, "user: Hi|assistant: <no-content>|")
+
+        normalized, is_batched = ProcessorMixin._normalize_conversations(
+            None,
+            [
+                DataclassMessage("user", "Hi"),
+                PydanticMessage(role="assistant", content="Hello!", tool_calls=None),
+            ],
+        )
+        self.assertFalse(is_batched)
+        self.assertEqual(
+            normalized,
+            [[{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}]],
+        )
