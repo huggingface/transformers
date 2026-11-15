@@ -183,8 +183,9 @@ class OnnxRuntimeQuantizer(ExportQuantizer):
             name: float(np.abs(np.asarray(data.range_value, dtype=np.float64)).max())
             for name, data in calibrator.compute_data().data.items()
         }
-        # TensorRT takes finite float32 ranges only: a tensor without one (a mask overflowing to -inf) stays out of int8
-        table = {name: value for name, value in ranges.items() if value <= np.finfo(np.float32).max}
+        # A range past fp16's (a mask filled with the float minimum, or overflowing to -inf) overflows the engine's own
+        # precision, which TensorRT refuses: such a tensor stays out of int8
+        table = {name: value for name, value in ranges.items() if value <= np.finfo(np.float16).max}
         model.metadata_props[TENSORRT_CALIBRATION_TABLE] = json.dumps(table)
         return model
 
