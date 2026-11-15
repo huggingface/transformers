@@ -240,7 +240,9 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_decode_matches_plain_export(self):
         model = _ort_model()
         inputs = _padded_inputs(model)
-        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode_model"] for fusions in ("cpu", None))
+        fused, plain = (
+            _export_for_ort(model, fusions, inputs, dynamic=False)["decode_model"] for fusions in ("cpu", None)
+        )
         self.assert_fused(model, fused, ORT_FUSIONS["cpu"])
         feeds = _decode_feeds(plain, model.config.vocab_size)
         for fused_output, plain_output in zip(_run(fused, feeds), _run(plain, feeds)):
@@ -251,7 +253,9 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         # The CUDA fusions' kernels run on CUDA only.
         model = _ort_model(ort_fusions="cuda")
         inputs = _padded_inputs(model)
-        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode_model"] for fusions in ("cuda", None))
+        fused, plain = (
+            _export_for_ort(model, fusions, inputs, dynamic=False)["decode_model"] for fusions in ("cuda", None)
+        )
         self.assert_fused(model, fused, ORT_FUSIONS["cuda"])
         feeds = _decode_feeds(plain, model.config.vocab_size)
         outputs = (_run(program, feeds, "CUDAExecutionProvider") for program in (fused, plain))

@@ -425,7 +425,7 @@ class StaticLayer(CacheLayerMixin):
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
         self.max_cache_len = max_cache_len
-        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions.
+        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
         self.cumulative_length: torch.Tensor | None = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
