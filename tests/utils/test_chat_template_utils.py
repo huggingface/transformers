@@ -792,6 +792,45 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         schema = get_json_schema(fn)
         self.assertEqual(schema["function"]["parameters"]["properties"]["x"]["description"], "The input")
 
+    def test_docstring_with_types_in_parentheses(self):
+        def fn(location: str, unit: str = "celsius", days: int | None = None):
+            """
+            Test function
+
+            Args:
+                location (str): The location to get the temperature for.
+                unit (`str`, *optional*): The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
+                days (int | None, optional): The number of days to forecast, for example
+                    days (int): 3
+            """
+            pass
+
+        # A "(type)" written after the argument name is skipped, the type itself comes from the type hints
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "The location to get the temperature for."},
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The unit to return the temperature in.",
+                    },
+                    "days": {
+                        "type": "integer",
+                        "nullable": True,
+                        "description": "The number of days to forecast, for example days (int): 3",
+                    },
+                },
+                "required": ["location"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_return_none(self):
         def fn(x: int) -> None:
             """

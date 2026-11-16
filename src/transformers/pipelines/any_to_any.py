@@ -175,7 +175,7 @@ class AnyToAnyPipeline(Pipeline):
             preprocess_params["processor_kwargs"] = processor_kwargs
 
         # Forward kwargs
-        forward_kwargs["generate_kwargs"] = generate_kwargs or {}
+        forward_kwargs["generate_kwargs"] = dict(generate_kwargs or {})
         if generation_mode is not None and generation_mode != "text":
             forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
         # Qwen-Omni models need to know the origin of audio, to align mm position ids
@@ -382,7 +382,19 @@ class AnyToAnyPipeline(Pipeline):
             # Handle Mistral tokenizer which does not accept processing kwargs
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
-                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                    k: v
+                    for k, v in chat_template_kwargs.items()
+                    if k
+                    in (
+                        "continue_final_message",
+                        "add_generation_prompt",
+                        "tokenize",
+                        "return_dict",
+                        "return_tensors",
+                        "padding",
+                        "truncation",
+                        "max_length",
+                    )
                 }
 
             model_inputs = self.processor.apply_chat_template(

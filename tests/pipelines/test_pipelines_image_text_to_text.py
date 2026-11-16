@@ -83,6 +83,22 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
 
         self.assertEqual(outputs[0]["input_text"], messages)
 
+    def test_generate_kwargs_not_mutated_tiny_llava(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+        )
+        generate_kwargs = {"do_sample": False}
+
+        # Reuse the exact same caller-owned dictionary across calls.
+        for max_new_tokens in (2, 3):
+            pipe(
+                text="Hello",
+                generate_kwargs=generate_kwargs,
+                max_new_tokens=max_new_tokens,
+            )
+            self.assertEqual(generate_kwargs, {"do_sample": False})
+
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, dtype="float32"):
         pipe = ImageTextToTextPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
