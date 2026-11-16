@@ -32,15 +32,13 @@ Let's initialize the model and the processor.
 
 ```python
 from transformers import AutoProcessor, AutoModelForMultimodalLM
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
 model = AutoModelForMultimodalLM.from_pretrained(
     "Qwen/Qwen2.5-Omni-3B",
-    dtype=torch.bfloat16,
+    device_map="auto",
     attn_implementation="flash_attention_2",
-).to(device)
+)
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-3B")
 ```
@@ -70,7 +68,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-)
+).to(model.device)
 ```
 
 We can now pass the preprocessed inputs to the model.
