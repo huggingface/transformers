@@ -67,16 +67,11 @@ class ModelTesterConfigMixin:
     def get_small_config_defaults(cls, **kwargs):
         """Return fresh merged tester values, including explicit caller overrides.
 
-        Precedence: caller kwargs > model overrides > modality/base defaults >
-        shared text defaults. Tester bases declare ``defaults``; models declare
-        literal ``small_config_overrides`` dictionaries. Inherited entries are retained.
+        Precedence: caller kwargs > ``small_config_overrides`` > ``defaults``.
+        Tester bases declare ``defaults``, built explicitly on top of their parent's
+        (``{**Parent.defaults, ...}``); models declare literal ``small_config_overrides``.
         Derived values are resolved by the causal or modality tester afterwards.
         """
-        values = {}
-        for base in reversed(cls.__mro__):
-            values.update(base.__dict__.get("defaults", {}))
-        for base in reversed(cls.__mro__):
-            values.update(base.__dict__.get("small_config_overrides", {}))
-        values = deepcopy(values)
+        values = deepcopy({**cls.defaults, **cls.small_config_overrides})
         values.update(kwargs)
         return values

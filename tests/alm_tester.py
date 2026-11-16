@@ -54,6 +54,7 @@ class ALMModelTester(MultiModalModelTester):
         return mapping
 
     defaults = {
+        **MultiModalModelTester.defaults,
         "seq_length": 32,
         "pad_token_id": 1,
         "feat_seq_length": 128,

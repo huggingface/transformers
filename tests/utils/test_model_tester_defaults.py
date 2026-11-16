@@ -138,7 +138,7 @@ class MergedSmallConfigDefaultsTest(unittest.TestCase):
             small_config_overrides = {"image_size": 16, "hidden_size": 64, "seq_length": 29}
 
         class Child(Parent):
-            small_config_overrides = {"patch_size": 8, "head_dim": 24}
+            small_config_overrides = {**Parent.small_config_overrides, "patch_size": 8, "head_dim": 24}
 
         values = Child.get_small_config_defaults()
         self.assertEqual(values["image_size"], 16)

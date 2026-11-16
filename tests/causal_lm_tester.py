@@ -50,6 +50,7 @@ if is_torch_available():
 
 class CausalLMModelTester(ModelTesterConfigMixin):
     defaults = {
+        **ModelTesterConfigMixin.defaults,
         "use_token_type_ids": False,
         "hidden_dropout_prob": 0.1,
         "attention_probs_dropout_prob": 0.1,

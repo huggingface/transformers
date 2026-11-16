@@ -36,6 +36,7 @@ class VLMModelTester(MultiModalModelTester):
         }
 
     defaults = {
+        **MultiModalModelTester.defaults,
         "pad_token_id": 0,
         "use_token_type_ids": False,
         "hidden_dropout_prob": 0.1,
@@ -65,9 +66,7 @@ class VLMModelTester(MultiModalModelTester):
             values["num_image_tokens"] = (values["image_size"] // values["patch_size"]) ** 2
         # The shared text sequence length is replaced by the vision default,
         # unless a model or caller explicitly supplies it.
-        explicit_seq_length = "seq_length" in kwargs or any(
-            "seq_length" in base.__dict__.get("small_config_overrides", {}) for base in cls.__mro__
-        )
+        explicit_seq_length = "seq_length" in kwargs or "seq_length" in cls.small_config_overrides
         if not explicit_seq_length:
             values["seq_length"] = 7 + values["num_image_tokens"]
         if "head_dim" not in values:
