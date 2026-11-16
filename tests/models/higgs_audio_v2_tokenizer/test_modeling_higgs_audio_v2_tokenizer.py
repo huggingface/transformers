@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import inspect
 import math
 import unittest
+import weakref
 
 import numpy as np
 
@@ -275,6 +277,18 @@ class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The HiggsAudioV2TokenizerModel does not have support dynamic compile yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
+
+    def test_model_is_freed_after_forward(self):
+        # A class-level `lru_cache` on `_get_conv1d_layers` used to keep every model that ran `encode` alive.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                model(input_values=inputs_dict["input_values"])
+            model_ref = weakref.ref(model)
+            del model
+            gc.collect()
+            self.assertIsNone(model_ref(), f"{model_class.__name__} was not freed")
 
 
 # @slow
