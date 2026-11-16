@@ -761,6 +761,8 @@
         title: jina_embeddings_v3
       - local: model_doc/kimi_linear
         title: KimiLinear
+      - local: model_doc/klm
+        title: KLM
       - local: model_doc/kolibri1
         title: Kolibri1
       - local: model_doc/laguna

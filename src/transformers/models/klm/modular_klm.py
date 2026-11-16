@@ -1,0 +1,883 @@
+# Copyright 2026 The KLM authors and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+from collections.abc import Callable
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
+from ...integrations import use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..olmo3.modeling_olmo3 import (
+    Olmo3ForCausalLM,
+    Olmo3MLP,
+    Olmo3RMSNorm,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+from ..olmo_hybrid.modeling_olmo_hybrid import OlmoHybridRotaryEmbedding
+from ..qwen3_next.modeling_qwen3_next import l2norm
+
+
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="MinimaLabs/KLM-1.6")
+@strict
+class KlmConfig(PreTrainedConfig):
+    r"""
+    layer_types (`list[str]`, *optional*):
+        Sequence mixer of every layer, either `"linear_attention"` (Gated DeltaNet-2) or `"full_attention"`. Defaults
+        to full attention in every fourth layer and linear attention elsewhere.
+    linear_num_heads (`int`, *optional*, defaults to 4):
+        Number of heads of the linear attention layers.
+    linear_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of each head of the linear attention layers.
+    linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
+        Kernel size of the causal convolution applied to queries, keys and values in the linear attention layers.
+    linear_norm_eps (`float`, *optional*, defaults to 1e-05):
+        Epsilon of the normalization applied to the output of the linear attention layers.
+    linear_decay_floor (`float`, *optional*, defaults to -20.0):
+        Lower bound of the per-channel log decay of the linear attention layers.
+    num_bigrams (`int`, *optional*, defaults to 125000):
+        Number of bigrams that have a learned embedding.
+    num_trigrams (`int`, *optional*, defaults to 38000):
+        Number of trigrams that have a learned embedding.
+    ngram_embedding_size (`int`, *optional*, defaults to 32):
+        Dimension of the bigram and trigram embeddings, before they are projected to `hidden_size`.
+    eos_token_id (`int`, *optional*, defaults to 2):
+        End of sequence token id. It also separates the documents of a sequence: the token that follows it starts
+        from an empty context.
+
+    Example:
+
+    ```python
+    >>> from transformers import KlmModel, KlmConfig
+
+    >>> # Initializing a KLM 1.6 style configuration
+    >>> configuration = KlmConfig()
+
+    >>> # Initializing a model from the KLM 1.6 style configuration
+    >>> model = KlmModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "klm"
+    keys_to_ignore_at_inference = ["cache"]
+    # Each linear attention layer caches its convolution inputs, the first one also caches the document state
+    number_of_conv_states = 2
+
+    vocab_size: int = 4160
+    hidden_size: int = 512
+    intermediate_size: int = 1408
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_dropout: float | int = 0.0
+    layer_types: list[str] | None = None
+    linear_num_heads: int = 4
+    linear_head_dim: int = 128
+    linear_conv_kernel_dim: int = 4
+    linear_norm_eps: float = 1e-5
+    linear_decay_floor: float = -20.0
+    num_bigrams: int = 125000
+    num_trigrams: int = 38000
+    ngram_embedding_size: int = 32
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | None = 2
+
+    def __post_init__(self, **kwargs):
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if layer_idx % 4 == 3 else "linear_attention"
+                for layer_idx in range(self.num_hidden_layers)
+            ]
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if "linear_attention" not in self.layer_types or "full_attention" not in self.layer_types:
+            raise ValueError("KLM expects at least one 'linear_attention' and one 'full_attention' layer.")
+
+
+class KlmRMSNorm(Olmo3RMSNorm):
+    pass
+
+
+class KlmRotaryEmbedding(OlmoHybridRotaryEmbedding):
+    pass
+
+
+class KlmMLP(Olmo3MLP):
+    pass
+
+
+class KlmNgramEmbedding(nn.Module):
+    """
+    Embeddings of the most frequent bigrams and trigrams that end at each token. An n-gram is identified by a single
+    integer key and found by exact search in a sorted bank of keys. N-grams that are not in the bank share the first
+    embedding. Tokens before the start of a document count as token 0.
+    """
+
+    def __init__(self, config: KlmConfig):
+        super().__init__()
+        self.vocab_size = config.vocab_size
+        self.bigram_keys = nn.Buffer(torch.zeros(config.num_bigrams, dtype=torch.long))
+        self.trigram_keys = nn.Buffer(torch.zeros(config.num_trigrams, dtype=torch.long))
+        self.bigram_embeddings = nn.Embedding(config.num_bigrams + 1, config.ngram_embedding_size)
+        self.trigram_embeddings = nn.Embedding(config.num_trigrams + 1, config.ngram_embedding_size)
+        self.bigram_proj = nn.Linear(config.ngram_embedding_size, config.hidden_size, bias=False)
+        self.trigram_proj = nn.Linear(config.ngram_embedding_size, config.hidden_size, bias=False)
+
+    @staticmethod
+    def lookup(keys: torch.Tensor, ngrams: torch.Tensor) -> torch.Tensor:
+        """Returns, for every n-gram, one plus its index in the sorted `keys`, or 0 when it is not one of them."""
+        index = torch.searchsorted(keys, ngrams).clamp(max=keys.shape[0] - 1)
+        return torch.where(keys[index] == ngrams, index + 1, 0)
+
+    def forward(
+        self, input_ids: torch.LongTensor, previous_ids: torch.LongTensor, document_starts: torch.BoolTensor
+    ) -> torch.Tensor:
+        r"""
+        previous_ids (`torch.LongTensor` of shape `(batch_size, 2)`):
+            The two tokens that precede `input_ids`, oldest first, or zeros where there are none.
+        document_starts (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Whether each token is the first one of a document.
+        """
+        input_ids = torch.cat([previous_ids, input_ids], dim=1)
+        first_previous = input_ids[:, 1:-1].masked_fill(document_starts, 0)
+        second_previous = torch.cat([previous_ids[:, :1], first_previous[:, :-1]], dim=1)
+        second_previous = second_previous.masked_fill(document_starts, 0)
+        input_ids = input_ids[:, 2:]
+
+        bigrams = first_previous * self.vocab_size + input_ids
+        trigrams = (second_previous * self.vocab_size + first_previous) * self.vocab_size + input_ids
+        bigram_embeds = self.bigram_embeddings(self.lookup(self.bigram_keys, bigrams))
+        trigram_embeds = self.trigram_embeddings(self.lookup(self.trigram_keys, trigrams))
+        return self.bigram_proj(bigram_embeds) + self.trigram_proj(trigram_embeds)
+
+
+class KlmBlockResidual(nn.Module):
+    """
+    Block attention residual. Instead of adding to a single residual stream, every sublayer reads its own softmax mix
+    of all the states computed so far (the token embeddings, the n-gram embeddings and the outputs of the previous
+    layers), weighted by the dot product between a learned query and each normalized state.
+    """
+
+    def __init__(self, config: KlmConfig):
+        super().__init__()
+        self.query = nn.Parameter(torch.empty(config.hidden_size))
+        self.weight = nn.Parameter(torch.empty(config.hidden_size))
+
+    def forward(
+        self, hidden_states: tuple[torch.Tensor, ...], normalized_hidden_states: tuple[torch.Tensor, ...]
+    ) -> torch.Tensor:
+        query = (self.query * self.weight).float()
+        with maybe_autocast(device_type=query.device.type, enabled=False):
+            scores = torch.stack([states @ query for states in normalized_hidden_states], dim=-1)
+            weights = scores.softmax(dim=-1)
+        weights = weights.to(hidden_states[0].dtype).unsqueeze(-1).unbind(dim=-2)
+        return sum(weight * states for weight, states in zip(weights, hidden_states))
+
+
+def normalize_residual_states(hidden_states: torch.Tensor, eps: float) -> torch.Tensor:
+    """Scales `hidden_states` to a unit root mean square in float32, the form `KlmBlockResidual` scores states in."""
+    return F.rms_norm(hidden_states.float(), (hidden_states.shape[-1],), eps=eps)
+
+
+def document_mask_function(first_positions: torch.Tensor, offset: int) -> Callable:
+    """
+    Returns the mask function that keeps a query from attending before the start of its document.
+    `first_positions[batch_idx, q_idx - offset]` is the position of the first token of the query's document.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return kv_idx >= first_positions[batch_idx, q_idx - offset]
+
+    return inner_mask
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class KlmAttention(nn.Module):
+    """
+    Grouped-query attention with a per-head RMSNorm on queries and keys, rotary position embeddings, a value residual
+    that mixes the values of each layer with those of the first attention layer, and a sigmoid gate on the output.
+    """
+
+    def __init__(self, config: KlmConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.q_norm = KlmRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = KlmRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.value_mix = nn.Parameter(torch.empty(2))
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        first_value_states: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
+        r"""
+        first_value_states (`torch.Tensor` of shape `(batch_size, num_key_value_heads, sequence_length, head_dim)`, *optional*):
+            Value states of the first attention layer. Has to be `None` in that layer, which then returns its own.
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        # Queries and keys are normalized and rotated in float32
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape).float()).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape).float()).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states = query_states.to(hidden_states.dtype)
+        key_states = key_states.to(hidden_states.dtype)
+
+        # Value residual
+        if first_value_states is None:
+            first_value_states = value_states
+        value_mix = self.value_mix.float()
+        value_states = value_mix[0] * value_states.float() + value_mix[1] * first_value_states.float()
+        value_states = value_states.to(hidden_states.dtype)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output * torch.sigmoid(self.gate_proj(hidden_states)))
+        return attn_output, attn_weights, first_value_states
+
+
+def torch_recurrent_gated_delta_rule_2(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    decay: torch.Tensor,
+    erase: torch.Tensor,
+    write: torch.Tensor,
+    document_starts: torch.Tensor,
+    initial_state: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes Gated DeltaNet-2 linear attention by iterating over each token of the sequence. Each head keeps a
+    recurrent state `S` of shape `(head_dim, head_dim)`, updated at every token with
+
+        S = (I - key (erase * key)^T) diag(exp(decay)) S + key (write * value)^T
+
+    and read with `query^T S / sqrt(head_dim)`. The state is emptied at the first token of every document.
+
+    Args:
+        query (`torch.Tensor` of shape `(batch_size, sequence_length, num_heads, head_dim)`):
+            The queries, which are L2-normalized here.
+        key (`torch.Tensor` of shape `(batch_size, sequence_length, num_heads, head_dim)`):
+            The keys, which are L2-normalized here.
+        value (`torch.Tensor` of shape `(batch_size, sequence_length, num_heads, head_dim)`):
+            The values.
+        decay (`torch.Tensor` of shape `(batch_size, sequence_length, num_heads, head_dim)`):
+            Log of the decay of each key channel of the state, always negative or zero.
+        erase (`torch.Tensor` of shape `(batch_size, sequence_length, num_heads, head_dim)`):
+            Gate in `[0, 1]` on each key channel of the content removed from the state.
+        write (`torch.Tensor` of shape `(batch_size, sequence_length, num_heads, head_dim)`):
+            Gate in `[0, 1]` on each value channel of the content written to the state.
+        document_starts (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Whether each token is the first one of a document.
+        initial_state (`torch.Tensor` of shape `(batch_size, num_heads, head_dim, head_dim)`, *optional*):
+            The recurrent state after the previous tokens. Starts from an empty state when not given.
+
+    Returns:
+        The attention output of shape `(batch_size, sequence_length, num_heads, head_dim)` and the recurrent state
+        after the last token, both in float32.
+    """
+    batch_size, sequence_length, num_heads, head_dim = key.shape
+    # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, sequence_length, head_dim]
+    query, key, value, decay, erase, write = [
+        x.transpose(1, 2).to(torch.float32) for x in (query, key, value, decay, erase, write)
+    ]
+    query = l2norm(query, dim=-1, eps=1e-6) * head_dim**-0.5
+    key = l2norm(key, dim=-1, eps=1e-6)
+    erase_key = erase * key
+    write_value = write * value
+    # The decay of a token that starts a document empties the state
+    decay = decay.exp().masked_fill(document_starts[:, None, :, None], 0.0)
+
+    if initial_state is None:
+        recurrent_state = torch.zeros(
+            (batch_size, num_heads, head_dim, head_dim), dtype=value.dtype, device=value.device
+        )
+    else:
+        recurrent_state = initial_state.to(value)
+
+    outputs = []
+    for i in range(sequence_length):
+        recurrent_state = recurrent_state * decay[:, :, i].unsqueeze(-1)
+        erased_value = (recurrent_state * erase_key[:, :, i].unsqueeze(-1)).sum(dim=-2)
+        delta = write_value[:, :, i] - erased_value
+        recurrent_state = recurrent_state + key[:, :, i].unsqueeze(-1) * delta.unsqueeze(-2)
+        outputs.append((recurrent_state * query[:, :, i].unsqueeze(-1)).sum(dim=-2))
+
+    return torch.stack(outputs, dim=1), recurrent_state
+
+
+def torch_chunk_gated_delta_rule_2(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    decay: torch.Tensor,
+    erase: torch.Tensor,
+    write: torch.Tensor,
+    document_starts: torch.Tensor,
+    initial_state: torch.Tensor | None = None,
+    chunk_size: int = 32,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the same linear attention as `torch_recurrent_gated_delta_rule_2`, exactly, one chunk of `chunk_size`
+    tokens at a time. What each token writes to the state depends on what the earlier tokens of its chunk wrote, which
+    is a triangular linear system that is solved for all the tokens of the chunk at once.
+
+    Same args and return value as `torch_recurrent_gated_delta_rule_2`, plus `chunk_size`.
+    """
+    batch_size, sequence_length, num_heads, head_dim = key.shape
+    # Make sure all tensors are fp32 and reshape them to [batch_size, num_heads, sequence_length, head_dim]
+    query, key, value, decay, erase, write = [
+        x.transpose(1, 2).to(torch.float32) for x in (query, key, value, decay, erase, write)
+    ]
+    query = l2norm(query, dim=-1, eps=1e-6) * head_dim**-0.5
+    key = l2norm(key, dim=-1, eps=1e-6)
+    erase_key = erase * key
+    write_value = write * value
+
+    if initial_state is None:
+        recurrent_state = torch.zeros(
+            (batch_size, num_heads, head_dim, head_dim), dtype=value.dtype, device=value.device
+        )
+    else:
+        recurrent_state = initial_state.to(value)
+
+    outputs = []
+    for chunk_start in range(0, sequence_length, chunk_size):
+        chunk = slice(chunk_start, chunk_start + chunk_size)
+        chunk_query, chunk_key, chunk_erase_key = query[:, :, chunk], key[:, :, chunk], erase_key[:, :, chunk]
+        # Log decay accumulated from the start of the chunk up to and including each token
+        log_decay = decay[:, :, chunk].cumsum(dim=2)
+
+        # Tokens only interact inside a document. The ones that come before the first document start of the chunk
+        # continue the incoming state, the others start from an empty one.
+        document_ids = document_starts[:, chunk].cumsum(dim=1)
+        same_document = (document_ids[:, :, None] == document_ids[:, None, :])[:, None]
+        continues_state = (document_ids == 0)[:, None, :, None].to(recurrent_state.dtype)
+        last_document = (document_ids == document_ids[:, -1:])[:, None, :, None].to(recurrent_state.dtype)
+
+        # decayed_key[..., i, j, :] is the key of token j after the decay of the tokens j + 1 to i
+        decayed_key = (log_decay[:, :, :, None] - log_decay[:, :, None, :]).clamp(max=0).exp() * chunk_key[:, :, None]
+        erase_overlap = (decayed_key @ chunk_erase_key.unsqueeze(-1)).squeeze(-1) * same_document
+        query_overlap = (decayed_key @ chunk_query.unsqueeze(-1)).squeeze(-1) * same_document
+
+        # delta is what each token adds to the state along its key: the written value, minus what its erase key reads
+        # from the decayed incoming state and from the deltas of the earlier tokens of the chunk
+        decayed_state = continues_state * ((chunk_erase_key * log_decay.exp()) @ recurrent_state)
+        delta = torch.linalg.solve_triangular(
+            erase_overlap.tril(-1), write_value[:, :, chunk] - decayed_state, upper=False, unitriangular=True
+        )
+
+        # The output reads the decayed incoming state, and the deltas up to and including the token itself
+        decayed_state = continues_state * ((chunk_query * log_decay.exp()) @ recurrent_state)
+        outputs.append(decayed_state + query_overlap.tril() @ delta)
+
+        # The new state is the incoming one, if no document started in the chunk, plus the deltas of the last document
+        # of the chunk, both decayed to the end of the chunk
+        decayed_state = continues_state[:, :, -1:] * log_decay[:, :, -1].exp().unsqueeze(-1) * recurrent_state
+        decayed_key = chunk_key * (log_decay[:, :, -1:] - log_decay).exp() * last_document
+        recurrent_state = decayed_state + decayed_key.transpose(-1, -2) @ delta
+
+    return torch.cat(outputs, dim=2).transpose(1, 2), recurrent_state
+
+
+class KlmGatedDeltaNet(nn.Module):
+    """
+    Gated DeltaNet-2 linear attention: short causal convolutions on queries, keys and values, per-channel erase and
+    write gates, a low-rank per-channel decay, and a normalized, sigmoid-gated output.
+    """
+
+    def __init__(self, config: KlmConfig, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.num_heads = config.linear_num_heads
+        self.head_dim = config.linear_head_dim
+        self.qkv_dim = self.num_heads * self.head_dim
+        self.conv_kernel_size = config.linear_conv_kernel_dim
+        self.decay_floor = config.linear_decay_floor
+        self.activation = config.hidden_act
+
+        self.q_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
+        # Depthwise, so the convolutions of queries, keys and values are the three thirds of a single one
+        self.conv1d = nn.Conv1d(
+            in_channels=self.qkv_dim * 3,
+            out_channels=self.qkv_dim * 3,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.qkv_dim * 3,
+        )
+
+        # Decay
+        self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
+        self.A_log = nn.Parameter(torch.empty(self.num_heads))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        # Erase and write gates
+        self.b_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
+        self.w_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
+        # Output gate
+        self.g_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.g_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=True)
+
+        self.o_norm = KlmRMSNorm(self.head_dim, eps=config.linear_norm_eps)
+        self.o_proj = nn.Linear(self.qkv_dim, config.hidden_size, bias=False)
+
+    @force_accelerate_hooks("conv1d")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        document_starts: torch.BoolTensor,
+        conv_mask: torch.Tensor,
+        cache: Cache | None = None,
+    ) -> torch.Tensor:
+        r"""
+        document_starts (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
+            Whether each token is the first one of a document, where the recurrent state is emptied.
+        conv_mask (`torch.Tensor` of shape `(batch_size, sequence_length, linear_conv_kernel_dim)`):
+            Which inputs of the convolution window that ends at each token belong to the document of that token, as
+            ones and zeros, oldest input first.
+        """
+        batch_size, seq_len, _ = hidden_states.shape
+        hidden_shape = (batch_size, seq_len, self.num_heads, self.head_dim)
+
+        mixed_qkv = torch.cat(
+            [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
+        ).transpose(1, 2)
+
+        recurrent_state = None
+        if cache is not None:
+            recurrent_state = cache.get_recurrent_state(self.layer_idx)
+            # Prepends the inputs cached by the previous forward, and caches the last ones for the next forward
+            mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
+
+        # Causal depthwise convolution, in which no window reaches back past the start of a document
+        mixed_qkv = F.pad(mixed_qkv, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
+        mixed_qkv = mixed_qkv.unfold(-1, self.conv_kernel_size, 1)
+        mixed_qkv = (mixed_qkv * self.conv1d.weight.to(mixed_qkv.dtype) * conv_mask[:, None]).sum(dim=-1)
+        mixed_qkv = ACT2FN[self.activation](mixed_qkv).transpose(1, 2)
+        query, key, value = [x.reshape(hidden_shape) for x in mixed_qkv.split(self.qkv_dim, dim=-1)]
+
+        # Log decay of every channel of the state, in float32
+        decay = self.f_b_proj(self.f_a_proj(hidden_states)).float() + self.dt_bias.float()
+        decay = -self.A_log.float().exp().unsqueeze(-1) * F.softplus(decay.view(hidden_shape))
+        decay = decay.clamp(min=self.decay_floor)
+        erase = torch.sigmoid(self.b_proj(hidden_states).float().view(hidden_shape))
+        write = torch.sigmoid(self.w_proj(hidden_states).float().view(hidden_shape))
+
+        # Single token decoding iterates, anything longer is solved chunk by chunk. Always in float32.
+        gated_delta_rule = torch_recurrent_gated_delta_rule_2 if seq_len == 1 else torch_chunk_gated_delta_rule_2
+        with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
+            output, recurrent_state = gated_delta_rule(
+                query, key, value, decay, erase, write, document_starts=document_starts, initial_state=recurrent_state
+            )
+
+        if cache is not None:
+            cache.update_recurrent_state(recurrent_state, self.layer_idx)
+
+        gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
+        output = self.o_norm(output.to(hidden_states.dtype)) * torch.sigmoid(gate)
+        return self.o_proj(output.reshape(batch_size, seq_len, -1))
+
+
+class KlmDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: KlmConfig, layer_idx: int):
+        super().__init__()
+        self.layer_type = config.layer_types[layer_idx]
+        self.rms_norm_eps = config.rms_norm_eps
+
+        self.input_residual = KlmBlockResidual(config)
+        self.input_layernorm = KlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if self.layer_type == "linear_attention":
+            self.linear_attn = KlmGatedDeltaNet(config, layer_idx)
+        else:
+            self.self_attn = KlmAttention(config, layer_idx)
+        self.post_attention_residual = KlmBlockResidual(config)
+        self.post_attention_layernorm = KlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = KlmMLP(config)
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        residual_states: tuple[torch.Tensor, ...],
+        normalized_residual_states: tuple[torch.Tensor, ...],
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        first_value_states: torch.Tensor | None = None,
+        document_starts: torch.BoolTensor | None = None,
+        conv_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        r"""
+        hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Output of the previous layer, or the token embeddings in the first layer.
+        residual_states (`tuple[torch.Tensor, ...]`):
+            The states computed before `hidden_states`: the n-gram embeddings, then the inputs of the previous layers.
+        normalized_residual_states (`tuple[torch.Tensor, ...]`):
+            `residual_states` followed by `hidden_states`, each one normalized by `normalize_residual_states`.
+        first_value_states (`torch.Tensor`, *optional*):
+            Value states of the first attention layer, or `None` in the layers that come before it.
+        document_starts (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Whether each token is the first one of a document.
+        conv_mask (`torch.Tensor` of shape `(batch_size, sequence_length, linear_conv_kernel_dim)`, *optional*):
+            Which inputs of each convolution window belong to the document of its last token.
+        """
+        residual_states = (*residual_states, hidden_states)
+
+        hidden_states = self.input_residual(residual_states, normalized_residual_states)
+        hidden_states = self.input_layernorm(hidden_states)
+        if self.layer_type == "linear_attention":
+            attn_output = self.linear_attn(
+                hidden_states, document_starts=document_starts, conv_mask=conv_mask, cache=cache
+            )
+        else:
+            attn_output, _, first_value_states = self.self_attn(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                first_value_states=first_value_states,
+                cache=cache,
+                **kwargs,
+            )
+
+        # The MLP also reads the output of the layer's own attention
+        hidden_states = self.post_attention_residual(
+            (*residual_states, attn_output),
+            (*normalized_residual_states, normalize_residual_states(attn_output, self.rms_norm_eps)),
+        )
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = attn_output + self.mlp(hidden_states)
+        return hidden_states, first_value_states
+
+
+@auto_docstring
+class KlmPreTrainedModel(PreTrainedModel):
+    config: KlmConfig
+    base_model_prefix = "model"
+    main_input_name = "input_ids"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["KlmDecoderLayer"]
+    _skip_keys_device_placement = ["cache"]
+    _supports_sdpa = True
+    _supports_attention_backend = True
+    # The recurrent states of the linear attention layers cannot be rolled back
+    _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": KlmDecoderLayer,
+        "attentions": KlmAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, KlmBlockResidual):
+            # A zero query reads the mean of all the states
+            init.zeros_(module.query)
+            init.ones_(module.weight)
+        elif isinstance(module, KlmNgramEmbedding):
+            # The keys come with a checkpoint, without them every n-gram reads the first embedding
+            init.zeros_(module.bigram_keys)
+            init.zeros_(module.trigram_keys)
+        elif isinstance(module, KlmAttention):
+            init.constant_(module.value_mix, 0.5)
+        elif isinstance(module, KlmGatedDeltaNet):
+            # Following the initialization of the Gated DeltaNet layers of flash-linear-attention
+            init.copy_(module.A_log, init.uniform_(module.A_log, a=1.0, b=16.0).log())
+            init.uniform_(module.dt_bias, a=math.log(1e-3), b=math.log(1e-1))
+            dt = module.dt_bias.exp().clamp_min(1e-4)
+            # Inverse of softplus
+            init.copy_(module.dt_bias, dt + torch.log(-torch.expm1(-dt)))
+
+
+@auto_docstring
+class KlmModel(KlmPreTrainedModel):
+    def __init__(self, config: KlmConfig):
+        super().__init__(config)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_ngrams = KlmNgramEmbedding(config)
+        self.layers = nn.ModuleList(
+            [KlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.output_residual = KlmBlockResidual(config)
+        self.norm = KlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = KlmRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        r"""
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            The first token that follows padding starts a document, so left padding is never read. Padding on the right
+            only comes after the tokens it could affect.
+        """
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        batch_size, seq_len = input_ids.shape
+        past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+        position_ids = torch.arange(seq_len, device=input_ids.device) + past_seen_tokens
+
+        # A sequence can hold several documents separated by `eos_token_id`. Every document is read on its own: the
+        # attention mask, the recurrent states, the convolutions and the n-grams all restart at its first token. What
+        # is needed to go on with the last document is cached with the first linear attention layer: the two last
+        # tokens (the oldest one zeroed if the last token started a document) and the position of its first token.
+        document_layer_idx = self.config.layer_types.index("linear_attention")
+        document_state = cache.get_conv_state(document_layer_idx, state_idx=1) if cache is not None else None
+        if document_state is None:
+            previous_ids = input_ids.new_zeros((batch_size, 2))
+        else:
+            previous_ids = document_state[:, :2, 0]
+
+        document_starts = torch.zeros_like(input_ids, dtype=torch.bool)
+        if self.config.eos_token_id is not None:
+            previous_token = torch.cat([previous_ids[:, 1:], input_ids[:, :-1]], dim=1)
+            document_starts = previous_token == self.config.eos_token_id
+        if attention_mask is not None:
+            is_token = attention_mask[:, -seq_len:].bool()
+            document_starts[:, 1:] |= is_token[:, 1:] & ~is_token[:, :-1]
+        if document_state is None:
+            document_starts[:, 0] = True
+
+        # Position of the first token of the document of each token
+        first_positions = torch.where(document_starts, position_ids, -1).cummax(dim=1).values
+        if document_state is not None:
+            first_positions = torch.where(first_positions < 0, document_state[:, 2], first_positions)
+
+        inputs_embeds = self.embed_tokens(input_ids)
+        ngram_embeds = self.embed_ngrams(input_ids, previous_ids, document_starts).to(inputs_embeds.dtype)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids[None])
+
+        # The padding mask is left out on purpose, the document starts already account for it. Rows that hold a single
+        # document from their first position on only need the plain causal mask.
+        and_mask_function = None
+        if (first_positions > 0).any():
+            and_mask_function = document_mask_function(first_positions, past_seen_tokens)
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+            cache=cache,
+            and_mask_function=and_mask_function,
+        )
+        # A convolution input that is `lag` tokens old is only read by tokens at least that far into their document
+        lags = torch.arange(self.config.linear_conv_kernel_dim - 1, -1, -1, device=input_ids.device)
+        conv_mask = ((position_ids - first_positions)[..., None] >= lags).to(inputs_embeds.dtype)
+
+        hidden_states = inputs_embeds
+        residual_states = (ngram_embeds,)
+        normalized_residual_states = (
+            normalize_residual_states(ngram_embeds, self.config.rms_norm_eps),
+            normalize_residual_states(inputs_embeds, self.config.rms_norm_eps),
+        )
+        first_value_states = None
+        for decoder_layer in self.layers:
+            layer_outputs = decoder_layer(
+                hidden_states,
+                residual_states=residual_states,
+                normalized_residual_states=normalized_residual_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                first_value_states=first_value_states,
+                document_starts=document_starts,
+                conv_mask=conv_mask,
+                cache=cache,
+                **kwargs,
+            )
+            residual_states = (*residual_states, hidden_states)
+            hidden_states, first_value_states = layer_outputs
+            normalized_residual_states = (
+                *normalized_residual_states,
+                normalize_residual_states(hidden_states, self.config.rms_norm_eps),
+            )
+
+        hidden_states = self.output_residual((*residual_states, hidden_states), normalized_residual_states)
+        hidden_states = self.norm(hidden_states)
+
+        if cache is not None:
+            previous_ids = torch.cat([previous_ids, input_ids], dim=1)[:, -2:]
+            document_state = torch.stack(
+                [
+                    previous_ids[:, 0].masked_fill(document_starts[:, -1], 0),
+                    previous_ids[:, 1],
+                    first_positions[:, -1],
+                ],
+                dim=1,
+            )
+            cache.update_conv_state(document_state[..., None], document_layer_idx, state_idx=1, conv_kernel_size=1)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            cache=cache,
+        )
+
+
+class KlmForCausalLM(Olmo3ForCausalLM):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            The first token that follows padding starts a document, so left padding is never read. Padding on the right
+            only comes after the tokens it could affect.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, KlmForCausalLM
+
+        >>> model = KlmForCausalLM.from_pretrained("MinimaLabs/KLM-1.6")
+        >>> tokenizer = AutoTokenizer.from_pretrained("MinimaLabs/KLM-1.6")
+
+        >>> inputs = tokenizer("The capital of France is", return_tensors="pt")
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=20)
+        >>> text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            cache=cache,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "KlmConfig",
+    "KlmForCausalLM",
+    "KlmModel",
+    "KlmPreTrainedModel",
+]
