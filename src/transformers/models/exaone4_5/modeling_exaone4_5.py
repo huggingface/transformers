@@ -20,6 +20,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import nn
@@ -565,18 +566,17 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the rotary `position_ids` of the patches, the full attention's `cu_seqlens` and `max_seqlen`, and the
+        window attention's `window_index`, `cu_window_seqlens` and `max_window_seqlen`. Passed back to the forward,
+        they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are returned
+        as they are; only the config is read.
 
-        Returns:
-            `torch.Tensor`: hidden_states.
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width dimensions of feature shape for each image.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
@@ -590,6 +590,37 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         max_window_seqlen = get_max_seqlen(
             cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
         )
+        return {
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "max_window_seqlen": max_window_seqlen,
+        }
+
+    def forward(
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
+        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
+        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
+        position_ids = data_dependent_inputs["position_ids"]
+        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
+        window_index, cu_window_seqlens = (
+            data_dependent_inputs["window_index"],
+            data_dependent_inputs["cu_window_seqlens"],
+        )
+        max_window_seqlen = data_dependent_inputs["max_window_seqlen"]
 
         hidden_states = self.patch_embed(hidden_states)
 
@@ -742,6 +773,60 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    def get_data_dependent_inputs(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the M-RoPE
+        `position_ids`, the vision tower's inputs (see
+        [`Qwen2VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
+        `get_image_embeddings` and `get_video_embeddings` take them. Passed back to the forward (or `generate`), they keep
+        `torch.compile` and `torch.export` free of those operations. Only the config is read, so a model on the meta
+        device computes them too.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                The prompt's token ids, which the M-RoPE positions are laid out over.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                The padding mask.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video.
+            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Which tokens are text, image or video, as the processor returns them.
+            position_ids (`torch.LongTensor` of shape `(4, batch_size, sequence_length)`, *optional*):
+                Positions already laid out (by `generate`), which are then not computed again.
+        """
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.get_encoder(modality="image").get_data_dependent_inputs(grid_thw)
+                inputs.update({prefix + name: value for name, value in tower_inputs.items()})
+        has_vision = image_grid_thw is not None or video_grid_thw is not None
+        if position_ids is None and input_ids is not None and mm_token_type_ids is not None and has_vision:
+            vision_position_ids, _ = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            if attention_mask is not None:
+                text_position_ids = (attention_mask.long().cumsum(-1) - 1).masked_fill(attention_mask == 0, 0)
+            else:
+                text_position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).expand_as(input_ids)
+            # The text positions first: the text model builds the attention mask from them
+            inputs["position_ids"] = torch.cat([text_position_ids[None], vision_position_ids], dim=0)
+        return inputs
+
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -884,6 +969,10 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
             The tensors corresponding to the input images.
         """
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Exaone4_5_Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

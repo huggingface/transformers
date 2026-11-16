@@ -1231,6 +1231,39 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         input_tensor = input_tensor.reshape(seq_len, -1)
         return input_tensor
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the rotary `position_ids` of the patches, the full attention's `cu_seqlens` and `max_seqlen`, and the
+        window attention's `window_index`, `cu_window_seqlens` and `max_window_seqlen`. Passed back to the forward,
+        they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are returned
+        as they are; only the config is read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width dimensions of feature shape for each image.
+        """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        )
+        return {
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "max_window_seqlen": max_window_seqlen,
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(

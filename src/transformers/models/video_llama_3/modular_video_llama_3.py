@@ -13,7 +13,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -366,6 +366,23 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, merge_sizes: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` and `merge_sizes` with data-dependent operations: the
+        rotary `position_ids` of the patches, and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the
+        forward, they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are
+        returned as they are; only the config is read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width dimensions of feature shape for each image.
+            merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
+                The spatial downsampling ratio of each image or video feature.
+        """
+        position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -382,8 +399,10 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
         """
-        position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, merge_sizes, **kwargs)
+        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
+        position_ids = data_dependent_inputs["position_ids"]
+        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
@@ -451,6 +470,38 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 class VideoLlama3Model(Qwen2VLModel):
     _can_compile_fullgraph = False
+
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        model's (see [`VideoLlama3VisionModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
+        `get_image_embeddings` and `get_video_embeddings` take them. Passed back to the forward, they keep
+        `torch.compile` and `torch.export` free of those operations. Only the config is read.
+
+        Args:
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image.
+            image_merge_sizes (`torch.LongTensor` of shape `(num_images,)`, *optional*):
+                The spatial downsampling ratio of each image.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video.
+            video_merge_sizes (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+                The spatial downsampling ratio of each video.
+        """
+        inputs = {}
+        modalities = (("image_", image_grid_thw, image_merge_sizes), ("video_", video_grid_thw, video_merge_sizes))
+        for prefix, grid_thw, merge_sizes in modalities:
+            if grid_thw is not None:
+                vision_inputs = self.vision_model.get_data_dependent_inputs(grid_thw, merge_sizes)
+                inputs.update({prefix + name: value for name, value in vision_inputs.items()})
+        return inputs
 
     def __init__(self, config: VideoLlama3Config):
         PreTrainedModel.__init__(self, config)
