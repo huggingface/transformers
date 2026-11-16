@@ -38,8 +38,7 @@ from transformers.models.mistral.modeling_mistral import MistralAttention, Mistr
 from transformers.testing_utils import is_sequence_parallel_test
 from transformers.utils import is_torch_greater_or_equal
 
-from ..distributed_testing_utils import run_distributed
-from ..test_fsdp_mixin import _deterministic_init_model_dir, _distributed_tmpdir
+from ..distributed_testing_utils import _deterministic_init_model_dir, _distributed_tmpdir, run_distributed
 
 
 def _mesh(size=2, rank=0):
