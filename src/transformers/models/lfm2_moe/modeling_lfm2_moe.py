@@ -538,7 +538,6 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(Lfm2MoeTopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Lfm2MoeExperts):

@@ -425,7 +425,6 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):

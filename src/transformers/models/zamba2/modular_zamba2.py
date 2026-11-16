@@ -405,7 +405,6 @@ class Zamba2PreTrainedModel(PreTrainedModel):
         "attentions": Zamba2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Zamba2MambaMixer):

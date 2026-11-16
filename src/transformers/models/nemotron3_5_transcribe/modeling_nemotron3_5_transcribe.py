@@ -127,7 +127,6 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
         r"^ctc_timestamp\.tokenizer\.model_proto$",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Nemotron3_5TranscribeSpeakerEmbedding):

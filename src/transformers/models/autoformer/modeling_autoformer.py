@@ -787,7 +787,6 @@ class AutoformerPreTrainedModel(PreTrainedModel):
         "attentions": AutoformerAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, AutoformerSinusoidalPositionalEmbedding):

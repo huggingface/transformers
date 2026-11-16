@@ -593,7 +593,6 @@ class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
         "attentions": PocketTTSAudioTokenizerAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # Mimi's, without its residual vector quantizer's codebooks

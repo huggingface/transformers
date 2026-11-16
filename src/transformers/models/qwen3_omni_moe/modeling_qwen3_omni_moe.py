@@ -129,7 +129,6 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)
@@ -1585,7 +1584,6 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range

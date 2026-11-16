@@ -374,7 +374,6 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MusicgenMelodySinusoidalPositionalEmbedding):
@@ -1172,7 +1171,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         # Initialize projection layers weights and tie text encoder and decoder weights if set accordingly
         self.post_init()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         # MusicgenMelodyForConditionalGeneration is made of PreTrainedModels that have already been initialized

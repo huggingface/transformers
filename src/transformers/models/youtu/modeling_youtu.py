@@ -456,7 +456,6 @@ class YoutuPreTrainedModel(PreTrainedModel):
         "attentions": YoutuAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)

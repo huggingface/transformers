@@ -667,7 +667,6 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DeepseekV32TopkRouter):

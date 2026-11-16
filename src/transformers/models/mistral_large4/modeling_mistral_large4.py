@@ -688,7 +688,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MistralLarge4TextTopkRouter):

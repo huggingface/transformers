@@ -328,7 +328,6 @@ class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
         "attentions": JinaEmbeddingsV3Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

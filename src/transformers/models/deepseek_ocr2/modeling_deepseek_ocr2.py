@@ -152,7 +152,6 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
         "DeepseekOcr2TextDecoderLayer",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DeepseekOcr2SamVisionAttention):
@@ -1309,7 +1308,6 @@ class DeepseekOcr2TextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(DeepseekOcr2TextTopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DeepseekOcr2TextTopkRouter):

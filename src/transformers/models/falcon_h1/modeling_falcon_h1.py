@@ -1003,7 +1003,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
         "attentions": FalconH1Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, FalconH1Mixer):

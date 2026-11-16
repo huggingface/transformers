@@ -423,7 +423,6 @@ class GraniteMoeSWAPreTrainedModel(PreTrainedModel):
         "kernels-community/aiter-flash-attn",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeSWAExperts):

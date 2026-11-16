@@ -362,7 +362,6 @@ class Gemma2PreTrainedModel(PreTrainedModel):
         "attentions": Gemma2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)

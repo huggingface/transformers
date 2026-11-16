@@ -475,7 +475,6 @@ class LagunaPreTrainedModel(PreTrainedModel):
         "attentions": LagunaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range

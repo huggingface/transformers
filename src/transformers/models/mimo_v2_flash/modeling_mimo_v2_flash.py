@@ -474,7 +474,6 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
     _compatible_flash_implementations = ["flash_attention_4"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MiMoV2FlashTopkRouter):

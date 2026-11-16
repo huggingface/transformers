@@ -834,7 +834,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(IdeficsAttention, index=1, layer_name="self_attn"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code

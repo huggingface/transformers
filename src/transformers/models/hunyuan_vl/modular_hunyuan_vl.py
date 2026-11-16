@@ -883,7 +883,6 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
         "attentions": HunYuanVLDenseV1Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
 

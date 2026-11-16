@@ -299,7 +299,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
         "UnlimitedOcrTextDecoderLayer",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrSamVisionAttention):
@@ -1287,7 +1286,6 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrTextTopkRouter):

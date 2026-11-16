@@ -384,7 +384,6 @@ class Qwen3VLMoePreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("text", "image", "video")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
