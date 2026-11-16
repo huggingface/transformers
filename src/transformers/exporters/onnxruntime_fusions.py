@@ -1525,14 +1525,25 @@ _STEPS = (
 )
 
 
-def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig, causal: bool = True) -> None:
-    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks.
-    `causal=False` for a model attending bidirectionally within blocks of its sequence."""
+def _is_causal(model: ir.Model) -> bool:
+    """Whether `model` attends causally only: token types mark blocks attended bidirectionally (PaliGemma's prefix,
+    Gemma3's images), as may a custom 4D mask (the one PaliGemma's language model takes, built from them)."""
+    for value in model.graph.inputs:
+        if value.name == "token_type_ids":
+            return False
+        if value.name == "attention_mask" and value.shape is not None and len(value.shape) == 4:
+            return False
+    return True
+
+
+def fuse_for_onnxruntime(model: ir.Model, fusions: OrtFusionConfig) -> None:
+    """Fuse `model` in place into ONNX Runtime's own ops for the provider it runs on, those `fusions` picks."""
     if fusions.provider == "cuda" and not is_onnxruntime_available("1.28.0"):
         logger.warning(
             "Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0: before it, `GroupQueryAttention` "
             "has no query and key norms and float16 skip norms overflow on large activations."
         )
+    causal = _is_causal(model)
     for step, providers, toggle in _STEPS:
         if (providers is None or fusions.provider in providers) and (toggle is None or getattr(fusions, toggle)):
             if getattr(step, "func", step) is _fuse_group_query_attention:
