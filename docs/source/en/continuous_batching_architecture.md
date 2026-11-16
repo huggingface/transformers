@@ -106,6 +106,8 @@ Continuous batching supports two attention types only: `full_attention` (`FullAt
 
 Sliding layers keep only a fixed window of recent tokens by recycling a small set of pages. They do not support kernel block tables or block sharing.
 
+Multi-head latent attention layers (DeepSeek V2 and V3 and the models built on them) are full attention layers that cache a compressed latent and a shared rotary key per token instead of keys and values. The cache detects them from the model config and gives them an `MLACacheAllocator`, which stores both in one row per token. The layers expand the latents of all the tokens the batch attends to into keys and values after the cache read, so the cache needs no change in the model, but these layers do not support kernel block tables yet.
+
 The cache reserves two chunks ahead of the data chunks for padding reads and writes that requests never use. Those chunks are never allocated to requests.
 
 ### Cache sizing
