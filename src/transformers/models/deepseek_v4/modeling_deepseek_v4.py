@@ -138,7 +138,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
         # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
