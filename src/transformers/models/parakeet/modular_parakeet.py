@@ -84,7 +84,6 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
         return inv_freq
 
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
