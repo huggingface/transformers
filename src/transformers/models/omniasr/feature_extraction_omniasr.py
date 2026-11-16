@@ -13,9 +13,6 @@
 # limitations under the License.
 
 
-import torch
-from torch.nn.functional import layer_norm
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -27,6 +24,9 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
+
+EPSILON = 1e-5
 
 
 @requires(backends=("torch",))
@@ -45,8 +45,8 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             Whether or not [`~OmniASRFeatureExtractor.__call__`] should return `attention_mask`. OmniASR needs the
             mask to know which frames are padding, so batched inputs are only encoded correctly when it is returned.
         do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize each audio sample to zero mean and unit variance. This is applied per sample,
-            before padding, to match the [original implementation](https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23).
+            Whether or not to normalize each audio sample to zero mean and unit variance. The statistics are computed
+            per sample, over its non-padded samples, to match the [original implementation](https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23).
     """
 
     model_input_names = ["input_values", "padding_mask"]
@@ -127,14 +127,6 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(
                     f"Only mono-channel audio is supported for input to {self}, got shape: {example.shape}"
                 )
-            if self.do_normalize:
-                # Zero mean and unit variance per example, before padding, as in the original implementation:
-                # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L162
-                # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L23
-                # Normalizing the padded batch instead would make each example's statistics depend on the other
-                # examples in the batch and on the amount of padding.
-                with torch.no_grad():
-                    example = layer_norm(example, example.shape)
             audio[idx] = example
 
         encoded_inputs = BatchFeature({"input_values": audio})
@@ -143,11 +135,27 @@ class OmniASRFeatureExtractor(SequenceFeatureExtractor):
             padding=padding,
             max_length=max_length,
             truncation=truncation,
-            return_attention_mask=return_attention_mask,
+            # the mask is needed to exclude the padding from the normalization statistics
+            return_attention_mask=return_attention_mask or self.do_normalize,
             return_tensors=return_tensors,
         )
+        padding_mask = output_values.pop("attention_mask", None)
+
+        if self.do_normalize:
+            # Zero mean and unit variance per example, over its non-padded samples, as in the original implementation (which uses `layer_norm`):
+            # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/datasets/utils/audio.py#L105
+            # Similar to `ParakeetFeatureExtractor` but the variance is biased and `EPSILON` is added inside the square root as in `layer_norm`.
+            input_values = output_values["input_values"]
+            mask = padding_mask.bool()
+            lengths = mask.sum(dim=-1, keepdim=True)
+            input_values_masked = input_values * mask
+            mean = input_values_masked.sum(dim=-1, keepdim=True) / lengths
+            variance = ((input_values_masked - mean) ** 2 * mask).sum(dim=-1, keepdim=True) / lengths
+            input_values = (input_values - mean) / torch.sqrt(variance + EPSILON)
+            output_values["input_values"] = input_values.masked_fill(~mask, self.padding_value)
+
         if return_attention_mask:
-            output_values["padding_mask"] = output_values.pop("attention_mask")
+            output_values["padding_mask"] = padding_mask
 
         # add channel dimension
         output_values["input_values"] = output_values["input_values"][:, None, :]

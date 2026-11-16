@@ -121,3 +121,16 @@ class OmniASRFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # The mask marks the padding, so the model knows which frames are real
         self.assertListEqual(encoded_pt.padding_mask.sum(-1).tolist(), [len(x) for x in audio_inputs])
         self.assertTrue(torch.all(encoded_pt.input_values[0, 0, len(audio_inputs[0]) :] == 0.0))
+
+    def test_batched_normalization_matches_per_example(self):
+        # Batched normalization only uses the non-padded samples, so it matches normalizing each example on its own
+        feat_extract = self._get_feat_extract()
+        sampling_rate = self.feat_extract_tester.sampling_rate
+        audio_inputs = [np.asarray(floats_list((1, x))[0]) * 3 + 1 for x in range(800, 1400, 200)]
+
+        batched = feat_extract(audio_inputs, sampling_rate=sampling_rate)
+        for idx, audio_input in enumerate(audio_inputs):
+            example = torch.tensor(audio_input, dtype=torch.float32)
+            expected = torch.nn.functional.layer_norm(example, example.shape)
+            torch.testing.assert_close(batched.input_values[idx, 0, : len(audio_input)], expected)
+            self.assertTrue(torch.all(batched.input_values[idx, 0, len(audio_input) :] == 0.0))
