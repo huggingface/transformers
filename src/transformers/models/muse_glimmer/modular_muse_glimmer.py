@@ -921,8 +921,10 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         target_dtype = self.patch_embedding.weight.dtype
         embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
+        # Patch (h, w) reads the position table at (w, h): ref code passes
+        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
+            grid_thw[:, [0, 2, 1]],
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
