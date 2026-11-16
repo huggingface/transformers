@@ -38,7 +38,7 @@ time they outperform other pretraining approaches. Different versions of FlauBER
 protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared to the research
 community for further reproducible experiments in French NLP.*
 
-This model was contributed by [formiel](https://huggingface.co/formiel). The original code can be found [here](https://github.com/getalp/Flaubert).
+This model was contributed by formiel. The original code can be found [here](https://github.com/getalp/Flaubert).
 
 Tips:
 

@@ -25,6 +25,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_xlstm import xLSTMConfig
@@ -1331,9 +1332,9 @@ class xLSTMCache:
         >>> inputs = tokenizer(text="I am an xLSTM", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_params = xLSTMCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
-        >>> outputs.cache_params
+        >>> cache = xLSTMCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, cache=cache, use_cache=True)
+        >>> outputs.cache
         xLSTMCache()
     """
 
@@ -1380,13 +1381,13 @@ class xLSTMCache:
 @dataclass
 class xLSTMOutput(ModelOutput):
     r"""
-    cache_params (`xLSTMCache`):
+    cache (`xLSTMCache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
     last_hidden_state: torch.Tensor | None
-    cache_params: xLSTMCache | None = None
+    cache: xLSTMCache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
 
 
@@ -1411,16 +1412,17 @@ class xLSTMModel(xLSTMPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
-        cache_params: xLSTMCache | None = None,
+        cache: xLSTMCache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | xLSTMOutput:
         r"""
-        cache_params (`xLSTMCache`, *optional*):
+        cache (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
         # Resolved here (not just by @capture_outputs) because the chunked inference path below
@@ -1435,8 +1437,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if use_cache and cache_params is None:
-            cache_params = xLSTMCache(
+        if use_cache and cache is None:
+            cache = xLSTMCache(
                 self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
 
@@ -1449,8 +1451,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         ):
             offset = 0
             with torch.no_grad():
-                if cache_params is None:
-                    cache_params = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
+                if cache is None:
+                    cache = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
                 final_state = torch.zeros_like(hidden_states)
                 while offset < hidden_states.shape[1]:
                     hidden_states_chunk = hidden_states[
@@ -1459,12 +1461,12 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     for layer_idx, xlstm_block in enumerate(self.blocks):
                         hidden_states_chunk, rnn_state = xlstm_block(
                             hidden_states_chunk,
-                            state=cache_params.rnn_state[layer_idx],
+                            state=cache.rnn_state[layer_idx],
                         )
-                        for state_idx in range(len(cache_params.rnn_state[layer_idx])):
+                        for state_idx in range(len(cache.rnn_state[layer_idx])):
                             local_rnn_state = rnn_state[state_idx]
-                            cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
-                        cache_params.rnn_state_initial = False
+                            cache.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
+                        cache.rnn_state_initial = False
                     final_state[
                         :, offset : min(offset + self.config.max_inference_chunksize, hidden_states.shape[1])
                     ] = hidden_states_chunk
@@ -1474,23 +1476,23 @@ class xLSTMModel(xLSTMPreTrainedModel):
             for layer_idx, xlstm_block in enumerate(self.blocks):
                 hidden_states, rnn_state = xlstm_block(
                     hidden_states,
-                    cache_params.rnn_state[layer_idx] if cache_params is not None else None,
+                    cache.rnn_state[layer_idx] if cache is not None else None,
                 )
 
-                if cache_params:
-                    for state_idx in range(len(cache_params.rnn_state[layer_idx])):
+                if cache:
+                    for state_idx in range(len(cache.rnn_state[layer_idx])):
                         local_rnn_state = rnn_state[state_idx]
-                        cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
-                    cache_params.rnn_state_initial = False
+                        cache.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
+                    cache.rnn_state_initial = False
 
         if use_cache:
-            cache_params.seqlen_offset += inputs_embeds.shape[1]
+            cache.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.out_norm(hidden_states)
 
         return xLSTMOutput(
             last_hidden_state=hidden_states,
-            cache_params=cache_params,
+            cache=cache,
         )
 
 
@@ -1502,14 +1504,14 @@ class xLSTMCausalLMOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache_params (`xLSTMCache`, *optional*, carrying the RNN states):
+    cache (`xLSTMCache`, *optional*, carrying the RNN states):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    cache_params: xLSTMCache | None = None
+    cache: xLSTMCache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
 
 
@@ -1536,22 +1538,23 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        cache_params: xLSTMCache | None = None,
+        cache: xLSTMCache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | xLSTMCausalLMOutput:
         r"""
-        cache_params (`xLSTMCache`, *optional*):
+        cache (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
         xlstm_outputs = self.backbone(
             input_ids,
-            cache_params=cache_params,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1579,7 +1582,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         return xLSTMCausalLMOutput(
             loss=loss,
             logits=logits,
-            cache_params=xlstm_outputs.cache_params,
+            cache=xlstm_outputs.cache,
             hidden_states=xlstm_outputs.hidden_states,
         )
 

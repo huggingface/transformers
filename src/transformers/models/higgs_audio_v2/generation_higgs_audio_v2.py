@@ -187,7 +187,7 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
         hidden_states (`tuple(tuple(torch.Tensor))`, *optional*):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.Tensor)))`, *optional*, returned when `use_cache=True`):
+        cache (`tuple(tuple(torch.Tensor)))`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
         audio_sequences (`tuple(torch.LongTensor)` *optional*):
@@ -438,7 +438,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=model_kwargs.get("past_key_values"),
+                cache=model_kwargs.get("cache"),
                 audio_sequences=model_kwargs.get("audio_input_ids"),
             )
         else:

@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen3_5.modeling_qwen3_5 import (
@@ -384,12 +385,13 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         self.q_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
         self.k_layernorm = Qwen4ExpTextRMSNorm(self.index_head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
@@ -407,8 +409,8 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         q = self.q_layernorm(q)
         q = apply_rotary_pos_emb(q, cos=current_cos, sin=current_sin, unsqueeze_dim=2)
 
-        if past_key_values is not None:
-            raw_keys = past_key_values.update_indexer(raw_keys, self.layer_idx)
+        if cache is not None:
+            raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
 
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
@@ -476,15 +478,16 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         self.k_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = Qwen4ExpTextQSAIndexer(config, layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
+        selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, cache)
         # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
         if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
@@ -499,7 +502,7 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
 
@@ -652,13 +655,12 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
         return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
 
-    def forward(self, input_ids: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(self, input_ids: torch.Tensor, cache: Cache | None) -> torch.Tensor:
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
-        cached_ctx = (
-            past_key_values.get_conv_state(self.layer_idx, state_idx=2) if past_key_values is not None else None
-        )
+        cached_ctx = cache.get_conv_state(self.layer_idx, state_idx=2) if cache is not None else None
 
         if cached_ctx is not None:
             previous_context = cached_ctx.clone()
@@ -666,7 +668,7 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
 
         # Store the current input_ids for the next forward
-        if past_key_values is not None:
+        if cache is not None:
             input_ids_to_cache = input_ids
             # In the case where `input_ids` would be smaller than `self.context_len`, the `update_conv_state` will pad with zeros, whereas
             # here we want to pad with eos, so we do it explicitly
@@ -674,7 +676,7 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
                 input_ids_to_cache = torch.nn.functional.pad(
                     input_ids_to_cache, (self.context_len - input_ids.shape[1], 0), value=self.eos_token_id
                 )
-            _ = past_key_values.update_conv_state(
+            _ = cache.update_conv_state(
                 input_ids_to_cache, self.layer_idx, state_idx=2, conv_kernel_size=self.context_len
             )
 
@@ -739,12 +741,12 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(self, hidden_states: torch.Tensor, past_key_values: Cache | None) -> torch.Tensor:
+    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            hidden_states = past_key_values.update_conv_state(
+        if cache is not None:
+            hidden_states = cache.update_conv_state(
                 hidden_states, self.layer_idx, state_idx=1, conv_kernel_size=self.short_conv_state_len
             )
 
@@ -758,14 +760,15 @@ class Qwen4ExpTextPLELayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         input_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        embeddings = self.ple_embedding(input_ids, past_key_values)
+        embeddings = self.ple_embedding(input_ids, cache)
         key_normed = self.norm_key(self.key_proj(embeddings)).unflatten(-1, (self.hc_count, self.hidden_size))
         value = self.value_proj(embeddings)
         query_normed = self.norm_query(hidden_states).unflatten(-1, (self.hc_count, self.hidden_size))
@@ -777,7 +780,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
         if conv_mask is not None:
             gated_value = apply_mask_to_padding_states(gated_value, conv_mask)
             gated_value_normed = apply_mask_to_padding_states(gated_value_normed, conv_mask)
-        output = gated_value + self._short_conv(gated_value_normed, past_key_values)
+        output = gated_value + self._short_conv(gated_value_normed, cache)
         return output
 
 
@@ -796,32 +799,29 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         self.attn_hyper_connection = Qwen4ExpTextGatedResidual(config)
         self.mlp_hyper_connection = Qwen4ExpTextGatedResidual(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         if self.ple is not None:
-            hidden_states = hidden_states + self.ple(
-                hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
-            )
+            hidden_states = hidden_states + self.ple(hidden_states, ple_input_ids, cache, conv_mask=conv_mask)
 
         hidden_states, hyper_input, injection_weights = self.attn_hyper_connection(hidden_states)
         if self.layer_type == "linear_attention":
-            hidden_states = self.linear_attn(
-                hidden_states, cache_params=past_key_values, attention_mask=conv_mask, **kwargs
-            )
+            hidden_states = self.linear_attn(hidden_states, cache=cache, attention_mask=conv_mask, **kwargs)
         else:
             hidden_states, _ = self.self_attn(
                 hidden_states,
                 position_embeddings,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -925,12 +925,13 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         ple_input_ids: torch.Tensor | None = None,
@@ -952,12 +953,12 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             # If we do not have input_ids but have ple, we need to revert the embeddings to find back the ids
             ple_input_ids = input_ids if input_ids is not None else self.reverse_embedding(inputs_embeds)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         # position_ids are the full position_ids here, as the indexer needs full position_embeddings
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
@@ -974,8 +975,8 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
         # such as reset, crop and beam reordering also update the position history.
-        if past_key_values is not None and "indexed_attention" in self.config.layer_types:
-            indexer_cache = past_key_values.layers[self.config.layer_types.index("indexed_attention")]
+        if cache is not None and "indexed_attention" in self.config.layer_types:
+            indexer_cache = cache.layers[self.config.layer_types.index("indexed_attention")]
             if indexer_cache.indexer_position_ids is not None:
                 position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
             indexer_cache.indexer_position_ids = position_ids
@@ -985,7 +986,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": text_position_ids,
                 # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
                 # we may have to recreate it in each layer if it gets skipped
@@ -1013,7 +1014,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 position_embeddings=position_embeddings,
                 attention_mask=causal_mask_mapping["indexed_attention"],
                 conv_mask=conv_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 ple_input_ids=ple_input_ids,
                 **kwargs,
             )
@@ -1022,7 +1023,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1040,12 +1041,13 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
     # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
     _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
@@ -1110,7 +1112,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
                 video_grid_thw=video_grid_thw,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 mm_token_type_ids=mm_token_type_ids,
             )
 
@@ -1118,7 +1120,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             ple_input_ids=ple_input_ids,
             **kwargs,

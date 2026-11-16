@@ -24,9 +24,9 @@ This guide shows how to work around this difference by using a web server to han
 
 ## Create a server
 
-[Starlette](https://www.starlette.io/) is a lightweight framework for building web servers. You can use any other framework you'd like, but you may have to make some changes to the code below.
+[Starlette](https://starlette.dev/) is a lightweight framework for building web servers. You can use any other framework you'd like, but you may have to make some changes to the code below.
 
-Before you begin, make sure Starlette and [uvicorn](http://www.uvicorn.org/) are installed.
+Before you begin, make sure Starlette and [uvicorn](https://uvicorn.dev/) are installed.
 
 ```py
 !pip install starlette uvicorn

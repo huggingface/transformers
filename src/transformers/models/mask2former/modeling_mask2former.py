@@ -2144,7 +2144,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
-        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
 
@@ -2183,7 +2182,21 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             init.zeros_(module.cross_attn.in_proj_bias)
 
         elif isinstance(module, Mask2FormerPixelDecoder):
-            init.normal_(module.level_embed, std=0)
+            init.normal_(module.level_embed, std=1.0)
+
+        elif isinstance(module, Mask2FormerPredictionBlock):
+            # The mask MLP keeps the default nn.Linear init in the original
+            for submodule in module.modules():
+                if isinstance(submodule, nn.Linear):
+                    init.kaiming_uniform_(submodule.weight, a=math.sqrt(5))
+                    if submodule.bias is not None:
+                        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(submodule.weight)
+                        bound = 1.0 / math.sqrt(fan_in) if fan_in > 0 else 0
+                        init.uniform_(submodule.bias, -bound, bound)
+
+        elif isinstance(module, nn.Embedding):
+            # The query and level embeddings keep the default nn.Embedding init in the original
+            init.normal_(module.weight, mean=0.0, std=1.0)
 
         elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
@@ -2198,6 +2211,9 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             empty_weight = torch.ones(module.num_labels + 1)
             empty_weight[-1] = module.eos_coef
             init.copy_(module.empty_weight, empty_weight)
+
+        else:
+            super()._init_weights(module)
 
         if hasattr(module, "reference_points"):
             init.xavier_uniform_(module.reference_points.weight, gain=1.0)
