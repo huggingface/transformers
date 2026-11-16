@@ -14,6 +14,7 @@
 """PyTorch Pixtral model."""
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import nn
@@ -358,21 +359,12 @@ class PixtralPreTrainedModel(PreTrainedModel):
     }
 
 
-def generate_block_attention_mask(patch_embeds_list, tensor):
-    dtype = tensor.dtype
-    device = tensor.device
-    seq_len = tensor.shape[1]
-    d_min = torch.finfo(dtype).min
-    causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device)
-
-    start = 0
-    for num_patches in patch_embeds_list:
-        end = start + num_patches
-        causal_mask[start:end, start:end] = 0
-        start = end
-
-    causal_mask = causal_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
-    return causal_mask
+def generate_block_attention_mask(patch_image_index, tensor):
+    """Additive mask letting each patch attend to the patches of its own image only."""
+    same_image = patch_image_index[:, None] == patch_image_index[None, :]
+    block_mask = torch.zeros(same_image.shape, dtype=tensor.dtype, device=tensor.device)
+    block_mask = block_mask.masked_fill(~same_image, torch.finfo(tensor.dtype).min)
+    return block_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
 
 
 @auto_docstring
@@ -399,6 +391,52 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, **kwargs
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `image_sizes` with data-dependent operations (host syncs, loops over
+        images): the image each unpadded patch belongs to (`patch_image_index`) and its 2D `position_ids` within that
+        image, plus the attention's `cu_seqlens` and `max_seqlen` with flash attention. Passed back to the forward,
+        they keep `torch.compile` and `torch.export` free of those operations. Returned as they are when already in
+        `kwargs`; only the config and the shape of `pixel_values` are read.
+
+        Args:
+            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
+                The padded images, whose height and width bound each image's patch grid.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)` or `list`, *optional*):
+                The height and width of each image, before padding. All of the padded size when not given.
+        """
+        names = ("patch_image_index", "position_ids")
+        if is_flash_attention_requested(self.config):
+            names += ("cu_seqlens", "max_seqlen")
+        if all(kwargs.get(name) is not None for name in names):
+            return {name: kwargs[name] for name in names}
+
+        batch_size, _, height, width = pixel_values.shape
+        if image_sizes is None:
+            image_sizes = [(height, width)] * batch_size
+        # Slicing the padded grid keeps each image's patch count bounded by it
+        rows, columns = torch.meshgrid(
+            torch.arange(height // self.patch_size, device=pixel_values.device),
+            torch.arange(width // self.patch_size, device=pixel_values.device),
+            indexing="ij",
+        )
+        patch_image_index, position_ids = [], []
+        for index, size in enumerate(image_sizes):
+            image_rows = rows[: size[0] // self.patch_size, : size[1] // self.patch_size].flatten()
+            image_columns = columns[: size[0] // self.patch_size, : size[1] // self.patch_size].flatten()
+            position_ids.append(torch.stack([image_rows, image_columns], dim=-1))
+            patch_image_index.append(torch.full_like(image_rows, index))
+        inputs = {"patch_image_index": torch.cat(patch_image_index), "position_ids": torch.cat(position_ids)}
+
+        if is_flash_attention_requested(self.config):
+            sequence_lengths = [image_position_ids.shape[0] for image_position_ids in position_ids]
+            cu_seqlens = torch.tensor([0, *sequence_lengths], device=pixel_values.device, dtype=torch.int32)
+            inputs["cu_seqlens"] = cu_seqlens.cumsum(dim=0, dtype=torch.int32)
+            inputs["max_seqlen"] = max(sequence_lengths)
+        return inputs
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -408,51 +446,31 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        if image_sizes is None:
-            batch_size, _, height, width = pixel_values.shape
-            image_sizes = [(height, width)] * batch_size
+        data_dependent_inputs = self.get_data_dependent_inputs(pixel_values, image_sizes, **kwargs)
+        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
 
         # pass images through initial convolution independently
         target_dtype = self.patch_conv.weight.dtype
         patch_embeds = self.patch_conv(pixel_values.to(dtype=target_dtype))
-        patch_embeds_list = [
-            embed[..., : (size[0] // self.patch_size), : (size[1] // self.patch_size)]
-            for embed, size in zip(patch_embeds, image_sizes)
-        ]
 
-        # flatten to a single sequence
-        patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
-        patch_embeds = self.ln_pre(patch_embeds)
-
-        # Create 2D positions for axial rotations
-        position_ids = []
-        for patch in patch_embeds_list:
-            hpos_ids, wpos_ids = torch.meshgrid(
-                torch.arange(patch.shape[-2], device=patch.device),
-                torch.arange(patch.shape[-1], device=patch.device),
-                indexing="ij",
-            )
-            position_ids.append(torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1))
-        position_ids = torch.cat(position_ids, dim=0)
+        # gather each image's unpadded patches into a single sequence
+        patch_image_index = data_dependent_inputs["patch_image_index"]
+        position_ids = data_dependent_inputs["position_ids"]
+        patch_embeds = patch_embeds.permute(0, 2, 3, 1)[patch_image_index, position_ids[:, 0], position_ids[:, 1]]
+        patch_embeds = self.ln_pre(patch_embeds.unsqueeze(0))
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):
             # Axial RoPE positions have two coordinates per patch, so they cannot
             # describe the packed image boundaries expected by Flash Attention.
-            sequence_lengths = [p.shape[-2] * p.shape[-1] for p in patch_embeds_list]
-            cu_seqlens = torch.tensor([0, *sequence_lengths], device=patch_embeds.device, dtype=torch.int32)
-            cu_seqlens = cu_seqlens.cumsum(dim=0, dtype=torch.int32)
+            cu_seqlens = data_dependent_inputs["cu_seqlens"]
+            max_seqlen = data_dependent_inputs["max_seqlen"]
             kwargs.update(
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max(sequence_lengths),
-                max_length_k=max(sequence_lengths),
+                cu_seq_lens_q=cu_seqlens, cu_seq_lens_k=cu_seqlens, max_length_q=max_seqlen, max_length_k=max_seqlen
             )
             attention_mask = None
         else:
-            attention_mask = generate_block_attention_mask(
-                [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
-            )
+            attention_mask = generate_block_attention_mask(patch_image_index, patch_embeds)
 
         return self.transformer(
             patch_embeds,
