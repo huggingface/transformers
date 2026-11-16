@@ -114,7 +114,7 @@ def length_regulator(encoded_embeddings, duration_labels, speaking_speed=1.0):
     # Create a padded tensor to hold the results
     hidden_states = torch.zeros(
         (encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)),
-        dtype=torch.float,
+        dtype=encoded_embeddings.dtype,
         device=encoded_embeddings.device,
     )
 

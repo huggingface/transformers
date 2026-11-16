@@ -141,6 +141,14 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_half_precision_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for dtype in (torch.float16, torch.bfloat16):
+            model = FastSpeech2ConformerModel(config).to(torch_device).to(dtype).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict, return_dict=True)
+            self.assertEqual(outputs.spectrogram.dtype, dtype)
+
     def test_duration_energy_pitch_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
