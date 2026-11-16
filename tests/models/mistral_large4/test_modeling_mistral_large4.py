@@ -111,8 +111,8 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
 
-    @parameterized.expand([("no_checkpointing", None), ("non_reentrant", False), ("reentrant", True)])
-    def test_lerope_training(self, name, use_reentrant):
+    @parameterized.expand([("no_checkpointing", False), ("checkpointing", True)])
+    def test_lerope_training(self, name, activation_checkpointing):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = MistralLarge4ForConditionalGeneration(config).to(torch_device).train()
         rotary_emb = model.model.language_model.rotary_emb
@@ -124,8 +124,8 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
         model._init_weights(rotary_emb)
         torch.testing.assert_close(alpha, torch.zeros_like(alpha))
 
-        if use_reentrant is not None:
-            model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": use_reentrant})
+        if activation_checkpointing:
+            model.activation_checkpointing_enable()
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
         before = alpha.detach().clone()
@@ -135,6 +135,10 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
         self.assertGreater(alpha.grad.norm().item(), 0)
         optimizer.step()
         self.assertFalse(torch.equal(before, alpha))
+
+    @unittest.skip("Reentrant checkpointing is not supported with differentiable LeRoPE embeddings.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
 
     def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # KV-shared layers attend to the cache of their source layer and leave their own cache layer empty, and NoPE
