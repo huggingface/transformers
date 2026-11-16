@@ -49,6 +49,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vision_position_ids
@@ -84,11 +85,11 @@ class Inkling2CausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
@@ -96,7 +97,7 @@ class Inkling2CausalLMOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     image_hidden_states: torch.Tensor | None = None
@@ -261,10 +262,11 @@ class Inkling2ShortConvolution(nn.Module):
         )
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -276,19 +278,15 @@ class Inkling2ShortConvolution(nn.Module):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        conv_state = (
-            None
-            if past_key_values is None
-            else past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
-        )
+        conv_state = None if cache is None else cache.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
 
-        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
             )
         else:
-            if past_key_values is not None:
-                hidden_states = past_key_values.update_conv_state(
+            if cache is not None:
+                hidden_states = cache.update_conv_state(
                     hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
@@ -296,7 +294,7 @@ class Inkling2ShortConvolution(nn.Module):
                 hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
             )
 
-            if past_key_values is not None:
+            if cache is not None:
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
@@ -323,11 +321,12 @@ class Inkling2DynamicShortConvolution(nn.Module):
         self.static_weight = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
         self.weight_proj = nn.Linear(input_size, num_heads * conv_kernel_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         dynamic_input: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -340,8 +339,8 @@ class Inkling2DynamicShortConvolution(nn.Module):
         hidden_states = hidden_states.float()
         residual = hidden_states
         context = apply_mask_to_padding_states(hidden_states, conv_mask).transpose(1, 2)
-        if past_key_values is not None:
-            context = past_key_values.update_conv_state(
+        if cache is not None:
+            context = cache.update_conv_state(
                 context, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
             )
         context = F.pad(context, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
@@ -434,28 +433,29 @@ class Inkling2SlidingAttention(nn.Module):
         self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
         self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         conv_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(self.k_proj(hidden_states), past_key_values=past_key_values, conv_mask=conv_mask)
-        value_states = self.v_sconv(self.v_proj(hidden_states), past_key_values=past_key_values, conv_mask=conv_mask)
+        key_states = self.k_sconv(self.k_proj(hidden_states), cache=cache, conv_mask=conv_mask)
+        value_states = self.v_sconv(self.v_proj(hidden_states), cache=cache, conv_mask=conv_mask)
         relative_states = self.r_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
 
         q_length = query_states.shape[1]
-        if past_key_values is not None:
-            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
-            q_offset = past_key_values.get_query_offset(self.layer_idx)
+        if cache is not None:
+            kv_length, kv_offset = cache.get_mask_sizes(q_length, self.layer_idx)
+            q_offset = cache.get_query_offset(self.layer_idx)
         else:
             kv_length = q_length
             q_offset, kv_offset = 0, 0
@@ -469,8 +469,8 @@ class Inkling2SlidingAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
@@ -543,6 +543,7 @@ class Inkling2FullAttention(nn.Module):
         self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
         self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -550,7 +551,7 @@ class Inkling2FullAttention(nn.Module):
         value_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
         conv_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
@@ -563,13 +564,11 @@ class Inkling2FullAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(
-            self.k_proj(key_hidden_states), key_hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
-        )
+        key_states = self.k_sconv(self.k_proj(key_hidden_states), key_hidden_states, cache=cache, conv_mask=conv_mask)
         value_states = self.v_sconv(
             self.v_proj(value_hidden_states),
             value_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             conv_mask=conv_mask,
         )
         relative_states = self.r_proj(hidden_states)
@@ -577,9 +576,9 @@ class Inkling2FullAttention(nn.Module):
         sinks = self.sink_proj(hidden_states)
 
         q_length = query_states.shape[1]
-        if past_key_values is not None:
-            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, self.layer_idx)
-            q_offset = past_key_values.get_query_offset(self.layer_idx)
+        if cache is not None:
+            kv_length, kv_offset = cache.get_mask_sizes(q_length, self.layer_idx)
+            q_offset = cache.get_query_offset(self.layer_idx)
         else:
             kv_length = q_length
             q_offset, kv_offset = 0, 0
@@ -601,8 +600,8 @@ class Inkling2FullAttention(nn.Module):
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
         relative_states = (relative_states.float() * tau).to(relative_states.dtype)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
@@ -770,13 +769,14 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
@@ -788,12 +788,10 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
             hidden_states=self.input_layernorm(hidden_states).to(dtype),
             attention_mask=attention_mask,
             conv_mask=conv_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
-        hidden_states = self.post_attention_convolution(
-            hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
-        )
+        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
 
         residual = hidden_states = hidden_states.float()
         if self.is_block_boundary:
@@ -803,7 +801,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
-        hidden_states = self.post_mlp_convolution(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
         return (residual + hidden_states).to(dtype)
 
 
@@ -828,13 +826,14 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
@@ -852,12 +851,10 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
             value_hidden_states=self.v_input_layernorm(value_hidden_states).to(dtype),
             attention_mask=attention_mask,
             conv_mask=conv_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
-        hidden_states = self.post_attention_convolution(
-            hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
-        )
+        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
 
         residual = hidden_states = hidden_states.float()
         if self.is_block_boundary:
@@ -867,7 +864,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
-        hidden_states = self.post_mlp_convolution(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
         return (residual + hidden_states).to(dtype)
 
 
@@ -1164,7 +1161,7 @@ class Inkling2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Inkling2SlidingDecoderLayer", "Inkling2FullDecoderLayer", "Inkling2VisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     # The relative position bias flows through the attention interface as a `position_bias` (duh)
     # kwarg that only the eager path consumes; other backends need a score_mod/kernel
     _supports_flash_attn = False
@@ -1254,12 +1251,13 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1270,11 +1268,11 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1283,7 +1281,7 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -1300,7 +1298,7 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
                 block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -1312,7 +1310,7 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
         hidden_states = self.norm(hidden_states).to(inputs_embeds.dtype)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1337,12 +1335,13 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1378,7 +1377,7 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1396,7 +1395,7 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
         return Inkling2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
@@ -1522,6 +1521,7 @@ class Inkling2Model(Inkling2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1529,7 +1529,7 @@ class Inkling2Model(Inkling2PreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -1600,14 +1600,14 @@ class Inkling2Model(Inkling2PreTrainedModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
         return Inkling2ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_embeds,
@@ -1646,6 +1646,7 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1653,7 +1654,7 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1708,7 +1709,7 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
             image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1728,7 +1729,7 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         return Inkling2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,

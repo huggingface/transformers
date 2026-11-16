@@ -185,11 +185,11 @@ class SpQRTest(unittest.TestCase):
         """
 
         # Sample tokens greedily
-        def decode_one_tokens(model, cur_token, input_pos, past_key_values):
+        def decode_one_tokens(model, cur_token, input_pos, cache):
             logits = model(
                 cur_token,
                 position_ids=input_pos,
-                past_key_values=past_key_values,
+                cache=cache,
                 return_dict=False,
                 use_cache=True,
             )[0]
@@ -202,9 +202,7 @@ class SpQRTest(unittest.TestCase):
         seq_length = input_ids.shape[1]
 
         # Setup static KV cache for generation
-        past_key_values = StaticCache(
-            config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1
-        )
+        cache = StaticCache(config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1)
 
         # Allocate token ids to be generated and copy prefix ids
         position = torch.arange(seq_length, device=torch_device)
@@ -214,7 +212,7 @@ class SpQRTest(unittest.TestCase):
         # Do a forward pass to fill the prefix cache and compile the kernels if necessary
         logits = self.quantized_model(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             return_dict=False,
             use_cache=True,
         )[0]
@@ -229,7 +227,7 @@ class SpQRTest(unittest.TestCase):
             position = torch.tensor([seq_length + 1], device=torch_device)
             for _ in range(1, self.max_new_tokens):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-                    next_token = decode_one_tokens(self.quantized_model, next_token.clone(), None, past_key_values)
+                    next_token = decode_one_tokens(self.quantized_model, next_token.clone(), None, cache)
                     generated_ids.index_copy_(1, position, next_token)
                 position += 1
 

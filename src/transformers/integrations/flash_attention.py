@@ -1,6 +1,5 @@
 import torch
 
-from ..generation.continuous_batching import PagedAttentionCache
 from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ..utils import logging
 
@@ -36,7 +35,6 @@ def flash_attention_forward(
     softcap: float | None = None,
     is_causal: bool | None = None,
     s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
-    cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -53,15 +51,6 @@ def flash_attention_forward(
             "Tensor query has shape  with a zero dimension.\n"
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
-        )
-
-    # If there is a paged cache, now is the time to update it and the kwargs
-    if isinstance(cache, PagedAttentionCache):
-        key, value = cache.update(
-            key_states=key,
-            value_states=value,
-            layer_idx=module.layer_idx,  # this makes torch.compile recompile for each layer. Fine for now (cf. #49101)
-            kwargs=kwargs,  # is updated in place
         )
 
     # FA uses non-transposed inputs. After this, shape is [batch_size, seq_len, num_heads, head_dim]

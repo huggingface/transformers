@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_hy_v4 import HYV4Config
@@ -163,7 +164,7 @@ class HYV4Indexer(nn.Module):
 
     **Cache strategy**: the indexer key cache lives on the per-layer `DynamicIndexedLayer` (or the
     `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
+    `cache.update_indexer()`.
     """
 
     def __init__(self, config: HYV4Config, layer_idx: int):
@@ -185,6 +186,7 @@ class HYV4Indexer(nn.Module):
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -192,7 +194,7 @@ class HYV4Indexer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -210,7 +212,7 @@ class HYV4Indexer(nn.Module):
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            past_key_values: Cache object containing the indexer key cache for this layer.
+            cache: Cache object containing the indexer key cache for this layer.
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
@@ -233,8 +235,8 @@ class HYV4Indexer(nn.Module):
         q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
-        if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
+        if cache is not None:
+            k = cache.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores)
@@ -391,12 +393,13 @@ class HYV4Attention(nn.Module):
         key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_ids: torch.Tensor | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -422,8 +425,8 @@ class HYV4Attention(nn.Module):
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
@@ -437,7 +440,7 @@ class HYV4Attention(nn.Module):
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
-                past_key_values=past_key_values,
+                cache=cache,
             )  # [B, S, topk]
         else:
             if prev_topk_indices is None:
@@ -676,12 +679,13 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         self.attn_hc = HYV4HyperConnection(config)
         self.ffn_hc = HYV4HyperConnection(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.LongTensor | None = None,
@@ -698,7 +702,7 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             prev_topk_indices=prev_topk_indices,
@@ -722,7 +726,7 @@ class HYV4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HYV4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     # Combination of sinks and DSA disable anything but eager atm
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -797,12 +801,13 @@ class HYV4Model(HYV4PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -813,11 +818,11 @@ class HYV4Model(HYV4PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -827,7 +832,7 @@ class HYV4Model(HYV4PreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
                 "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
             }
@@ -845,7 +850,7 @@ class HYV4Model(HYV4PreTrainedModel):
                 attention_mask=causal_mask_mapping["indexed_attention"],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 prev_topk_indices=topk_indices,
                 **kwargs,
@@ -856,7 +861,7 @@ class HYV4Model(HYV4PreTrainedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -892,12 +897,13 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -925,7 +931,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -943,7 +949,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
