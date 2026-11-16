@@ -36,6 +36,7 @@ from transformers import (
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
+    DeepseekV3ForCausalLM,
     GenerationConfig,
     GenerationMixin,
     StaticCache,
@@ -92,6 +93,7 @@ from transformers.utils import (
 from transformers.utils.generic import is_flash_attention_requested
 
 from ..distributed_testing_utils import run_distributed
+from ..models.deepseek_v3.test_modeling_deepseek_v3 import DeepseekV3ModelTester
 
 
 # Constants for tests
@@ -884,6 +886,41 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             # Clear the caches again so the mocked availabilities do not leak into subsequent tests.
             for check in cached_availability_checks:
                 check.cache_clear()
+
+    @parameterized.expand(["eager", "sdpa"])
+    def test_continuous_batching_mla(self, attn_implementation: str) -> None:
+        """Test continuous batching on a model with MLA layers: they cache two latents of different shapes rather than
+        keys and values of shape [num_key_value_heads, head_dim]."""
+        torch.manual_seed(0)
+        # The default tester config has latents of the same shape, so we make them ragged like real checkpoints
+        config = DeepseekV3ModelTester(self, qk_rope_head_dim=8).get_config()
+        model = DeepseekV3ForCausalLM(config).to(torch_device).eval()
+        model.set_attn_implementation(attn_implementation)
+        generation_config = GenerationConfig(max_new_tokens=10, do_sample=False, pad_token_id=config.pad_token_id)
+        # Prompts both shorter and longer than max_batch_tokens, so the prefill of the long one reads from the cache
+        input_ids = [torch.randint(1, config.vocab_size, (length,)).tolist() for length in (5, 23, 70)]
+
+        continuous_batching_config = ContinuousBatchingConfig(
+            auto_switch_to_flash=False, page_size=16, num_blocks=64, max_batch_tokens=64, return_logprobs=True
+        )
+        outputs = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+
+        # The logprobs of the generated tokens have to match those of a plain forward over each whole sequence. Greedy
+        # tokens alone tell little on a tiny random model: a lost cache row can leave the argmax unchanged
+        self.assertEqual(len(outputs), len(input_ids))
+        for output in outputs.values():
+            self.assertIsNone(output.error)
+            self.assertEqual(len(output.generated_tokens), generation_config.max_new_tokens)
+            sequence = torch.tensor([output.prompt_ids + output.generated_tokens], device=torch_device)
+            with torch.no_grad():
+                logprobs = model(sequence).logits[0].float().log_softmax(dim=-1)
+            generated = torch.tensor(output.generated_tokens, device=torch_device)
+            expected = logprobs[len(output.prompt_ids) - 1 : -1].gather(-1, generated[:, None])[:, 0]
+            torch.testing.assert_close(torch.tensor(output.logprobs, device=torch_device), expected, rtol=0, atol=1e-4)
 
     def test_output_router_deliver_to_queue(self):
         """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
