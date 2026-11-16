@@ -16,11 +16,10 @@ and parses it into a single key in the output message dictionary. Functions are 
 
 from __future__ import annotations
 
-import ast
 import json
 import math
-import warnings
-from typing import Any
+from collections.abc import Callable
+from typing import Any, NoReturn
 
 import regex as re
 
@@ -140,59 +139,148 @@ def _kv_lines(text: str, args: dict) -> dict:
     return out
 
 
-_PYTHON_LITERAL_NAMES = {"True": True, "true": True, "False": False, "false": False, "None": None, "null": None}
-
-
-def _python_literal(node: ast.expr) -> Any:
-    if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, bool, type(None))):
-        return node.value
-    # Overflowing literals like `1e999` parse to `inf`, which is not valid JSON.
-    if isinstance(node, ast.Constant) and isinstance(node.value, float) and math.isfinite(node.value):
-        return node.value
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-        operand = _python_literal(node.operand)
-        if isinstance(operand, (int, float)) and not isinstance(operand, bool):
-            return -operand if isinstance(node.op, ast.USub) else operand
-    if isinstance(node, (ast.List, ast.Tuple)):
-        return [_python_literal(element) for element in node.elts]
-    if isinstance(node, ast.Dict) and None not in node.keys:
-        out = {}
-        for key, value in zip(node.keys, node.values):
-            # Bare identifiers are accepted as keys, as in `{city: "Paris"}`.
-            key = key.id if isinstance(key, ast.Name) else _python_literal(key)
-            if not isinstance(key, str):
-                raise ValueError("dict keys must be strings")
-            out[key] = _python_literal(value)
-        return out
-    if isinstance(node, ast.Name) and node.id in _PYTHON_LITERAL_NAMES:
-        return _PYTHON_LITERAL_NAMES[node.id]
-    raise ValueError(f"unsupported value {ast.unparse(node)!r}")
+_CALL_LIST_WHITESPACE = re.compile(r"[ \t\n\r]*")
+_CALL_LIST_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:[-.][A-Za-z0-9_]+)*")
+_CALL_LIST_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?")
+_CALL_LIST_STRING = re.compile(r"""'((?:[^'\\\n\r]|\\.)*)'|"((?:[^"\\\n\r]|\\.)*)\"""", flags=re.DOTALL)
+_CALL_LIST_UNICODE_ESCAPE = re.compile(r"u([0-9a-fA-F]{4})")
+_CALL_LIST_LOW_SURROGATE = re.compile(r"\\u([dD][c-fC-F][0-9a-fA-F]{2})")
+_CALL_LIST_ESCAPES = {"\\": "\\", "'": "'", '"': '"', "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
+_CALL_LIST_CONSTANTS = {"True": True, "true": True, "False": False, "false": False, "None": None, "null": None}
+_CALL_LIST_MAX_INTEGER = 2**53 - 1
+_CALL_LIST_MAX_DEPTH = 100
 
 
 def _python_call_list(text: str, args: dict) -> list[dict]:
-    """Parse a Python-style list of keyword-argument calls, e.g. `[get_weather(city="Paris")]`,
-    into `[{"name": ..., "arguments": {...}}]`. Model output is parsed with `ast`, never evaluated."""
-    try:
-        # Invalid escapes like `\q` are kept verbatim, as in Python, without warning about model output.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", SyntaxWarning)
-            tree = ast.parse(text.strip(), mode="eval").body
-        if not isinstance(tree, ast.List):
-            raise ValueError("expected a list of calls")
-        calls = []
-        for call in tree.elts:
-            if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
-                raise ValueError("expected a call to a named function")
-            if call.args or any(keyword.arg is None for keyword in call.keywords):
-                raise ValueError("only keyword arguments are supported")
-            if len({keyword.arg for keyword in call.keywords}) != len(call.keywords):
-                raise ValueError("keyword argument repeated")
-            arguments = {keyword.arg: _python_literal(keyword.value) for keyword in call.keywords}
-            calls.append({"name": call.func.id, "arguments": arguments})
-        return calls
-    # Deeply nested input overflows the Python parser with a `MemoryError` or `RecursionError`.
-    except (SyntaxError, ValueError, MemoryError, RecursionError) as e:
-        raise ValueError(f"python-call-list: could not parse region.\nContent: {text!r}\nError: {e}") from e
+    """Parse a list of keyword-argument calls, e.g. `[get_weather(city="Paris")]`, into
+    `[{"name": ..., "arguments": {...}}]`. The grammar is specified in `docs/source/en/chat_response_parsing.md`
+    and is deliberately strict, so that implementations in other languages can match it exactly."""
+    position = 0
+
+    def fail(message: str) -> NoReturn:
+        raise ValueError(f"python-call-list: {message} at position {position}.\nContent: {text!r}")
+
+    def skip_whitespace() -> None:
+        nonlocal position
+        position = _CALL_LIST_WHITESPACE.match(text, position).end()
+
+    def at(char: str) -> bool:
+        skip_whitespace()
+        return text.startswith(char, position)
+
+    def expect(char: str) -> None:
+        nonlocal position
+        if not at(char):
+            fail(f"expected {char!r}")
+        position += 1
+
+    def items(close: str, item: Callable[[], Any]) -> list:
+        nonlocal position
+        out = []
+        if at(close):
+            position += 1
+            return out
+        while True:
+            out.append(item())
+            if at(close):
+                position += 1
+                return out
+            expect(",")
+
+    def unique(pairs: list[tuple[str, Any]]) -> dict:
+        out = {}
+        for key, value in pairs:
+            if key in out:
+                fail(f"repeated name {key!r}")
+            out[key] = value
+        return out
+
+    def string() -> str:
+        nonlocal position
+        match = _CALL_LIST_STRING.match(text, position)
+        if match is None:
+            fail("invalid string")
+        body = match[1] if match[1] is not None else match[2]
+        out, start = [], 0
+        while (backslash := body.find("\\", start)) != -1:
+            out.append(body[start:backslash])
+            start = backslash + 2
+            if body[backslash + 1] in _CALL_LIST_ESCAPES:
+                out.append(_CALL_LIST_ESCAPES[body[backslash + 1]])
+                continue
+            escape = _CALL_LIST_UNICODE_ESCAPE.match(body, backslash + 1)
+            if escape is None:
+                fail(f"unsupported escape {body[backslash : backslash + 2]!r} in the string starting")
+            code, start = int(escape[1], 16), escape.end()
+            if 0xD800 <= code <= 0xDBFF and (low := _CALL_LIST_LOW_SURROGATE.match(body, start)) is not None:
+                code, start = 0x10000 + ((code - 0xD800) << 10) + (int(low[1], 16) - 0xDC00), low.end()
+            if 0xD800 <= code <= 0xDFFF:
+                fail("lone surrogate escape in the string starting")
+            out.append(chr(code))
+        position = match.end()
+        return "".join(out) + body[start:]
+
+    def value(depth: int) -> Any:
+        nonlocal position
+        if depth > _CALL_LIST_MAX_DEPTH:
+            fail("value nested too deeply")
+        if at("'") or at('"'):
+            return string()
+        if at("["):
+            position += 1
+            return items("]", lambda: value(depth + 1))
+        if at("{"):
+            position += 1
+            return unique(items("}", lambda: pair(depth + 1)))
+        if (match := _CALL_LIST_NUMBER.match(text, position)) is not None:
+            is_integer = match[1] is None and match[2] is None
+            # Check the digit count first so that huge literals never reach `int()`.
+            if is_integer and (len(match[0]) > 17 or abs(int(match[0])) > _CALL_LIST_MAX_INTEGER):
+                fail("integer outside the range of -(2^53 - 1) to 2^53 - 1")
+            if not is_integer and math.isinf(float(match[0])):
+                fail("number too large")
+            position = match.end()
+            return int(match[0]) if is_integer else float(match[0])
+        if (match := _CALL_LIST_NAME.match(text, position)) is not None and match[0] in _CALL_LIST_CONSTANTS:
+            position = match.end()
+            return _CALL_LIST_CONSTANTS[match[0]]
+        fail("expected a string, number, list, dict, True, False or None")
+
+    def pair(depth: int) -> tuple[str, Any]:
+        if not (at("'") or at('"')):
+            fail("dict keys must be strings")
+        key = string()
+        expect(":")
+        return key, value(depth)
+
+    def name(what: str) -> str:
+        nonlocal position
+        skip_whitespace()
+        match = _CALL_LIST_NAME.match(text, position)
+        if match is None:
+            fail(f"expected {what}")
+        position = match.end()
+        return match[0]
+
+    def argument() -> tuple[str, Any]:
+        nonlocal position
+        key = name("a keyword argument (positional arguments and trailing commas are not supported)")
+        if not at("="):
+            fail("expected '=' (positional arguments are not supported)")
+        position += 1
+        return key, value(1)
+
+    def call() -> dict:
+        function_name = name("a function name")
+        expect("(")
+        return {"name": function_name, "arguments": unique(items(")", argument))}
+
+    expect("[")
+    calls = items("]", call)
+    skip_whitespace()
+    if position != len(text):
+        fail("unexpected content after the closing ']'")
+    return calls
 
 
 CONTENT_PARSERS = {

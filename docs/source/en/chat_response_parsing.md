@@ -415,23 +415,20 @@ Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` t
 
 #### python-call-list
 
-The `python-call-list` parser handles tool calls written as a Python list of function calls with keyword arguments,
-such as `[get_weather(city="Paris", days=2)]`. It returns a list of `{"name": ..., "arguments": {...}}` dicts, so it is
-usually combined with `transform_each`. The text is parsed with Python's `ast` module and never evaluated. Argument
-values must be literals: strings, numbers, lists, tuples (returned as lists), dicts with string keys, `True`/`False`/`None`,
-or their JSON spellings `true`/`false`/`null`. Bare identifiers are accepted as dict keys. It has no `content_args`.
+The `python-call-list` parser handles tool calls written as a list of function calls with keyword arguments,
+such as `[get_weather(city="Paris", days=2)]`. Several model families use this format, including LFM2 and Llama 4.
+It returns a list of `{"name": ..., "arguments": {...}}` dicts, so it is usually combined with `transform_each`.
+It has no `content_args`.
 
-The accepted syntax is Python's own, with a few restrictions so other implementations (such as Transformers.js) can
-match it exactly:
+- Argument values are strings (single or double quoted), numbers, lists, dicts with string keys, and
+  `True`/`False`/`None` or their JSON spellings `true`/`false`/`null`.
+- Function and argument names are ASCII and may contain `-` and `.`, like `get-weather`. Python keywords such as
+  `from` are valid names.
+- The format is strict. Anything else raises a `ValueError`, including positional arguments such as
+  `add_numbers(2, 3.5)`.
 
-- Any Python `str` literal is accepted: single, double and triple quotes, `r`/`u` prefixes, and implicit concatenation
-  (`"a" "b"`). Bytes and f-strings are rejected. Named unicode escapes (`\N{...}`) work in Python, but other
-  implementations may reject them because they need the Unicode name database.
-- Number literals follow Python, including `0x`/`0o`/`0b`, `1_000`, `.5`, `1e3` and unary `+`/`-`. Complex numbers
-  and floats that overflow to infinity (`1e999`) are rejected. Integers keep full precision in Python; JavaScript
-  can only represent integers exactly up to 2^53.
-- Positional arguments, `*args`/`**kwargs` and repeated keyword arguments are rejected.
-- `(x)` is just `x`; only `(x,)` and `()` are tuples. Comments and redundant parentheses are allowed.
+The model output is never evaluated as code. The exact grammar is in
+[The python-call-list format](#framework-developers-the-python-call-list-format).
 
 ```python
 field = {
@@ -622,3 +619,65 @@ follow the simple guidelines below, then response templates should be much less 
 - Other advanced features like backreferences, atomic groups, possessive quantifiers, recursion and so on are generally
   not used in response templates. We'll try to dissuade model authors from using them, so you can hopefully safely 
   ignore them.
+
+## Framework developers: The python-call-list format
+
+The `python-call-list` content parser does not accept Python syntax in general. It accepts the small grammar below,
+so that every implementation can use the same hand-written parser and return the same result for the same input.
+The grammar is deliberately strict: it covers what chat templates render and what models are documented to emit,
+and everything else is an error.
+
+```
+call-list  = ws "[" ws [ call *( sep call ) ] ws "]" ws
+call       = name ws "(" ws [ argument *( sep argument ) ] ws ")"
+argument   = name ws "=" ws value
+sep        = ws "," ws
+
+value      = string / number / list / dict / constant
+list       = "[" ws [ value *( sep value ) ] ws "]"
+dict       = "{" ws [ pair *( sep pair ) ] ws "}"
+pair       = string ws ":" ws value
+constant   = "True" / "False" / "None" / "true" / "false" / "null"
+
+name       = name-start *name-char *( ( "-" / "." ) 1*name-char )
+name-start = ALPHA / "_"
+name-char  = ALPHA / DIGIT / "_"
+number     = [ "-" ] int [ "." 1*DIGIT ] [ ( "e" / "E" ) [ "+" / "-" ] 1*DIGIT ]
+int        = "0" / ( %x31-39 *DIGIT )
+string     = "'" *( char / escape ) "'"  /  DQUOTE *( char / escape ) DQUOTE
+char       = any character except backslash, the closing quote, LF and CR
+escape     = "\" ( "\" / "'" / DQUOTE / "/" / "b" / "f" / "n" / "r" / "t" / "u" 4HEXDIG )
+ws         = *( SP / TAB / LF / CR )
+```
+
+- **Result.** A list of `{"name": ..., "arguments": {...}}` in source order. `[]` gives an empty list.
+- **Names.** ASCII letters, digits and `_`, starting with a letter or `_`. `-` and `.` are allowed between those, so
+  `get-weather` and `github.search` are names but `get-` and `a..b` are not. There are no reserved words: `from`,
+  `class`, `None` and `true` are valid function and argument names. Names and dict keys are plain data, so
+  `__proto__` or `constructor` must end up as ordinary keys.
+- **Constants.** An argument always starts with a name followed by `=`. Constants only exist in value position,
+  where a bare word must be exactly one of the six constants. `True`/`true`, `False`/`false` and `None`/`null` map
+  to the same three values.
+- **Numbers.** This is the JSON number grammar. A number with no fraction and no exponent is an integer, anything
+  else is a float. An integer outside -(2^53 - 1) to 2^53 - 1 is an error in every language, so that no
+  implementation returns a rounded value. A float that overflows to infinity (`1e999`) is an error, and a float that
+  underflows (`1e-999`) is `0.0`.
+- **Strings.** Both quote styles behave the same. The escapes are JSON's escapes plus `\'`. A `\uXXXX` surrogate
+  pair becomes one character, and a lone surrogate is an error. Any other backslash sequence is an error, including
+  `\d`, `\x41`, and a `\u` that is not followed by four hex digits. A string cannot contain a raw line break, but
+  other raw characters such as a tab are allowed.
+- **Whitespace.** Only space, tab, LF and CR. Any other whitespace character outside a string is an error.
+- **Commas.** Only between items. A trailing comma is an error.
+- **Duplicates.** A repeated argument name or a repeated dict key is an error.
+- **Nesting.** Lists and dicts nest up to 100 levels deep. Deeper input is an ordinary error.
+- **Errors.** Anything outside the grammar is an error for the whole region. There are no partial results.
+
+Languages with a single number type cannot tell `1.0` from `1`, so compare numbers by value when testing.
+
+Positional arguments, such as `[add_numbers(2, 3.5)]`, are not supported yet and raise an error. Some models do emit
+them. Supporting them means naming the values from the called tool's parameters, which needs `tools`.
+
+The test cases in
+[`tests/fixtures/chat_parsing/python_call_list.json`](https://github.com/huggingface/transformers/blob/main/tests/fixtures/chat_parsing/python_call_list.json)
+are shared between implementations. Each accepted input must parse to exactly the given output, and each rejected
+input must raise an error.

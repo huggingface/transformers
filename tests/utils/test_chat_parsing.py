@@ -18,12 +18,13 @@ here in the new region-spec shape and asserted against the same expected
 output dicts. Any divergence indicates a regression in the new executor."""
 
 import copy
+import json
 import random
 import tempfile
 import unittest
 
 from transformers import AutoTokenizer
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import get_tests_dir, require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
 from transformers.utils.chat_parsing.content_parsers import parse_content
 from transformers.utils.chat_parsing.response_parser import _coerce, _schema_types
@@ -255,49 +256,6 @@ lfm2_template = {
         "content": {"close": "<|im_end|>", "content": "text"},
     },
 }
-
-
-def _f(**arguments):
-    return [{"name": "f", "arguments": arguments}]
-
-
-# (input, expected) pairs for `python-call-list`; `None` means the input must be rejected.
-PYTHON_CALL_LIST_EDGE_CASES = [
-    # Every Python str literal form is accepted.
-    ('[f(s="""a"b""")]', _f(s='a"b')),
-    ("[f(s='''x\ny''')]", _f(s="x\ny")),
-    ('[f(s=r"C:\\new", t=R"\\N{x}")]', _f(s="C:\\new", t="\\N{x}")),
-    ('[f(s="a" \'b\' """c""")]', _f(s="abc")),
-    ('[f(s=u"x")]', _f(s="x")),
-    ('[f(s="a\\qb")]', _f(s="a\\qb")),
-    ('[f(s="\\N{BULLET}")]', _f(s="\u2022")),
-    # Python number literals, including signs.
-    (
-        "[f(h=0x1F, o=0o17, b=0b101, u=1_000, e=1e3, d=.5, t=1., n=--3, p=+2)]",
-        _f(h=31, o=15, b=5, u=1000, e=1000.0, d=0.5, t=1.0, n=3, p=2),
-    ),
-    # `(1)` is just `1`; only `(1,)` and `()` are tuples.
-    ("[f(t=(1,), p=(1), e=())]", _f(t=[1], p=1, e=[])),
-    # Comments, redundant parentheses, JSON-style names as dict keys, unicode identifiers.
-    ("[f(x=1)  # note\n]", _f(x=1)),
-    ("[(f(x=1))]", _f(x=1)),
-    ("[f(d={true: 1, null: 2})]", _f(d={"true": 1, "null": 2})),
-    ("[größe(wert=1)]", [{"name": "größe", "arguments": {"wert": 1}}]),
-    # Rejected: positional or repeated arguments, non-str literals, non-literals, Python syntax errors.
-    ("[f(1, 3.5)]", None),
-    ("[f(x=1, x=2)]", None),
-    ('[f(s=b"x")]', None),
-    ('[f(s=f"x")]', None),
-    ("[f(n=1j)]", None),
-    ("[f(n=1e999)]", None),
-    ("[f(n=" + "-" * 20000 + "1)]", None),
-    ("[f(n=007)]", None),
-    ("[f(d={True: 1})]", None),
-    ("[f(x={1, 2})]", None),
-    ("[f(x=-True)]", None),
-    ("[if(x=1)]", None),
-    ('[f(s="a\nb")]', None),
-]
 
 
 class ChatResponseTemplateParserTest(unittest.TestCase):
@@ -985,51 +943,21 @@ class ChatResponseTemplateParserTest(unittest.TestCase):
         )
 
     def test_python_call_list_parser(self):
-        def parse(text):
-            return parse_content(text, "python-call-list", {})
+        # The fixture is the shared test suite for every implementation of the format (e.g. Transformers.js).
+        with open(get_tests_dir("fixtures/chat_parsing/python_call_list.json"), encoding="utf-8") as f:
+            cases = json.load(f)
+        for case in cases["accepted"]:
+            with self.subTest(accepted=case["input"]):
+                self.assertEqual(parse_content(case["input"], "python-call-list", {}), case["output"])
+        for case in cases["rejected"]:
+            with self.subTest(rejected=case["input"], reason=case["reason"]):
+                with self.assertRaisesRegex(ValueError, "python-call-list"):
+                    parse_content(case["input"], "python-call-list", {})
 
-        self.assertEqual(parse(" [ ] "), [])
-        self.assertEqual(
-            parse("[a(), b(x=1,),]"), [{"name": "a", "arguments": {}}, {"name": "b", "arguments": {"x": 1}}]
-        )
-        self.assertEqual(
-            parse("[f(n=-3, s='it\\'s', l=[1, (2, 3)], d={'k': None, bare: true}, b=False, z=null)]"),
-            [
-                {
-                    "name": "f",
-                    "arguments": {
-                        "n": -3,
-                        "s": "it's",
-                        "l": [1, [2, 3]],
-                        "d": {"k": None, "bare": True},
-                        "b": False,
-                        "z": None,
-                    },
-                }
-            ],
-        )
-        for bad in (
-            "f(x=1)",
-            "[f(1)]",
-            "[f(**kw)]",
-            "[obj.f(x=1)]",
-            "[f(x=g())]",
-            "[f(x=b'raw')]",
-            "[f(x={1: 2})]",
-            "[f(",
-        ):
-            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "python-call-list"):
-                parse(bad)
-
-    def test_python_call_list_edge_cases(self):
-        # Mirrored in Transformers.js (tests/utils/chat_parsing.test.js) so both ports agree on the format.
-        for text, expected in PYTHON_CALL_LIST_EDGE_CASES:
-            with self.subTest(text=text):
-                if expected is None:
-                    with self.assertRaisesRegex(ValueError, "python-call-list"):
-                        parse_content(text, "python-call-list", {})
-                else:
-                    self.assertEqual(parse_content(text, "python-call-list", {}), expected)
+    def test_python_call_list_positional_arguments_error(self):
+        for text in ("[add_numbers(2, 3.5)]", "[add_numbers(a=2, 3.5)]", "[f(x)]"):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "positional arguments"):
+                parse_content(text, "python-call-list", {})
 
     def test_unknown_content_parser_rejected(self):
         bad_template = {
