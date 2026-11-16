@@ -79,6 +79,22 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
         expected = torch.tensor([[0, 1, 1, 1, 2, 2, 2]], device=torch_device)
         torch.testing.assert_close(adapter_indices, expected)
 
+    def test_base_reset_token_routes_back_to_base(self):
+        """A leading base-reset token sends the tokens after it back to adapter 0."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_reset = 94
+        config_dict = config.to_dict()
+        config_dict["adapter_token_ids"] = [base_reset] + ADAPTER_TOKEN_IDS
+        config_dict["adapter_substitute_token_ids"] = [12] + ADAPTER_SUBSTITUTE_TOKEN_IDS
+        switch = GraniteSwitchModel(type(config)(**config_dict)).to(torch_device).eval().switch
+        first, second = ADAPTER_TOKEN_IDS
+        input_ids = torch.tensor([[5, first, 7, base_reset, 8, second, 9, base_reset, 9]], device=torch_device)
+        with torch.no_grad():
+            adapter_indices, modified_input_ids = switch(input_ids)
+        expected = torch.tensor([[0, 1, 1, 0, 0, 2, 2, 0, 0]], device=torch_device)
+        torch.testing.assert_close(adapter_indices, expected)
+        self.assertFalse(any(token in modified_input_ids for token in [base_reset] + ADAPTER_TOKEN_IDS))
+
     def test_token_exchange_hides_the_control_token(self):
         """The decoder embeds a substitute id, so a control token is never itself embedded."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
