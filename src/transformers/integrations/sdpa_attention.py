@@ -10,6 +10,7 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+_is_torch_greater_or_equal_than_2_11 = is_torch_greater_or_equal("2.11", accept_dev=True)
 _is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -89,6 +90,56 @@ def create_position_bias_mask(
         position_bias_mask = position_bias + attention_mask
 
     return position_bias_mask.contiguous()
+
+
+def _mps_sdpa_needs_general_path(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    is_causal: bool,
+    num_key_value_groups: int,
+) -> bool:
+    """
+    Whether `sdpa_vector_2pass_mps` would silently return wrong results for this call
+    (pytorch/pytorch#174861, present in torch >= 2.8 and fixed upstream in torch 2.11).
+
+    The buggy kernel is only selected when every condition of the upstream bug holds, so the
+    workaround in `sdpa_attention_forward` must fire on exactly the same window: no wider (it
+    would needlessly slow down correct calls) and no narrower (it would leave wrong results in
+    place). The head-count condition uses the module's `num_key_value_groups` because key/value
+    heads have already been repeated to the query head count by the time this runs.
+    """
+    return (
+        not is_causal
+        and query.dtype != torch.float32
+        and (attention_mask is None or attention_mask.dtype == torch.bool)
+        and query.shape[2] <= 8
+        and query.shape[2] <= key.shape[2]
+        and query.shape[-1] == value.shape[-1]
+        and query.shape[-1] in (64, 96, 128)
+        and (key.shape[2] >= 1024 or (num_key_value_groups > 1 and key.shape[2] >= 4096))
+    )
+
+
+def _mps_sdpa_general_path_mask(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+) -> torch.Tensor:
+    """
+    Return a floating-point mask equivalent to `attention_mask` (which is `None` or boolean).
+
+    Passing a float mask keeps PyTorch's MPS backend off the `sdpa_vector_2pass_mps` kernel and
+    on the correct `sdpa_general_mps` path. A `None` mask becomes an all-zeros mask, which does
+    not change the attention result; a boolean mask becomes the equivalent additive mask.
+    """
+    if attention_mask is None:
+        return torch.zeros(
+            (query.shape[0], 1, query.shape[2], key.shape[2]), dtype=query.dtype, device=query.device
+        )
+    min_dtype = torch.finfo(query.dtype).min
+    return torch.where(attention_mask, torch.zeros((), dtype=query.dtype, device=query.device), min_dtype)
 
 
 def sdpa_attention_forward(
@@ -178,6 +229,23 @@ def sdpa_attention_forward(
     if position_bias is not None:
         attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
         is_causal = False
+
+    # Workaround for pytorch/pytorch#174861 (transformers#44247): on MPS, torch >= 2.8 and
+    # < 2.11 can dispatch non-causal attention to the `sdpa_vector_2pass_mps` kernel, which
+    # silently returns wrong results in the narrow window `_mps_sdpa_needs_general_path`
+    # describes. Materializing an equivalent float mask routes the call to the correct
+    # `sdpa_general_mps` path. The window is bounded (query length <= 8), so the mask is small,
+    # and this is a no-op on every other device and torch version.
+    if (
+        _is_torch_mps_available
+        and _is_torch_greater_or_equal_than_2_8
+        and not _is_torch_greater_or_equal_than_2_11
+        and query.device.type == "mps"
+        and _mps_sdpa_needs_general_path(
+            query, key, value, attention_mask, is_causal, getattr(module, "num_key_value_groups", 1)
+        )
+    ):
+        attention_mask = _mps_sdpa_general_path_mask(query, key, attention_mask)
 
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
