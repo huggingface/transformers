@@ -40,7 +40,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    can_return_tuple,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_nearest_position_ids, get_vision_window_index
@@ -440,6 +446,31 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         }
         return downsampled_kwargs, target_sizes, cu_seqlens
 
+    def get_data_dependent_inputs(self, target_sizes: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `target_sizes` with data-dependent operations (host syncs, loops over
+        images): the patches' `position_ids`, the attention's `max_seqlen`, and the window merger's `window_index` and
+        `cu_window_seqlens`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
+        operations. Those already in `kwargs` are returned as they are; only the config and the tower's constants are
+        read.
+
+        Args:
+            target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
+                Patch grid sizes `(h, w)` of each image.
+        """
+        position_ids = get_vision_nearest_position_ids(
+            target_sizes, self.embeddings.num_patches_per_side, kwargs=kwargs
+        )
+        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        window_index, cu_window_seqlens, _ = self.vit_merger.get_window_index(target_sizes, kwargs=kwargs)
+        return {
+            "position_ids": position_ids,
+            "max_seqlen": max_seqlen,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -457,13 +488,17 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             Whether to apply the ViT window-attention merger after the encoder.
         """
 
-        hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes, **kwargs)
+        data_dependent_inputs = self.get_data_dependent_inputs(target_sizes, **kwargs)
+        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
+        hidden_states = self.embeddings(
+            pixel_values, target_sizes=target_sizes, position_ids=data_dependent_inputs["position_ids"], **kwargs
+        )
 
         cu_seqlens = F.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
             (1, 0),
         )
-        max_seqlens = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlens = data_dependent_inputs["max_seqlen"]
 
         attn_kwargs = {
             "attention_mask": None,
@@ -477,7 +512,13 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             for layer_index, encoder_layer in enumerate(self.encoder.layers):
                 hidden_states = encoder_layer(hidden_states, **attn_kwargs)
                 if layer_index == insert_layer_id:
-                    hidden_states = self.vit_merger(hidden_states, target_sizes, **kwargs)
+                    hidden_states = self.vit_merger(
+                        hidden_states,
+                        target_sizes,
+                        window_index=data_dependent_inputs["window_index"],
+                        cu_window_seqlens=data_dependent_inputs["cu_window_seqlens"],
+                        **kwargs,
+                    )
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
                     attn_kwargs, target_sizes, cu_seqlens = self.get_downsampled_inputs(
@@ -600,6 +641,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         self.merger = MiniCPMV4_6Merger(config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_features(
@@ -741,6 +783,22 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             **kwargs,
         )
         return output
+
+    def get_data_dependent_inputs(self, target_sizes: torch.IntTensor | None = None, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        tower's (see [`MiniCPMV4_6VisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
+        `get_image_features` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export` free
+        of those operations. Only the config and the tower's constants are read.
+
+        Args:
+            target_sizes (`torch.IntTensor` of shape `(num_images, 2)`, *optional*):
+                Height and width (in patches) of each image.
+        """
+        if target_sizes is None:
+            return {}
+        tower_inputs = self.vision_tower.get_data_dependent_inputs(target_sizes)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
 
     @can_return_tuple
     @auto_docstring(
