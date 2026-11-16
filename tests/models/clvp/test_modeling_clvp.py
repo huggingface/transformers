@@ -180,6 +180,17 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_half_precision_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # `from_pretrained(dtype=...)` keeps the rotary `inv_freq` buffer in float32, unlike `model.to(dtype)`
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ClvpEncoder(config).save_pretrained(tmp_dir)
+            for dtype in (torch.float16, torch.bfloat16):
+                model = ClvpEncoder.from_pretrained(tmp_dir, dtype=dtype).to(torch_device).eval()
+                with torch.no_grad():
+                    outputs = model(**inputs_dict)
+                self.assertEqual(outputs.last_hidden_state.dtype, dtype)
+
     @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_training(self):
         pass

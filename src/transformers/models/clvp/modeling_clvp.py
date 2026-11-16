@@ -347,6 +347,7 @@ class ClvpSelfAttention(nn.Module):
             )
 
             cos, sin = rotary_pos_emb.cos().squeeze(0), rotary_pos_emb.sin().squeeze(0)
+            cos, sin = cos.to(query_states.dtype), sin.to(query_states.dtype)
             query_rot, key_rot, value_rot = apply_rotary_pos_emb(query_rot, key_rot, value_rot, cos, sin, position_ids)
 
             # [batch_size, num_heads, seq_length, head_dim]
