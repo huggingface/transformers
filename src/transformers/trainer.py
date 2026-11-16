@@ -874,6 +874,13 @@ class Trainer:
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
 
+        if self.args.save_full_checkpoint_limit is not None and (
+            self.is_deepspeed_enabled or self.is_fsdp_enabled or is_torch_xla_available() or is_sagemaker_mp_enabled()
+        ):
+            raise ValueError(
+                "`save_full_checkpoint_limit` is not supported with DeepSpeed, FSDP, XLA, or SageMaker model parallelism."
+            )
+
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.activation_checkpointing:
@@ -2021,7 +2028,12 @@ class Trainer:
         )
 
         # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
-        if self.args.should_save and self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
+        if (
+            self.args.should_save
+            and self.state.best_model_checkpoint is not None
+            and self.args.save_total_limit == 1
+            and self.args.save_full_checkpoint_limit is None
+        ):
             for checkpoint in checkpoints_sorted:
                 if not os.path.samefile(checkpoint, self.state.best_model_checkpoint):
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
@@ -3411,6 +3423,10 @@ class Trainer:
         if self.args.push_to_hub:
             self._push_from_checkpoint(output_dir)
 
+        if self.args.save_full_checkpoint_limit is not None:
+            # All ranks must finish writing their RNG states before pruning them.
+            self.accelerator.wait_for_everyone()
+
         # Maybe delete some older checkpoints.
         if self.args.should_save:
             # we use mtime as default, filesystems without mtime support will be detected in `sort_checkpoints`
@@ -3420,6 +3436,28 @@ class Trainer:
                 best_model_checkpoint=self.state.best_model_checkpoint,
                 use_mtime=True,
             )
+            self._rotate_full_checkpoints(run_dir)
+
+    def _rotate_full_checkpoints(self, output_dir: str) -> None:
+        limit = self.args.save_full_checkpoint_limit
+        if limit is None:
+            return
+
+        optimizer_names = (OPTIMIZER_NAME, OPTIMIZER_NAME_BIN)
+        checkpoints = [
+            Path(checkpoint)
+            for checkpoint in sort_checkpoints(output_dir, use_mtime=True)
+            if any((Path(checkpoint) / name).is_file() for name in optimizer_names)
+        ]
+        for checkpoint in checkpoints[:-limit]:
+            logger.info(f"Removing training state from [{checkpoint}] due to args.save_full_checkpoint_limit")
+            checkpoint_stat = checkpoint.stat()
+            state_files = [checkpoint / name for name in (*optimizer_names, SCHEDULER_NAME, SCALER_NAME)]
+            state_files.extend(checkpoint.glob("rng_state*.pth"))
+            for state_file in state_files:
+                state_file.unlink(missing_ok=True)
+            # Pruning must not make an old checkpoint look newer to model rotation.
+            os.utime(checkpoint, ns=(checkpoint_stat.st_atime_ns, checkpoint_stat.st_mtime_ns))
 
     def _determine_best_metric(self, metrics: dict[str, float], trial: "optuna.Trial | dict[str, Any] | None") -> bool:
         """
