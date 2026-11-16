@@ -447,7 +447,9 @@ class Qwen3VLMoeModel(Qwen3VLModel):
             **kwargs,
         )
 
-        return Qwen3VLMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Qwen3VLMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
@@ -565,6 +567,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

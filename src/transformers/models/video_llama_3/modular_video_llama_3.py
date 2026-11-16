@@ -561,7 +561,9 @@ class VideoLlama3Model(Qwen2VLModel):
             **kwargs,
         )
 
-        return VideoLlama3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return VideoLlama3ModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -633,6 +635,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     def _prepare_position_ids_for_generation(self):

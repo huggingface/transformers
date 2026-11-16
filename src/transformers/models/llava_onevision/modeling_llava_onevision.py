@@ -54,7 +54,7 @@ class LlavaOnevisionModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 class LlavaOnevisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
@@ -64,7 +64,7 @@ class LlavaOnevisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 @auto_docstring
@@ -510,7 +510,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             **kwargs,
         )
 
-        return LlavaOnevisionModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return LlavaOnevisionModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -737,6 +739,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     @merge_with_config_defaults

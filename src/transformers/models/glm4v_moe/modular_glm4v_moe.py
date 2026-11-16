@@ -400,7 +400,9 @@ class Glm4vMoeModel(Glm4vModel):
             **kwargs,
         )
 
-        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
@@ -480,6 +482,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

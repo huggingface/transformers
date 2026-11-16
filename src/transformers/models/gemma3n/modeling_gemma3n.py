@@ -2087,6 +2087,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_outputs = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
             audio_features = audio_outputs.pooler_output
@@ -2124,7 +2125,9 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             **kwargs,
         )
 
-        return Gemma3nModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Gemma3nModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
+        )
 
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer
@@ -2287,6 +2290,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
         )
 
     def get_per_layer_input_embeddings(self):

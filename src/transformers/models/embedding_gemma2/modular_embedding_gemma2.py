@@ -750,7 +750,9 @@ class EmbeddingGemma2Model(Gemma4Model):
             **kwargs,
         )
 
-        return EmbeddingGemma2ModelOutput(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return EmbeddingGemma2ModelOutput(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=mm_encoder_outputs.get("audio")
+        )
 
 
 class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):

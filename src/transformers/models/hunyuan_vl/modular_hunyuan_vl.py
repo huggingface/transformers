@@ -1308,7 +1308,7 @@ class HunYuanVLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return HunYuanVLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return HunYuanVLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video"))
 
 
 @auto_docstring
@@ -1421,57 +1421,8 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        image_grid_thw=None,
-        mm_token_type_ids=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        position_ids = model_inputs.get("position_ids")
-        if position_ids is not None and position_ids.dim() == 3:
-            rope_parameters = self.config.text_config.rope_parameters or {}
-            num_mrope_axes = len(rope_parameters.get("mrope_section", []))
-            if num_mrope_axes and position_ids.shape[0] != num_mrope_axes:
-                batch_size_source = model_inputs.get("input_ids")
-                if batch_size_source is None:
-                    batch_size_source = model_inputs.get("inputs_embeds")
-                if batch_size_source is None:
-                    batch_size_source = attention_mask
-                batch_size = batch_size_source.shape[0]
-                if position_ids.shape[0] % num_mrope_axes == 0 and position_ids.shape[1] != batch_size:
-                    expand_size = position_ids.shape[0] // num_mrope_axes
-                    position_ids = position_ids.view(expand_size, num_mrope_axes, *position_ids.shape[1:])
-                    position_ids = position_ids.permute(1, 0, 2, 3).reshape(num_mrope_axes, -1, position_ids.shape[-1])
-                    model_inputs["position_ids"] = position_ids
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-
-        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Same as qwen-vl with variable `num_mrope_axes` based on config values

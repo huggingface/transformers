@@ -69,7 +69,7 @@ class VideoLlama3ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 @auto_docstring
@@ -89,7 +89,7 @@ class VideoLlama3CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 class VideoLlama3VisionRotaryEmbedding(nn.Module):
@@ -730,7 +730,9 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             **kwargs,
         )
 
-        return VideoLlama3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return VideoLlama3ModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
@@ -836,6 +838,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

@@ -58,7 +58,7 @@ class VideoLlavaModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 @auto_docstring
@@ -78,7 +78,7 @@ class VideoLlavaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->VideoLlava
@@ -334,7 +334,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             **kwargs,
         )
 
-        return VideoLlavaModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return VideoLlavaModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring(
@@ -505,6 +507,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

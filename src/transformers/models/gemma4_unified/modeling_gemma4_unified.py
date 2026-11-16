@@ -84,15 +84,11 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
     """
 
     shared_kv_states: KVSharingDict | None = None
@@ -1129,6 +1125,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             )
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1188,7 +1185,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             **kwargs,
         )
 
-        return Gemma4UnifiedModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Gemma4UnifiedModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
+        )
 
     @can_return_tuple
     @auto_docstring(

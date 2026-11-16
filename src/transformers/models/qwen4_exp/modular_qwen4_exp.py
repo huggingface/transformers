@@ -1129,7 +1129,9 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return Qwen4ExpBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Qwen4ExpBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring

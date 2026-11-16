@@ -389,7 +389,9 @@ class Qwen3_5MoeModel(Qwen3_5Model):
             use_cache=use_cache,
             **kwargs,
         )
-        return Qwen3_5MoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Qwen3_5MoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):

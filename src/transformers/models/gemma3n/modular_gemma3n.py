@@ -2224,6 +2224,7 @@ class Gemma3nModel(PaliGemmaModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_outputs = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
             audio_features = audio_outputs.pooler_output
@@ -2261,7 +2262,9 @@ class Gemma3nModel(PaliGemmaModel):
             **kwargs,
         )
 
-        return Gemma3nModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Gemma3nModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
+        )
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
@@ -2412,6 +2415,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):

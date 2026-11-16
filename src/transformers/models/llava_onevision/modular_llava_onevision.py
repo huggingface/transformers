@@ -696,7 +696,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             **kwargs,
         )
 
-        return LlavaOnevisionModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return LlavaOnevisionModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
@@ -801,6 +803,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     @merge_with_config_defaults

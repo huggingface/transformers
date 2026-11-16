@@ -1035,7 +1035,9 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MuseGlimmerModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return MuseGlimmerModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring
@@ -1172,6 +1174,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

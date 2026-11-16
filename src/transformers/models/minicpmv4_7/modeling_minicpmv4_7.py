@@ -757,7 +757,9 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MultimodalBaseModelOutputWithPast(**output, image_outputs=mm_encoder_outputs.get("image"))
+        return MultimodalBaseModelOutputWithPast(
+            **output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
     @can_return_tuple
     @auto_docstring(
@@ -1290,6 +1292,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")

@@ -137,17 +137,13 @@ class Gemma4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         return self.audio_outputs.pooler_output
 
 
-@dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`KVSharingDict`, *optional*):
-            A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
-        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-            Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+    shared_kv_states (`KVSharingDict`, *optional*):
+        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
+    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
     shared_kv_states: KVSharingDict | None = None
@@ -2432,6 +2428,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             )
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output
@@ -2494,7 +2491,9 @@ class Gemma4Model(Gemma4PreTrainedModel):
             **kwargs,
         )
 
-        return Gemma4ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Gemma4ModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
+        )
 
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer

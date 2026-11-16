@@ -59,16 +59,16 @@ class ModernVBertMaskedLMOutput(MultimodalModelOutput):
         sequence_length)`.
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
-    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-        encoder. Contains only the modalities that were processed.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 class ModernVBertConnector(nn.Module):

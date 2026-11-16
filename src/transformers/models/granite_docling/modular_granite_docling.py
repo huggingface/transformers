@@ -1188,7 +1188,6 @@ class GraniteDoclingModel(Idefics3Model):
         image_hidden_states = None
         deepstack_visual_embeds = None
         visual_pos_masks = None
-        router_logits = None
         mm_encoder_outputs = {} if mm_encoder_outputs is None else mm_encoder_outputs
         if mm_encoder_outputs.get("image") is not None or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
@@ -1199,7 +1198,6 @@ class GraniteDoclingModel(Idefics3Model):
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            router_logits = image_outputs.router_logits
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
@@ -1221,12 +1219,9 @@ class GraniteDoclingModel(Idefics3Model):
         )
 
         return GraniteDoclingBaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-            router_logits=router_logits,
+            **outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
         )
 
 
@@ -1336,8 +1331,9 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            router_logits=router_logits,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
+            router_logits=outputs.router_logits,
         )
 
 

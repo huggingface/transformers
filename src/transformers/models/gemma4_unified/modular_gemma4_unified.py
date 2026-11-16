@@ -534,12 +534,9 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
 
 class Gemma4UnifiedTextModelOutputWithPast(Gemma4TextModelOutputWithPast):
     """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
     """
 
     router_logits = AttributeError()
@@ -1201,6 +1198,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1260,7 +1258,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             **kwargs,
         )
 
-        return Gemma4UnifiedModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return Gemma4UnifiedModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs)
 
 
 class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):

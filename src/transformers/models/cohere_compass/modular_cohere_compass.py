@@ -563,6 +563,7 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

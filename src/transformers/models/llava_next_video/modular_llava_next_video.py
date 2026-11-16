@@ -137,7 +137,7 @@ class LlavaNextVideoModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 class LlavaNextVideoCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
@@ -147,7 +147,7 @@ class LlavaNextVideoCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 class LlavaNextVideoPooler(nn.Module):
@@ -443,7 +443,9 @@ class LlavaNextVideoModel(LlavaNextModel):
             **kwargs,
         )
 
-        return LlavaNextVideoModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return LlavaNextVideoModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
@@ -589,6 +591,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.videp_outputs,
         )
 
 

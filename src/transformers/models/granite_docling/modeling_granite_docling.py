@@ -31,15 +31,24 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from .configuration_granite_docling import GraniteDoclingConfig, GraniteDoclingTextConfig, GraniteDoclingVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(
@@ -48,20 +57,22 @@ from .configuration_granite_docling import GraniteDoclingConfig, GraniteDoclingT
     """
 )
 @dataclass
-class GraniteDoclingBaseModelOutputWithPast(ModelOutput):
+class GraniteDoclingBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
     router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
         Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
         given.
     """
 
-    last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
-
     router_logits: torch.FloatTensor | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -70,7 +81,7 @@ class GraniteDoclingBaseModelOutputWithPast(ModelOutput):
     """
 )
 @dataclass
-class GraniteDoclingCausalLMOutputWithPast(ModelOutput):
+class GraniteDoclingCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -81,14 +92,15 @@ class GraniteDoclingCausalLMOutputWithPast(ModelOutput):
         given.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
-
     router_logits: torch.FloatTensor | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -1131,7 +1143,6 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         image_hidden_states = None
         deepstack_visual_embeds = None
         visual_pos_masks = None
-        router_logits = None
         mm_encoder_outputs = {} if mm_encoder_outputs is None else mm_encoder_outputs
         if mm_encoder_outputs.get("image") is not None or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
@@ -1142,7 +1153,6 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            router_logits = image_outputs.router_logits
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
@@ -1164,12 +1174,9 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         )
 
         return GraniteDoclingBaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-            router_logits=router_logits,
+            **outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
         )
 
     def get_placeholder_mask(
@@ -1365,8 +1372,9 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            router_logits=router_logits,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
+            router_logits=outputs.router_logits,
         )
 
 

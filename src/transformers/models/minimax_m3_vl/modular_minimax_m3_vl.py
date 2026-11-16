@@ -904,7 +904,7 @@ class MiniMaxM3VLModelOutputWithPast(AriaModelOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 class MiniMaxM3VLCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
@@ -916,7 +916,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
             "`video_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_pooler_output
+        return self.video_outputs.pooler_output
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
@@ -1070,7 +1070,9 @@ class MiniMaxM3VLModel(LlavaModel):
             **kwargs,
         )
 
-        return MiniMaxM3VLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return MiniMaxM3VLModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
@@ -1151,6 +1153,7 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 
