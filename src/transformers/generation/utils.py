@@ -30,10 +30,12 @@ from torch import nn
 
 from ..cache_utils import (
     Cache,
+    DummyLayer,
     DynamicCache,
     EncoderDecoderCache,
     QuantizedCache,
     StaticCache,
+    StaticLayer,
 )
 from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
@@ -2168,11 +2170,12 @@ class GenerationMixin(ContinuousMixin):
         max_cache_len: int,
         prefill_chunk_size: int | None,
         model_kwargs,
+        use_cache_buffer: bool = False,
     ) -> Cache:
         """
         Create a static cache for `generate`. To avoid recompilation, the new cache will use the maximum between the current
         `max_cache_len` and the potential previous value of `max_cache_len`, if there was some previous `generate` calls with
-        static cache.
+        static cache. With `use_cache_buffer`, the cache is also kept as the base model's non-persistent buffers.
         """
         offload_cache = "offloaded" in cache_implementation
         previous_max_len = getattr(self, "_previous_max_cache_length", -1)
@@ -2191,7 +2194,7 @@ class GenerationMixin(ContinuousMixin):
                 "offloading": offload_cache,
             }
             cache = EncoderDecoderCache(cache, StaticCache(**cross_attention_cache_kwargs))
-        elif prefill_chunk_size is not None:
+        elif prefill_chunk_size is not None or use_cache_buffer:
             # Chunked prefill compiles the prefill, so eagerly init the fresh cache to avoid a recompile next call
             # (#46421). Skipped (-> lazy init) when it can't be initialized on a single device.
             init_shape = self._get_static_cache_init_shape()
@@ -2204,6 +2207,18 @@ class GenerationMixin(ContinuousMixin):
                     dtype=self.dtype,
                     device=self.device,
                 )
+
+        if use_cache_buffer:
+            if (
+                self.config.is_encoder_decoder
+                or any(
+                    type(layer) not in (StaticLayer, DummyLayer) or not layer.is_initialized for layer in cache.layers
+                )
+                or not getattr(type(self.base_model).forward, "_merges_config_defaults", False)
+            ):
+                raise ValueError("`use_cache_buffer=True` only supports static caches.")
+            cache.register_as_buffers(self.base_model)
+            self.base_model._cache_buffer = cache
 
         # Set the current length on the current model, to avoid recompilation later if we can
         self._previous_max_cache_length = effective_length
@@ -2305,6 +2320,8 @@ class GenerationMixin(ContinuousMixin):
                 max_cache_len=max_cache_length,
                 prefill_chunk_size=generation_config.prefill_chunk_size,
                 model_kwargs=model_kwargs,
+                use_cache_buffer=generation_config.use_cache_buffer
+                and generation_config.cache_implementation == "static",
             )
         elif generation_config.cache_implementation == "quantized":
             if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():

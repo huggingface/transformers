@@ -178,6 +178,8 @@ class GenerationConfig(PushToHubMixin):
             largest call you expect so that repeated `generate()` calls with a longer prompt or a larger
             `max_new_tokens` (up to this ceiling) reuse the same cache instead of triggering a reallocation and a
             `torch.compile` recompilation.
+        use_cache_buffer (`bool`, *optional*, defaults to `False`):
+            Only used with `cache_implementation="static"`. Keeps the static cache as the model's non-persistent buffers.
 
         > Parameters for manipulation of the model output logits
 
@@ -407,6 +409,7 @@ class GenerationConfig(PushToHubMixin):
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
         self.max_cache_len = kwargs.pop("max_cache_len", None)
+        self.use_cache_buffer = kwargs.pop("use_cache_buffer", False)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", None)
@@ -693,6 +696,11 @@ class GenerationConfig(PushToHubMixin):
             logger.warning_once(
                 f"`max_cache_len` is only used with static caches ({STATIC_CACHE_IMPLEMENTATIONS}); it will be "
                 f"ignored with `cache_implementation={self.cache_implementation!r}`."
+            )
+        if self.use_cache_buffer and self.cache_implementation != "static":
+            logger.warning_once(
+                "`use_cache_buffer` is only used with `cache_implementation='static'`; it will be ignored with "
+                f"`cache_implementation={self.cache_implementation!r}`."
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):

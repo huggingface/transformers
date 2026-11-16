@@ -1058,6 +1058,23 @@ def merge_with_config_defaults(func):
                 else:
                     kwargs[arg_name] = arg_value
 
+        # Without a `past_key_values`, the `StaticCache` that `generate` kept as this model's buffers
+        # (`generation_config.use_cache_buffer`) is used and not returned
+        cache_buffer = getattr(self, "_cache_buffer", None)
+        if cache_buffer is not None:
+            # `inspect.signature` follows `__wrapped__`, so it sees the real `forward` under inner decorators
+            parameter_names = list(inspect.signature(func).parameters)
+            past_index = parameter_names.index("past_key_values") - 1 if "past_key_values" in parameter_names else None
+            passed_positionally = past_index is not None and len(args) > past_index
+            if (args[past_index] if passed_positionally else kwargs.get("past_key_values")) is not None:
+                cache_buffer = None
+            else:
+                cache_buffer.bind_buffers(self)
+                if passed_positionally:
+                    args = (*args[:past_index], cache_buffer, *args[past_index + 1 :])
+                else:
+                    kwargs["past_key_values"] = cache_buffer
+
         # Maybe temporarily overwrite config value to create the correct mask - kwarg takes precedence
         is_causal = kwargs.get("is_causal", getattr(self.config, "is_causal", None))
         if is_causal is not None:
@@ -1087,8 +1104,16 @@ def merge_with_config_defaults(func):
                 else:
                     del self.config.is_causal
 
+        if cache_buffer is not None:
+            # Return the outputs without the KV cache: it is model state updated in place, not an output
+            if isinstance(output, ModelOutput):
+                output = type(output)(**{key: value for key, value in output.items() if key != "past_key_values"})
+            else:
+                output = tuple(value for value in output if value is not cache_buffer)
         return output
 
+    # Lets `generate` check that a model's `forward` can use a cache kept as buffers (`use_cache_buffer`)
+    wrapper._merges_config_defaults = True
     return wrapper
 
 

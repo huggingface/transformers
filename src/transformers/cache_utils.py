@@ -2109,6 +2109,28 @@ class StaticCache(Cache):
         ]
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
 
+    def register_as_buffers(self, module: torch.nn.Module) -> None:
+        """Register every initialized layer's `keys`, `values` and `cumulative_length` as non-persistent buffers of
+        `module`, so the cache is module state (`torch.export` traces its updates as `BUFFER_MUTATION`s)."""
+        for i, layer in enumerate(self.layers):
+            # Layers sharing another layer's KV hold no state
+            if isinstance(layer, DummyLayer):
+                continue
+            module.register_buffer(f"static_cache_keys_{i}", layer.keys, persistent=False)
+            module.register_buffer(f"static_cache_values_{i}", layer.values, persistent=False)
+            module.register_buffer(f"static_cache_cumulative_length_{i}", layer.cumulative_length, persistent=False)
+
+    def bind_buffers(self, module: torch.nn.Module) -> None:
+        """Point every layer at the buffers `register_as_buffers` put on `module`."""
+        for i, layer in enumerate(self.layers):
+            if isinstance(layer, DummyLayer):
+                continue
+            layer.keys = module.get_buffer(f"static_cache_keys_{i}")
+            layer.values = module.get_buffer(f"static_cache_values_{i}")
+            layer.cumulative_length = module.get_buffer(f"static_cache_cumulative_length_{i}")
+            # The module may have been moved or cast since the layer was initialized
+            layer.device, layer.dtype = layer.keys.device, layer.keys.dtype
+
 
 class QuantizedCache(Cache):
     """

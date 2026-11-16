@@ -868,6 +868,15 @@ def decompose_prefill_decode(
     for call in calls:
         call.pop("logits_to_keep", None)
 
+    # With `use_cache_buffer`, `generate` kept its cache as the model's buffers: capture the components without
+    # `past_key_values` (they then use the buffers) and empty the cache, so an export starts from an empty one
+    if capture_config.use_cache_buffer and capture_config.cache_implementation == "static":
+        for call in calls:
+            call.pop("past_key_values", None)
+        cache_buffer = model.base_model._cache_buffer
+        cache_buffer.bind_buffers(model.base_model)
+        cache_buffer.reset()
+
     # A single-token decode specializes its query-sequence axis to 1 (never dynamic). When
     # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays
     # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
