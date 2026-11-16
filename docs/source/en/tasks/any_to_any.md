@@ -31,10 +31,11 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForMultimodalLM, infer_device
+from transformers import AutoProcessor, AutoModelForMultimodalLM
+from accelerate import Accelerator
 import torch
 
-device = torch.device(infer_device())
+device = Accelerator().device
 model = AutoModelForMultimodalLM.from_pretrained(
     "Qwen/Qwen2.5-Omni-3B",
     dtype=torch.bfloat16,
@@ -76,7 +77,7 @@ We can now pass the preprocessed inputs to the model.
 
 ```python
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=100)
+    generated_ids = model.generate(**inputs, max_new_tokens=100, generation_mode="text")
 generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 print(generated_texts)
 ```
