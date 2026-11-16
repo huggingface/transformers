@@ -536,8 +536,9 @@ class BloomIntegrationTest(unittest.TestCase):
         # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_560m = "bigscience/bloom-560m"
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
         model = BloomForCausalLM.from_pretrained(
-            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
         ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m)
@@ -558,8 +559,9 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation(self):
         path_560m = "bigscience/bloom-560m"
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
         model = BloomForCausalLM.from_pretrained(
-            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
         ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
@@ -580,8 +582,9 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation_padding(self):
         path_560m = "bigscience/bloom-560m"
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
         model = BloomForCausalLM.from_pretrained(
-            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
         ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
@@ -612,8 +615,9 @@ class BloomIntegrationTest(unittest.TestCase):
     def test_batch_generated_text(self):
         path_560m = "bigscience/bloom-560m"
 
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
         model = BloomForCausalLM.from_pretrained(
-            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
         ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
