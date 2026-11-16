@@ -102,7 +102,6 @@ class JetMoeRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -555,7 +554,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": [OutputRecorder(JetMoeAttention, index=2), OutputRecorder(JetMoeTopKGating, index=4)],
+        "router_logits": OutputRecorder(JetMoeTopKGating, index=4),
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }

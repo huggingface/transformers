@@ -298,7 +298,6 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -660,6 +659,8 @@ class Gemma3Model(PaliGemmaModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         del self.text_config_dtype
@@ -760,6 +761,8 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

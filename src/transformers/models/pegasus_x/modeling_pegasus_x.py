@@ -100,7 +100,6 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.max_scale = max_scale
 
-    @torch.no_grad()
     def forward(
         self, inputs_embeds: torch.Tensor, cache_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:

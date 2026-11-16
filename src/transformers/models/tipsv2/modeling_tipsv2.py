@@ -618,7 +618,6 @@ class Tipsv2SinusoidalPositionalEmbedding(nn.Module):
             emb[padding_idx, :] = 0
         return emb.to(torch.get_default_dtype())
 
-    @torch.no_grad()
     def forward(self, position_ids: torch.LongTensor) -> torch.Tensor:
         return self.weights[position_ids]
 
