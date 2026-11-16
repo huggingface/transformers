@@ -527,7 +527,8 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Encode-only EMU3.5-derived vision tokenizer used by Apertus 1.5. It returns hard codebook indices; run it in
+    Encode-only EMU3.5 vision tokenizer used by Apertus 1.5: a 2D VQGAN encoder as in Chameleon, followed by a
+    quantizer that picks the codebook entry with the largest inner product. It returns hard codebook indices; run it in
     `float32` for stable code assignment (Apertus 1.5 does this automatically).
     """
 )

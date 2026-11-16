@@ -26,7 +26,9 @@ limitations under the License.
 Apertus 1.5 is a multimodal model from the [Swiss AI Initiative](https://huggingface.co/swiss-ai) that accepts
 text, images, and audio and generates text. It extends the [Apertus](./apertus) language model with the
 [EMU3.5 vision tokenizer](https://huggingface.co/BAAI/Emu3.5-VisionTokenizer) and [WavTokenizer](./wavtokenizer)
-for audio.
+for audio. The EMU3.5 vision tokenizer is an image-only VQGAN with the same encoder as [Chameleon](./chameleon)'s,
+unlike the [Emu3](./emu3) tokenizer, which adds temporal layers for video. It assigns codes by the largest inner
+product with the codebook instead of the smallest L2 distance.
 
 The media tokenizers convert images and audio into discrete tokens, which the language backbone processes
 alongside text in a shared input vocabulary. The output vocabulary contains only text tokens. The integration
