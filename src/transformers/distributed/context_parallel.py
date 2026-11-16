@@ -285,13 +285,11 @@ def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: di
             "disable context parallelism."
         )
 
-    # every other layer type (recurrent, convolutional, sparse-indexer, ...) mixes tokens outside attention
     layer_types = set(getattr(model.config.get_text_config(), "layer_types", None) or ())
     if unsupported := layer_types - {"full_attention", "sliding_attention", "chunked_attention"}:
         raise ValueError(
-            f"Context parallelism does not support the {sorted(unsupported)} layers of {model.__class__.__name__}: "
-            "they mix tokens outside softmax attention, so they would run on this rank's slice only and be silently "
-            "cut at the slice boundaries. Use another model, or disable context parallelism."
+            f"Context parallelism does not support layer types {sorted(unsupported)} "
+            f"in {model.__class__.__name__}. Use another model or disable context parallelism."
         )
 
     # `loss_type=None` (base models, and heads whose name maps to no loss) falls back to the causal LM loss
