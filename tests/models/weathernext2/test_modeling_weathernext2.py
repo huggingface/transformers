@@ -203,8 +203,9 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         if return_labels and model_class == WeatherNext2ForWeatherForecasting:
             config = self.model_tester.get_config()
             batch_size = inputs_dict["grid_features"].shape[0]
-            inputs_dict["labels"] = floats_tensor(
-                [batch_size // 2, 2, config.num_output_channels, *inputs_dict["grid_features"].shape[-2:]]
+            inputs_dict["labels"] = torch.zeros(
+                [batch_size // 2, 2, config.num_output_channels, *inputs_dict["grid_features"].shape[-2:]],
+                device=torch_device,
             )
         return inputs_dict
 
@@ -214,7 +215,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     @with_grad
     def test_loss_gradient_accumulation(self):
         config = self.model_tester.get_config()
-        config.loss_weights = {}
         labels = floats_tensor([3, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes])
         prediction = floats_tensor([6, *labels.shape[2:]]).requires_grad_()
         loss = WeatherNext2ForWeatherForecastingLoss(prediction, labels, config)
@@ -289,7 +289,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             inputs = extractor(manual_state, seconds_since_epoch=manual_time, generator=generator).to(torch_device)
             with torch.no_grad():
                 prediction = model(**inputs).prediction
-            forecast = extractor.postprocess(prediction, manual_state)
+            forecast = extractor.postprocess_forecasts(prediction, manual_state)
             for name in extractor.target_variables:
                 torch.testing.assert_close(generated.forecasts[step][name], forecast[name])
 

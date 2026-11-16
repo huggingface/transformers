@@ -192,7 +192,7 @@ class WeatherNext2GenerationMixin:
                     noise=step_noise[rows],
                 ).to(dtype=self.dtype)
                 outputs = self(**inputs, **model_kwargs)
-                batch_forecasts.append(feature_extractor.postprocess(outputs.prediction, batch_state))
+                batch_forecasts.append(feature_extractor.postprocess_forecasts(outputs.prediction, batch_state))
                 del outputs, inputs
 
             forecast = batch_forecasts[0]

@@ -450,7 +450,9 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
 
         return torch.cat(channels, dim=1)
 
-    def postprocess(self, prediction: Any, state: Mapping[str, Any] | None = None) -> dict[str, "torch.Tensor"]:
+    def postprocess_forecasts(
+        self, prediction: Any, state: Mapping[str, Any] | None = None
+    ) -> dict[str, "torch.Tensor"]:
         """Decodes the model's normalized output into physical units.
 
         Variables that also appear in the inputs are predicted as normalized residuals and need the last
@@ -533,7 +535,7 @@ class WeatherNext2FeatureExtractor(WeatherNext2ChannelLayoutMixin, FeatureExtrac
             state (`Mapping[str, array]`):
                 The state the forecast was produced from.
             forecast (`Mapping[str, array]`):
-                Physical values from [`~WeatherNext2FeatureExtractor.postprocess`].
+                Physical values from [`~WeatherNext2FeatureExtractor.postprocess_forecasts`].
             seconds_since_epoch (`torch.Tensor` of shape `(batch,)`):
                 Valid time of `forecast`, which is the same value that was passed to `__call__` to produce it. The
                 appended frame is stamped with it, so advancing the clock before calling this puts the physical

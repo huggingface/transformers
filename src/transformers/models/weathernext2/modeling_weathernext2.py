@@ -502,7 +502,7 @@ class WeatherNext2ForecastOutput(ModelOutput):
         Predicted state for the next time step, in the model's normalized space, with channels ordered as in
         [`WeatherNext2Config.target_channel_layout`]. For variables that are also inputs this is a normalized
         *residual* on the last input frame; for the others it is the normalized value itself. Use
-        [`WeatherNext2FeatureExtractor.postprocess`] to get physical units.
+        [`WeatherNext2FeatureExtractor.postprocess_forecasts`] to get physical units.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Mesh-node features, shaped as in [`WeatherNext2ModelOutput`].
     attentions (`tuple(torch.FloatTensor)`, *optional*):

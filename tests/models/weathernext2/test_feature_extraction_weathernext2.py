@@ -164,14 +164,14 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
         self.assertFalse(np.isnan(inputs["grid_features"]).any())
         np.testing.assert_allclose(inputs["grid_features"][:, :2], (state["2m_temperature"] - 280.0) / 20.0)
 
-    def test_postprocess_inverts_the_residual_encoding(self):
+    def test_postprocess_forecasts_inverts_the_residual_encoding(self):
         tester = self.feat_extract_tester
         extractor = self.feature_extraction_class(**self.feat_extract_dict)
         state = tester.prepare_state()
 
         channels = sum(levels for _, _, levels in extractor.target_channel_layout)
         prediction = np.zeros((tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes), np.float32)
-        forecast = extractor.postprocess(prediction, state)
+        forecast = extractor.postprocess_forecasts(prediction, state)
 
         np.testing.assert_allclose(forecast["2m_temperature"], state["2m_temperature"][:, -1], rtol=1e-5)
         self.assertEqual(forecast["temperature"].shape, (tester.batch_size, len(tester.pressure_levels), 5, 8))
@@ -197,7 +197,7 @@ class WeatherNext2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unitte
                 state[variable] = np.where(np.isnan(state[variable]), np.nan, 0.0).astype(np.float32)
         channels = sum(levels for _, _, levels in extractor.target_channel_layout)
         prediction = np.ones((tester.batch_size, channels, tester.grid_latitudes, tester.grid_longitudes), np.float32)
-        targets = extractor.postprocess(prediction, state)
+        targets = extractor.postprocess_forecasts(prediction, state)
         targets["cyclone_all_wind_disc"][0, 1, 1] = float("nan")
         inputs = extractor(
             state, seconds_since_epoch=tester.prepare_times(), targets=targets, num_members=3, return_tensors="np"
