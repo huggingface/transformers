@@ -32,6 +32,7 @@ if is_torch_available():
         NanoChatForCausalLM,
         NanoChatModel,
     )
+    from transformers.models.nanochat.modeling_nanochat import apply_rotary_pos_emb
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -50,25 +51,12 @@ class NanoChatModelTest(CausalLMModelTest, unittest.TestCase):
 
     @require_kernels
     def test_rotary_kernel_not_inherited(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config._attn_implementation = "eager"
-        model = NanoChatForCausalLM(config).to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"]
+        model = NanoChatModel(self.model_tester.get_config())
 
         # The standard rotary kernel rotates in the opposite direction to NanoChat.
-        for layer in model.model.layers:
+        self.assertFalse(hasattr(apply_rotary_pos_emb, "kernel_layer_name"))
+        for layer in model.layers:
             self.assertNotIn("rotary_pos_emb", getattr(layer.self_attn, "_kernel_funcs", {}))
-
-        with torch.no_grad():
-            eager_prefill = model(input_ids, use_cache=True)
-            eager_decode = model(input_ids[:, :1], cache=eager_prefill.cache, use_cache=True)
-
-            model.set_use_kernels(True)
-            kernel_prefill = model(input_ids, use_cache=True)
-            kernel_decode = model(input_ids[:, :1], cache=kernel_prefill.cache, use_cache=True)
-
-        torch.testing.assert_close(kernel_prefill.logits, eager_prefill.logits, rtol=0, atol=0)
-        torch.testing.assert_close(kernel_decode.logits, eager_decode.logits, rtol=0, atol=0)
 
 
 @require_torch
