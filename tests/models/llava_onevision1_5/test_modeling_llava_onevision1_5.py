@@ -57,19 +57,14 @@ class LlavaOnevision15ModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 6)
         kwargs.setdefault("vision_start_token_id", 3)
         kwargs.setdefault("vision_end_token_id", 4)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
         kwargs.setdefault("head_dim", 16)
         kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("vision_hidden_size", 32)
         kwargs.setdefault("vision_intermediate_size", 37)
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("num_heads", 2)
         kwargs.setdefault("out_hidden_size", 32)
         kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 4)
         kwargs.setdefault("temporal_patch_size", 1)
         kwargs.setdefault("spatial_merge_size", 2)
         kwargs.setdefault("num_image_tokens", 4)
@@ -157,7 +152,6 @@ class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
     def test_generate_multiple_sequences_preserves_image_features(self):
         """Beam and sample expansion must preserve the image features associated with each prompt."""
         config = self.model_tester.get_config()
-        config.vision_config.spatial_merge_size = 2
         model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
         input_ids = torch.tensor(
             [[10, config.vision_start_token_id, *([config.image_token_id] * 4), config.vision_end_token_id, 11]],
