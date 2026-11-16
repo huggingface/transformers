@@ -75,7 +75,6 @@ class PixtralVisionRotaryEmbedding(nn.Module):
 
         return inv_freq_2d, attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
