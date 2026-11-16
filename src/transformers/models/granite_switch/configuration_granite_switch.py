@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -206,16 +204,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
     head_dim: int | None = None
 
     def __post_init__(self, **kwargs):
-        # A pre-fusion Shadow Residual checkpoint carries unfused Q/K/V and gate/up weights, which
-        # would load into the fused model with silently mismatched keys. `PreTrainedConfig` keeps
-        # unknown keys, so the marker survives to here and the rejection has to be explicit.
-        if kwargs.get("unfused_qkv"):
-            raise ValueError(
-                "This checkpoint sets unfused_qkv=True, so it carries the old unfused Shadow Residual "
-                "weight layout. Only the fused layout is supported: qkv_proj and shared_mlp.input_linear "
-                "must be single pre-fused tensors. Rebuild the checkpoint."
-            )
-
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
@@ -300,42 +288,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
                 "Adapter weights are zero-padded to max_lora_rank on disk, so the two must agree or the "
                 "padding width is wrong."
             )
-
-    @classmethod
-    def from_dict(cls, config_dict: dict[str, Any], **kwargs):
-        """Reject SingleSwitch checkpoints; MultiSwitch is the only engine.
-
-        A checkpoint built for the earlier SingleSwitch engine cannot run as MultiSwitch: it
-        carries a one-transition switch whose weights have no counterpart here, and its
-        `num_hidden_layers` follows the old convention of counting the switch's cache slots as
-        decoder layers. There is no auto-migration; it must be rebuilt.
-
-        This is the one seam that still sees the raw on-disk config, so the rejection lives here.
-        Two shapes identify such a checkpoint, with adapters present:
-
-        - an explicit `switch_type` that is not `"multi"`; or
-        - no `switch_type` key and no `ms_code_m` key, which marks a checkpoint predating the coded
-          engine. `ms_code_m` is serialized by every MultiSwitch checkpoint, so its absence is the
-          reliable marker.
-
-        A stale `switch_type` key on a real MultiSwitch checkpoint is stripped before delegating, so
-        the removed parameter never reaches the parent.
-        """
-        if config_dict.get("num_adapters", 0) > 0:
-            switch_type = config_dict.get("switch_type")
-            legacy_single = switch_type is None and "ms_code_m" not in config_dict
-            if (switch_type is not None and switch_type != "multi") or legacy_single:
-                raise ValueError(
-                    "This checkpoint was built for the SingleSwitch engine, which has been removed. "
-                    "MultiSwitch is now the only engine, and a SingleSwitch checkpoint cannot be loaded as "
-                    "MultiSwitch because it was sized for a different decoder-layer count. A loadable "
-                    "checkpoint must set switch_type to 'multi' or omit it entirely, and must carry "
-                    "ms_code_m; rebuild it from its source adapters."
-                )
-        if "switch_type" in config_dict:
-            config_dict = {k: v for k, v in config_dict.items() if k != "switch_type"}
-        config = super().from_dict(config_dict, **kwargs)
-        return config
 
     def validate_probes(self):
         """Part of `@strict`-powered validation. Checks the probe slots are fully described."""
