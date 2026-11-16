@@ -124,6 +124,10 @@ print(tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_t
 
 - `num_adapters=0` builds a plain Granite model: no router, no control tokens, and every projection
   is a regular `nn.Linear`.
+- In `config.json`, a checkpoint with adapters counts two extra layer slots for the router in
+  `num_hidden_layers` and `layer_types`, so a 40-layer checkpoint lists 42. The config removes them
+  on load (`config.num_hidden_layers` is 40) and writes them back on save, so the same file still
+  loads in vLLM.
 - `torch.compile` with `fullgraph=True` is not supported. The LoRA layers call `.unique()` on the
   adapter indices to find which adapters a batch uses, which is data-dependent.
 - Control tokens are ordinary tokens and the model can generate them.

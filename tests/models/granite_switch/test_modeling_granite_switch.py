@@ -27,7 +27,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import GraniteSwitchForCausalLM, GraniteSwitchModel
+    from transformers import GraniteSwitchConfig, GraniteSwitchForCausalLM, GraniteSwitchModel
+    from transformers.models.granite_switch.configuration_granite_switch import SWITCH_LAYER_SLOTS
 
 
 # Two adapters, whose control tokens sit at the top of the tester's small vocabulary. Picked so the
@@ -59,6 +60,19 @@ class GraniteSwitchModelTester(CausalLMModelTester):
         if dual_stream:
             self.cross_stream_rank = 4
 
+    def get_config(self):
+        # The tester's `num_hidden_layers` is the decoder layer count the common tests check, but the
+        # config takes the on-disk count, which includes the switch's layer slots when there are adapters.
+        kwargs = {
+            key: getattr(self, key)
+            for key in self.config_args + self.forced_config_args
+            if key != "self" and hasattr(self, key)
+        }
+        if self.num_adapters > 0:
+            kwargs["num_hidden_layers"] = self.num_hidden_layers + SWITCH_LAYER_SLOTS
+            kwargs["layer_types"] = ["full_attention"] * SWITCH_LAYER_SLOTS + self.layer_types
+        return self.config_class(**kwargs)
+
 
 @require_torch
 class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
@@ -78,6 +92,35 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
             adapter_indices, _ = switch(input_ids)
         expected = torch.tensor([[0, 1, 1, 1, 2, 2, 2]], device=torch_device)
         torch.testing.assert_close(adapter_indices, expected)
+
+    def test_config_counts_the_switch_layer_slots_on_disk(self):
+        """With adapters, `config.json` counts the switch's layer slots; the model builds the rest."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        num_decoder_layers = self.model_tester.num_hidden_layers
+        self.assertEqual(config.num_hidden_layers, num_decoder_layers)
+        self.assertEqual(len(config.layer_types), num_decoder_layers)
+        self.assertEqual(len(GraniteSwitchModel(config).layers), num_decoder_layers)
+
+        on_disk = config.to_dict()
+        self.assertEqual(on_disk["num_hidden_layers"], num_decoder_layers + SWITCH_LAYER_SLOTS)
+        self.assertEqual(len(on_disk["layer_types"]), num_decoder_layers + SWITCH_LAYER_SLOTS)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            reloaded = GraniteSwitchConfig.from_pretrained(tmp_dir)
+            from_json = GraniteSwitchConfig.from_json_file(f"{tmp_dir}/config.json")
+        for loaded in (reloaded, from_json, GraniteSwitchConfig(**on_disk)):
+            self.assertEqual(loaded.num_hidden_layers, num_decoder_layers)
+            self.assertEqual(loaded.layer_types, config.layer_types)
+
+        # Without adapters there is no switch, so nothing is counted.
+        config_dict = {**on_disk, "num_adapters": 0, "num_hidden_layers": num_decoder_layers}
+        for key in ("adapter_token_ids", "adapter_substitute_token_ids", "adapter_names", "adapter_ranks"):
+            config_dict[key] = None
+        config_dict.update(adapter_kinds=None, lora_target_modules=None, layer_types=None)
+        plain = GraniteSwitchConfig(**config_dict)
+        self.assertEqual(plain.num_hidden_layers, num_decoder_layers)
+        self.assertEqual(plain.to_dict()["num_hidden_layers"], num_decoder_layers)
 
     def test_base_reset_token_routes_back_to_base(self):
         """A leading base-reset token sends the tokens after it back to adapter 0."""

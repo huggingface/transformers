@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Any
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -28,6 +30,12 @@ from ...utils import auto_docstring
 # all-`"linear_attention"` (mamba), which would size the per-layer cache wrongly, so the value
 # is pinned here instead. It must be a key of the dynamic-cache layer-type mapping.
 ATTENTION_LAYER_TYPE = "full_attention"
+
+# Layer slots that a checkpoint with adapters counts in its on-disk `num_hidden_layers` and
+# `layer_types` on top of the decoder layers. They are the two switch heads (counting and memory),
+# which the cached vLLM switch gives KV-cache layers of their own. This switch is stateless, so the
+# config drops the slots on load and writes them back on save, and the file stays loadable by vLLM.
+SWITCH_LAYER_SLOTS = 2
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-switch-4.1-3b-preview")
@@ -46,6 +54,15 @@ class GraniteSwitchConfig(PreTrainedConfig):
     `adapter_substitute_token_ids`) before the decoder embeds the sequence. The decoder never sees a
     control token.
 
+    num_hidden_layers (`int`, *optional*, defaults to 32):
+        Number of decoder layers. When `num_adapters > 0`, the value passed in, like the one in
+        `config.json`, also counts the switch's two layer slots, so a checkpoint with 40 decoder
+        layers carries 42. The attribute holds the decoder layers alone, and the slots are added
+        back when the config is serialized.
+    layer_types (`list[str]`, *optional*):
+        Layer type of each decoder layer, all `"full_attention"` by default. When `num_adapters > 0`
+        the value passed in starts with one entry per switch slot, in the same way as
+        `num_hidden_layers`.
     num_adapters (`int`, *optional*, defaults to 0):
         Number of adapter slots embedded in the checkpoint, where a slot holds either a LoRA adapter
         or an activation probe head (see `adapter_kinds`). Counts real slots only, not the base;
@@ -204,11 +221,20 @@ class GraniteSwitchConfig(PreTrainedConfig):
     head_dim: int | None = None
 
     def __post_init__(self, **kwargs):
+        if self.num_adapters > 0:
+            if self.num_hidden_layers <= SWITCH_LAYER_SLOTS:
+                raise ValueError(
+                    f"num_hidden_layers ({self.num_hidden_layers}) must exceed the {SWITCH_LAYER_SLOTS} switch "
+                    "layer slots it counts when num_adapters > 0."
+                )
+            self.num_hidden_layers -= SWITCH_LAYER_SLOTS
+            if self.layer_types is not None:
+                self.layer_types = self.layer_types[SWITCH_LAYER_SLOTS:]
+
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         if self.layer_types is None:
-            # Every decoder layer is attention; the switch takes no layer slots.
             self.layer_types = [ATTENTION_LAYER_TYPE] * self.num_hidden_layers
 
         if self.shared_intermediate_size is None:
@@ -288,6 +314,14 @@ class GraniteSwitchConfig(PreTrainedConfig):
                 "Adapter weights are zero-padded to max_lora_rank on disk, so the two must agree or the "
                 "padding width is wrong."
             )
+
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the counts `__post_init__` converted from, so a reload converts them once more.
+        if self.num_adapters > 0:
+            output["num_hidden_layers"] = self.num_hidden_layers + SWITCH_LAYER_SLOTS
+            output["layer_types"] = [ATTENTION_LAYER_TYPE] * SWITCH_LAYER_SLOTS + output["layer_types"]
+        return output
 
     def validate_probes(self):
         """Part of `@strict`-powered validation. Checks the probe slots are fully described."""
