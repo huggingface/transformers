@@ -47,7 +47,13 @@ def channel_weights(config, device: torch.device) -> tuple[torch.Tensor, torch.T
     )
 
 
-def WeatherNext2ForWeatherForecastingLoss(prediction: torch.Tensor, labels: torch.Tensor, config, **kwargs):
+def WeatherNext2ForWeatherForecastingLoss(
+    prediction: torch.Tensor,
+    labels: torch.Tensor,
+    config,
+    num_items_in_batch: torch.Tensor | int | None = None,
+    **kwargs,
+):
     """The original FGN unbiased ensemble CRPS on normalized targets.
 
     `prediction` flattens the initial-condition and member axes of `labels`, which is shaped
@@ -56,7 +62,7 @@ def WeatherNext2ForWeatherForecastingLoss(prediction: torch.Tensor, labels: torc
     `vars_with_nan_targets` contribute zero to both CRPS terms.
     """
     if config.loss_weights is None:
-        raise ValueError("Set `config.loss_weights` from the original checkpoint before computing the loss.")
+        raise ValueError("Set `config.loss_weights` before computing the loss.")
     if labels.ndim != 5 or prediction.shape != (labels.shape[0] * labels.shape[1], *labels.shape[2:]):
         raise ValueError(
             "`labels` must have shape (batch_size, num_members, channels, latitudes, longitudes), "
@@ -95,4 +101,9 @@ def WeatherNext2ForWeatherForecastingLoss(prediction: torch.Tensor, labels: torc
             )
 
     crps = absolute_error / num_members - absolute_difference / (num_members * (num_members - 1))
+    if num_items_in_batch is not None:
+        if isinstance(num_items_in_batch, torch.Tensor):
+            num_items_in_batch = num_items_in_batch.to(crps.device)
+        # Trainer counts target elements; CRPS averages complete ensembles per initial condition.
+        return crps.sum() * labels[0].numel() / num_items_in_batch
     return crps.mean()

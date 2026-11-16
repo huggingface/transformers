@@ -202,6 +202,26 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @with_grad
+    def test_loss_gradient_accumulation(self):
+        config = self.model_tester.get_config()
+        config.loss_weights = {}
+        labels = floats_tensor([3, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes])
+        prediction = floats_tensor([6, *labels.shape[2:]]).requires_grad_()
+        loss = WeatherNext2ForWeatherForecastingLoss(prediction, labels, config)
+        expected_gradient = torch.autograd.grad(loss, prediction)[0]
+
+        num_items = labels.ne(-100).sum()
+        first = WeatherNext2ForWeatherForecastingLoss(prediction[:2], labels[:1], config, num_items_in_batch=num_items)
+        second = WeatherNext2ForWeatherForecastingLoss(
+            prediction[2:], labels[1:], config, num_items_in_batch=num_items
+        )
+        accumulated = first + second
+        actual_gradient = torch.autograd.grad(accumulated, prediction)[0]
+
+        torch.testing.assert_close(accumulated, loss)
+        torch.testing.assert_close(actual_gradient, expected_gradient)
+
     @require_torch_accelerator
     @slow
     def test_sdpa_can_compile_dynamic(self):
