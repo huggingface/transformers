@@ -218,12 +218,12 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-# Missing from the hub config: the routed experts are MXFP8 (e4m3, a ue8m0 scale per row and 32 values), the rest bf16
+# Missing from the hub config
 INKLING2_QUANTIZATION_CONFIG = {
     "quant_method": "fp8",
     "weight_block_size": [1, 32],
     "scale_fmt": "ue8m0",
-    "modules_to_not_convert": ["lm_head", "model.vision_tower", "model.language_model.layers.*.self_attn"],
+    "modules_to_not_convert": ["model.llm.unembed", "model.visual", "model.llm.layers.*.attn.*"],
 }
 
 

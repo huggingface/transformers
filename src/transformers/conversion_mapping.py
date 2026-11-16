@@ -260,28 +260,32 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
         ],
         "inkling2": [
-            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model.language_model."),
+            WeightRenaming(source_patterns=r"model\.visual\.", target_patterns=r"model.vision_tower."),
             WeightRenaming(
-                source_patterns=r"model\.visual\.backbone\.embeddings\.",
-                target_patterns=r"model.vision_tower.embeddings.",
+                source_patterns=r"vision_tower\.backbone\.embeddings\.",
+                target_patterns=r"vision_tower.embeddings.",
             ),
             WeightRenaming(
                 source_patterns=r"vision_tower\.embeddings\.position_embedding",
                 target_patterns=r"vision_tower.embeddings.position_embedding.weight",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.backbone\.ln_pre\.",
-                target_patterns=r"model.vision_tower.pre_layernorm.",
+                source_patterns=r"vision_tower\.backbone\.ln_pre\.",
+                target_patterns=r"vision_tower.pre_layernorm.",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.backbone\.layers\.", target_patterns=r"model.vision_tower.layers."
+                source_patterns=r"vision_tower\.backbone\.layers\.",
+                target_patterns=r"vision_tower.layers.",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.proj_in\.", target_patterns=r"model.vision_tower.merger.linear_1."
+                source_patterns=r"vision_tower\.proj_in\.",
+                target_patterns=r"vision_tower.merger.linear_1.",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.proj_out\.", target_patterns=r"model.vision_tower.merger.linear_2."
+                source_patterns=r"vision_tower\.proj_out\.",
+                target_patterns=r"vision_tower.merger.linear_2.",
             ),
             WeightRenaming(
                 source_patterns=r"(vision_tower\.layers\.\d+)\.ln_1\.", target_patterns=r"\1.layernorm_before."
@@ -303,7 +307,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "inkling2_text": [
-            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),
