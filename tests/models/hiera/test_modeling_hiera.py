@@ -504,6 +504,14 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
+    def test_for_pretraining_half_precision(self):
+        config, pixel_values, _ = self.model_tester.prepare_config_and_inputs()
+        for dtype in (torch.float16, torch.bfloat16):
+            model = HieraForPreTraining(config).to(torch_device).to(dtype).eval()
+            with torch.no_grad():
+                outputs = model(pixel_values.to(dtype))
+            self.assertEqual(outputs.logits.dtype, dtype)
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)

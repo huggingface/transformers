@@ -181,7 +181,7 @@ class HieraPatchEmbeddings(nn.Module):
         # Reshape bool_masked_pos to (batch_size, 1, mask_unit_height, mask_unit_width)
         bool_masked_pos = bool_masked_pos.view(pixel_values.shape[0], 1, *self.mask_spatial_shape)
 
-        bool_masked_pos = nn.functional.interpolate(bool_masked_pos.float(), size=target_size)
+        bool_masked_pos = nn.functional.interpolate(bool_masked_pos.to(pixel_values.dtype), size=target_size)
 
         return self.projection(pixel_values * bool_masked_pos)
 
@@ -964,9 +964,10 @@ class HieraDecoder(nn.Module):
         bool_masked_pos = bool_masked_pos.reshape(batch_size, num_mask_units, 1, 1, 1)
         bool_masked_pos = bool_masked_pos.expand(-1, -1, mask_unit_height, mask_unit_width, decoder_hidden_size)
         decoder_hidden_states[bool_masked_pos] = hidden_states.flatten()
+        bool_masked_pos_float = bool_masked_pos.to(decoder_hidden_states.dtype)
         decoder_hidden_states = (
-            1 - bool_masked_pos.float()
-        ) * mask_tokens + bool_masked_pos.float() * decoder_hidden_states
+            1 - bool_masked_pos_float
+        ) * mask_tokens + bool_masked_pos_float * decoder_hidden_states
 
         # Get back spatial order
         hidden_states = undo_windowing(
