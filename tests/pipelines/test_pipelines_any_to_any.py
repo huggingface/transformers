@@ -64,7 +64,9 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         )
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
 
-        outputs = pipe(text=messages, return_tensors=True, generation_mode="text", max_new_tokens=2)
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 2}
+
+        outputs = pipe(text=messages, return_tensors=True, generate_kwargs=kwargs)
 
         self.assertEqual(outputs[0]["input_text"], messages)
 
