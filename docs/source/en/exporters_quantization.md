@@ -51,9 +51,9 @@ calibration_dataset = [tokenizer(text, return_tensors="pt") for text in texts]
 inputs = tokenizer("An absolute delight from start to finish.", return_tensors="pt")
 
 config = OnnxConfig(dynamic=True, quantizer=OnnxRuntimeQuantizer(calibration_dataset=calibration_dataset))
-onnx_program = OnnxExporter().export(model, inputs, config)
+exported = OnnxExporter().export(model, inputs, config)
 
-logits = onnx_program(**inputs)[0]
+logits = exported(**inputs).logits
 print(model.config.id2label[int(logits.argmax())])  # POSITIVE
 ```
 
@@ -105,7 +105,7 @@ inputs = tokenizer("Once upon a time", return_tensors="pt")
 
 x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
 config = DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86, calibration_dataset=calibration_dataset))
-components = DynamoExporter().export_for_generation(model, inputs, config)  # {"prefill": ..., "decode": ...}
+exported = DynamoExporter().export_for_generation(model, inputs, config)  # "prefill" and "decode" components
 ```
 
 On OpenVINO, PT2E weights stay in full precision behind quantize/dequantize pairs, which OpenVINO converts to
@@ -158,7 +158,7 @@ onnx_int4 = OnnxConfig(quantizer=NNCFOnnxQuantizer(int4))
 # Dynamo: int8 on the FX graph
 dynamo_int8 = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
 
-ov_model = OpenVINOExporter().export(model, inputs, openvino_int4)
+exported = OpenVINOExporter().export(model, inputs, openvino_int4)
 ```
 
 Int8 activations run int8 matmuls, which saturate on CPUs without VNNI (AVX2-only Intel and AMD Zen 2 and older), so
@@ -184,7 +184,7 @@ config = {
     "prefill": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86)),
     "decode": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(dynamic_x86)),
 }
-components = DynamoExporter().export_for_generation(model, inputs, config)
+exported = DynamoExporter().export_for_generation(model, inputs, config)
 ```
 
 The dict must name every component [`~exporters.utils.decompose_for_generation`] produces (a multimodal model adds its
@@ -207,13 +207,13 @@ Quantizers live in `transformers.exporters.quantizers`, one class per toolchain 
 Then implement `quantize(model, sample_inputs, export_format)`. `model` is the FX graph or the backend model, and
 `sample_inputs` are the export's own inputs. Calibrate on a [`~exporters.quantizers.CalibrationSet`]: it reads the
 quantizer's `calibration_dataset` (or `sample_inputs` when there is none) and maps each sample to the model's own
-inputs with a feed from `transformers.exporters.quantizers.utils` (`traced_inputs` for the FX graph, `onnx_feed` for ONNX,
-`openvino_feed` for OpenVINO).
+inputs with a feed: `traced_inputs` from `transformers.exporters.quantizers.utils` for the FX graph, `onnx_feed` or
+`openvino_feed` from `transformers.exporters.utils` for ONNX or OpenVINO.
 
 ```python
 from transformers.exporters import ExportFormat
 from transformers.exporters.quantizers import CalibrationSet, ExportQuantizer
-from transformers.exporters.quantizers.utils import onnx_feed
+from transformers.exporters.utils import onnx_feed
 
 
 class MyOnnxQuantizer(ExportQuantizer):

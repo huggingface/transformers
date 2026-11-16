@@ -25,8 +25,6 @@ from transformers import (
     PPFormulaNetConfig,
     PPFormulaNetForConditionalGeneration,
     PPFormulaNetModel,
-    PPFormulaNetTextConfig,
-    PPFormulaNetVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -50,8 +48,7 @@ if is_torch_available():
 class PPFormulaNetModelTester(VLMModelTester):
     base_model_class = PPFormulaNetModel
     config_class = PPFormulaNetConfig
-    text_config_class = PPFormulaNetTextConfig
-    vision_config_class = PPFormulaNetVisionConfig
+
     conditional_generation_class = PPFormulaNetForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -285,10 +282,8 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(
-        reason="PPFormulaNet does not support continuing generation from past_key_values across generate calls."
-    )
-    def test_generate_continue_from_past_key_values(self):
+    @unittest.skip(reason="PPFormulaNet does not support continuing generation from cache across generate calls.")
+    def test_generate_continue_from_cache(self):
         pass
 
 

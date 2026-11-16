@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mas
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_tapas import TapasConfig
 
 
@@ -162,12 +163,13 @@ class TapasSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
-        past_key_values=None,
+        cache=None,
         output_attentions=False,
         **kwargs,
     ):
@@ -177,32 +179,32 @@ class TapasSelfAttention(nn.Module):
 
         is_updated = False
         is_cross_attention = encoder_hidden_states is not None
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = curr_past_key_values.layers[self.layer_idx].keys
-            value_layer = curr_past_key_values.layers[self.layer_idx].values
+            key_layer = curr_cache.layers[self.layer_idx].keys
+            value_layer = curr_cache.layers[self.layer_idx].values
         else:
             key_layer = self.key(current_states).view(hidden_shape).transpose(1, 2)
             value_layer = self.value(current_states).view(hidden_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)
+                key_layer, value_layer = curr_cache.update(key_layer, value_layer, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -226,7 +228,7 @@ class TapasSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         if self.is_decoder:
-            outputs = outputs + (past_key_values,)
+            outputs = outputs + (cache,)
         return outputs
 
 
@@ -251,13 +253,14 @@ class TapasAttention(nn.Module):
         self.self = TapasSelfAttention(config, layer_idx=layer_idx)
         self.output = TapasSelfOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     # Copied from transformers.models.rembert.modeling_rembert.RemBertAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -265,7 +268,7 @@ class TapasAttention(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             output_attentions=output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -319,6 +322,7 @@ class TapasLayer(GradientCheckpointingLayer):
         self.intermediate = TapasIntermediate(config)
         self.output = TapasOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     # Copied from transformers.models.rembert.modeling_rembert.RemBertLayer.forward
     def forward(
         self,
@@ -326,7 +330,7 @@ class TapasLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
@@ -334,7 +338,7 @@ class TapasLayer(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            past_key_values=past_key_values,
+            cache=cache,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -350,7 +354,7 @@ class TapasLayer(GradientCheckpointingLayer):
                 attention_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_values=past_key_values,
+                cache=cache,
                 output_attentions=output_attentions,
             )
             attention_output = cross_attention_outputs[0]
@@ -377,21 +381,22 @@ class TapasEncoder(nn.Module):
         self.layer = nn.ModuleList([TapasLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
         **kwargs,
     ):
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -404,7 +409,7 @@ class TapasEncoder(nn.Module):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 output_attentions=output_attentions,
             )
             hidden_states = layer_outputs[0]

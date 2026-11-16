@@ -56,28 +56,28 @@ class VoxtralAudioKwargs(AudioKwargs, total=False):
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: VoxtralAudioKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "pad_to_multiple_of": 480000,
-            "max_source_positions": 3000,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "return_dict": True,
-            "tokenize": True,
-        },
-    }
 
 
 @requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
+    valid_processor_kwargs = VoxtralProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "tokenize": True,
+        "return_dict": True,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+        "pad_to_multiple_of": 480000,
+        "max_source_positions": 3000,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         feature_extractor,
@@ -193,7 +193,6 @@ class VoxtralProcessor(ProcessorMixin):
         if return_tensors:
             processor_kwargs["return_tensors"] = return_tensors
         output_kwargs = self._merge_kwargs(
-            VoxtralProcessorKwargs,
             **processor_kwargs,
         )
         text_kwargs = output_kwargs["text_kwargs"]
@@ -245,7 +244,7 @@ class VoxtralProcessor(ProcessorMixin):
                 f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead."
             )
 
-        output_kwargs = self._merge_kwargs(VoxtralProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         out = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
@@ -299,7 +298,6 @@ class VoxtralProcessor(ProcessorMixin):
                 The format of the audio, necessary if is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
         """
         output_kwargs = self._merge_kwargs(
-            VoxtralProcessorKwargs,
             **kwargs,
         )
         text_kwargs = output_kwargs["text_kwargs"]

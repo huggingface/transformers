@@ -16,6 +16,7 @@
 import inspect
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -110,13 +111,13 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # KV-shared layers attend to the cache of their source layer and leave their own cache layer empty, and NoPE
         # layers cache an empty rotary key
         config = config.get_text_config(decoder=True)
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
         k_shape, v_shape = self._get_attention_shape(batch_size, seq_length, config)
-        for layer_idx, layer in enumerate(past_key_values.layers):
+        for layer_idx, layer in enumerate(cache.layers):
             if config.kv_source_layers[layer_idx] != layer_idx:
                 self.assertIsNone(layer.keys)
             else:
@@ -185,6 +186,29 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
         for attentions in outputs.attentions:
             attended = (attentions > 0).sum(dim=-1)
             self.assertLessEqual(attended.max().item(), 2)
+
+    def test_cached_decode_matches_cacheless(self):
+        # Cached decode and full recompute score keys over rows of different lengths, and CPU `topk` breaks exact
+        # score ties differently for each. Avoid ties: no ReLU zeros, and no generated pad token (zero embedding ->
+        # zero indexer query -> all scores tie)
+        get_logits_processor_kwargs = self._get_logits_processor_kwargs
+
+        def get_logits_processor_kwargs_without_pad(do_sample=False, config=None):
+            kwargs = get_logits_processor_kwargs(do_sample=do_sample, config=config)
+            kwargs["bad_words_ids"].append([config.get_text_config().pad_token_id])
+            return kwargs
+
+        with (
+            indexer_leaky_relu(),
+            patch.object(self, "_get_logits_processor_kwargs", get_logits_processor_kwargs_without_pad),
+        ):
+            super().test_cached_decode_matches_cacheless()
+
+    def test_left_padding_compatibility(self):
+        # Left padding shifts the key rows, and CPU `topk` breaks exact indexer score ties (ReLU zeros) differently
+        # for the padded and unpadded inputs. A leaky ReLU keeps the scores distinct
+        with indexer_leaky_relu():
+            super().test_left_padding_compatibility()
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)

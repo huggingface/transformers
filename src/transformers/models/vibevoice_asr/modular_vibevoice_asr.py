@@ -29,6 +29,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig, AutoModel
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
@@ -160,7 +161,7 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -174,7 +175,7 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
 @dataclass
 class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance.
     audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
@@ -195,7 +196,7 @@ class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
         Language modeling loss.
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores.
-    past_key_values (`Cache`, *optional*):
+    cache (`Cache`, *optional*):
         Cache instance.
     audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
@@ -203,7 +204,7 @@ class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     audio_hidden_states: torch.Tensor | None = None
@@ -283,20 +284,21 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         if padding_mask is not None:
             hop_length = self.config.acoustic_tokenizer_encoder_config.hop_length
             num_audio_tokens = (padding_mask.sum(dim=-1) + hop_length - 1) // hop_length
-            padding_mask = torch.arange(num_audio_tokens.max(), device=combined_features.device) < num_audio_tokens[
-                :, None
-            ].to(combined_features.device)
+            positions = torch.arange(combined_features.shape[1], device=num_audio_tokens.device)
+            # Keeps a mask already on the CPU from syncing with the accelerator
+            padding_mask = (positions < num_audio_tokens[:, None]).cpu()
             combined_features = combined_features[padding_mask]
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
@@ -328,13 +330,13 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
 
         return VibeVoiceAsrModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
@@ -358,11 +360,12 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
@@ -391,7 +394,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             input_values=input_values,
             padding_mask=padding_mask,
@@ -412,7 +415,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         return VibeVoiceAsrCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,

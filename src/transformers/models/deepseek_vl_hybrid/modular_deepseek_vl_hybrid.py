@@ -35,7 +35,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -43,6 +43,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
@@ -52,7 +54,7 @@ from ..deepseek_vl.modeling_deepseek_vl import (
     DeepseekVLModel,
     DeepseekVLPreTrainedModel,
 )
-from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVLProcessorKwargs
+from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
@@ -225,12 +227,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
 
+    @select_hidden_states(lambda self: self.global_attn_index + 1)
     def get_high_res_image_features(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        kwargs["output_hidden_states"] = True
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
             return_dict=True,
@@ -277,6 +279,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -284,7 +287,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         high_res_pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -321,14 +324,14 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
         return DeepseekVLHybridBaseModelOutputWithPast(
             last_hidden_state=lm_output.last_hidden_state,
-            past_key_values=lm_output.past_key_values,
+            cache=lm_output.cache,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
@@ -338,6 +341,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -345,7 +349,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         high_res_pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -359,7 +363,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             high_res_pixel_values=high_res_pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -378,7 +382,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         return DeepseekVLHybridCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
@@ -667,13 +671,11 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         )
 
 
-class DeepseekVLHybridProcessorKwargs(DeepseekVLProcessorKwargs):
-    pass
-
-
 class DeepseekVLHybridProcessor(DeepseekVLProcessor):
     pass
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLHybridProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "DeepseekVLHybridConfig",

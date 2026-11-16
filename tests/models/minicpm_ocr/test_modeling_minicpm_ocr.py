@@ -309,6 +309,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_input_ids = Expectations(
             {
                 ("cuda", (8, 0)): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271],
+                ("xpu", 5): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271],
             }
         ).get_expectation()
         self.assertEqual(inputs["input_ids"][0].tolist(), expected_input_ids)
@@ -323,12 +324,14 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-2.4219, 7.4063, -3.7188, 1.3594, -0.1069, -2.1094, 5.2188, 0.4180],
                 ("cuda", (8, 6)): [-2.2031, 7.5313, -3.4063, 1.7188, 0.1611, -1.9844, 5.2813, 0.5781],
+                ("xpu", 5): [-2.1719, 7.5312, -3.6250, 1.5312, -0.1245, -2.0469, 5.1875, 0.5039],
             }
         ).get_expectation()
         torch.testing.assert_close(
             logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-4, atol=1e-4
         )
-        expected_argmax = Expectations({("cuda", (8, 0)): 12675}).get_expectation()
+        # On XPU, 12675 ("Hi") and 9419 ("Hello") round to the same bf16 logit; argmax returns the lowest index on ties.
+        expected_argmax = Expectations({("cuda", (8, 0)): 12675, ("xpu", 5): 9419}).get_expectation()
         self.assertEqual(logits[0, -1].argmax().item(), expected_argmax)
 
     def test_small_model_vision_generation(self):
@@ -365,7 +368,12 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected = Expectations({("cuda", 8): "Document No : TD01167104\nDate : 25/12/2018 8:1"}).get_expectation()
+        expected = Expectations(
+            {
+                ("cuda", 8): "Document No : TD01167104\nDate : 25/12/2018 8:1",
+                ("xpu", 5): "Document No : TD01167104\nDate : 25/12/2018 8:1",
+            }
+        ).get_expectation()
         self.assertEqual(decoded, expected)
 
     def test_small_model_document_markdown(self):
@@ -405,6 +413,9 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected = Expectations(
             {
                 ("cuda", 8): (
+                    "```markdown\nR&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann,"
+                ),
+                ("xpu", 5): (
                     "```markdown\nR&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann,"
                 ),
             }
@@ -466,7 +477,11 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 8): [
                     "Document No : TD01167104\nDate : 25/12/2018 8:1",
                     "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann P. Harper P",
-                ]
+                ],
+                ("xpu", 5): [
+                    "Document No : TD01167104\nDate : 25/12/2018 8:1",
+                    "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann P. Harper P",
+                ],
             }
         ).get_expectation()
         self.assertEqual(decoded, expected)

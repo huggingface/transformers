@@ -511,7 +511,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         self.embeddings = Siglip2VisionEmbeddings(config)
         self.encoder = Siglip2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        self.use_head = config.vision_use_head
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
         self.post_init()

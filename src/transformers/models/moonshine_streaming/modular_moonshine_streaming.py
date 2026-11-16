@@ -29,6 +29,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import LlamaMLP, eager_attention_forward
@@ -47,17 +48,13 @@ from .configuration_moonshine_streaming import MoonshineStreamingConfig, Moonshi
 logger = logging.get_logger(__name__)
 
 
-class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "pad_to_multiple_of": 80,
-            "padding": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
+class MoonshineStreamingProcessor(Wav2Vec2Processor):
+    text_kwargs = {"return_tensors": "pt"}
+    audio_kwargs = {
+        "pad_to_multiple_of": 80,
+        "padding": True,
+        "return_tensors": "pt",
     }
-
-
-class MoonshineStreamingProcessor(Wav2Vec2Processor): ...
 
 
 @auto_docstring(
@@ -361,12 +358,13 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
@@ -393,7 +391,7 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             encoder_hidden_states=encoder_hidden_states,
@@ -411,6 +409,8 @@ class MoonshineStreamingModel(MoonshineModel):
 
 class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration): ...
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MoonshineStreamingProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "MoonshineStreamingPreTrainedModel",

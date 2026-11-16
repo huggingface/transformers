@@ -291,7 +291,7 @@ class WhisperModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
@@ -302,9 +302,7 @@ class WhisperModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -315,6 +313,27 @@ class WhisperModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+
+    def create_and_check_training_compile_fullgraph(self, config, inputs_dict):
+        # Explicitly check with layerdrop=0.0 (fullgraph compiles without graph breaks)
+        config.encoder_layerdrop = 0.0
+        config.decoder_layerdrop = 0.0
+        model = WhisperForConditionalGeneration(config).to(torch_device).train()
+        compiled = torch.compile(model, fullgraph=True, backend="eager")
+        outputs = compiled(**inputs_dict)
+        loss = outputs.logits.sum()
+        loss.backward()
+        self.parent.assertIsNotNone(loss)
+
+        # Explicitly check with layerdrop > 0.0 (compile succeeds with graph break)
+        config.encoder_layerdrop = 0.5
+        config.decoder_layerdrop = 0.5
+        model_layerdrop = WhisperForConditionalGeneration(config).to(torch_device).train()
+        compiled_layerdrop = torch.compile(model_layerdrop, fullgraph=False, backend="eager")
+        outputs_layerdrop = compiled_layerdrop(**inputs_dict)
+        loss_layerdrop = outputs_layerdrop.logits.sum()
+        loss_layerdrop.backward()
+        self.parent.assertIsNotNone(loss_layerdrop)
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = WhisperModel(config=config).to(torch_device).eval()
@@ -686,8 +705,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -1220,6 +1239,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
+
+    @pytest.mark.torch_compile_test
+    def test_training_compile_fullgraph(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_training_compile_fullgraph(*config_and_inputs)
 
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
@@ -3400,7 +3424,7 @@ class WhisperStandaloneDecoderModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past_key_values = outputs["past_key_values"]
+        cache = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -3409,7 +3433,7 @@ class WhisperStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -3429,7 +3453,7 @@ class WhisperStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        cache = model(input_ids, attention_mask=attn_mask, use_cache=True)["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -3448,9 +3472,7 @@ class WhisperStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=attn_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

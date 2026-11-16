@@ -194,6 +194,8 @@ class ImageTextToTextPipeline(Pipeline):
         if skip_special_tokens is not None:
             postprocess_params["skip_special_tokens"] = skip_special_tokens
 
+        if "tools" in kwargs:
+            postprocess_params["tools"] = kwargs["tools"]
         return preprocess_params, forward_kwargs, postprocess_params
 
     @overload
@@ -403,6 +405,7 @@ class ImageTextToTextPipeline(Pipeline):
         return_type=ReturnType.FULL_TEXT,
         continue_final_message=None,
         skip_special_tokens=None,
+        tools=None,
         **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
@@ -472,7 +475,9 @@ class ImageTextToTextPipeline(Pipeline):
                             # New-style templates need to see the prompt as `prefix`, because chat
                             # templates often pre-write part of the assistant message (e.g. an
                             # opening <think> tag), which affects parsing.
-                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                            assistant_message = self.tokenizer.parse_response(
+                                generated_text, prefix=decoded_input, tools=tools
+                            )
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
                         generated_text = list(prompt_text.messages) + [assistant_message]

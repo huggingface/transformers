@@ -48,7 +48,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_5_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -87,7 +87,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
     # Default tensor parallel plan for base model `Qwen2_5_VL`
     base_model_tp_plan = {
@@ -181,7 +181,7 @@ class Qwen2_5_VLConfig(PreTrainedConfig):
         "vision_config": Qwen2_5_VLVisionConfig,
         "text_config": Qwen2_5_VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

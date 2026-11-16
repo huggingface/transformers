@@ -491,7 +491,7 @@ if is_kernels_available():
                 },
                 "mps": {
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mlx_rmsnorm",
+                        repo_id="kernels-community/mlx-rmsnorm",
                         layer_name="RMSNorm",
                         version=1,
                     )

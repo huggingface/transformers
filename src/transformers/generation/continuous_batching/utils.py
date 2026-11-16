@@ -253,7 +253,10 @@ def get_available_accelerator_module() -> Any | None:
 def create_device_stream(device: torch.device) -> torch.cuda.Stream | None:
     """If the given device is available and supports streams, returns a new stream. Otherwise, returns None."""
     device_module = torch.get_device_module()
-    if torch.accelerator.is_available() and hasattr(device_module, "Stream"):
+    # MPS streams are broken in torch 2.15: `torch.mps.Stream` rejects `device`, and even without it the compute stream
+    # reads stale inputs because writes on the default stream aren't committed when switching streams. See #50395.
+    # TODO: gate this on the torch version once 2.16 is out and the fix is in place in torch
+    if device.type != "mps" and torch.accelerator.is_available() and hasattr(device_module, "Stream"):
         return device_module.Stream(device=device)
     return None
 

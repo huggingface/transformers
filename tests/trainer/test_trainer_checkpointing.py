@@ -623,6 +623,30 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(parameters, parameters1)
         self.check_trainer_state_are_the_same(state, state1)
 
+    @require_peft
+    def test_peft_root_adapter_restored_with_adapter_subfolders(self):
+        from peft import LoraConfig, get_peft_model
+
+        # PEFT saves the "default" adapter at the checkpoint root and other adapters in subfolders,
+        # so resuming must restore both (see #50204)
+        MODEL_ID = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        peft_config = LoraConfig(r=4, lora_alpha=16, task_type="CAUSAL_LM", init_lora_weights=False)
+
+        def get_model(seed):
+            torch.manual_seed(seed)
+            peft_model = get_peft_model(AutoModelForCausalLM.from_pretrained(MODEL_ID), peft_config)
+            peft_model.add_adapter("ref", peft_config)
+            return peft_model
+
+        trained_model = get_model(0)
+        checkpoint = self.get_auto_remove_tmp_dir()
+        trained_model.save_pretrained(checkpoint)
+        model = get_model(1)
+        trainer = Trainer(model, TrainingArguments(checkpoint, use_cpu=True))
+        trainer._load_from_checkpoint(checkpoint)
+        for (name, expected), (_, actual) in zip(trained_model.named_parameters(), model.named_parameters()):
+            torch.testing.assert_close(actual, expected, msg=f"{name} was not restored")
+
 
 # ---------------------------------------------------------------------------
 # Auto batch size finder tests

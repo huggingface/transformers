@@ -80,7 +80,7 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 </hfoption>
 <hfoption id="advanced usage: control Static Cache">
 
-[`StaticCache`] 객체는 `past_key_values` 인수로 모델의 [`~GenerationMixin.generate`] 함수에 전달할 수 있습니다. 이 객체는 캐시 내용을 유지하므로, 동적 캐시를 사용하는 것처럼 새로운 [`~GenerationMixin.generate`] 호출에 이를 전달하여 생성을 계속할 수 있습니다.
+[`StaticCache`] 객체는 `cache` 인수로 모델의 [`~GenerationMixin.generate`] 함수에 전달할 수 있습니다. 이 객체는 캐시 내용을 유지하므로, 동적 캐시를 사용하는 것처럼 새로운 [`~GenerationMixin.generate`] 호출에 이를 전달하여 생성을 계속할 수 있습니다.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM, StaticCache
@@ -97,19 +97,19 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 prompt_length = input_ids.input_ids.shape[1]
 model.generation_config.max_new_tokens = 16
 
-past_key_values = StaticCache(
+cache = StaticCache(
     config=model.config,
     # 캐시를 재사용할 계획이 있는 경우, 모든 경우에 충분한 캐시 길이를 설정해야 합니다
     max_cache_len=prompt_length+(model.generation_config.max_new_tokens*2),
 )
-outputs = model.generate(**input_ids, past_key_values=past_key_values)
+outputs = model.generate(**input_ids, cache=cache)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2']
 
 # 생성된 텍스트와 동일한 캐시 객체를 전달하여, 중단한 곳에서 생성을 계속합니다.
 # 다중 턴 대화의 경우, 생성된 텍스트에 새로운 사용자 입력을 추가할 수 있습니다.
 new_input_ids = outputs
-outputs = model.generate(new_input_ids, past_key_values=past_key_values)
+outputs = model.generate(new_input_ids, cache=cache)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['The theory of special relativity states 1. The speed of light is constant in all inertial reference frames. 2. The speed of light is constant in all inertial reference frames. 3.']
 ```
@@ -117,7 +117,7 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 > [!TIP]
 > 동일한 [`StaticCache`] 객체를 새로운 프롬프트에 사용하려면, 호출 간에 `.reset()` 메서드를 사용하여 그 내용을 초기화하는 것이 좋습니다.
 
-더 깊이 들어가고 싶다면, [`StaticCache`] 객체를 모델의 `forward` 패스에 동일한 `past_key_values` 인수로 전달할 수도 있습니다. 이 전략을 사용하면, 현재 토큰과 이전에 생성된 토큰의 위치 및 캐시 위치를 바탕으로 다음 토큰을 디코딩하는 자체 함수를 작성할 수 있습니다.
+더 깊이 들어가고 싶다면, [`StaticCache`] 객체를 모델의 `forward` 패스에 동일한 `cache` 인수로 전달할 수도 있습니다. 이 전략을 사용하면, 현재 토큰과 이전에 생성된 토큰의 위치 및 캐시 위치를 바탕으로 다음 토큰을 디코딩하는 자체 함수를 작성할 수 있습니다.
 
 ```py
 from transformers import LlamaTokenizer, LlamaForCausalLM, StaticCache, logging
@@ -136,11 +136,11 @@ tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token
 model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
 inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-def decode_one_tokens(model, cur_token, input_pos, past_key_values):
+def decode_one_tokens(model, cur_token, input_pos, cache):
     logits = model(
         cur_token,
         position_ids=input_pos,
-        past_key_values=past_key_values,
+        cache=cache,
         return_dict=False,
         use_cache=True
     )[0]
@@ -156,7 +156,7 @@ def decode_one_tokens(model, cur_token, input_pos, past_key_values):
 ```py
 batch_size, seq_length = inputs["input_ids"].shape
 with torch.no_grad():
-    past_key_values = StaticCache(
+    cache = StaticCache(
         config=model.config, max_cache_len=4096
     )
     positions = torch.arange(seq_length, device=torch_device)
@@ -166,7 +166,7 @@ with torch.no_grad():
     generated_ids[:, positions] = inputs["input_ids"].to(torch_device).to(torch.int)
 
     logits = model(
-        **inputs, past_key_values=past_key_values,return_dict=False, use_cache=True
+        **inputs, cache=cache,return_dict=False, use_cache=True
     )[0]
     next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
     generated_ids[:, seq_length] = next_token[:, 0]
@@ -175,7 +175,7 @@ with torch.no_grad():
     positions = torch.tensor([seq_length + 1], device=torch_device)
     for _ in range(1, NUM_TOKENS_TO_GENERATE):
         with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-            next_token = decode_one_tokens(model, next_token.clone(), None, past_key_values)
+            next_token = decode_one_tokens(model, next_token.clone(), None, cache)
             generated_ids[:, positions] = next_token.int()
         positions += 1
 

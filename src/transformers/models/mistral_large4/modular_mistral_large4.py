@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -28,6 +29,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
@@ -51,6 +53,8 @@ from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4T
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
+@strict
 class MistralLarge4TextConfig(GlmMoeDsaConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -73,9 +77,6 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         List with at least the same length as the number of layers in the model.
         A `1` at an index position indicates that the corresponding layer will use RoPE,
         while a `0` indicates that it's a NoPE layer.
-    no_rope_layer_interval (`int`, *optional*, defaults to 4):
-        Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
-        indexer). The other layers use RoPE.
     kv_source_layers (`list[int]`, *optional*):
         For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
         index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
@@ -134,7 +135,6 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     index_n_heads: int = 32
     first_k_dense_replace: int = 1
     no_rope_layers: list[int] | None = None
-    no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
     final_logit_softcapping: float = 30.0
 
@@ -156,8 +156,9 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
             }
         # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
         if self.no_rope_layers is None:
+            no_rope_layer_interval = kwargs.pop("no_rope_layer_interval", 4)
             self.no_rope_layers = [
-                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+                int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
             ]
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
@@ -194,6 +195,8 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         return kv_sharing_modes
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
+@strict
 class MistralLarge4Config(Mistral3Config):
     model_type = "mistral_large4"
     sub_configs_defaults = {
@@ -320,13 +323,14 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         self.use_rope = config.no_rope_layers[layer_idx]
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -338,7 +342,7 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            past_key_values: Cache object containing the indexer key cache for this layer.
+            cache: Cache object containing the indexer key cache for this layer.
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]`. The eager / SDPA paths
@@ -365,8 +369,8 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
             k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
         k = k.squeeze(2)
 
-        if past_key_values is not None:
-            k = past_key_values.update_indexer(k, self.layer_idx)
+        if cache is not None:
+            k = cache.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
@@ -412,6 +416,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         )
 
     # trf-ignore: TRF043
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -419,7 +424,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         attention_mask: torch.Tensor,
         shared_kv_states: KVSharingDict,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
@@ -449,8 +454,8 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
                 q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Update the cache while latent KV is still compressed
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None and not self.is_kv_shared_layer:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
         if self.store_full_length_kv:
             shared_kv_states["rope" if self.use_rope else "nope"] = (k_pass, k_rot)
@@ -468,7 +473,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
                 position_embeddings,
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
-                past_key_values=past_key_values,
+                cache=cache,
             )  # [B, S, topk]
         else:
             if prev_topk_indices is None:
@@ -562,13 +567,14 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
         self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         shared_kv_states: KVSharingDict,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
@@ -583,7 +589,7 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
             attention_mask=attention_mask,
             shared_kv_states=shared_kv_states,  # the forward is overloaded to pass this args
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             prev_topk_indices=prev_topk_indices,
             use_cache=use_cache,
             **kwargs,
@@ -601,7 +607,7 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     config: MistralLarge4Config
     input_modalities = ("image", "text")
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
@@ -623,6 +629,8 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
 
 
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
+    config: MistralLarge4TextConfig
+
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -630,12 +638,13 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -646,11 +655,11 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -662,7 +671,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
                 allow_is_causal_skip=False,  # Always force creation to account for causality in the indexer
             )
@@ -680,7 +689,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 shared_kv_states=shared_kv_states,
                 use_cache=use_cache,
                 prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
@@ -690,17 +699,17 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
 class MistralLarge4ModelOutputWithPast(Mistral3ModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -715,13 +724,14 @@ class MistralLarge4Model(Mistral3Model):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         use_cache: bool | None = None,
@@ -759,7 +769,7 @@ class MistralLarge4Model(Mistral3Model):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -767,7 +777,7 @@ class MistralLarge4Model(Mistral3Model):
 
         return MistralLarge4ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,  # only diff with Mistral3Model: we also return the router logits
@@ -787,13 +797,14 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -831,7 +842,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             image_sizes=image_sizes,
@@ -857,7 +868,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
         return MistralLarge4CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

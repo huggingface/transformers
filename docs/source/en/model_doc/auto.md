@@ -290,6 +290,10 @@ The following auto classes are available for the following multimodal tasks.
 
 [[autodoc]] AutoModelForImageTextToText
 
+### AutoModelForDecision
+
+[[autodoc]] AutoModelForDecision
+
 ## Time Series
 
 ### AutoModelForTimeSeriesPrediction
