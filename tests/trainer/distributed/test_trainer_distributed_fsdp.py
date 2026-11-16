@@ -19,7 +19,6 @@ FSDP-specific distributed trainer tests.
 import itertools
 import json
 import os
-import subprocess
 import unittest
 from functools import partial
 from pathlib import Path
@@ -373,7 +372,7 @@ class TestFSDPConfig(TestCasePlus):
 class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
-        subprocess.run(cmd, env=self.get_env(), check=True, timeout=180)
+        execute_subprocess_async(cmd, env=self.get_env())
         # output_dir is always the last script_arg value
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []

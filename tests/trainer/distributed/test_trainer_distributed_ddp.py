@@ -19,7 +19,6 @@ DDP-specific distributed trainer tests.
 import json
 import os
 import re
-import subprocess
 
 from parameterized import parameterized
 
@@ -187,13 +186,13 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
 
         torchrun_dir = self.get_auto_remove_tmp_dir()
         cmd = self.get_torchrun_cmd(script, script_args=["--output_dir", torchrun_dir], num_processes=num_processes)
-        subprocess.run(cmd, env=self.get_env(), check=True, timeout=180)
+        execute_subprocess_async(cmd, env=self.get_env())
 
         accelerate_dir = self.get_auto_remove_tmp_dir()
         cmd = self.get_accelerate_cmd(
             script, DDP_CONFIG_FILE, script_args=["--output_dir", accelerate_dir], num_processes=num_processes
         )
-        subprocess.run(cmd, env=self.get_env(), check=True, timeout=180)
+        execute_subprocess_async(cmd, env=self.get_env())
 
         for rank in range(num_processes):
             with open(os.path.join(torchrun_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:

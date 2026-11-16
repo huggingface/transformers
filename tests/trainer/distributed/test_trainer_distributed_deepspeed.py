@@ -23,7 +23,6 @@ import dataclasses
 import itertools
 import json
 import os
-import subprocess
 import tempfile
 import unittest
 from copy import deepcopy
@@ -969,7 +968,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
-        subprocess.run(cmd, env=self.get_env(), check=True, timeout=180)
+        execute_subprocess_async(cmd, env=self.get_env())
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []
         for rank in range(num_processes):
