@@ -636,6 +636,8 @@ class EmbeddingGemma2ModelOutput(BaseModelOutput):
 class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
     config: EmbeddingGemma2Config
     _keys_to_ignore_on_load_unexpected = [
         r"(^|\.)vision_tower\.",

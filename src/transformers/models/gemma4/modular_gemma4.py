@@ -1925,6 +1925,8 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     """
 )
 class Gemma4Model(Gemma3nModel):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
@@ -2287,6 +2289,8 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
