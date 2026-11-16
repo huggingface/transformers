@@ -684,6 +684,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
 
         topk_indices = None  # MAIN DIFF with DSV3.2
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            # Reentrant checkpointing needs the differentiable RoPE tensors as direct positional inputs.
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 *position_embeddings,

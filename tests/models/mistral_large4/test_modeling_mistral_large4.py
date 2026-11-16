@@ -111,6 +111,31 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
 
+    @parameterized.expand([("no_checkpointing", None), ("non_reentrant", False), ("reentrant", True)])
+    def test_lerope_training(self, name, use_reentrant):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MistralLarge4ForConditionalGeneration(config).to(torch_device).train()
+        rotary_emb = model.model.language_model.rotary_emb
+        alpha = rotary_emb.alpha
+        self.assertIsInstance(alpha, torch.nn.Parameter)
+        # Exercise the initialization hook independently of the constructor's zero-filled tensor.
+        with torch.no_grad():
+            alpha.fill_(float("nan"))
+        model._init_weights(rotary_emb)
+        torch.testing.assert_close(alpha, torch.zeros_like(alpha))
+
+        if use_reentrant is not None:
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": use_reentrant})
+
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        before = alpha.detach().clone()
+        model(**inputs, labels=inputs["input_ids"], use_cache=False).loss.backward()
+        self.assertIsNotNone(alpha.grad)
+        self.assertTrue(torch.isfinite(alpha.grad).all())
+        self.assertGreater(alpha.grad.norm().item(), 0)
+        optimizer.step()
+        self.assertFalse(torch.equal(before, alpha))
+
     def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # KV-shared layers attend to the cache of their source layer and leave their own cache layer empty, and NoPE
         # layers cache an empty rotary key
