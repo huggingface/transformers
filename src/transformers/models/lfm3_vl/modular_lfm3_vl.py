@@ -602,6 +602,10 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
 class Lfm3VlProcessor(Qwen3VLProcessor):
     return_mm_token_type_ids = False
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # LFM3-VL uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def model_input_names(self):
         raise AttributeError("Lfm3Vl doesn't need to override it")
 

@@ -15,13 +15,18 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Qwen2VLProcessor
+
+if is_torch_available():
+    import torch
+
+    from transformers import Qwen2VLConfig, Qwen2VLModel
 
 
 @require_vision
@@ -93,3 +98,25 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=20,
             )
+
+    def test_position_ids_match_model_rope_index(self):
+        """The processor's 3D RoPE `position_ids` are the ones the model computes with `get_rope_index`."""
+        processor = self.get_processor()
+        processor.tokenizer.padding_side = "left"
+        inputs = processor(
+            text=self.prepare_text_inputs(batch_size=2, modalities="image"),
+            images=self.prepare_images_inputs(batch_size=2),
+            padding=True,
+            return_tensors="pt",
+        )
+        config = Qwen2VLConfig(
+            text_config={"hidden_size": 16, "intermediate_size": 32, "num_hidden_layers": 1, "num_attention_heads": 2},
+            vision_config={"depth": 1, "embed_dim": 16, "hidden_size": 16, "num_heads": 2},
+        )
+        expected, _ = Qwen2VLModel(config).get_rope_index(
+            inputs["input_ids"],
+            inputs["mm_token_type_ids"],
+            image_grid_thw=inputs["image_grid_thw"],
+            attention_mask=inputs["attention_mask"],
+        )
+        torch.testing.assert_close(inputs["position_ids"], expected)

@@ -1243,6 +1243,10 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     VISION_START_TOKEN = "]<]start of image[>["
     VISION_END_TOKEN = "]<]end of image[>["
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # MiniMax-M3-VL uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = self.IMAGE_TOKEN

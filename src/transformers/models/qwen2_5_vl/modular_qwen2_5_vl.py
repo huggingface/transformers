@@ -665,6 +665,12 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 class Qwen2_5_VLProcessor(Qwen2VLProcessor):
     videos_kwargs = {"return_metadata": True}
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple[int, int, int]]] | None:
+        # video temporal positions are scaled by `second_per_grid_ts`, the model still computes those
+        if video_inputs.get("video_grid_thw") is not None:
+            return None
+        return super().get_mrope_grids(image_inputs, video_inputs)
+
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)
         video_grid_thw = processed_data["video_grid_thw"]

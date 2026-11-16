@@ -1737,7 +1737,9 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextProcessor(Glm46VProcessor):
-    pass
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # GLM-5-Next uses 1D RoPE, the model builds its own `position_ids`
+        return None
 
 
 def smart_resize(

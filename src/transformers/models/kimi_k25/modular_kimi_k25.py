@@ -737,6 +737,10 @@ class Kimi_K25Processor(Qwen2VLProcessor):
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = AttributeError()
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # Kimi-K2.5 uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def __init__(
         self,
         image_processor=None,

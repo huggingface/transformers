@@ -713,6 +713,10 @@ class VideoLlama3Processor(Qwen3VLProcessor):
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = AttributeError()
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # VideoLLaMA3 uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token

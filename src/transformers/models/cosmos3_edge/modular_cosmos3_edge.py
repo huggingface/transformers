@@ -1059,7 +1059,7 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "position_ids"]
 
 
 __all__ = [
