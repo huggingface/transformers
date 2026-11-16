@@ -61,7 +61,7 @@ class Apertus1p5Processor(ProcessorMixin):
         return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        """Peak-normalize the clips, extract features under the model's input names, and build the replacements."""
+        """Peak-normalize the clips, run the feature extractor, and build the replacements."""
         # peak-normalize each clip to -3 dBFS in float32, as in the reference Apertus 1.5 pipeline
         # (the codec feature extractor itself deliberately performs no normalization)
         target_peak = 10.0 ** (-3.0 / 20.0)
@@ -81,13 +81,11 @@ class Apertus1p5Processor(ProcessorMixin):
                 np.ones(values.shape[-1], dtype=np.int64) for values in audio_inputs["input_values"]
             ]
             audio_inputs.convert_to_tensors(kwargs.get("return_tensors"))
-        audio_inputs["input_features"] = audio_inputs.pop("input_values")
-        audio_inputs["feature_attention_mask"] = audio_inputs.pop("padding_mask")
         # counts come from the feature-extractor OUTPUT so that truncation/max_length can never desync the
         # placeholder count from the features the model will actually encode
         audio_inputs["num_audio_codes"] = [
             self.feature_extractor.get_num_audio_codes(int(np.asarray(mask).sum()))
-            for mask in audio_inputs["feature_attention_mask"]
+            for mask in audio_inputs["padding_mask"]
         ]
 
         audio_replacements = []
@@ -125,15 +123,6 @@ class Apertus1p5Processor(ProcessorMixin):
                 self.feature_extractor.get_num_audio_codes(int(length)) for length in audio_lengths
             ]
         return MultiModalData(**data)
-
-    @property
-    def model_input_names(self):
-        # the audio names are hardcoded because `_process_audio` renames the feature extractor's
-        # `input_values`/`padding_mask` outputs to the model's `input_features`/`feature_attention_mask`
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        audio_input_names = ["input_features", "feature_attention_mask"]
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + audio_input_names))
 
     @property
     def unused_input_names(self) -> list[str]:

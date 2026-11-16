@@ -31,6 +31,7 @@ if is_torch_available():
 @require_torchvision
 class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Apertus1p5Processor
+    audio_input_name = "input_values"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -117,11 +118,11 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_audio_peak_normalized_to_minus_3_dbfs(self):
         processor = self.get_processor()
         out = processor(text="<|audio|>", audio=[self._clip(1200) * 20.0], return_tensors="pt")
-        peak = out["input_features"].abs().amax().item()
+        peak = out["input_values"].abs().amax().item()
         self.assertAlmostEqual(peak, 10 ** (-3 / 20), places=4)
         # an all-zero clip must not produce NaNs
         out = processor(text="<|audio|>", audio=[np.zeros(1200, dtype=np.float32)], return_tensors="pt")
-        self.assertFalse(torch.isnan(out["input_features"]).any())
+        self.assertFalse(torch.isnan(out["input_values"]).any())
 
     def test_audio_mask_tracks_valid_samples(self):
         """Masks, features and placeholder counts follow the valid samples of unpadded, padded and truncated clips."""
@@ -142,10 +143,8 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     audio_kwargs=audio_kwargs,
                 )
                 for index, (valid, output_length) in enumerate(zip(valid_lengths, output_lengths)):
-                    np.testing.assert_array_equal(
-                        out["feature_attention_mask"][index], np.arange(output_length) < valid
-                    )
-                    self.assertEqual(np.shape(out["input_features"][index]), (1, output_length))
+                    np.testing.assert_array_equal(out["padding_mask"][index], np.arange(output_length) < valid)
+                    self.assertEqual(np.shape(out["input_values"][index]), (1, output_length))
                     self.assertEqual(out["input_ids"][index].count(processor.audio_token_id), math.ceil(valid / hop))
 
         # without padding the feature extractor returns no mask; the processor builds it in the requested format
@@ -156,7 +155,7 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     audio=[self._clip(hop)] * 2,
                     audio_kwargs={"padding": False, "return_tensors": return_tensors},
                 )
-                self.assertIsInstance(out["feature_attention_mask"], expected_type)
+                self.assertIsInstance(out["padding_mask"], expected_type)
 
 
 @slow

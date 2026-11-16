@@ -834,58 +834,55 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         image_features = torch.split(image_embeddings, [codes.numel() for codes in image_tokens])
         return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
 
-    def get_audio_tokens(self, input_features: torch.Tensor, feature_attention_mask: torch.Tensor) -> torch.LongTensor:
+    def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> torch.LongTensor:
         """
         Tokenizes each unpadded audio clip and returns flattened shared-vocabulary ids.
 
         Args:
-            input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
+            input_values (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
                 Mono 24 kHz waveforms, padded to a common length.
-            feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
+            padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
                 Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
 
         Returns:
             `torch.LongTensor`: Audio code ids offset by `config.audio_token_offset`.
         """
-        if input_features.dim() == 2:
-            input_features = input_features.unsqueeze(1)
-        audio_lengths = feature_attention_mask.sum(dim=-1)
+        if input_values.dim() == 2:
+            input_values = input_values.unsqueeze(1)
+        audio_lengths = padding_mask.sum(dim=-1)
         if (audio_lengths == 0).any():
-            raise ValueError("`feature_attention_mask` marks an audio clip with zero valid samples.")
+            raise ValueError("`padding_mask` marks an audio clip with zero valid samples.")
         # a 0 -> 1 transition along a row means the mask is not right-padded
-        if (feature_attention_mask.long().diff(dim=-1) > 0).any():
+        if (padding_mask.long().diff(dim=-1) > 0).any():
             raise ValueError(
-                "`feature_attention_mask` must be right-padded (valid samples first), as returned by the feature "
-                "extractor."
+                "`padding_mask` must be right-padded (valid samples first), as returned by the feature extractor."
             )
         vocab_ids_list = []
-        for clip, length in zip(input_features, audio_lengths):
+        for clip, length in zip(input_values, audio_lengths):
             clip = clip[None, :, : int(length)].to(self.audio_tokenizer.dtype)
             codes = self.audio_tokenizer.encode(clip, return_dict=True).audio_codes
             vocab_ids_list.append(codes.flatten() + self.config.audio_token_offset)
         return torch.cat(vocab_ids_list)
 
-    def _get_audio_token_counts(self, feature_attention_mask: torch.Tensor) -> list[int]:
+    def _get_audio_token_counts(self, padding_mask: torch.Tensor) -> list[int]:
         """Number of audio codes per clip: one per started `hop_length` window of valid samples."""
         hop_length = self.audio_tokenizer.config.hop_length
-        return ((feature_attention_mask.sum(dim=-1) + hop_length - 1) // hop_length).tolist()
+        return ((padding_mask.sum(dim=-1) + hop_length - 1) // hop_length).tolist()
 
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes audio and embeds its discrete codes with the text embedding layer.")
     def get_audio_features(
         self,
-        input_features: torch.Tensor,
-        feature_attention_mask: torch.Tensor,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
         r"""
-        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
-            Mono 24 kHz waveforms, padded to a common length.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
+        padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
         """
-        vocab_ids = self.get_audio_tokens(input_features, feature_attention_mask)
-        split_sizes = self._get_audio_token_counts(feature_attention_mask)
+        vocab_ids = self.get_audio_tokens(input_values, padding_mask)
+        split_sizes = self._get_audio_token_counts(padding_mask)
         audio_embeddings = self.get_input_embeddings()(vocab_ids)
         audio_features = torch.split(audio_embeddings, split_sizes)
         audio_tokens = [ids - self.config.audio_token_offset for ids in torch.split(vocab_ids, split_sizes)]
@@ -940,8 +937,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_sizes: torch.Tensor | None = None,
-        input_features: torch.Tensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -951,11 +948,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`, *optional*):
-            Processor-produced mono 24 kHz waveforms, peak-normalized and padded. Requires
-            `feature_attention_mask`; rows must follow expanded audio-placeholder order.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
-            Right-padded mask with 1 for valid samples and 0 for padding, required with `input_features`.
+        padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
+            Right-padded mask with 1 for valid samples and 0 for padding, required with `input_values`.
         """
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
@@ -977,10 +971,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
                 inputs_embeds.device, inputs_embeds.dtype
             )
         audio_features = None
-        if input_features is not None:
-            audio_features = self.get_audio_features(
-                input_features, feature_attention_mask, return_dict=True
-            ).pooler_output
+        if input_values is not None:
+            audio_features = self.get_audio_features(input_values, padding_mask, return_dict=True).pooler_output
             audio_features = torch.cat(audio_features, dim=0)
 
         if image_features is not None or audio_features is not None:
@@ -1031,17 +1023,15 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
     @auto_docstring
     def get_audio_features(
         self,
-        input_features: torch.Tensor,
-        feature_attention_mask: torch.Tensor,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
         r"""
-        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
-            Mono 24 kHz waveforms, padded to a common length.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
+        padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
         """
-        return self.model.get_audio_features(input_features, feature_attention_mask, **kwargs)
+        return self.model.get_audio_features(input_values, padding_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1051,8 +1041,8 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_sizes: torch.Tensor | None = None,
-        input_features: torch.Tensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -1064,10 +1054,8 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`, *optional*):
-            Padded, peak-normalized mono 24 kHz waveforms in audio-placeholder order. Requires `feature_attention_mask`.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
-            Audio sample mask: 1 for valid samples, 0 for right padding. Required with `input_features`.
+        padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
+            Audio sample mask: 1 for valid samples, 0 for right padding. Required with `input_values`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Next-token labels in `[0, output_vocab_size)` (or `[0, text_config.vocab_size)` when unset).
             Use `-100` for input-only multimodal tokens and other ignored positions.
@@ -1081,8 +1069,8 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_sizes=image_sizes,
-            input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
+            input_values=input_values,
+            padding_mask=padding_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
@@ -1116,7 +1104,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **model_kwargs,
     ) -> tuple[torch.LongTensor | None, dict[str, Any]]:
         """Expand audio clips by prompt; shared generation handles precomputed image features."""
-        if expand_size == 1 or model_kwargs.get("input_features") is None:
+        if expand_size == 1 or model_kwargs.get("input_values") is None:
             return super()._expand_inputs_for_generation(expand_size, is_encoder_decoder, input_ids, **model_kwargs)
 
         inputs_embeds = model_kwargs.get("inputs_embeds")
@@ -1130,7 +1118,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         else:
             raise ValueError("Either `input_ids` or `inputs_embeds` must be provided for multimodal expansion.")
 
-        audio_token_counts = self.model._get_audio_token_counts(model_kwargs["feature_attention_mask"])
+        audio_token_counts = self.model._get_audio_token_counts(model_kwargs["padding_mask"])
         audio_nums = []
         audio_idx = 0
         for expected_tokens in placeholder_mask.sum(dim=-1).tolist():
@@ -1143,7 +1131,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
 
         # Keep flattened audio tensors out of the shared per-text-row expansion.
         audio_kwargs = {}
-        for key in ("input_features", "feature_attention_mask"):
+        for key in ("input_values", "padding_mask"):
             value = model_kwargs.pop(key)
             repeats = (expand_size,) + (1,) * (value.ndim - 1)
             audio_kwargs[key] = torch.cat([group.repeat(repeats) for group in value.split(audio_nums)], dim=0)

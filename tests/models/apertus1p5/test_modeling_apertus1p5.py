@@ -143,7 +143,7 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
         base_model_class = Apertus1p5Model
         conditional_generation_class = Apertus1p5ForConditionalGeneration
     config_class = Apertus1p5Config
-    audio_mask_key = "feature_attention_mask"
+    audio_mask_key = "padding_mask"
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("pad_token_id", 0)
@@ -167,6 +167,9 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.image_token_id}
+
+    def get_audio_feature_key(self):
+        return "input_values"
 
     def create_audio_features(self, batch_size: int | None = None):
         # raw mono waveforms
@@ -198,15 +201,15 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
         audio = model.config.audio_token_id
         # prompt 0 holds two clips of one code each, prompt 1 one clip of two codes (hop length 4)
         input_ids = torch.tensor([[audio, audio, 5]] * 2)
-        input_features = torch.arange(3.0)[:, None, None].expand(3, 1, 8)
-        feature_attention_mask = torch.tensor([[1] * 4 + [0] * 4, [1] * 4 + [0] * 4, [1] * 8])
+        input_values = torch.arange(3.0)[:, None, None].expand(3, 1, 8)
+        padding_mask = torch.tensor([[1] * 4 + [0] * 4, [1] * 4 + [0] * 4, [1] * 8])
         _, expanded = model._expand_inputs_for_generation(
             expand_size=2,
             input_ids=input_ids,
-            input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
+            input_values=input_values,
+            padding_mask=padding_mask,
         )
-        torch.testing.assert_close(expanded["input_features"], input_features[[0, 1, 0, 1, 2, 2]])
+        torch.testing.assert_close(expanded["input_values"], input_values[[0, 1, 0, 1, 2, 2]])
 
     @unittest.skip("The audio tokenizer does not record intermediate outputs")
     def test_get_audio_features_hidden_states(self):
