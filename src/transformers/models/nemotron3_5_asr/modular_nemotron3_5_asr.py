@@ -18,18 +18,16 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import (
     NemotronAsrStreamingForRNNT,
     NemotronAsrStreamingPreTrainedModel,
 )
-from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import (
-    NemotronAsrStreamingProcessor,
-    NemotronAsrStreamingProcessorKwargs,
-)
+from ..nemotron_asr_streaming.processing_nemotron_asr_streaming import NemotronAsrStreamingProcessor
 from .configuration_nemotron3_5_asr import Nemotron3_5AsrConfig
 from .generation_nemotron3_5_asr import Nemotron3_5AsrGenerationMixin, Nemotron3_5AsrRNNTDecoderCache
 
@@ -167,10 +165,6 @@ DEFAULT_PROMPT_DICTIONARY = {
 }
 
 
-class Nemotron3_5AsrProcessorKwargs(NemotronAsrStreamingProcessorKwargs, total=False):
-    pass
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
@@ -237,7 +231,7 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
         language: str | list[str] = "auto",
-        **kwargs: Unpack[Nemotron3_5AsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -269,7 +263,6 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            Nemotron3_5AsrProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -324,7 +317,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
         Joint-network scores over the vocabulary plus the blank symbol, for every encoder/decoder frame pair.
     decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*):
         Updated decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
@@ -336,7 +329,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     logits: torch.Tensor | None = None
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None  # noqa: F821
 
 
@@ -496,10 +489,12 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Nemotron3_5AsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Nemotron3_5AsrProcessor",

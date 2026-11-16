@@ -100,7 +100,7 @@ class MoonshineStreamingConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "encoder_config": MoonshineStreamingEncoderConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     encoder_config: dict | MoonshineStreamingEncoderConfig | None = None
     vocab_size: int = 32768

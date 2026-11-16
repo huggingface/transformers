@@ -40,7 +40,6 @@ models exportable. The export pipeline uses five sections, in execution order:
 from __future__ import annotations
 
 import copy
-import importlib
 import inspect
 import sys
 import types
@@ -51,8 +50,9 @@ from typing import Any
 from ..utils import logging
 from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
-from .configs import DynamoConfig
-from .utils import apply_patches, patch_attributes, prepare_for_export, register_patch
+from .configs import DynamoConfig, ExportFormat
+from .metadata import ExportMetadata, build_export_metadata
+from .utils import apply_patches, import_dotted_path, patch_attributes, prepare_for_export, register_patch
 
 
 if is_torch_available():
@@ -76,24 +76,25 @@ class DynamoExporter(HfExporter):
 
     >>> exporter = DynamoExporter()
     >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.module()(**inputs)
+    >>> outputs = exported(**inputs)
+    >>> exported.save_pretrained("exported")  # `model.pt2`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.DYNAMO
+    config_class = DynamoConfig
+    program_suffix = ".pt2"
 
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
-    def export(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
-        config: DynamoConfig | dict[str, Any],
-    ) -> ExportedProgram:
-        if isinstance(config, dict):
-            config = DynamoConfig(**config)
-        elif not isinstance(config, DynamoConfig):
-            raise TypeError(f"Expected config to be a DynamoConfig or dict, got {type(config)}")
+        config: DynamoConfig,
+    ) -> tuple[ExportedProgram, ExportMetadata]:
         if config.quantizer is not None:
             config.quantizer.validate_environment(config.export_format)
 
@@ -141,17 +142,24 @@ class DynamoExporter(HfExporter):
                 prefer_deferred_runtime_asserts_over_guards=config.prefer_deferred_runtime_asserts_over_guards,
             )
 
-        return exported_program
+        metadata = build_export_metadata(model, sample_inputs, exported_program, self.required_packages)
+        return exported_program, metadata
+
+    @classmethod
+    def save_program(cls, program: ExportedProgram, path) -> None:
+        torch.export.save(program, str(path))
+
+    @classmethod
+    def load_program(cls, path) -> ExportedProgram:
+        return torch.export.load(str(path))
 
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
 # Replaces `model.forward` with a flat explicit signature derived from the
 # inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
-# `patch_model_config` lives here too — it strips output flags from the inputs
-# and applies them onto `model.config` for the duration of the trace.
+# `patch_model_config` applies the output flags to `model.config` for the trace.
 
 
-# Output flags stripped from inputs and applied onto `model.config` for the trace.
 @contextmanager
 def patch_model_config(model: PreTrainedModel, output_flags: dict[str, Any]):
     """Reversibly tweak `model.config` for the trace:
@@ -346,9 +354,13 @@ def _reshaped_vision_attention_forward(
         q_proj = getattr(self, "q_proj", getattr(self, "q", None))
         k_proj = getattr(self, "k_proj", getattr(self, "k", None))
         v_proj = getattr(self, "v_proj", getattr(self, "v", None))
+        num_key_value_heads = getattr(self, "num_key_value_heads", self.num_heads)
         query_states = q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
-        key_states = k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
-        value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        key_states = k_proj(hidden_states).view(seq_length, num_key_value_heads, self.head_dim)
+        value_states = v_proj(hidden_states).view(seq_length, num_key_value_heads, self.head_dim)
+        # qk-norm encoders (lfm3_vl) normalize the heads before rotary
+        if hasattr(self, "q_norm"):
+            query_states, key_states = self.q_norm(query_states), self.k_norm(key_states)
 
     if position_embeddings is not None:
         # Each vision encoder ships its own ``apply_rotary_pos_emb_vision`` in its modeling file
@@ -411,6 +423,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm4v.modeling_glm4v.Glm4vVisionAttention.forward",
     "transformers.models.glm4v_moe.modeling_glm4v_moe.Glm4vMoeVisionAttention.forward",
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
+    "transformers.models.dots3_note.modeling_dots3_note.Dots3NoteVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
     # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
@@ -423,8 +436,11 @@ def _reshaped_vision_attention_forward(
     "transformers.models.muse_glimmer.modeling_muse_glimmer.MuseGlimmerVisionAttention.forward",
     "transformers.models.muse_spark.modeling_muse_spark.MuseSparkVisionAttention.forward",
     # Separate `_proj` + `(cos, sin)` rotary + `.out_proj` (tuple return)
+    "transformers.models.lfm3_vl.modeling_lfm3_vl.Lfm3VlVisionAttention.forward",
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
+    "transformers.models.minimax_m3_vl.modeling_minimax_m3_vl.MiniMaxM3VLVisionAttention.forward",
+    "transformers.models.inkling2.modeling_inkling2.Inkling2VisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
@@ -460,11 +476,7 @@ def _class_to_path(cls: type) -> str:
 
 
 def _path_to_class(path: str) -> type:
-    module_name, qualname = path.split(":", 1)
-    obj = importlib.import_module(module_name)
-    for part in qualname.split("."):
-        obj = getattr(obj, part)
-    return obj
+    return import_dotted_path(path.replace(":", "."))
 
 
 def _maybe_sym_constant(sym: Any) -> Any:
@@ -487,7 +499,11 @@ def _flatten_to_context(obj: Any, tensors: list) -> Any:
     if type(obj) is list:
         return [_flatten_to_context(i, tensors) for i in obj]
     if type(obj) is dict:
-        return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
+        if all(type(k) is str for k in obj):
+            return {k: _flatten_to_context(v, tensors) for k, v in obj.items()}
+        # As pairs: JSON keys are strings, so a saved program would read `EncoderDecoderCache.is_updated`'s int keys
+        # back as strings, and its input spec would no longer match the cache it is called with.
+        return {"_t": "items", "v": [[k, _flatten_to_context(v, tensors)] for k, v in obj.items()]}
 
     # --- Torch objects ---
     if isinstance(obj, torch.Tensor):
@@ -573,6 +589,9 @@ def _unflatten_from_context(ctx: Any, tensors: list) -> Any:
         return torch.Size(ctx["v"])
     if t == "sym":
         return tensors[ctx["i"]]
+
+    if t == "items":
+        return {k: _unflatten_from_context(v, tensors) for k, v in ctx["v"]}
 
     # --- Python types ---
     if t == "type":

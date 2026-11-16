@@ -14,7 +14,10 @@
 
 import copy
 import random
+import tempfile
 from unittest.mock import patch
+
+from huggingface_hub import get_safetensors_metadata
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
@@ -27,6 +30,10 @@ from .test_modeling_common import (
 
 if is_torch_available():
     import torch
+
+    from transformers import PreTrainedConfig
+    from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers.utils.auto_docstring import get_checkpoint_from_config_class
 
 
 class ALMModelTester(MultiModalModelTester):
@@ -240,3 +247,46 @@ class ALMModelTest(MultiModalModelTest):
                     [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key]], dim=0
                 )
             _ = model(**curr_input_dict)
+
+    # TODO: @eustlb, escalate to core? Core `test_reverse_loading_mapping` only checks self-consistency (no reference
+    # layout), so it misses #45534. No saved layout is enforced: built from config, all rules are reverted and rule
+    # order picks the layout when rules collide (#45534, nemotron3_5_transcribe, inkling); after `from_pretrained`,
+    # used rules can still collide (inkling), untested. Escalating = run this check for every model with a mapping.
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        """
+        Model built from config (no `from_pretrained`) must save under its reference checkpoint's tensor names.
+        Regression test for #45534: saved `language_model.model.model.*` instead of the checkpoint's
+        `language_model.model.*`.
+
+        Test:
+            1. reference = repo in config docstring, fetch only its config + safetensors header
+            2. build model from that config on meta
+            3. run `save_pretrained`, capture the names it writes (file write patched out)
+            4. every saved name must be in the checkpoint -> catches #45534
+        """
+        model_class = self.model_tester.conditional_generation_class
+        config_class = model_class.config_class
+        repo = get_checkpoint_from_config_class(config_class)
+        if repo is None:  # `auto_docstring(custom_intro=...)` drops the link, the sub-configs keep it (e.g. Inkling)
+            sub_config_classes = [
+                c for c in config_class.sub_configs.values() if isinstance(c, type) and issubclass(c, PreTrainedConfig)
+            ]
+            repo = next(filter(None, map(get_checkpoint_from_config_class, sub_config_classes)), None)
+        if repo is None:
+            self.skipTest(f"No reference checkpoint declared for {config_class.__name__}")
+        config = config_class.from_pretrained(repo)
+        with torch.device("meta"):
+            model = model_class(config)
+        if not get_model_conversion_mapping(model, add_legacy=False):
+            self.skipTest("No checkpoint conversion mapping: the model saves its own parameter names")
+        checkpoint_keys = set(get_safetensors_metadata(repo).weight_map)
+
+        # Real `save_pretrained`, only the file write is replaced (meta tensors can't be written)
+        saved_keys = set()
+        with (
+            tempfile.TemporaryDirectory() as tmpdirname,
+            patch("transformers.modeling_utils.safe_save_file", lambda shard, *_, **__: saved_keys.update(shard)),
+        ):
+            model.save_pretrained(tmpdirname)
+
+        self.assertEqual(saved_keys - checkpoint_keys, set(), f"Saved under names that are not in {repo}")

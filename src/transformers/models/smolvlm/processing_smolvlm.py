@@ -20,6 +20,7 @@ from datetime import timedelta
 from ...image_utils import make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_num2words_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 # Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
@@ -41,7 +42,7 @@ else:
 
 
 # The correct chat template to be used for videos after #38105
-DEFAULT_CHAT_TEMPLATE = "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% elif line['type'] == 'video' %}{{ '<video>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
+DEFAULT_CHAT_TEMPLATE = "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'] is string %}{{': ' + message['content']}}{% else %}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% elif line['type'] == 'video' %}{{ '<video>' }}{% endif %}{% endfor %}{% endif %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}"
 
 
 def _prompt_split_image(
@@ -90,25 +91,14 @@ def get_image_prompt_string(
     )
 
 
-class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-        "videos_kwargs": {
-            "return_metadata": True,
-        },
-    }
-
-
 @auto_docstring
 class SmolVLMProcessor(ProcessorMixin):
-    valid_processor_kwargs = SmolVLMProcessorKwargs
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
+    videos_kwargs = {
+        "return_metadata": True,
+    }
 
     def __init__(
         self,
@@ -286,5 +276,7 @@ class SmolVLMProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["rows", "cols", "video_metadata"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"SmolVLMProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["SmolVLMProcessor"]

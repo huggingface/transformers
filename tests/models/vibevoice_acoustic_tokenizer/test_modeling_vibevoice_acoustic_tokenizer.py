@@ -26,7 +26,7 @@ from transformers import (
     VibeVoiceAcousticTokenizerConfig,
     VibeVoiceAcousticTokenizerModel,
 )
-from transformers.audio_utils import load_audio_librosa
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -326,7 +326,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Carter_man.wav",
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav",
         ]
-        audio_arrays = [load_audio_librosa(path, sampling_rate=self.sampling_rate) for path in audio_paths]
+        audio_arrays = [load_audio(path, sampling_rate=self.sampling_rate) for path in audio_paths]
         feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_checkpoint)
 
         # apply model and compare

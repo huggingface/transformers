@@ -419,7 +419,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "Blip2TextEmbeddings",
         "Blip2VisionEmbeddings",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1011,8 +1011,8 @@ class Blip2Model(Blip2PreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `cache`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `cache`).
 
             To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
             Training](./t5#training).
