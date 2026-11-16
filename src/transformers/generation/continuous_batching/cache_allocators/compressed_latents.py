@@ -15,10 +15,10 @@
 import torch
 
 from ....configuration_utils import PreTrainedConfig
-from .full_attention import PackedAttentionCacheAllocator
+from .full_attention import PackedCacheAllocator
 
 
-class MLACacheAllocator(PackedAttentionCacheAllocator):
+class MLACacheAllocator(PackedCacheAllocator):
     """Cache allocator for a group of MLA layers, which cache two single-head latents per token instead of regular
     keys and values: the compressed KV latent, then the rotated key."""
 

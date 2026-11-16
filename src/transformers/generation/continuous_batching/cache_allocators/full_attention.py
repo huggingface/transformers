@@ -231,7 +231,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         return self._kv_page_views[layer_idx]
 
 
-class PackedAttentionCacheAllocator(FullAttentionCacheAllocator):
+class PackedCacheAllocator(FullAttentionCacheAllocator):
     """Base cache allocator for a group of full attention layers which cache any number of per-token fields of
     different shapes. Subclasses choose the fields and map the cache updates of their layers to `update_fields`.
     Blocks, pages and indices work like they do in the parent class, only the content of a page differs: each token
@@ -326,4 +326,4 @@ class PackedAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Returns the K and V cache views for a block table update."""
-        raise NotImplementedError("Not implemented for packed attention cache allocator")
+        raise NotImplementedError("Not implemented for packed cache allocator")
