@@ -42,6 +42,7 @@ class Qwen2MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        # 这里使用的是silu激活函数
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -81,18 +82,20 @@ class Qwen2RotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))    # inv_freq是一维的：(head_dim / 2,)
         return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    # 这里position_ids的形状是(1, seq_len)，且内容是range(seq_len)
     def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)    # 在最后一维扩充并与inv_freq广播相乘得到(1,seq_len,head_dim / 2)
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)        # (1, seq_len, head_dim)
 
 
 def rotate_half(x):
@@ -127,7 +130,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
-
+# 如果用的是MGA，key/value的head_num会小于query的head_num，所以需要重复
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -139,7 +142,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-
+# 注意力前馈过程
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -150,21 +153,26 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
+    # query.shape:(batch_size,num_atten_heads,query_len,head_dim)
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    # 这里的attention_mask的形状是（batch_size, 1, seq_len, seq_len),因为同一query的不同head对于key的关注方式是相同的，所以用1后续自动广播
+    # 当处于Prefill阶段时候：seq_len=prompt_len，当处于decode阶段时候：seq_len = 1,kvcache中存放着前序token的kvcache
+    # 所以这里的attention_mask的作用有两个：1.无论是prefill阶段还是decode阶段：都需要对padding_token进行掩码（因为是batch处理，所以肯定会有padding_token).2.如果是Prefill阶段，还需要设置因果掩码，前面的token注意不到后面的token
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
+    # 将(batch_size, num_heads, seq_len, head_dim)转换为(batch_size, seq_len, num_heads, head_dim)方便后续直接将后面两个维度合并
     attn_output = attn_output.transpose(1, 2).contiguous()
-
+    # attn_output.shape=(batch_size, seq_len, num_attn_heads, head_dim), attn_weights.shape=(batch_size, num_attn_heads, seq_len, seq_len)
     return attn_output, attn_weights
 
-
+# 单层注意力层：封装上述前馈函数
 @use_kernelized_func(apply_rotary_pos_emb)
 class Qwen2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -194,12 +202,13 @@ class Qwen2Attention(nn.Module):
         cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        # 这里hidden_states.shape=(batch_size, seq_len, hidden_dim)
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)    #(batch_size, seq_len, -1, head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)    # (batch_size, num_attention_heads, seq_len, head_dim)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)        # (batch_size, num_key_value_heads, seq_len, head_dim)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)        #(batch_size, num_key_value_heads, seq_len, head_dim)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -248,7 +257,7 @@ class Qwen2RMSNorm(nn.Module):
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
-
+# 一个transformer的Block层，封装了：PreRMSNorm->Qwen2Attention->PostRMSNorm->Qwen2MLP
 class Qwen2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
@@ -345,6 +354,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
+        # input_ids.shape=(batch_size, seq_len)
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -355,7 +365,8 @@ class Qwen2Model(Qwen2PreTrainedModel):
             cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            # 假设这里同一batch中的不同sequence缓存的kvcache长度不同，但是会填充到max_seq_len，所以cache.get_seq_length()返回的是一个整数:max_seq_len
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0    # prefill阶段不为0，decode阶段是0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
