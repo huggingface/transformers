@@ -1258,7 +1258,9 @@ class Gemma4UnifiedModel(Gemma4Model):
             **kwargs,
         )
 
-        return Gemma4UnifiedModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs)
+        return Gemma4UnifiedModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
+        )
 
 
 class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):

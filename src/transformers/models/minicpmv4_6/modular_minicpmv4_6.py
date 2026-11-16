@@ -709,7 +709,9 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MultimodalBaseModelOutputWithPast(**output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video"))
+        return MultimodalBaseModelOutputWithPast(
+            **output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring

@@ -1308,7 +1308,9 @@ class HunYuanVLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return HunYuanVLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video"))
+        return HunYuanVLModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring
