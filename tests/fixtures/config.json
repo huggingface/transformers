@@ -1,4 +1,5 @@
 {
-    "model_type": "wav2vec2"
+    "model_type": "wav2vec2",
+    "model_type": "ernie5_5_moe"
 }
   
