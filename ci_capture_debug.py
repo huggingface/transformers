@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture_keep_kernels")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -505,12 +505,37 @@ def _patch_force_gc_in_capture():
                     log(f"    ORT/ONNX garbage object: {type(o).__module__}.{type(o).__qualname__} {o!r:.200}")
                 except Exception as e:
                     log(f"    ORT/ONNX garbage object: {type(o)} (repr failed: {e!r})")
+            if PLUGIN_MODE == "force_gc_in_capture_keep_kernels":
+                # Control experiment: identical, except Triton / inductor-runtime kernel objects (CompiledKernel,
+                # StaticallyLaunchedCudaKernel, ...) are kept alive during the capture and released after capture_end.
+                kept = [o for o in garbage if type(o).__module__.startswith(("triton.", "torch._inductor.runtime"))]
+                _force_gc_state["kept"] = kept
+                kept_types = collections.Counter(f"{type(o).__module__}.{type(o).__qualname__}" for o in kept)
+                log(
+                    f"force_gc_in_capture_keep_kernels: keeping {len(kept)} Triton/inductor-runtime objects alive until "
+                    f"after capture_end: {kept_types.most_common(20)}"
+                )
             log("force_gc_in_capture: releasing the cyclic garbage NOW (inside the capture)")
             del garbage, ort_objs  # frees everything (DEBUG_SAVEALL kept it alive) -> destructors run inside capture
             log("force_gc_in_capture: garbage released; capture continues")
         return out
 
     G.capture_begin = capture_begin
+
+    if PLUGIN_MODE == "force_gc_in_capture_keep_kernels":
+        orig_end = G.capture_end
+
+        def capture_end(self, *args, **kwargs):
+            try:
+                return orig_end(self, *args, **kwargs)
+            finally:
+                kept = _force_gc_state.pop("kept", None)
+                if kept is not None:
+                    log(f"force_gc_in_capture_keep_kernels: capture ended; releasing the {len(kept)} kept objects NOW")
+                    kept.clear()
+                    log("force_gc_in_capture_keep_kernels: kept objects released (outside the capture)")
+
+        G.capture_end = capture_end
     log(
         "force_gc_in_capture: CUDAGraph.capture_begin patched (forced GC inside the first capture of each target original)"
     )
@@ -939,7 +964,7 @@ class CaptureDebugPlugin:
             _patch_triton_launch()
             log("triton_wrapper_only: CachingAutotuner.run wrapped (pass-through)")
             return
-        if PLUGIN_MODE == "force_gc_in_capture":
+        if PLUGIN_MODE in ("force_gc_in_capture", "force_gc_in_capture_keep_kernels"):
             _patch_force_gc_in_capture()
             return
         faulthandler.enable(file=sys.stderr, all_threads=True)
