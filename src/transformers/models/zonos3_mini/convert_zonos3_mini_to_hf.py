@@ -44,7 +44,6 @@ from transformers import (
 )
 
 
-# TODO: move to final Zyphra repo
 AUDIO_TOKENIZER_REPO = "Zyphra/ZAC-1-hf"
 
 # One `user` message (the text, optionally with the voice clip), optionally followed by the `assistant` target audio to

@@ -31,7 +31,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="Zyphra/ZAC-1-hf")  # TODO: move to final Zyphra repo
+@auto_docstring(checkpoint="Zyphra/ZAC-1-hf")
 @strict
 class ZacConfig(PreTrainedConfig):
     r"""

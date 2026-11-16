@@ -1096,7 +1096,7 @@ class ZacModel(ZacPreTrainedModel):
         >>> from datasets import Audio, load_dataset
         >>> from transformers import AutoFeatureExtractor, AutoModel
 
-        >>> model_id = "Zyphra/ZAC-1-hf"  # TODO: move to final Zyphra repo
+        >>> model_id = "Zyphra/ZAC-1-hf"
         >>> model = AutoModel.from_pretrained(model_id)
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

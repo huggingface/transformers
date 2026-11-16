@@ -1592,7 +1592,7 @@ class Zonos3MiniForConditionalGeneration(Zonos3MiniPreTrainedModel, Zonos3MiniGe
         ```python
         >>> from transformers import AutoModelForTextToWaveform, AutoProcessor
 
-        >>> model_id = "Zyphra/ZONOS3-Mini-transformers"  # TODO: move to final Zyphra repo
+        >>> model_id = "Zyphra/ZONOS3-Mini-transformers"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = AutoModelForTextToWaveform.from_pretrained(model_id)
 

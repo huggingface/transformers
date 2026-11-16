@@ -36,7 +36,7 @@ SPEAKER_ENCODER_STAGES = [
 ]
 
 
-@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")  # TODO: move to final Zyphra repo
+@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")
 @strict
 class Zonos3MiniSpeakerEncoderConfig(PreTrainedConfig):
     r"""
@@ -112,7 +112,7 @@ class Zonos3MiniSpeakerEncoderConfig(PreTrainedConfig):
                 channels = out_channels
 
 
-@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")  # TODO: move to final Zyphra repo
+@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")
 @strict
 class Zonos3MiniConfig(PreTrainedConfig):
     r"""

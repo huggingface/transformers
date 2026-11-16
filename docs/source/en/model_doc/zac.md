@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-13.*
+*This model was contributed to Hugging Face Transformers on 2026-11-15.*
 
 # ZAC-1
 
@@ -38,9 +38,9 @@ ZAC-1 (Zyphra Audio Codec 1) is the 44.1 kHz speech codec of [ZONOS3-Mini](./zon
 Audio is encoded in lanes of 20 seconds; every lane after the first re-reads the previous 10 seconds as left context.
 
 Two decoders are released: `keep2_plain` (2 layers per transformer stage, the default) and `full_mr` (32/12/12/12/12
-layers). The checkpoint [Zyphra/ZAC-1-hf](https://huggingface.co/Zyphra/ZAC-1-hf) (TODO: coordinate the final repo
-with Zyphra) holds the `keep2_plain` decoder; convert `full_mr` with
-`python src/transformers/models/zac/convert_zac_to_hf.py --variant full_mr --output_dir zac-1-full-mr-hf`.
+layers). The checkpoint [Zyphra/ZAC-1-hf](https://huggingface.co/Zyphra/ZAC-1-hf) holds the `keep2_plain` decoder on
+`main` and the `full_mr` decoder on the `full_mr` branch (`AutoModel.from_pretrained("Zyphra/ZAC-1-hf",
+revision="full_mr")`).
 
 The decoder outputs audio at the raw decoder level: multiply it by `10 ** (-3 / 20)` (ZAC-1's `output_gain()`, a 3 dB
 headroom) for playback level. The [`Zonos3MiniProcessor`] applies this gain when decoding speech.
@@ -56,7 +56,7 @@ import torch
 from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, AutoModel
 
-model_id = "Zyphra/ZAC-1-hf"  # TODO: move to final Zyphra repo
+model_id = "Zyphra/ZAC-1-hf"
 model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 

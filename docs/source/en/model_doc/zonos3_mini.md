@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-13.*
+*This model was contributed to Hugging Face Transformers on 2026-11-15.*
 
 # ZONOS3-Mini
 
@@ -49,8 +49,8 @@ The voice comes from one of two places:
   continues them.
 - **Embedding**: the speaker encoder's embedding of a clip (or a released voice's embedding) fills a speaker row.
 
-The checkpoint [Zyphra/ZONOS3-Mini-transformers](https://huggingface.co/Zyphra/ZONOS3-Mini-transformers) (TODO:
-coordinate the final repo with Zyphra) ships 27 voices in `voices/`, each with its reference codes and embedding. The
+The checkpoint [Zyphra/ZONOS3-Mini-transformers](https://huggingface.co/Zyphra/ZONOS3-Mini-transformers) ships 27
+voices in `voices/`, each with its reference codes and embedding. The
 original code can be found at [Zyphra/ZONOS3-Mini-hf](https://huggingface.co/Zyphra/ZONOS3-Mini-hf).
 
 The processor normalizes the text (numbers, dates, currencies, units) with
@@ -67,7 +67,7 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 from transformers import AutoModelForTextToWaveform, AutoProcessor
 
-model_id = "Zyphra/ZONOS3-Mini-transformers"  # TODO: move to final Zyphra repo
+model_id = "Zyphra/ZONOS3-Mini-transformers"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 

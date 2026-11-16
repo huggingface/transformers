@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 from transformers import (
     TokenizersBackend,
@@ -30,16 +30,17 @@ from transformers.testing_utils import require_torch, require_torchaudio, slow
 from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
+from ..zac.test_modeling_zac import ZacModelTester
 
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import ZacModel
 
 
-# TODO: move to final Zyphra repo
-ZONOS3_MINI_CHECKPOINT = os.environ.get("ZONOS3_MINI_TEST_DIR", "Zyphra/ZONOS3-Mini-transformers")
+ZONOS3_MINI_CHECKPOINT = "Zyphra/ZONOS3-Mini-transformers"
 
 NUM_CODEBOOKS = 10
 AUDIO_PAD, TEXT_PAD, AUDIO_EOS = 4097, 8196, 4096
@@ -107,8 +108,6 @@ class Zonos3MiniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict(cls):
         # a tiny random ZAC-1 with the real sampling rates, saved so the processor's pointer to it resolves
         if not hasattr(cls, "_audio_tokenizer_dir"):
-            from ..zac.test_modeling_zac import ZacModelTester
-
             cls._audio_tokenizer_dir = tempfile.mkdtemp()
             ZacModel(ZacModelTester(None).get_config()).save_pretrained(cls._audio_tokenizer_dir)
         return {
@@ -315,20 +314,12 @@ class Zonos3MiniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @slow
     def test_prompt_rows_match_reference(self):
         """Reproducer: zonos3_repro/reproducer.py `prompt` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
-        from huggingface_hub import hf_hub_download
-        from safetensors.torch import load_file
-
         with open(
             Path(__file__).parent.parent.parent / "fixtures/zonos3_mini/expected_prompt.json", encoding="utf-8"
         ) as f:
             expected = json.load(f)
         processor = Zonos3MiniProcessor.from_pretrained(ZONOS3_MINI_CHECKPOINT)
-        voice_path = (
-            os.path.join(ZONOS3_MINI_CHECKPOINT, "voices", f"{expected['voice']}.safetensors")
-            if os.path.isdir(ZONOS3_MINI_CHECKPOINT)
-            else hf_hub_download(ZONOS3_MINI_CHECKPOINT, f"voices/{expected['voice']}.safetensors")
-        )
-        voice = load_file(voice_path)
+        voice = load_file(hf_hub_download(ZONOS3_MINI_CHECKPOINT, f"voices/{expected['voice']}.safetensors"))
         reference = processor(
             text=expected["text"],
             speaker_reference_codes=[voice["codes"]],

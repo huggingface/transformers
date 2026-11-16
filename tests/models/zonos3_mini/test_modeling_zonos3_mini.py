@@ -15,11 +15,11 @@
 
 import copy
 import json
-import os
 import unittest
 from pathlib import Path
 
 import pytest
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import Zonos3MiniConfig, is_torch_available
@@ -29,10 +29,12 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ..zac.test_modeling_zac import load_reference_clip
 
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import (
         AutoProcessor,
@@ -41,8 +43,7 @@ if is_torch_available():
     )
 
 
-# TODO: move to final Zyphra repo
-ZONOS3_MINI_CHECKPOINT = os.environ.get("ZONOS3_MINI_TEST_DIR", "Zyphra/ZONOS3-Mini-transformers")
+ZONOS3_MINI_CHECKPOINT = "Zyphra/ZONOS3-Mini-transformers"
 
 
 class Zonos3MiniModelTester:
@@ -411,15 +412,7 @@ class Zonos3MiniForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unit
             return json.load(f)
 
     def _reference_voice(self):
-        from huggingface_hub import hf_hub_download
-        from safetensors.torch import load_file
-
-        path = (
-            os.path.join(ZONOS3_MINI_CHECKPOINT, "voices", "Savannah.safetensors")
-            if os.path.isdir(ZONOS3_MINI_CHECKPOINT)
-            else hf_hub_download(ZONOS3_MINI_CHECKPOINT, "voices/Savannah.safetensors")
-        )
-        return load_file(path)
+        return load_file(hf_hub_download(ZONOS3_MINI_CHECKPOINT, "voices/Savannah.safetensors"))
 
     def test_logits(self):
         """Reproducer: zonos3_repro/reproducer.py `prompt` and `logits` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
@@ -465,8 +458,6 @@ class Zonos3MiniForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unit
 
     def test_speaker_embedding(self):
         """Reproducer: zonos3_repro/reproducer.py `speaker` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
-        from ..zac.test_modeling_zac import load_reference_clip
-
         expected = self._load("expected_speaker_embedding.json")
         processor = AutoProcessor.from_pretrained(ZONOS3_MINI_CHECKPOINT)
         model = Zonos3MiniForConditionalGeneration.from_pretrained(ZONOS3_MINI_CHECKPOINT).to(torch_device).eval()

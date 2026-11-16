@@ -68,7 +68,7 @@ SPEAKER_ENCODER_STAGES = [
 ]
 
 
-@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")  # TODO: move to final Zyphra repo
+@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")
 @strict
 class Zonos3MiniSpeakerEncoderConfig(PreTrainedConfig):
     r"""
@@ -144,7 +144,7 @@ class Zonos3MiniSpeakerEncoderConfig(PreTrainedConfig):
                 channels = out_channels
 
 
-@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")  # TODO: move to final Zyphra repo
+@auto_docstring(checkpoint="Zyphra/ZONOS3-Mini-transformers")
 @strict
 class Zonos3MiniConfig(Qwen3NextConfig):
     r"""
@@ -959,7 +959,7 @@ class Zonos3MiniForConditionalGeneration(Zonos3MiniPreTrainedModel, Zonos3MiniGe
         ```python
         >>> from transformers import AutoModelForTextToWaveform, AutoProcessor
 
-        >>> model_id = "Zyphra/ZONOS3-Mini-transformers"  # TODO: move to final Zyphra repo
+        >>> model_id = "Zyphra/ZONOS3-Mini-transformers"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = AutoModelForTextToWaveform.from_pretrained(model_id)
 

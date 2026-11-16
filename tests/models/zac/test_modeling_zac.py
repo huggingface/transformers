@@ -15,13 +15,12 @@
 
 import inspect
 import json
-import os
 import unittest
 from pathlib import Path
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import ZacConfig
+from transformers import ZacConfig, ZacFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -36,8 +35,7 @@ if is_torch_available():
     from transformers import ZacModel
 
 
-# TODO: move to final Zyphra repo
-ZAC_CHECKPOINT = os.environ.get("ZAC_TEST_DIR", "Zyphra/ZAC-1-hf")
+ZAC_CHECKPOINT = "Zyphra/ZAC-1-hf"
 
 
 class ZacModelTester:
@@ -263,8 +261,6 @@ class ZacIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         """
         Reproducer: zonos3_repro/reproducer.py `encode` (ZAC-1 encoder with its lane schedule on CPU in float32).
         """
-        from transformers import ZacFeatureExtractor
-
         with open(self.fixtures_path / "expected_encode.json", encoding="utf-8") as f:
             expected = json.load(f)
         feature_extractor = ZacFeatureExtractor.from_pretrained(ZAC_CHECKPOINT)
