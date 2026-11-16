@@ -215,6 +215,7 @@ class BenchmarkRunner:
         # `distributed_config` and `device_map` are mutually exclusive — TP does its own placement.
         distributed_config = config.distributed_config
         device_map = config.device if distributed_config is None else None
+        load_start = time.perf_counter()
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=dtype,
@@ -225,6 +226,8 @@ class BenchmarkRunner:
             distributed_config=distributed_config,
         )
         self.model = self.model.eval()
+        self.torch_accelerator_module.synchronize()
+        self.load_time = time.perf_counter() - load_start
         self.inputs = self.inputs.to(self.model.device)
 
     def run_benchmark(self, config: BenchmarkConfig, num_tokens_to_profile: int = 0) -> BenchmarkResult | None:
@@ -233,34 +236,83 @@ class BenchmarkRunner:
             self.logger.info(f"Running benchmark scenario: {config.name}")
             self.logger.debug(f"Full config: {config.to_dict()}")
 
-            # Quick validation: try one measurement first to see if this scenario works
+            # Startup metrics are read outside the measured generations (timers around whole calls, counters that
+            # torch keeps anyway), so collecting them adds no work to the measurements
+            startup = {"load_time": getattr(self, "load_time", None)}
+
+            # Quick validation: try one measurement first to see if this scenario works. This first call is the cold
+            # start: compilation, CUDA graph capture, kernel loading.
             flush_memory()
+            compile_counts = self._compile_counters()
+            self._reset_peak_memory()
             e2e_latency = self.time_generate(config, warmup=True)[0]
             if e2e_latency < 0:
                 self.logger.warning(f"Skipping config {config.name}: {e2e_latency = }")
                 return None
+            startup["first_generate_latency"] = e2e_latency
+            startup["first_generate_peak_memory_mb"] = self._peak_memory_mb()
+            startup.update(self._compile_counters_since(compile_counts, "first_generate"))
 
             # Warmup runs
             self.logger.info(f"Warming up with {config.warmup_iterations} iterations...")
-            for _ in trange(config.warmup_iterations, desc="Warmup"):
-                self.time_generate(config, warmup=True)
+            compile_counts = self._compile_counters()
+            startup["warmup_latencies"] = [
+                self.time_generate(config, warmup=True)[0] for _ in trange(config.warmup_iterations, desc="Warmup")
+            ]
+            startup.update(self._compile_counters_since(compile_counts, "warmup"))
             self.logger.info("Warmup over.")
 
             # Measurement runs
             result = BenchmarkResult()
             self.logger.info(f"Benchmarking with {config.measurement_iterations} iterations.")
+            compile_counts = self._compile_counters()
+            self._reset_peak_memory()
             for _ in trange(config.measurement_iterations, desc="Benchmarking"):
                 e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics = self.time_generate(
                     config, warmup=False
                 )
                 result.accumulate(e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics)
             self.logger.info("Benchmarking done. Cleaning up.")
+            # Anything compiled here means the measurements were not steady state
+            startup.update(self._compile_counters_since(compile_counts, "measurement"))
+            startup["measurement_peak_memory_mb"] = self._peak_memory_mb()
+            if startup["measurement_compiled_graphs"]:
+                self.logger.warning(
+                    f"{config.name}: {startup['measurement_compiled_graphs']} graph(s) compiled during measurements"
+                )
+            result.startup = startup
 
             # Profile if needed
             if num_tokens_to_profile > 0:
                 self.profile_generate(num_tokens_to_profile, config.name)
 
             return result
+
+    @staticmethod
+    def _compile_counters() -> dict[str, int]:
+        """Cumulative torch.compile counters: graphs compiled (first compile and recompiles), graph breaks, and
+        FX graph cache hits/misses (a hit reuses a compilation from an earlier process)."""
+        from torch._dynamo.utils import counters
+
+        return {
+            "compiled_graphs": counters["stats"]["unique_graphs"],
+            "graph_breaks": sum(counters["graph_break"].values()),
+            "fxgraph_cache_hits": counters["inductor"]["fxgraph_cache_hit"],
+            "fxgraph_cache_misses": counters["inductor"]["fxgraph_cache_miss"],
+        }
+
+    def _compile_counters_since(self, before: dict[str, int], phase: str) -> dict[str, int]:
+        return {f"{phase}_{k}": v - before[k] for k, v in self._compile_counters().items()}
+
+    def _reset_peak_memory(self) -> None:
+        if hasattr(self.torch_accelerator_module, "reset_peak_memory_stats"):
+            self.torch_accelerator_module.reset_peak_memory_stats()
+
+    def _peak_memory_mb(self) -> float | None:
+        """Peak memory allocated by torch since the last reset (the allocator tracks it anyway)."""
+        if hasattr(self.torch_accelerator_module, "max_memory_allocated"):
+            return self.torch_accelerator_module.max_memory_allocated() / 1024**2
+        return None
 
     def time_generate(
         self, config: BenchmarkConfig, warmup: bool

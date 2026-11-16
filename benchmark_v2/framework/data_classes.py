@@ -99,6 +99,9 @@ class BenchmarkResult:
         self.inter_token_latency = []
         self.shape_and_decoded_outputs = []
         self.gpu_metrics = []
+        # Collected outside the measurements: load time, first generation (cold start), warmup latencies, compiled
+        # graphs and graph breaks per phase, peak memory
+        self.startup: dict[str, Any] = {}
 
     def accumulate(
         self,
@@ -133,6 +136,7 @@ class BenchmarkResult:
             "shape_and_decoded_outputs": self.shape_and_decoded_outputs,
             "gpu_metrics": gpu_metrics,
             "timestamps": None if summarized else self._timestamps,
+            "startup": self.startup,
         }
 
     @classmethod
@@ -155,6 +159,7 @@ class BenchmarkResult:
         new_instance.inter_token_latency = data["inter_token_latency"]
         new_instance.shape_and_decoded_outputs = data["shape_and_decoded_outputs"]
         new_instance.gpu_metrics = gpu_metrics
+        new_instance.startup = data.get("startup", {})
         return new_instance
 
     def get_throughput(self, total_generated_tokens: int) -> list[float]:
