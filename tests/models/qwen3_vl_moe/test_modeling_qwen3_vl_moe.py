@@ -297,23 +297,19 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
         cls.model = None
         cls.offload_dir = None
-
-    @staticmethod
-    def get_max_memory():
         # device_map="auto" fills GPUs to ~100%, leaving no room for the transpose temporary
         # buffer that fuses per-expert weight shards into a single gate_up_proj tensor during
         # from_pretrained — causing CUDA OOM on multi-GPU runners. A 70% per-GPU max_memory cap
         # reserves the headroom.
+        cls.max_memory = None
         n = backend_device_count(torch_device)
         if n > 0 and torch_device != "cpu":
             torch_accel = getattr(torch, torch_device)
             per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
-            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-            max_memory["cpu"] = (
+            cls.max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            cls.max_memory["cpu"] = (
                 f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
             )
-            return max_memory
-        return None
 
     @classmethod
     def get_model(cls):
@@ -323,7 +319,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 "Qwen/Qwen3-VL-30B-A3B-Instruct",
                 dtype="auto",
                 device_map="auto",
-                max_memory=cls.get_max_memory(),
+                max_memory=cls.max_memory,
                 offload_folder=cls.offload_dir.name,
             )
         return cls.model
@@ -626,7 +622,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
-            max_memory=self.get_max_memory(),
+            max_memory=self.max_memory,
             offload_folder=offload_dir.name,
         )
         batched_messages = [self.message, self.message2]
@@ -683,7 +679,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
-            max_memory=self.get_max_memory(),
+            max_memory=self.max_memory,
             offload_folder=offload_dir.name,
         )
         message_wo_image = [
