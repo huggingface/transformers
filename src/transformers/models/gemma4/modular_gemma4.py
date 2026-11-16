@@ -169,6 +169,8 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
 
 
+@auto_docstring
+@dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
     shared_kv_states (`KVSharingDict`, *optional*):

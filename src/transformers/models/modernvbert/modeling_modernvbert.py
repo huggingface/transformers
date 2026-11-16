@@ -285,10 +285,10 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
         # Images processing
-        image_outputs = {}
+        image_outputs = None
         if pixel_values is not None:
             image_outputs = self.get_image_features(
-                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
+                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, return_dict=True
             )
             image_hidden_states = image_outputs.pooler_output
 

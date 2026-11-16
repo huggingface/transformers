@@ -775,7 +775,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
-            video_outputs=outputs.videp_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     @merge_with_config_defaults

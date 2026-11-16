@@ -85,6 +85,8 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
+@auto_docstring
+@dataclass
 class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     """
     shared_kv_states (`dict`, *optional*):

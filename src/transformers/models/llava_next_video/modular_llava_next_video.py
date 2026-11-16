@@ -594,7 +594,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
-            video_outputs=outputs.videp_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

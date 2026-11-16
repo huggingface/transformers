@@ -138,6 +138,8 @@ class Gemma4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         return self.audio_outputs.pooler_output
 
 
+@auto_docstring
+@dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
     shared_kv_states (`KVSharingDict`, *optional*):
