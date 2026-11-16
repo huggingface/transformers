@@ -24,6 +24,9 @@ from ...utils import auto_docstring
 
 @auto_docstring(custom_intro="Constructs an Apertus 1.5 processor for text, images, and audio.")
 class Apertus1p5Processor(ProcessorMixin):
+    # bare arrays are assumed to already be 24 kHz mono, like the reference pipeline
+    audio_kwargs = {"sampling_rate": 24000}
+
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
         self.audio_token = tokenizer.audio_token
@@ -57,25 +60,10 @@ class Apertus1p5Processor(ProcessorMixin):
         return f"{self.boi_token}{grid_height}*{grid_width}{self.image_wrapper_token}{rows}{self.eoi_token}"
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
-        num_codes = int(audio_inputs["num_audio_codes"][audio_idx])
+        # count from the feature extractor's output, so truncation cannot desync placeholders from features
+        num_samples = int(np.asarray(audio_inputs["padding_mask"][audio_idx]).sum())
+        num_codes = self.feature_extractor.get_num_audio_codes(num_samples)
         return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
-
-    def _process_audio(self, audio: AudioInput, **kwargs):
-        """Run the feature extractor and build the placeholder replacements from the resulting code counts."""
-        # bare arrays are assumed to already be 24 kHz mono, like the reference pipeline
-        kwargs.setdefault("sampling_rate", self.feature_extractor.sampling_rate)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        # counts come from the feature-extractor OUTPUT so that truncation/max_length can never desync the
-        # placeholder count from the features the model will actually encode
-        audio_inputs["num_audio_codes"] = [
-            self.feature_extractor.get_num_audio_codes(int(np.asarray(mask).sum()))
-            for mask in audio_inputs["padding_mask"]
-        ]
-
-        audio_replacements = []
-        for idx in range(len(audio_inputs["num_audio_codes"])):
-            audio_replacements.append(self.replace_audio_token(audio_inputs, audio_idx=idx))
-        return audio_inputs, audio_replacements
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
         """
@@ -107,11 +95,6 @@ class Apertus1p5Processor(ProcessorMixin):
                 self.feature_extractor.get_num_audio_codes(int(length)) for length in audio_lengths
             ]
         return MultiModalData(**data)
-
-    @property
-    def unused_input_names(self) -> list[str]:
-        """Input names returned always by subprocessors but not used in the model's `forward`"""
-        return ["num_audio_codes"]
 
 
 __all__ = ["Apertus1p5Processor"]
