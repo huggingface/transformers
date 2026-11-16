@@ -15,21 +15,11 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Ovis2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Ovis2Processor(ProcessorMixin):
-    valid_processor_kwargs = Ovis2ProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -69,5 +59,7 @@ class Ovis2Processor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["grids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Ovis2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Ovis2Processor"]

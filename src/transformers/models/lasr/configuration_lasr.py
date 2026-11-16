@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -66,7 +66,7 @@ class LasrEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "lasr_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     hidden_size: int = 512
     num_hidden_layers: int = 17
@@ -126,7 +126,7 @@ class LasrCTCConfig(PreTrainedConfig):
 
     model_type = "lasr_ctc"
     sub_configs_defaults = {
-        "encoder_config": SubConfigSpec(config_class=LasrEncoderConfig),
+        "encoder_config": LasrEncoderConfig,
     }
 
     vocab_size: int = 512

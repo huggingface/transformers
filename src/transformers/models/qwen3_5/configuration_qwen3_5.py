@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -54,7 +54,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_5_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -132,7 +132,7 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     model_type = "qwen3_5_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -170,10 +170,10 @@ class Qwen3_5Config(PreTrainedConfig):
 
     model_type = "qwen3_5"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Qwen3_5VisionConfig),
-        "text_config": SubConfigSpec(config_class=Qwen3_5TextConfig),
+        "vision_config": Qwen3_5VisionConfig,
+        "text_config": Qwen3_5TextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

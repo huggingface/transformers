@@ -183,6 +183,18 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip(reason="xLSTM cache is not standard and not compatible")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="xLSTM cache is not standard and not compatible")
+    def test_cache_format(self):
+        pass
+
+    @unittest.skip(reason="xLSTM cache is not standard and not compatible")
+    def test_generate_continue_from_cache(self):
+        pass
+
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

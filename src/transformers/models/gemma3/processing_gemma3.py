@@ -18,27 +18,20 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-            "do_pan_and_scan": False,
-            "pan_and_scan_min_crop_size": 256,
-            "pan_and_scan_max_num_crops": 4,
-            "pan_and_scan_min_ratio_to_activate": 1.2,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Gemma3Processor(ProcessorMixin):
-    valid_processor_kwargs = Gemma3ProcessorKwargs
+    images_kwargs = {
+        # Values are "null" in preprocessor_config.json
+        "do_convert_rgb": True,
+        "do_pan_and_scan": False,
+        "pan_and_scan_min_crop_size": 256,
+        "pan_and_scan_max_num_crops": 4,
+        "pan_and_scan_min_ratio_to_activate": 1.2,
+    }
+    return_mm_token_type_ids = True
 
     def __init__(
         self,
@@ -67,7 +60,7 @@ class Gemma3Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[Gemma3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if text is not None and not isinstance(text, str):
             if not isinstance(text, list) or not isinstance(text[0], str):
@@ -95,17 +88,14 @@ class Gemma3Processor(ProcessorMixin):
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
-        if images is not None and text is not None:
-            if len(images) != len(text):
+        if text is not None and images is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
-
-            for prompt, images in zip(text, images):
-                if len(images) != prompt.count(self.boi_token):
-                    raise ValueError(
-                        f"Prompt contained {prompt.count(self.boi_token)} image tokens but received {len(images)} images."
-                    )
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """
@@ -172,5 +162,7 @@ class Gemma3Processor(ProcessorMixin):
             + " ".join([self.full_image_sequence] * num_crops)
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma3ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma3Processor"]

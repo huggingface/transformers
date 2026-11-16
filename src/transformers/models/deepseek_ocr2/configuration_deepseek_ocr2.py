@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -87,7 +87,7 @@ class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_ocr2_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `DeepseekOcr2VisionEncoder`
     base_model_tp_plan = {
@@ -158,8 +158,8 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=DeepseekOcr2SamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=DeepseekOcr2VisionEncoderConfig),
+        "sam_config": DeepseekOcr2SamVisionConfig,
+        "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
@@ -178,7 +178,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     """
 
     model_type = "deepseek_ocr2_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Override DeepseekV2's MLA TP plan with standard MHA projections
     base_model_tp_plan = {
@@ -269,8 +269,8 @@ class DeepseekOcr2Config(PreTrainedConfig):
 
     model_type = "deepseek_ocr2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=DeepseekOcr2VisionConfig),
-        "text_config": SubConfigSpec(config_class=DeepseekOcr2TextConfig),
+        "vision_config": DeepseekOcr2VisionConfig,
+        "text_config": DeepseekOcr2TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

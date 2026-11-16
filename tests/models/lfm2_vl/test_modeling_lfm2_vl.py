@@ -287,6 +287,10 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
                     "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
                 ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
+                ],
                 ("xpu", 5): [
                     "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
                     "In this image, we see a cat that is lying on its side on a cat bed.",

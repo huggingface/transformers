@@ -19,9 +19,7 @@ import pytest
 
 from transformers import (
     AutoProcessor,
-    GraniteConfig,
     GraniteSpeechConfig,
-    GraniteSpeechEncoderConfig,
     GraniteSpeechForConditionalGeneration,
     GraniteSpeechModel,
 )
@@ -52,20 +50,12 @@ class GraniteSpeechModelTester(ALMModelTester):
     config_class = GraniteSpeechConfig
     base_model_class = GraniteSpeechModel
     conditional_generation_class = GraniteSpeechForConditionalGeneration
-    text_config_class = GraniteConfig
-    audio_config_class = GraniteSpeechEncoderConfig
+
     audio_config_key = "encoder_config"
 
     def __init__(self, parent, **kwargs):
-        kwargs["projector_config"] = {
-            "model_type": "blip_2_qformer",
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 256,
-            "encoder_hidden_size": 32,
-        }
-
+        kwargs.setdefault("projector_intermediate_size", 256)
+        kwargs.setdefault("projector_encoder_hidden_size", 32)
         super().__init__(parent, **kwargs)
 
     def create_audio_features(self, batch_size: int | None = None):
@@ -80,9 +70,6 @@ class GraniteSpeechModelTester(ALMModelTester):
         nblocks = math.ceil(self.feat_seq_length / config.window_size)
         num_audio_tokens = nblocks * (config.window_size // config.downsample_rate)
         return torch.ones([self.batch_size, num_audio_tokens], dtype=torch.long).to(torch_device)
-
-    def create_attention_mask(self, input_ids):
-        return torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
     def create_and_check_granite_speech_model_fp16_forward(self, config, input_ids, input_features, attention_mask):
         model = GraniteSpeechForConditionalGeneration(config=config)

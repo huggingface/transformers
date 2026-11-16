@@ -152,7 +152,7 @@ class HfArgumentParser(ArgumentParser):
         if "_" in field.name:
             long_options.append(f"--{field.name.replace('_', '-')}")
 
-        kwargs = field.metadata.copy()
+        kwargs = dict(field.metadata)
         # field.metadata is not used at all by Data Classes,
         # it is provided as a third-party extension mechanism.
         if isinstance(field.type, str):
