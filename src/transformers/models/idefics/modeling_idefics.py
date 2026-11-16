@@ -943,7 +943,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         cache_length = cache.get_seq_length() if cache is not None else 0
-        seq_length_with_past = seq_length + cache_length
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -1052,7 +1051,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         hidden_states = self.norm(hidden_states)
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             image_outputs=image_outputs,
         )
 

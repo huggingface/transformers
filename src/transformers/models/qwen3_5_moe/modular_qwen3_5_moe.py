@@ -25,8 +25,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPa
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
-from ..aria.modeling_aria import AriaModelOutputWithPast
 from ...utils.deprecation import deprecate_kwarg
+from ..aria.modeling_aria import AriaModelOutputWithPast
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,

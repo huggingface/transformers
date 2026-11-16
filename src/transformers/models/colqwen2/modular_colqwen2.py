@@ -19,7 +19,7 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, is_torch_available, logging
-from ...utils.deprecation import deprecate_attr, deprecate_kwargs
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput, ColPaliPreTrainedModel
 from ..colpali.processing_colpali import ColPaliProcessor
 from .configuration_colqwen2 import ColQwen2Config
