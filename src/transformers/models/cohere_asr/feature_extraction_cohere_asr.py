@@ -170,6 +170,7 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
 
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
         # spectrogram
+        waveform = waveform.to(device)
         window = torch.hann_window(self.win_length, periodic=False, device=device)
         stft = torch.stft(
             waveform,
@@ -352,6 +353,7 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
         features_lengths = torch.floor_divide(
             padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
         )
+        features_lengths = features_lengths.to(device)
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # normalize mel features, ignoring padding
