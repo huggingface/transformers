@@ -63,19 +63,16 @@ class WeatherNext2ConditionedNorm(nn.Module):
 
 @use_kernel_forward_from_hub("WeatherNext2ConditionedMlp")
 class WeatherNext2ConditionedMlp(nn.Module):
-    """Two linear projections followed by a globally conditioned LayerNorm.
+    """Two linear projections followed by a globally conditioned LayerNorm."""
 
-    Grid-sized layers are `tiled`: with `use_kernels=True` they run in tiles of `config.chunk_size` rows.
-    """
-
-    def __init__(self, config: WeatherNext2Config, in_features: int, hidden_size: int | None = None, tiled=False):
+    def __init__(self, config: WeatherNext2Config, in_features: int, hidden_size: int | None = None):
         super().__init__()
         hidden_size = hidden_size or config.hidden_size
         self.activation_fn = ACT2FN[config.graph_config.hidden_act]
         self.fc1 = nn.Linear(in_features, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
-        self.chunk_size = config.chunk_size if tiled else None
+        self.chunk_size = config.chunk_size
 
     def forward(
         self,
@@ -170,7 +167,7 @@ class WeatherNext2GridToMesh(nn.Module):
         self.aggregate_normalization = graph_config.aggregate_normalization
         self.edge_update = WeatherNext2GridToMeshEdgeUpdate(config)
         self.mesh_node_update = WeatherNext2ConditionedMlp(config, 2 * config.hidden_size)
-        self.grid_node_update = WeatherNext2ConditionedMlp(config, config.hidden_size, tiled=True)
+        self.grid_node_update = WeatherNext2ConditionedMlp(config, config.hidden_size)
 
     def forward(
         self,
@@ -307,9 +304,11 @@ class WeatherNext2Attention(nn.Module):
         )
 
         # Fold the block axis into the batch axis and upcast, as in the original implementation.
-        query_states = query_states.reshape(-1, *query_states.shape[-3:]).float()
-        key_states = key_states.reshape(-1, *key_states.shape[-3:]).float()
-        value_states = value_states.reshape(-1, *value_states.shape[-3:]).float()
+        target_shape = (-1, *query_states.shape[-3:])
+        key_value_shape = (-1, *key_states.shape[-3:])
+        query_states = query_states.reshape(target_shape).float()
+        key_states = key_states.reshape(key_value_shape).float()
+        value_states = value_states.reshape(key_value_shape).float()
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -545,7 +544,7 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
     def __init__(self, config: WeatherNext2Config):
         super().__init__(config)
         self.noise_encoder = nn.Linear(config.noise_channels, config.noise_channels, bias=False)
-        self.grid_encoder = WeatherNext2ConditionedMlp(config, config.num_grid_input_channels, tiled=True)
+        self.grid_encoder = WeatherNext2ConditionedMlp(config, config.num_grid_input_channels)
         self.mesh_encoder = WeatherNext2ConditionedMlp(config, config.num_mesh_input_channels)
         self.grid_to_mesh = WeatherNext2GridToMesh(config)
         self.mesh_transformer = WeatherNext2MeshEncoder(config)
