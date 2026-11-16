@@ -30,6 +30,7 @@ from ...utils import (
     is_torchaudio_available,
     requires_backends,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -224,17 +225,9 @@ def _diarization_segments(is_active: "torch.Tensor", frame_duration: float, audi
     return sorted(segments, key=lambda segment: (segment["start"], segment["end"], segment["speaker"]))
 
 
-class Nemotron3_5TranscribeProcessorKwargs(ProcessingKwargs, total=False):
-    # call defaults (`padding`, `padding_side`) ship in the checkpoint's `tokenizer_config.json`; outputs are always
-    # PyTorch tensors
-    _defaults = {}
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5TranscribeProcessor(ProcessorMixin):
-    valid_processor_kwargs = Nemotron3_5TranscribeProcessorKwargs
-
     def __init__(
         self,
         feature_extractor,
@@ -270,8 +263,9 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         self,
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
+        # Should be a processor kwarg but needs to stay for BC.
         output_labels: bool | None = False,
-        **kwargs: Unpack[Nemotron3_5TranscribeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -341,7 +335,7 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[Nemotron3_5TranscribeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
@@ -604,5 +598,7 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
             )
         return results[0] if is_single else results
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Nemotron3_5TranscribeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Nemotron3_5TranscribeProcessor"]

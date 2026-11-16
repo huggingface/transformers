@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoModel
 from .configuration_video_llava import VideoLlavaConfig
 
@@ -44,25 +45,25 @@ logger = logging.get_logger(__name__)
 @dataclass
 class VideoLlavaModelOutputWithPast(ModelOutput):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+        `cache` input) to speed up sequential decoding.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
+    video_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    cache: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
+    video_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -73,30 +74,30 @@ class VideoLlavaModelOutputWithPast(ModelOutput):
 @dataclass
 class VideoLlavaCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
+        `cache` input) to speed up sequential decoding.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
+    video_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    cache: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
+    video_hidden_states: torch.Tensor | None = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->VideoLlava
@@ -128,7 +129,7 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
@@ -164,26 +165,26 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_images: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_images: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
+        pixel_values_images (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`
         """
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         image_outputs = self.image_tower(
             pixel_values,
             return_dict=True,
@@ -210,19 +211,19 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         video_outputs = self.video_tower(
             pixel_values,
             return_dict=True,
@@ -245,9 +246,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -289,15 +290,16 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
@@ -346,7 +348,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -354,7 +356,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
         return VideoLlavaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
@@ -386,7 +388,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -408,16 +410,17 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     @auto_docstring
     @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_images: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_images: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
@@ -427,7 +430,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlavaCausalLMOutputWithPast:
         r"""
-        pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        pixel_values_images (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`VideoLlavaImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
             [`VideoLlavaImageProcessor`] for processing images).
@@ -504,7 +507,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             pixel_values_videos=pixel_values_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             vision_feature_layer=vision_feature_layer,
@@ -526,7 +529,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         return VideoLlavaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,

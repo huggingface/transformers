@@ -143,7 +143,7 @@ VOICE_BOS = "flow_lm.bos_before_voice"
 # The chat template lays out the prompt: the voice BOS and the voice placeholder (expanded by the processor to one token
 # per voice frame) when the user turn has an `audio` item (a recording, or an empty item for precomputed latents), the
 # text and, as the generation prompt, the first audio position (`<|audio_bos|>`, the BOS latent). Without an `audio`
-# item, the voice is the cache of its prefix (`past_key_values`, the shipped voices). The normalizer of the tokenizer
+# item, the voice is the cache of its prefix (`cache`, the shipped voices). The normalizer of the tokenizer
 # prepares the text the way the original's `prepare_text_prompt` does (`build_normalizer`). With an `assistant` turn
 # holding the target audio (training), the voice placeholder is only there when the user turn has a voice, the text may be empty
 # (classifier-free guidance dropout), and the target is the first audio position and one latent placeholder, which the
@@ -479,7 +479,7 @@ def main():
     conversation = [{"role": "user", "content": [{"type": "text", "text": text}]}]
     inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True, add_generation_prompt=True)
     with torch.no_grad():
-        output = model.generate(**inputs, past_key_values=voice, do_sample=False)
+        output = model.generate(**inputs, cache=voice, do_sample=False)
     num_frames = output.audio_latents_mask.sum().item()
     print(f"Sanity: {num_frames} frames generated (the original, english: 68 frames).")
 

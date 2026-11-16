@@ -67,7 +67,7 @@ class Glm4MoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm4_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `Glm4Moe`
     base_model_tp_plan = {

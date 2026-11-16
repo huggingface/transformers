@@ -47,29 +47,29 @@ from .configuration_efficientloftr import EfficientLoFTRConfig
 @dataclass
 class EfficientLoFTRKeypointMatchingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matches (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
-    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Scores of predicted matches.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Absolute (x, y) coordinates of predicted keypoints in a given image.
-    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
         num_keypoints)`, returned when `output_hidden_states=True` is passed or when
         `config.output_hidden_states=True`)
-    attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+    attentions (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: torch.FloatTensor | None = None
-    matches: torch.FloatTensor | None = None
-    matching_scores: torch.FloatTensor | None = None
-    keypoints: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    matches: torch.Tensor | None = None
+    matching_scores: torch.Tensor | None = None
+    keypoints: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @compile_compatible_method_lru_cache(maxsize=32)
@@ -666,7 +666,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.num_batches_tracked)
 
     # Copied from transformers.models.superpoint.modeling_superpoint.SuperPointPreTrainedModel.extract_one_channel_pixel_values with SuperPoint->EfficientLoFTR
-    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def extract_one_channel_pixel_values(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
         extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for EfficientLoFTR. This is
@@ -674,10 +674,10 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
         https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
         Args:
-            pixel_values: torch.FloatTensor of shape (batch_size, 3, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 3, height, width)
 
         Returns:
-            pixel_values: torch.FloatTensor of shape (batch_size, 1, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 1, height, width)
 
         """
         return pixel_values[:, 0, :, :][:, None, :, :]
@@ -704,7 +704,7 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
@@ -1280,7 +1280,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EfficientLoFTRKeypointMatchingOutput:

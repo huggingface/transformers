@@ -43,6 +43,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_moonshine_streaming import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig
@@ -248,12 +249,13 @@ class MoonshineStreamingEncoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
         self.post_attention_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -265,7 +267,7 @@ class MoonshineStreamingEncoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -383,19 +385,19 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
     @capture_outputs
     def forward(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         Args:
-            input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+            input_values (`torch.Tensor` of shape `(batch_size, audio_length)`):
                 Float values of the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
                 `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_values`, the [`AutoFeatureExtractor`] should be used for padding
-                and conversion into a tensor of type `torch.FloatTensor`.
+                and conversion into a tensor of type `torch.Tensor`.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
                 - 1 for tokens that are **not masked**,
@@ -601,12 +603,13 @@ class MoonshineStreamingAttention(nn.Module):
         else:
             self.head_dim_padding = 0
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         key_value_states: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -617,20 +620,20 @@ class MoonshineStreamingAttention(nn.Module):
         )
 
         is_cross_attention = key_value_states is not None
-        if past_key_values is not None:
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            is_updated = cache.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_values.is_updated[self.layer_idx] = True
-                past_key_values = past_key_values.cross_attention_cache
+                cache.is_updated[self.layer_idx] = True
+                cache = cache.cross_attention_cache
             else:
-                past_key_values = past_key_values.self_attention_cache
+                cache = cache.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_values and is_updated:
-            key_states = past_key_values.layers[self.layer_idx].keys
-            value_states = past_key_values.layers[self.layer_idx].values
+        if is_cross_attention and cache and is_updated:
+            key_states = cache.layers[self.layer_idx].keys
+            value_states = cache.layers[self.layer_idx].values
         else:
             key_states = (
                 self.k_proj(current_states)
@@ -642,15 +645,15 @@ class MoonshineStreamingAttention(nn.Module):
                 .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
                 .transpose(1, 2)
             )
-            if is_cross_attention and past_key_values is not None:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if is_cross_attention and cache is not None:
+                key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         if not is_cross_attention:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-            if past_key_values is not None:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -708,6 +711,7 @@ class MoonshineStreamingDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -716,12 +720,12 @@ class MoonshineStreamingDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         encoder_position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         encoder_position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -729,7 +733,7 @@ class MoonshineStreamingDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -743,7 +747,7 @@ class MoonshineStreamingDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
             )
             hidden_states = residual + hidden_states
@@ -764,7 +768,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
         "cross_attentions": OutputRecorder(MoonshineStreamingAttention, index=1, layer_name="encoder_attn"),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -788,20 +792,21 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.
         encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -821,11 +826,11 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -833,7 +838,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -853,7 +858,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -863,13 +868,13 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
 @auto_docstring
 class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.encoder = MoonshineStreamingEncoder(config.encoder_config)
         self.decoder = MoonshineStreamingDecoder(config)
@@ -898,27 +903,28 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        cache: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
             `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`.
+            and conversion into a tensor of type `torch.Tensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
@@ -949,7 +955,7 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs.last_hidden_state,
             encoder_attention_mask=encoder_outputs.attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             position_ids=decoder_position_ids,
             use_cache=use_cache,
@@ -958,7 +964,7 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1011,28 +1017,29 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        cache: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
             `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`.
+            and conversion into a tensor of type `torch.Tensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
@@ -1075,7 +1082,7 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             decoder_inputs_embeds=decoder_inputs_embeds,
             decoder_position_ids=decoder_position_ids,
             use_cache=use_cache,
@@ -1100,7 +1107,7 @@ class MoonshineStreamingForConditionalGeneration(MoonshineStreamingPreTrainedMod
         return Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

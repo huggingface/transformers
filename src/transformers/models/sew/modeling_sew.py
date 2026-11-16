@@ -459,9 +459,10 @@ class SEWEncoder(nn.Module):
 
         for layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            skip_the_layer = False
+            if self.training and self.config.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
@@ -681,8 +682,8 @@ class SEWModel(SEWPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -732,7 +733,7 @@ class SEWModel(SEWPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -771,7 +772,7 @@ class SEWModel(SEWPreTrainedModel):
     """
 )
 class SEWForCTC(SEWPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: SEWConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -898,7 +899,7 @@ class SEWForCTC(SEWPreTrainedModel):
     """
 )
 class SEWForSequenceClassification(SEWPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -941,12 +942,12 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`SEWProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`SEWProcessor.__call__`] for details.
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True

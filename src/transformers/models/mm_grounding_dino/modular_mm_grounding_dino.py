@@ -24,6 +24,7 @@ from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.modeling_grounding_dino import (
+    SPECIAL_TOKENS,
     GroundingDinoContrastiveEmbedding,
     GroundingDinoConvEncoder,
     GroundingDinoConvModel,
@@ -158,10 +159,10 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
     def forward(
         self,
-        vision_hidden_state: torch.FloatTensor,
-        text_hidden_state: torch.FloatTensor,
+        vision_hidden_state: torch.Tensor,
+        text_hidden_state: torch.Tensor,
         text_token_mask: torch.BoolTensor,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         res = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         res = res / math.sqrt(vision_hidden_state.shape[-1])
         res = res + self.bias
@@ -247,6 +248,10 @@ class MMGroundingDinoModel(GroundingDinoModel, MMGroundingDinoPreTrainedModel):
         )
         self.encoder_output_class_embed = MMGroundingDinoContrastiveEmbedding(config)
 
+        self.special_tokens = nn.Buffer(
+            torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
+            persistent=False,
+        )
         self.post_init()
 
 

@@ -21,14 +21,22 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import is_typeddict
 from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import ProcessorMixin
-from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
+from transformers.processing_utils import (
+    MODALITY_TO_AUTOPROCESSOR_MAPPING,
+    AudioKwargs,
+    ImagesKwargs,
+    OmniModalProcessingKwargs,
+    OmniModalProcessorMixin,
+    ProcessingKwargs,
+    TextKwargs,
+    VideosKwargs,
+)
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_librosa,
@@ -77,11 +85,13 @@ MODALITY_TEST_SPECS = {
         "component_key": "tokenizer",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
     "images": {
         "component_key": "image_processor",
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
+        "valid_kwargs_key": "valid_kwargs",
     },
     "videos": {
         "component_key": "video_processor",
@@ -92,6 +102,7 @@ MODALITY_TEST_SPECS = {
             "do_rescale": True,
             "rescale_factor": -1.0,
         },
+        "valid_kwargs_key": "valid_kwargs",
     },
     "audio": {
         # Either a raw feature_extractor or an audio_processor attribute
@@ -99,6 +110,7 @@ MODALITY_TEST_SPECS = {
         "component_key": None,
         "call_time_kwargs": {"return_tensors": "pt"},
         "init_time_kwargs": {},
+        "valid_kwargs_key": None,
     },
 }
 
@@ -874,6 +886,54 @@ class ProcessorTesterMixin:
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        """
+        Tests that vision models raise an error when number of data doesn't match number
+        of special token in input text.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if not ("text" in input_args and hasattr(processor, "tokenizer")):
+            self.skipTest(f"{self.processor_class} doesn't accpet text inputs.")
+
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+        if (
+            "images" in input_args
+            and getattr(processor, "image_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
+        ):
+            image_inputs = self.prepare_images_inputs(batch_size=4)
+            image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["image"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(images=image_inputs_nested, text=text, **processing_kwargs)
+
+        if (
+            "videos" in input_args
+            and getattr(processor, "video_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
+        ):
+            video_inputs = self.prepare_videos_inputs(batch_size=4)
+            videos = [[video] for video in video_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["video"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(videos=videos, text=text, do_sample_frames=False, **processing_kwargs)
+
+        if (
+            "audio" in input_args
+            and getattr(processor, "audio_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_audio_token")
+        ):
+            audio_inputs = self.prepare_audio_inputs(batch_size=4)
+            text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(audio=audio_inputs, text=text, **processing_kwargs)
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
@@ -1489,34 +1549,32 @@ class ProcessorTesterMixin:
                 processor_kwargs={"do_sample_frames": True},
             )
 
-    @require_librosa
     @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest(f"{self.processor_class} does not support video inputs")
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"{self.processor_class.__name__} does not support video inputs")
 
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
-            or "audio_processor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
         ):
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+            self.skipTest(f"{self.processor_class.__name__} does not support audio inputs")
 
-        video_file_path = hf_hub_download(
-            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
+        video_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
-        messages = [
+        video_expected_shape = processor.video_processor(videos=video_file_path)[self.videos_input_name].shape
+
+        Video_audio_message = [
             {
                 "role": "user",
                 "content": [
                     {"type": "video", "path": video_file_path},
+                    {"type": "audio"},
                     {"type": "text", "text": "Which of these animals is making the sound?"},
                 ],
             },
@@ -1532,25 +1590,52 @@ class ProcessorTesterMixin:
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
         out_dict = processor.apply_chat_template(
-            messages,
+            Video_audio_message,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            load_audio_backend="torchcodec",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.videos_input_name in out_dict)
 
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
+
+        audio_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
+        )
+        audio_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file_path},
+                    {"type": "text", "text": "What do you hear in this track?"},
+                ],
+            },
+        ]
+        out_dict = processor.apply_chat_template(
+            [Video_audio_message, audio_message],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            load_audio_backend="torchcodec",
+            load_audio_from_video=True,
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[0], 2)
+        self.assertEqual(out_dict["attention_mask"].shape[0], 2)
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""
@@ -1692,6 +1777,21 @@ class ProcessorTesterMixin:
         result = processor.apply_chat_template(messages, tokenize=True)
         self.assertIsInstance(result, list)
 
+        # Also test with explicit content=None (OpenAI returns this for tool-call-only messages)
+        messages_with_none = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+            },
+        ]
+        result_none = processor.apply_chat_template(messages_with_none, tokenize=True)
+        self.assertIsInstance(result_none, list)
+
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
 
@@ -1796,14 +1896,61 @@ class ProcessorTesterMixin:
         num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
         self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
 
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if processor._audio_processor is None:
+            self.skipTest("Processor has no audio processor")
+
+        if "audio_lengths" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count audio tokens yet")
+
+        sampling_rate = processor._audio_processor.sampling_rate
+        # Lengths that aren't a multiple of the hop length, so that the frame rounding of the counters is covered
+        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate) + 50]
+        audio_inputs = [np.zeros(length, dtype=np.float32) for length in audio_lengths]
+
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+
+        audio_token = getattr(self, "audio_token", "")
+        text = [f"This is an audio {audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
+
+        # Test with two audios per single text
+        text = [f"These are two audios {audio_token}{audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs * 2, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths * 2)
+        self.assertEqual(sum(num_audio_tokens_from_call), sum(num_audio_tokens_from_helper["num_audio_tokens"]))
+
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):
         """
         Updated processor need to override a `replace_xxx_method` which is the only
         reliable way to tell if processor is old format or not.
         """
+        parent_class = processor_class.__mro__[1]
         child_method = getattr(processor_class, method_name)
-        base_method = getattr(ProcessorMixin, method_name)
+        base_method = getattr(parent_class, method_name)
         return child_method is not base_method
 
     def test_replacement_offsets(self):
@@ -1860,3 +2007,250 @@ class ProcessorTesterMixin:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
                 self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+
+    def test_no_redundant_default_kwargs(self):
+        """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
+        already has the same default.
+        """
+        # Processors whose defaults cannot be removed without breaking BC.
+        # Do not add new processors to this list: remove redundant defaults from the processor instead.
+        skipped_processors = {
+            "AriaProcessor",  # Hub config doesn't match processor defaults
+            "BridgeTowerProcessor",  # Hub config doesn't match processor defaults
+            "ColPaliProcessor",  # Hub config doesn't match processor defaults
+            "DeepseekOcr2Processor",  # Hub config doesn't match processor defaults
+            "Gemma3Processor",  # Hub config doesn't match processor defaults
+            "GotOcr2Processor",  # Hub config doesn't match processor defaults
+            "Granite4VisionProcessor",  # Hub config doesn't match processor defaults
+            "IdeficsProcessor",  # Hub config doesn't match processor defaults
+            "Kosmos2Processor",  # __call__ relies on add_special_tokens default
+            "Kosmos2_5Processor",  # Hub config doesn't match processor defaults
+            "LlavaNextProcessor",  # Hub config doesn't match processor defaults
+            "Pix2StructProcessor",  # __call__ relies on add_special_tokens default
+            "ShieldGemma2Processor",  # Hub config doesn't match processor defaults
+            "VideoLlama3Processor",  # Hub config doesn't match processor defaults
+        }
+        if self.processor_class.__name__ in skipped_processors:
+            self.skipTest(
+                f"Cannot remove redundant defaults from `{self.processor_class.__name__}` without breaking BC."
+            )
+
+        processor = self.get_processor()
+        processor_class = processor.__class__
+        processor_class_name = processor_class.__name__
+
+        for modality in MODALITY_TEST_SPECS:
+            kwargs_name = f"{modality}_kwargs"
+            if not hasattr(processor, kwargs_name):
+                continue
+
+            # Don't allow defaults if there is no subprocessor for that modality
+            subprocessor_attr_name = self.get_subprocessor_name(modality, processor_class.get_attributes())
+            if not hasattr(processor, subprocessor_attr_name):
+                raise ValueError(
+                    f"`{processor_class_name}` has default `{kwargs_name}` but no `{subprocessor_attr_name}`"
+                )
+
+            subprocessor = getattr(processor, subprocessor_attr_name)
+            subprocessor_class_name = subprocessor.__class__.__name__
+
+            # Defaults must not be identical to the subprocessor's defaults, otherwise they are redundant.
+            for attr_name, default_value in getattr(processor, kwargs_name).items():
+                # Check if the subprocessor's `__call__` has a default for this attribute (e.g. for tokenizers).
+                subprocessor_call_parameters = inspect.signature(subprocessor.__call__).parameters
+                if attr_name in subprocessor_call_parameters:
+                    subprocessor_default_call_value = subprocessor_call_parameters[attr_name].default
+                    self.assertNotEqual(
+                        subprocessor_default_call_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.__call__`'s default (`{subprocessor_default_call_value}`). "
+                            f"Keep the default in `{subprocessor_class_name}.__call__` and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+                    continue
+
+                # Check if the subprocessor has an attribute with the same name (e.g. for image processors).
+                if hasattr(subprocessor, attr_name):
+                    subprocessor_value = getattr(subprocessor, attr_name)
+                    self.assertNotEqual(
+                        subprocessor_value,
+                        default_value,
+                        (
+                            f"`{processor_class_name}.{kwargs_name}` has default for `{attr_name}` that is identical to "
+                            f"`{subprocessor_class_name}.{attr_name}` (`{subprocessor_value}`). Keep the default in `{subprocessor_class_name}` "
+                            f"and remove the redundant default from `{processor_class_name}`."
+                        ),
+                    )
+
+    def test_valid_processor_kwargs_set(self):
+        """Check that if a processor defines a custom `ProcessorKwargs` class it is set as `valid_processor_kwargs` on the processor."""
+        processor = self.get_processor()
+        processor_module = sys.modules[processor.__class__.__module__]
+        default_kwargs_class = (
+            OmniModalProcessingKwargs if isinstance(processor, OmniModalProcessorMixin) else ProcessingKwargs
+        )
+        expected_kwargs_class = vars(processor_module).get(
+            f"{processor.__class__.__name__}Kwargs", default_kwargs_class
+        )
+        self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)
+
+    @staticmethod
+    def _get_explicit_arguments(method):
+        return {
+            name
+            for name, param in inspect.signature(method).parameters.items()
+            if name != "self" and param.kind not in (param.VAR_POSITIONAL, param.VAR_KEYWORD)
+        }
+
+    def _get_valid_processor_kwargs_names(self):
+        kwargs_names = set()
+        for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
+            kwargs_names.add(name)
+
+            # Also add nested kwargs as _merge_kwargs promotes flat to nested kwargs.
+            if is_typeddict(annotation):
+                kwargs_names.update(annotation.__annotations__)
+        return kwargs_names
+
+    # TODO: Remove this method once we remove all the deprecated processor kwargs in v5.29.0
+    def _get_deprecated_processor_kwargs_names(self):
+        base_kwargs = {
+            "text_kwargs": TextKwargs,
+            "images_kwargs": ImagesKwargs,
+            "videos_kwargs": VideosKwargs,
+            "audio_kwargs": AudioKwargs,
+        }
+        deprecated_names = set()
+        for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
+            if is_typeddict(annotation) and annotation.__name__.startswith("Deprecated"):
+                deprecated_names.update(set(annotation.__annotations__) - set(base_kwargs[name].__annotations__))
+        return deprecated_names
+
+    def test_init_arguments_not_in_class_attributes(self):
+        """Check that explicit `__init__` arguments are not also class attributes.
+
+        This avoids having defaults defined in __init__ and as a class attribute.
+        """
+        processor_class = self.processor_class
+        init_arguments = self._get_explicit_arguments(processor_class.__init__)
+        overlapping_attributes = {name for name in init_arguments if hasattr(processor_class, name)}
+        self.assertFalse(
+            overlapping_attributes,
+            f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_attributes)} that are also "
+            f"class attributes of `{processor_class.__name__}`. Define the default only in `__init__`.",
+        )
+
+    def test_init_arguments_not_in_processor_kwargs(self):
+        """Check that explicit `__init__` arguments don't overlap with `valid_processor_kwargs`.
+
+        We want to avoid that arguments can have defaults in many different places.
+        An argument passed to __init__ should not be overrideable at call time and therefore not
+        be in valid_processor_kwargs.
+
+        This test might be too strict and we can relax it in the future. There is a case for
+        arguments that have a default in __init__ (and therefore the config) and that can be
+        modified at runtime through a __call__ argument. Image and video processors support
+        this use case.
+        """
+        # Processors whose `__init__` arguments cannot be removed without breaking BC.
+        # Do not add new processors to this list: update the processor instead.
+        skipped_processors = {
+            "IdeficsProcessor",  # add_end_of_utterance_token
+        }
+        processor_class = self.processor_class
+        if processor_class.__name__ in skipped_processors:
+            self.skipTest(f"Cannot remove `{processor_class.__name__}.__init__` arguments without breaking BC.")
+
+        init_arguments = self._get_explicit_arguments(processor_class.__init__)
+        overlapping_arguments = init_arguments & self._get_valid_processor_kwargs_names()
+        # Ignore image_seq_length for BC. It is in ImagesKwargs but is only used by the
+        # processor and not the image processor. It was added as a hack to save it as part
+        # of the image processor config.
+        overlapping_arguments -= {"image_seq_length"}
+        self.assertFalse(
+            overlapping_arguments,
+            f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_arguments)} that are also "
+            f"defined in `{processor_class.valid_processor_kwargs.__name__}`.",
+        )
+
+    def test_call_arguments_not_in_processor_kwargs(self):
+        """Check that explicit `__call__` arguments are not in `valid_processor_kwargs`.
+
+        This ensures that we don't duplicate arguments unnecessarily.
+        """
+        processor_class = self.processor_class
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        overlapping_kwargs = call_arguments & self._get_valid_processor_kwargs_names()
+        # Deprecated nested kwargs are kept for BC and can overlap with the explicit arguments that replace them.
+        overlapping_kwargs -= self._get_deprecated_processor_kwargs_names()
+        self.assertFalse(
+            overlapping_kwargs,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_kwargs)} that are also "
+            f"defined in `{processor_class.valid_processor_kwargs.__name__}`.  Explicit `__call__` arguments are reserved "
+            "for values only known at runtime (e.g. input text or image). Remove them from "
+            f"`{processor_class.valid_processor_kwargs.__name__} if this is the case, otherwise remove them from `__call__`.",
+        )
+
+    def test_call_arguments_not_in_attributes(self):
+        """Check that explicit `__call__` arguments are not in processor attributes.
+
+        This ensures that explicit arguments don't have attribute based default values.
+        """
+        processor = self.get_processor()
+        processor_class = self.processor_class
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        overlapping_attributes = {name for name in call_arguments if hasattr(processor, name)}
+        self.assertFalse(
+            overlapping_attributes,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_attributes)} that are "
+            f"also attributes of `{processor_class.__name__}`. Explicit `__call__` arguments must not have a processor "
+            "default value. They are reserved for values only known at runtime (e.g. input text or image).",
+        )
+
+    def test_call_arguments_default_none(self):
+        """Check that explicit `__call__` arguments either have no default or default to `None`.
+
+        This ensures that `__call__` arguments which can have defaults are in `valid_processor_kwargs` instead.
+        """
+        # Processors whose `__call__` defaults cannot be changed without breaking BC.
+        # Do not add new processors to this list: use `valid_processor_kwargs` for arguments with defaults.
+        skipped_processors = {
+            "AudioFlamingo3Processor",  # output_labels
+            "CsmProcessor",  # output_labels, depth_decoder_labels_ratio
+            "FunAsrNanoProcessor",  # output_labels
+            "FuyuProcessor",  # return_legacy_image_output
+            "GlmAsrProcessor",  # output_labels
+            "InstructBlipVideoProcessor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_token_type_ids, return_length, verbose
+            "LayoutLMv2Processor",  # add_special_tokens, padding, truncation, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "LayoutLMv3Processor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "LayoutXLMProcessor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "MossTranscribeDiarizeProcessor",  # output_labels
+            "MusicFlamingoProcessor",  # output_labels
+            "Nemotron3_5TranscribeProcessor",  # output_labels
+            "Qwen3ASRProcessor",  # output_labels
+            "VibeVoiceAsrProcessor",  # output_labels
+            "VibeVoiceProcessor",  # output_labels
+            "VoxtralRealtimeProcessor",  # is_streaming, is_first_audio_chunk
+        }
+        processor_class = self.processor_class
+        if processor_class.__name__ in skipped_processors:
+            self.skipTest(f"Cannot change the defaults of `{processor_class.__name__}.__call__` without breaking BC.")
+
+        parameters = inspect.signature(processor_class.__call__).parameters
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        non_none_defaults = {
+            name
+            for name in call_arguments
+            if parameters[name].default is not inspect.Parameter.empty and parameters[name].default is not None
+        }
+        self.assertFalse(
+            non_none_defaults,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(non_none_defaults)} with a default "
+            "other than `None`. Explicit `__call__` arguments must either have no default or default to `None`. "
+            "Arguments which can have a default must be added to `valid_processor_kwargs` instead.",
+        )

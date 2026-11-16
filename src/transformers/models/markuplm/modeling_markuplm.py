@@ -138,7 +138,7 @@ class MarkupLMEmbeddings(nn.Module):
 
     @staticmethod
     # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings.create_position_ids_from_input_ids
-    def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+    def create_position_ids_from_input_ids(input_ids, padding_idx, cache_length=0):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
         are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -150,7 +150,7 @@ class MarkupLMEmbeddings(nn.Module):
         """
         # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
         mask = input_ids.ne(padding_idx).int()
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + cache_length) * mask
         return incremental_indices.long() + padding_idx
 
     def forward(
@@ -362,7 +362,7 @@ class MarkupLMSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -401,7 +401,7 @@ class MarkupLMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -427,7 +427,7 @@ class MarkupLMLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -459,7 +459,7 @@ class MarkupLMEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         for layer_module in self.layer:
@@ -496,7 +496,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class MarkupLMModel(MarkupLMPreTrainedModel):
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MarkupLMConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -526,10 +526,10 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         xpath_tags_seq: torch.LongTensor | None = None,
         xpath_subs_seq: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -602,7 +602,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
 @auto_docstring
 class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -708,7 +708,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
 )
 class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -801,7 +801,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
 )
 class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config

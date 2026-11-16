@@ -25,7 +25,7 @@ limitations under the License.
 
 NomicBERT was proposed in [Nomic Embed: Training a Reproducible Long Context Text Embedder](https://huggingface.co/papers/2402.01613) by 
 Zach Nussbaum, John X. Morris, Brandon Duderstadt, and Andriy Mulyar. It is BERT-inspired with the most notable extension applying 
-[Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to an encoder model. 
+[Rotary Position Embeddings](https://huggingface.co/papers/2104.09864) to an encoder model. 
 
 The abstract from the paper is the following:
 

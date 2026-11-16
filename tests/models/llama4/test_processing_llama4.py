@@ -32,7 +32,3 @@ class Llama4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Small size (20×20) keeps tensor allocations minimal.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(max_patches=1, size={"height": 20, "width": 20})
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token

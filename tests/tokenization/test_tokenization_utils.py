@@ -32,6 +32,7 @@ from transformers import (
     ProphetNetTokenizer,
     PythonBackend,
     TensorType,
+    TokenizersBackend,
     TokenSpan,
     is_tokenizers_available,
 )
@@ -293,6 +294,16 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    @require_tokenizers
+    def test_model_input_names_not_shared_between_instances(self):
+        tokenizer_1 = TokenizersBackend(tokenizer_object=Tokenizer(WordPiece(unk_token="[UNK]")))
+        tokenizer_2 = TokenizersBackend(tokenizer_object=Tokenizer(WordPiece(unk_token="[UNK]")))
+
+        tokenizer_1.model_input_names.append("pixel_values")
+        self.assertIn("pixel_values", tokenizer_1.model_input_names)
+        self.assertNotIn("pixel_values", tokenizer_2.model_input_names)
+        self.assertNotIn("pixel_values", TokenizersBackend.model_input_names)
 
     def test_vocab_file_in_config_does_not_escape_repo(self):
         # Regression test for path traversal (CWE-22): a vocab-file argument injected into
