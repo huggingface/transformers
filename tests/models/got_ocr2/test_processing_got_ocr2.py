@@ -93,8 +93,11 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
 
+    @unittest.skip("Multipage setting in model doesn't allow validation")
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        pass
+
     def test_subprocessor_defaults_1_images(self):
-        # overriden - pop certina keys from `merged_kwargs` which are used only by processor
         parameterized_config = MODALITY_TEST_SPECS["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])
 
@@ -115,8 +118,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
         kwargs = merged_kwargs["images_kwargs"]
-        kwargs.pop("num_image_tokens")
-        kwargs.pop("multi_page")
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:

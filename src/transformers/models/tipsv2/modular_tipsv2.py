@@ -32,6 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
@@ -144,19 +145,13 @@ class Tipsv2ImageProcessor(TorchvisionBackend):
     do_convert_rgb = True
 
 
-class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-    }
-
-
 @auto_docstring
 class Tipsv2Processor(ProcessorMixin):
-    valid_processor_kwargs = Tipsv2ProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+    }
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -402,8 +397,12 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
+    # trf-ignore: TRF055
+    config: Tipsv2VisionConfig
+
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
         # reassign config to vision_config for compatibility with AutoBackbone
+        # FIXME raushan should not happen in practice!
         if isinstance(config, Tipsv2Config):
             config = config.vision_config
             super().__init__(config)
@@ -468,7 +467,7 @@ class Tipsv2TextEmbeddings(CLIPTextEmbeddings):
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_ids.shape[-1]
@@ -622,7 +621,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -721,7 +720,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.text_model(
@@ -736,7 +735,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         bool_masked_pos: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -762,10 +761,10 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         bool_masked_pos: torch.Tensor | None = None,
         return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -852,6 +851,8 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Tipsv2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Tipsv2ImageProcessor",

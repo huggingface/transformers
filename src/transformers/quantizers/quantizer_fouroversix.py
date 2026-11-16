@@ -82,9 +82,6 @@ class FourOverSixHfQuantizer(HfQuantizer):
                     for parameter_name in module.parameters_to_quantize:
                         delattr(module, parameter_name)
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        return model
-
     def is_serializable(self):
         return True
 

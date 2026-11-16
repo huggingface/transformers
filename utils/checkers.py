@@ -313,7 +313,7 @@ def format_elapsed(seconds: float) -> str:
 
 
 class SlidingWindow:
-    """Displays a spinning title + sliding window of the last N output lines in a TTY."""
+    """Displays a spinning title with the elapsed time + sliding window of the last N output lines in a TTY."""
 
     def __init__(self, label, max_lines=10):
         self.label = label
@@ -322,10 +322,11 @@ class SlidingWindow:
         self.displayed = 0  # number of output lines currently on screen
         self.term_width = shutil.get_terminal_size().columns
         self._spinner = itertools.cycle(SPINNER_CHARS)
+        self._started = time.perf_counter()
         self._stop = threading.Event()
         self._lock = threading.Lock()
         # Print initial title line (will be overwritten by spinner)
-        print(f"{ORANGE}{next(self._spinner)} {label}{RESET}")
+        print(self._title())
         self._title_on_screen = True
         self._thread = threading.Thread(target=self._spin, daemon=True)
         self._thread.start()
@@ -345,7 +346,7 @@ class SlidingWindow:
             sys.stdout.write("\033[A\033[2K")
         self.displayed = 0
         # Redraw title with next spinner frame
-        print(f"{ORANGE}{next(self._spinner)} {self.label}{RESET}")
+        print(self._title())
         self._title_on_screen = True
         # Redraw output lines
         for line in self.lines:
@@ -353,9 +354,20 @@ class SlidingWindow:
         self.displayed = len(self.lines)
         sys.stdout.flush()
 
+    def _title(self):
+        """The spinner title, with whole seconds elapsed so a long quiet step visibly keeps going."""
+        minutes, seconds = divmod(int(time.perf_counter() - self._started), 60)
+        clock = f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
+        return f"{ORANGE}{next(self._spinner)} {self.label} ({clock}){RESET}"
+
     def add_line(self, line):
         with self._lock:
-            self.lines.append(line.rstrip()[: self.term_width])
+            # A line starting with "\r" redraws the previous one in place (e.g. a progress bar).
+            if line.startswith("\r") and self.lines:
+                self.lines.pop()
+            shown = line.lstrip("\r").rstrip()[: self.term_width]
+            # Truncation can cut a colored line before its reset code: never let the color bleed.
+            self.lines.append(shown + RESET if "\033[" in shown else shown)
             self._redraw()
 
     def finish(self, success, elapsed=None, show_lines=True):
@@ -401,7 +413,10 @@ def _run_cmd(cmd, line_callback=None):
     output_lines = []
     for raw_line in proc.stdout:
         line = raw_line.decode("utf-8", errors="replace")
-        output_lines.append(line)
+        # A line starting with "\r" replaces the previous one (progress bars): keep only the last state.
+        if line.startswith("\r") and output_lines:
+            output_lines.pop()
+        output_lines.append(line.lstrip("\r"))
         line_callback(line)
     proc.wait()
     return proc.returncode, "".join(output_lines)
@@ -624,6 +639,9 @@ def main():
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
+    if is_tty and "NO_COLOR" not in os.environ:
+        # Checkers write to a pipe, so they cannot see the terminal: tell them they may use color.
+        os.environ["CHECKERS_COLOR"] = "1"
 
     if not is_tty and hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)

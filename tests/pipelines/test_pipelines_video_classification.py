@@ -16,7 +16,12 @@ import unittest
 
 from huggingface_hub import VideoClassificationOutputElement, hf_hub_download
 
-from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEImageProcessor
+from transformers import (
+    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
+    AutoModelForVideoClassification,
+    VideoMAEImageProcessor,
+    is_torch_available,
+)
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
@@ -28,6 +33,10 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 @is_pipeline_test
@@ -122,3 +131,64 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         for output in outputs:
             for element in output:
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+
+    @require_torch
+    def test_problem_type_defaults_and_overrides(self):
+        small_model = AutoModelForVideoClassification.from_pretrained(
+            "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
+        )
+        small_image_processor = VideoMAEImageProcessor(
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
+        )
+        classifier = pipeline(
+            "video-classification",
+            model=small_model,
+            image_processor=small_image_processor,
+            frame_sampling_rate=4,
+        )
+        video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
+        num_labels = classifier.model.config.num_labels
+        labels = [classifier.model.config.id2label[i] for i in range(num_labels)]
+
+        raw = classifier(video_file_path, top_k=num_labels, function_to_apply="none")
+        raw_scores = {item["label"]: item["score"] for item in raw}
+        logits = torch.tensor([raw_scores[label] for label in labels])
+
+        for problem_type, activation in (
+            ("regression", "none"),
+            ("multi_label_classification", "sigmoid"),
+            ("single_label_classification", "softmax"),
+            (None, "softmax"),
+        ):
+            with self.subTest(problem_type=problem_type):
+                classifier.model.config.problem_type = problem_type
+                result = classifier(video_file_path, top_k=num_labels)
+                scores = {item["label"]: item["score"] for item in result}
+                expected = {
+                    "none": logits,
+                    "sigmoid": logits.sigmoid(),
+                    "softmax": logits.softmax(-1),
+                }[activation]
+                self.assertEqual(len(scores), num_labels)
+                for label, value in zip(labels, expected.tolist()):
+                    self.assertAlmostEqual(scores[label], value, places=4)
+
+        classifier.model.config.problem_type = "regression"
+        initialized = pipeline(
+            "video-classification",
+            model=classifier.model,
+            image_processor=small_image_processor,
+            frame_sampling_rate=4,
+            function_to_apply="softmax",
+        )
+
+        for override, expected in (
+            (None, logits.softmax(-1)),
+            ("none", logits),
+            ("sigmoid", logits.sigmoid()),
+        ):
+            with self.subTest(call_override=override):
+                result = initialized(video_file_path, top_k=num_labels, function_to_apply=override)
+                scores = {item["label"]: item["score"] for item in result}
+                for label, value in zip(labels, expected.tolist()):
+                    self.assertAlmostEqual(scores[label], value, places=4)

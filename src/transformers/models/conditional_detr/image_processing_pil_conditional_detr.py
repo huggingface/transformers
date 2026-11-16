@@ -50,7 +50,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires
 
 
@@ -862,7 +862,6 @@ class ConditionalDetrImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:
@@ -929,7 +928,6 @@ class ConditionalDetrImageProcessorPil(PilBackend):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-        requires_backends(self, ["torch"])
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
@@ -1012,11 +1010,6 @@ class ConditionalDetrImageProcessorPil(PilBackend):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post-processing.")
-        import torch
-        from torch import nn
-
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
@@ -1109,11 +1102,6 @@ class ConditionalDetrImageProcessorPil(PilBackend):
         if label_ids_to_fuse is None:
             logger.warning_once("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
-
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post-processing.")
-        import torch
-        from torch import nn
 
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]

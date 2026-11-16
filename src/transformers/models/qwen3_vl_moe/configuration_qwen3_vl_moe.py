@@ -49,7 +49,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -134,7 +134,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl_moe_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -176,7 +176,7 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
         "vision_config": Qwen3VLMoeVisionConfig,
         "text_config": Qwen3VLMoeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

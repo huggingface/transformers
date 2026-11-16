@@ -42,7 +42,7 @@ class CTRLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ctrl"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "max_position_embeddings": "n_positions",
         "hidden_size": "n_embd",

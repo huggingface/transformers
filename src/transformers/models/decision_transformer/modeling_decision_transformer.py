@@ -35,6 +35,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_decision_transformer import DecisionTransformerConfig
@@ -135,27 +136,28 @@ class DecisionTransformerGPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        hidden_states: tuple[torch.FloatTensor] | None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        hidden_states: tuple[torch.Tensor] | None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor | tuple[torch.Tensor], ...]:
         is_cross_attention = encoder_hidden_states is not None
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         if is_cross_attention:
             if not hasattr(self, "q_attn"):
@@ -167,9 +169,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
             attention_mask = encoder_attention_mask
 
             # Try to get key/value states from cache if possible
-            if past_key_values is not None and is_updated:
-                key_states = curr_past_key_values.layers[self.layer_idx].keys
-                value_states = curr_past_key_values.layers[self.layer_idx].values
+            if cache is not None and is_updated:
+                key_states = curr_cache.layers[self.layer_idx].keys
+                value_states = curr_cache.layers[self.layer_idx].values
             else:
                 key_states, value_states = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
                 shape_kv = (*key_states.shape[:-1], -1, self.head_dim)
@@ -184,13 +186,13 @@ class DecisionTransformerGPT2Attention(nn.Module):
         shape_q = (*query_states.shape[:-1], -1, self.head_dim)
         query_states = query_states.view(shape_q).transpose(1, 2)
 
-        if (past_key_values is not None and not is_cross_attention) or (
-            past_key_values is not None and is_cross_attention and not is_updated
+        if (cache is not None and not is_cross_attention) or (
+            cache is not None and is_cross_attention and not is_updated
         ):
-            key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if is_cross_attention:
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
 
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -230,7 +232,7 @@ class DecisionTransformerGPT2MLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
+    def forward(self, hidden_states: tuple[torch.Tensor] | None) -> torch.Tensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -258,13 +260,14 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
 
         self.mlp = DecisionTransformerGPT2MLP(inner_dim, config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        hidden_states: tuple[torch.FloatTensor] | None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        hidden_states: tuple[torch.Tensor] | None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = False,
         **kwargs,
     ) -> torch.Tensor:
@@ -272,7 +275,7 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
         hidden_states = self.ln_1(hidden_states)
         attn_output, _ = self.attn(
             hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             use_cache=use_cache,
             **kwargs,
@@ -291,7 +294,7 @@ class DecisionTransformerGPT2Block(GradientCheckpointingLayer):
             hidden_states = self.ln_cross_attn(hidden_states)
             cross_attn_output, _ = self.crossattention(
                 hidden_states,
-                past_key_values=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
@@ -344,7 +347,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -371,16 +374,17 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
@@ -395,14 +399,14 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
         # based on pattern from src/transformers/models/whisper/modeling_whisper.py::WhisperDecoder and similar addition in GPT2Model
         if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache(config=self.config)
+            if cache is None:
+                cache = DynamicCache(config=self.config)
 
-            if self.config.add_cross_attention and not isinstance(past_key_values, EncoderDecoderCache):
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
+            if self.config.add_cross_attention and not isinstance(cache, EncoderDecoderCache):
+                cache = EncoderDecoderCache(cache, DynamicCache(config=self.config))
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -411,7 +415,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -440,7 +444,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         for block in self.h:
             hidden_states = block(
                 hidden_states,
-                past_key_values if not (self.gradient_checkpointing and self.training) else None,
+                cache if not (self.gradient_checkpointing and self.training) else None,
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
@@ -452,10 +456,10 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
         hidden_states = hidden_states.view(output_shape)
 
-        past_key_values = past_key_values if use_cache else None
+        cache = cache if use_cache else None
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -467,20 +471,20 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 @dataclass
 class DecisionTransformerOutput(ModelOutput):
     r"""
-    state_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, state_dim)`):
+    state_preds (`torch.Tensor` of shape `(batch_size, sequence_length, state_dim)`):
         Environment state predictions
-    action_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, action_dim)`):
+    action_preds (`torch.Tensor` of shape `(batch_size, sequence_length, action_dim)`):
         Model action predictions
-    return_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
+    return_preds (`torch.Tensor` of shape `(batch_size, sequence_length, 1)`):
         Predicted returns for each state
     """
 
-    state_preds: torch.FloatTensor | None = None
-    action_preds: torch.FloatTensor | None = None
-    return_preds: torch.FloatTensor | None = None
-    hidden_states: torch.FloatTensor | None = None
-    attentions: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
+    state_preds: torch.Tensor | None = None
+    action_preds: torch.Tensor | None = None
+    return_preds: torch.Tensor | None = None
+    hidden_states: torch.Tensor | None = None
+    attentions: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
 
 
 class DecisionTransformerPreTrainedModel(PreTrainedModel):
@@ -510,7 +514,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
         self.config = config
         self.hidden_size = config.hidden_size
@@ -538,26 +542,26 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        states: torch.FloatTensor | None = None,
-        actions: torch.FloatTensor | None = None,
-        rewards: torch.FloatTensor | None = None,
-        returns_to_go: torch.FloatTensor | None = None,
+        states: torch.Tensor | None = None,
+        actions: torch.Tensor | None = None,
+        rewards: torch.Tensor | None = None,
+        returns_to_go: torch.Tensor | None = None,
         timesteps: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         output_attentions: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | DecisionTransformerOutput:
+    ) -> tuple[torch.Tensor] | DecisionTransformerOutput:
         r"""
-        states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
+        states (`torch.Tensor` of shape `(batch_size, episode_length, state_dim)`):
             The states for each step in the trajectory
-        actions (`torch.FloatTensor` of shape `(batch_size, episode_length, act_dim)`):
+        actions (`torch.Tensor` of shape `(batch_size, episode_length, act_dim)`):
             The actions taken by the "expert" policy for the current state, these are masked for auto regressive
             prediction
-        rewards (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
+        rewards (`torch.Tensor` of shape `(batch_size, episode_length, 1)`):
             The rewards for each state, action
-        returns_to_go (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
+        returns_to_go (`torch.Tensor` of shape `(batch_size, episode_length, 1)`):
             The returns for each state in the trajectory
         timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
             The timestep for each step in the trajectory
