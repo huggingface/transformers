@@ -71,93 +71,57 @@ _MIN_ATTENTION_HEAD_DIM = 32
 @strict
 class GraniteSwitchConfig(GraniteMoeHybridConfig):
     r"""
-    A Granite Switch checkpoint carries its LoRA adapters baked in and selects one per token from a
-    control-token signal, so every field describing the adapter population is frozen into
-    `config.json` when the checkpoint is built. This class is the on-disk contract: it is what makes
-    a checkpoint self-describing, and its validation is what turns a malformed checkpoint into a
-    load-time error instead of silently wrong routing.
-
-    The switch engine is the Kerdock/Delsarte-Goethals coded-memory MultiSwitch. Control tokens are
-    handled exclusively through token exchange: the switch reads `input_ids`, decides the active
-    adapter, and rewrites each control token to its substitute id (from
-    `adapter_substitute_token_ids`) before the decoder embeds the sequence. The decoder never sees a
-    control token.
-
     num_hidden_layers (`int`, *optional*, defaults to 32):
-        Number of decoder layers. When `num_adapters > 0`, the value passed in, like the one in
-        `config.json`, also counts the switch's two layer slots, so a checkpoint with 40 decoder
-        layers carries 42. The attribute holds the decoder layers alone, and the slots are added
-        back when the config is serialized.
+        Number of decoder layers. With adapters, the value in `config.json` also counts the switch's two
+        layer slots (a 40-layer checkpoint lists 42); they are removed on load and added back on save.
     layer_types (`list[str]`, *optional*):
-        Layer type of each decoder layer, all `"full_attention"` by default. When `num_adapters > 0`
-        the value passed in starts with one entry per switch slot, in the same way as
-        `num_hidden_layers`.
+        Layer type of each decoder layer, all `"full_attention"` by default. With adapters, the value in
+        `config.json` starts with one entry per switch slot, like `num_hidden_layers`.
     num_adapters (`int`, *optional*, defaults to 0):
-        Number of adapter slots embedded in the checkpoint, where a slot holds either a LoRA adapter
-        or an activation probe head (see `adapter_kinds`). Counts real slots only, not the base;
-        adapter index 0 always means "base / no adapter".
+        Number of adapter slots. Each slot holds a LoRA adapter or a probe head. Adapter index 0 is the base model.
     adapter_token_ids (`list[int]`, *optional*):
-        Token ids that activate an adapter. Length is `num_adapters`, or `num_adapters + 1` with a
-        leading base-reset token that returns the stream to base mid-request. Must be unique, since
-        token exchange keys its lookup by control-token id. `adapter_token_ids[i]` activates adapter
-        `i + 1`, a LoRA adapter or a probe head; adapter 0 is base and needs no token. Required when
-        `num_adapters > 0`.
+        Control token of each slot: `adapter_token_ids[i]` selects adapter `i + 1`. May carry one extra
+        leading token that switches back to the base model. Required when `num_adapters > 0`.
     adapter_substitute_token_ids (`list[int]`, *optional*):
-        Token ids whose embeddings replace the control-token embeddings before the decoder runs.
-        Same length as `adapter_token_ids`. Required when `num_adapters > 0`.
+        Token ids that replace the control tokens before the embedding lookup. Same length as
+        `adapter_token_ids`.
     adapter_names (`list[str]`, *optional*):
-        Ordered adapter names, for name-to-index mapping. Length `num_adapters`.
+        Name of each adapter slot.
     max_lora_rank (`int`, *optional*, defaults to 8):
-        Maximum rank across all adapters. Every adapter's weights are zero-padded to this rank on
-        disk so one kernel can serve a rank-heterogeneous adapter set.
+        Rank every adapter's weights are zero-padded to.
     adapter_ranks (`list[int]`, *optional*):
-        Per-adapter LoRA ranks. Length `num_adapters`, and the maximum must equal `max_lora_rank`.
-        Required when `num_adapters > 0`.
+        LoRA rank of each adapter. The maximum must equal `max_lora_rank`.
     lora_target_modules (`list[str]`, *optional*):
-        Module *group* names to apply LoRA to, drawn from `qkv_proj`, `o_proj`,
-        `shared_input_linear` and `shared_output_linear`. Defaults to the groups the architecture
-        actually has: a pure sparse-MoE base has no shared MLP, so asking for its groups would build
-        zero-width LoRA projections.
+        Projections that carry LoRA weights, from `qkv_proj`, `o_proj`, `shared_input_linear` and
+        `shared_output_linear`. Defaults to every one the architecture has.
     adapter_kinds (`list[str]`, *optional*):
-        What each adapter slot holds, `"lora"` or `"probe"`. Length `num_adapters`, defaulting to all
-        `"lora"`. A probe slot keeps its control token and adapter index but carries a linear head
-        over a hidden state instead of LoRA weights: the LoRA path is a no-op at its positions, and
-        the head's verdict is written into the logits of its control token.
+        What each slot holds, `"lora"` (the default) or `"probe"`.
     probe_label_token_ids (`list[list[int] | None]`, *optional*):
-        Per slot, the token ids of a probe's label words, one id per label, in the order of the
-        head's output rows. Length `num_adapters`, with `None` on every LoRA slot. A probe reports
-        its verdict as a generated label word, so this is required as soon as one slot is a probe.
+        Token ids of each probe's labels, in the order of the head's outputs, and `None` for LoRA slots.
+        Required when any slot is a probe.
     probe_read_layers (`list[int | None]`, *optional*):
-        Per slot, the zero-based decoder layer whose output a probe head reads. Length
-        `num_adapters`. `None`, which is also what a LoRA slot must carry, reads the final
-        normalized hidden state.
+        Zero-based decoder layer each probe reads. `None` reads the final normalized hidden state.
     control_token_gain (`float`, *optional*, defaults to 15.0):
         Attention gain that separates control tokens from ordinary tokens in the switch heads.
     switch_head_dim (`int`, *optional*, defaults to 32):
-        Dimension of the switch attention Q/K/V vectors.
+        Head dimension of the switch attention heads.
     ms_code_m (`int`, *optional*, defaults to 6):
-        Code parameter of the coded-memory head. A kerdock codebook holds `2 ** (2 * m - 1)` vectors
-        of dimension `2 ** m`.
+        Codebook parameter. A Kerdock codebook holds `2 ** (2 * m - 1)` codewords of dimension `2 ** m`.
     ms_code_type (`str`, *optional*, defaults to `"kerdock"`):
         Codebook family, `"kerdock"` or `"dg1"`.
     ms_memory_gain (`float`, *optional*, defaults to 28.0):
-        Attention gain applied to the memory head's code vectors.
+        Attention gain of the memory head.
     ms_counting_head_dim (`int`, *optional*, defaults to 32):
-        Head dimension of the counting head, whose `1 / (1 + n)` signal recovers the write address.
+        Head dimension of the counting head.
     dual_stream (`bool`, *optional*, defaults to `False`):
-        Whole-checkpoint decoder mode. `False` is ordinary LoRA/aLoRA, one stream. `True` is Shadow
-        Residual, where every adapter runs a frozen base stream alongside an adapter stream and
-        takes K/V from the base stream. A checkpoint holds either Shadow Residual adapters or
-        LoRA/aLoRA adapters, never both, so this is a single flag rather than a per-adapter list.
+        Whether the adapters are Shadow Residual adapters, which run a frozen base stream next to the
+        adapter stream.
     cross_stream_rank (`int`, *optional*):
-        LoRA rank of the layer-level `cross_stream` injection site. Required when `dual_stream` is
-        `True`, and must be `None` otherwise, since the site is not allocated at all.
+        Rank of the per-layer `cross_stream` projection. Required when `dual_stream=True`.
     shared_intermediate_size (`int`, *optional*):
-        Width of the dense shared MLP. Defaults to `intermediate_size` for a dense base, and to 0
-        for a pure sparse-MoE base, where 0 is the "no shared MLP" sentinel: the layer is built
-        without one rather than with a zero-width one.
+        Width of the shared MLP. Defaults to `intermediate_size`, or 0 (no shared MLP) when the model has experts.
     position_embedding_type (`str`, *optional*, defaults to `"rope"`):
-        Positional embedding type. Allowed options: `[None, "rope"]`.
+        Positional embedding type, `None` or `"rope"`.
 
     Example:
 
@@ -1594,12 +1558,10 @@ class GraniteSwitchShadowResidualDecoderLayer(GradientCheckpointingLayer):
 class GraniteSwitchModelOutputWithPast(MoeModelOutputWithPast):
     r"""
     probe_logits (`torch.Tensor` of shape `(batch_size, sequence_length, max_num_labels)`, *optional*):
-        Per-label scores of the activation probe heads, at the control token of each probe request
-        and zero everywhere else. Padded to the widest head's label count. Only returned when the
-        input holds a probe slot's control token.
+        Label scores of the probe heads at each probe's control token, zero elsewhere. Only returned
+        when the input contains a probe's control token.
     probe_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        The adapter index of the probe slot scored at each position, and 0 wherever no probe was
-        read. Only returned together with `probe_logits`.
+        Adapter index of the probe scored at each position, 0 elsewhere. Returned with `probe_logits`.
     """
 
     probe_logits: torch.Tensor | None = None
@@ -1771,11 +1733,9 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
     ) -> GraniteSwitchModelOutputWithPast:
         r"""
         switch_input_ids (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
-            The sequence from position 0, used for routing only. Routing is latest-wins over the
-            control tokens seen so far, so a decode step cannot be routed from its single new token
-            alone; `prepare_inputs_for_generation` passes the full sequence here while `input_ids`
-            stays the step's new token. Defaults to `input_ids`, which is correct whenever that is
-            itself the whole sequence.
+            The full sequence from position 0, used only to route tokens to adapters. Defaults to
+            `input_ids`. During generation, `prepare_inputs_for_generation` fills it in, because a single
+            decode token cannot tell which control tokens came before it.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1980,9 +1940,8 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         switch_input_ids (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
-            The sequence from position 0, used for routing only. See
-            [`GraniteSwitchModel.forward`]; `prepare_inputs_for_generation` fills it in during
-            generation.
+            The full sequence from position 0, used only to route tokens to adapters. See
+            [`GraniteSwitchModel.forward`].
 
         Example:
 

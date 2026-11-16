@@ -1386,12 +1386,10 @@ class GraniteSwitchShadowResidualDecoderLayer(GradientCheckpointingLayer):
 class GraniteSwitchModelOutputWithPast(MoeModelOutputWithPast):
     r"""
     probe_logits (`torch.Tensor` of shape `(batch_size, sequence_length, max_num_labels)`, *optional*):
-        Per-label scores of the activation probe heads, at the control token of each probe request
-        and zero everywhere else. Padded to the widest head's label count. Only returned when the
-        input holds a probe slot's control token.
+        Label scores of the probe heads at each probe's control token, zero elsewhere. Only returned
+        when the input contains a probe's control token.
     probe_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-        The adapter index of the probe slot scored at each position, and 0 wherever no probe was
-        read. Only returned together with `probe_logits`.
+        Adapter index of the probe scored at each position, 0 elsewhere. Returned with `probe_logits`.
     """
 
     probe_logits: torch.Tensor | None = None
@@ -1577,11 +1575,9 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
     ) -> GraniteSwitchModelOutputWithPast:
         r"""
         switch_input_ids (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
-            The sequence from position 0, used for routing only. Routing is latest-wins over the
-            control tokens seen so far, so a decode step cannot be routed from its single new token
-            alone; `prepare_inputs_for_generation` passes the full sequence here while `input_ids`
-            stays the step's new token. Defaults to `input_ids`, which is correct whenever that is
-            itself the whole sequence.
+            The full sequence from position 0, used only to route tokens to adapters. Defaults to
+            `input_ids`. During generation, `prepare_inputs_for_generation` fills it in, because a single
+            decode token cannot tell which control tokens came before it.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1858,9 +1854,8 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         switch_input_ids (`torch.LongTensor` of shape `(batch_size, total_sequence_length)`, *optional*):
-            The sequence from position 0, used for routing only. See
-            [`GraniteSwitchModel.forward`]; `prepare_inputs_for_generation` fills it in during
-            generation.
+            The full sequence from position 0, used only to route tokens to adapters. See
+            [`GraniteSwitchModel.forward`].
 
         Example:
 
