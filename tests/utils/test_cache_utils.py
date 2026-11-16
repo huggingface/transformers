@@ -1315,7 +1315,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
                 "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
                 " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
             ],
-            ("cuda", None): [
+            ("cuda", (8, 6)): [
                 "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
                 "wonderful way to explore new places, cultures, and experiences. Whether you are a seasoned "
                 "traveler or a first-time adventurer, there is always something",
