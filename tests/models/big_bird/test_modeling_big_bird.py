@@ -553,6 +553,11 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             "output_logits": True,
         }
 
+        # Without a cache (training, scoring) block-sparse attention is kept
+        with torch.no_grad():
+            model(input_ids, use_cache=False)
+        self.assertEqual(model.bert.attention_type, "block_sparse")
+
         for cache_implementation in ("dynamic", "static"):
             # The fallback to full attention sticks to the model, so block-sparse is restored before each call
             model.bert.set_attention_type("block_sparse")
