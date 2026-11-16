@@ -139,6 +139,23 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
                 )
             self.assertTrue(torch.equal(dynamic, static), layer_types)
 
+    def test_default_rope_with_partial_rotary_factor_leaves_the_tail_unrotated(self):
+        """Released LFM3 configs declare `default` RoPE with `partial_rotary_factor` < 1 on the full-attention layers:
+        the first frequencies follow the full head dimension and the remaining ones are zero (unrotated)."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rope_parameters = {
+            "full_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
+            "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+        }
+        rotary_emb = Lfm3Model(config).rotary_emb
+        head_dim = config.head_dim
+        rope_angles = int(0.5 * head_dim) // 2
+        expected = 1.0 / (10_000.0 ** (torch.arange(0, 2 * rope_angles, 2, dtype=torch.float) / head_dim))
+        expected = torch.cat([expected, torch.zeros(head_dim // 2 - rope_angles)])
+        torch.testing.assert_close(rotary_emb.full_attention_inv_freq.cpu(), expected)
+        # without a partial factor every frequency rotates
+        self.assertTrue(bool((rotary_emb.sliding_attention_inv_freq > 0).all()))
+
 
 @require_torch_accelerator
 @slow
