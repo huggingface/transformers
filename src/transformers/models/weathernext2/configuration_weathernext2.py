@@ -18,6 +18,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ...utils.type_validators import positive_int_field
+from .utils_weathernext2 import WeatherNext2ChannelLayoutMixin
 
 
 ATMOSPHERIC_VARIABLES = (
@@ -73,62 +74,6 @@ DEFAULT_INPUT_VARIABLES = (
 DEFAULT_TARGET_VARIABLES = DEFAULT_INPUT_VARIABLES[:11] + ("total_precipitation_6hr",) + CYCLONE_VARIABLES
 DEFAULT_FORCING_VARIABLES = ("year_progress_sin", "year_progress_cos", "day_progress_sin", "day_progress_cos")
 DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
-
-
-class WeatherNext2ChannelLayoutMixin:
-    """Channel layouts shared by [`WeatherNext2Config`] and [`WeatherNext2FeatureExtractor`].
-
-    Each entry is `(variable, time offset in hours or None, number of levels)`.
-    """
-
-    input_variables: list[str] | tuple[str, ...]
-    target_variables: list[str] | tuple[str, ...]
-    forcing_variables: list[str] | tuple[str, ...]
-    atmospheric_variables: list[str] | tuple[str, ...]
-    static_variables: list[str] | tuple[str, ...]
-    global_variables: list[str] | tuple[str, ...]
-    pressure_levels: list[int] | tuple[int, ...]
-    num_input_timesteps: int
-    time_step_hours: int
-
-    def num_levels(self, variable: str) -> int:
-        return len(self.pressure_levels) if variable in self.atmospheric_variables else 1
-
-    @property
-    def past_time_offsets(self) -> list[int]:
-        """Hours, relative to the initialization time, of each conditioning frame."""
-        return [-(self.num_input_timesteps - 1 - i) * self.time_step_hours for i in range(self.num_input_timesteps)]
-
-    @property
-    def input_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        """Channels the grid encoder consumes, after the three spatial features.
-
-        Dynamic input variables appear once per past time step, static variables once with no time,
-        and forcings once at the predicted time step.
-        """
-        layout = []
-        for variable in self.input_variables:
-            if variable in self.static_variables:
-                layout.append((variable, None, self.num_levels(variable)))
-            else:
-                layout.extend((variable, offset, self.num_levels(variable)) for offset in self.past_time_offsets)
-
-        for variable in self.forcing_variables:
-            layout.append((variable, self.time_step_hours, self.num_levels(variable)))
-
-        return layout
-
-    @property
-    def mesh_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        """Channels the mesh encoder consumes, after the three spatial features.
-
-        Only the variables with no spatial extent reach the mesh encoder directly.
-        """
-        return [entry for entry in self.input_channel_layout if entry[0] in self.global_variables]
-
-    @property
-    def target_channel_layout(self) -> list[tuple[str, int | None, int]]:
-        return [(variable, self.time_step_hours, self.num_levels(variable)) for variable in self.target_variables]
 
 
 @auto_docstring(custom_intro="Configuration for the grid/mesh graph networks and conditioned encoder/decoder MLPs.")

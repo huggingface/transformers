@@ -33,7 +33,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import TensorType, is_torch_available, logging
 from ...utils.hub import cached_file
 from ...utils.import_utils import requires
-from .configuration_weathernext2 import WeatherNext2ChannelLayoutMixin
+from .utils_weathernext2 import WeatherNext2ChannelLayoutMixin
 
 
 if is_torch_available():

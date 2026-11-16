@@ -14,18 +14,17 @@
 
 import copy
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
 
 from ...generation.configuration_utils import GenerationConfig
-from ...modeling_outputs import ModelOutput
 from ...utils import logging
 
 
 if TYPE_CHECKING:
     from .feature_extraction_weathernext2 import WeatherNext2FeatureExtractor
+    from .modeling_weathernext2 import WeatherNext2GenerationOutput
 
 
 logger = logging.get_logger(__name__)
@@ -64,26 +63,6 @@ class WeatherNext2GenerationConfig(GenerationConfig):
         raise NotImplementedError("WeatherNext2GenerationConfig does not support `from_model_config`")
 
 
-@dataclass
-class WeatherNext2GenerationOutput(ModelOutput):
-    """Output of [`WeatherNext2GenerationMixin.generate`].
-
-    Args:
-        forecasts (`list[dict[str, torch.Tensor]]`):
-            One postprocessed forecast in physical units per generated time step. With `num_members > 1` the batch
-            axis holds every member of every initial condition: member `m` of initial condition `i` is row
-            `i * num_members + m`.
-        state (`dict[str, torch.Tensor]`):
-            Conditioning state after the final forecast has been appended.
-        valid_time (`torch.Tensor`):
-            Valid time, as Unix seconds, of the next forecast that would be generated.
-    """
-
-    forecasts: list[dict[str, torch.Tensor]] | None = None
-    state: dict[str, torch.Tensor] | None = None
-    valid_time: torch.Tensor | None = None
-
-
 def select_members(state: Mapping[str, Any], static_variables: list[str], rows: slice) -> dict[str, Any]:
     """Selects ensemble rows of a state. Static fields have no batch axis and are shared by every row."""
     selected = {}
@@ -120,7 +99,7 @@ class WeatherNext2GenerationMixin:
         batch_size: int | None = None,
         generation_config: WeatherNext2GenerationConfig | None = None,
         **model_kwargs,
-    ) -> WeatherNext2GenerationOutput:
+    ) -> "WeatherNext2GenerationOutput":
         """Generates an autoregressive weather forecast.
 
         Args:
@@ -155,6 +134,8 @@ class WeatherNext2GenerationMixin:
             [`WeatherNext2GenerationOutput`] containing each forecast in physical units, the final conditioning
             state, and the valid time of the next forecast.
         """
+        from .modeling_weathernext2 import WeatherNext2GenerationOutput
+
         generation_config = copy.deepcopy(generation_config or self.generation_config)
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**generation_config._get_default_generation_params(), defaults_only=True)
@@ -248,4 +229,4 @@ class WeatherNext2GenerationMixin:
                 logger.info("Generation config file not found, using the default generation config.")
 
 
-__all__ = ["WeatherNext2GenerationConfig", "WeatherNext2GenerationMixin", "WeatherNext2GenerationOutput"]
+__all__ = ["WeatherNext2GenerationConfig", "WeatherNext2GenerationMixin"]

@@ -479,6 +479,26 @@ class WeatherNext2ForecastOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+@dataclass
+class WeatherNext2GenerationOutput(ModelOutput):
+    """Output of [`WeatherNext2GenerationMixin.generate`].
+
+    Args:
+        forecasts (`list[dict[str, torch.Tensor]]`):
+            One postprocessed forecast in physical units per generated time step. With `num_members > 1` the batch
+            axis holds every member of every initial condition: member `m` of initial condition `i` is row
+            `i * num_members + m`.
+        state (`dict[str, torch.Tensor]`):
+            Conditioning state after the final forecast has been appended.
+        valid_time (`torch.Tensor`):
+            Valid time, as Unix seconds, of the next forecast that would be generated.
+    """
+
+    forecasts: list[dict[str, torch.Tensor]] | None = None
+    state: dict[str, torch.Tensor] | None = None
+    valid_time: torch.Tensor | None = None
+
+
 class WeatherNext2Geometry(nn.Module):
     """Exact checkpoint geometry, stored as persistent buffers."""
 
@@ -717,6 +737,7 @@ class WeatherNext2ForWeatherForecasting(WeatherNext2PreTrainedModel, WeatherNext
 
 __all__ = [
     "WeatherNext2ForWeatherForecasting",
+    "WeatherNext2GenerationOutput",
     "WeatherNext2Model",
     "WeatherNext2PreTrainedModel",
 ]
