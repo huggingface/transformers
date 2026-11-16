@@ -993,7 +993,6 @@ class ReasoningFieldAliasTest(unittest.TestCase):
 
 @require_jinja
 class AssistantTrackerConcurrencyTest(unittest.TestCase):
-    @require_jinja
     def test_concurrent_rendering_keeps_assistant_spans(self):
         template = "{% generation %}{{ pause() }}{{ messages[0].content }}{% endgeneration %}"
         compiled = _compile_jinja_template(template)
@@ -1029,6 +1028,7 @@ class AssistantTrackerConcurrencyTest(unittest.TestCase):
         self.assertEqual(second_result, (["SECOND"], [[(0, 6)]]))
 
 
+@require_jinja
 class TemplateSandboxTest(unittest.TestCase):
     def render(self, template, chat=None):
         chat = chat if chat is not None else [{"role": "user", "content": "Hi"}]
