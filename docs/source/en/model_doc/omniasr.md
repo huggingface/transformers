@@ -33,7 +33,7 @@ followed by a pre-norm Transformer encoder) with one of two heads:
 - **CTC variant** (`OmniASRForCTC`, see [OmniASR CTC](./omniasr_ctc)): a single linear projection to the vocabulary, decoded non-autoregressively with greedy CTC.
 - **ALM (audio language model) variant** (`OmniASRForConditionalGeneration`, this page): the audio embeddings are linearly projected into a Llama decoder which autoregressively generates the transcription. This variant additionally supports optional **language conditioning**: passing a language code such as `"eng_Latn"` makes the processor write the matching language token into the decoder context, which generally improves transcription quality.
 
-Checkpoints can be found in [this collection](https://huggingface.co/collections/bezzam/omnilingual-asr-transformers-compatible): 4x ALM and 4x CTC checkpoints of various sizes (300M, 1B, 3B, 7B). Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
+Checkpoints can be found in [this collection](https://huggingface.co/collections/hf-audio/omnilingual-asr-transformers-compatible): 4x ALM and 4x CTC checkpoints of various sizes (300M, 1B, 3B, 7B). Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
 
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
@@ -48,7 +48,7 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "bezzam/omniasr-llm-300m-v2"
+model_id = "hf-audio/omniasr-llm-300m-v2"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
@@ -72,7 +72,7 @@ For the languages that have one, the more common ISO 639-1 codes (e.g. `"en"`, `
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "bezzam/omniasr-llm-300m-v2"
+model_id = "hf-audio/omniasr-llm-300m-v2"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
@@ -99,7 +99,7 @@ list of languages (one per audio, `None` for the language-agnostic mode).
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "bezzam/omniasr-llm-300m-v2"
+model_id = "hf-audio/omniasr-llm-300m-v2"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
@@ -126,7 +126,7 @@ The model also accepts chat template inputs. The `apply_transcription_request` u
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "bezzam/omniasr-llm-300m-v2"
+model_id = "hf-audio/omniasr-llm-300m-v2"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
@@ -179,7 +179,7 @@ Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech trans
 from datasets import Audio, load_dataset
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "bezzam/omniasr-llm-300m-v2"
+model_id = "hf-audio/omniasr-llm-300m-v2"
 NUM_SAMPLES = 2
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -232,7 +232,7 @@ On an A100, we observed a speed-up of ~2.3 for a batch size of 4 ([script](https
 import torch
 from transformers import AutoModelForMultimodalLM, AutoProcessor, CompileConfig, StaticCache
 
-model_id = "bezzam/omniasr-llm-300m-v2"
+model_id = "hf-audio/omniasr-llm-300m-v2"
 NUM_SAMPLES = 4
 num_warmup = 3
 max_new_tokens = 256

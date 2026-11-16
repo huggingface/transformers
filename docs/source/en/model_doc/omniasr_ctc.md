@@ -36,7 +36,7 @@ The CTC variant transcribes in lowercase without punctuation, and does not take 
 from datasets import Audio, load_dataset
 from transformers import AutoModelForCTC, AutoProcessor
 
-model_id = "bezzam/omniasr-ctc-300m-v2"
+model_id = "hf-audio/omniasr-ctc-300m-v2"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCTC.from_pretrained(model_id, device_map="auto")
 
@@ -57,7 +57,7 @@ Batch inference is possible by passing a list of audios, which the processor pad
 from datasets import Audio, load_dataset
 from transformers import AutoModelForCTC, AutoProcessor
 
-model_id = "bezzam/omniasr-ctc-300m-v2"
+model_id = "hf-audio/omniasr-ctc-300m-v2"
 NUM_SAMPLES = 5
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -84,7 +84,7 @@ are lowercased below.
 from datasets import Audio, load_dataset
 from transformers import AutoModelForCTC, AutoProcessor
 
-model_id = "bezzam/omniasr-ctc-300m-v2"
+model_id = "hf-audio/omniasr-ctc-300m-v2"
 NUM_SAMPLES = 5
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -118,7 +118,7 @@ import torch
 from datasets import Audio, load_dataset
 from transformers import AutoModelForCTC, AutoProcessor, CompileConfig
 
-model_id = "bezzam/omniasr-ctc-300m-v2"
+model_id = "hf-audio/omniasr-ctc-300m-v2"
 NUM_SAMPLES = 4
 num_warmup = 3
 

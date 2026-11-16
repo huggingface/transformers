@@ -347,7 +347,7 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
         >>> from transformers import AutoProcessor, OmniASRForConditionalGeneration
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "bezzam/omniasr-llm-300m-v2"
+        >>> model_id = "hf-audio/omniasr-llm-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = OmniASRForConditionalGeneration.from_pretrained(model_id)
 

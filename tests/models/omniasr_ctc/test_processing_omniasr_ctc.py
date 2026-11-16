@@ -25,4 +25,4 @@ class OmniASRCTCProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = OmniASRCTCProcessor
     audio_input_name = "input_values"
     text_input_name = "labels"
-    model_id = "bezzam/omniasr-ctc-300m-v2"
+    model_id = "hf-audio/omniasr-ctc-300m-v2"

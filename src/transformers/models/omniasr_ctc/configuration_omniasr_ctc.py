@@ -19,7 +19,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="bezzam/omniasr-ctc-300m-v2")
+@auto_docstring(checkpoint="hf-audio/omniasr-ctc-300m-v2")
 @strict
 class OmniASRCTCConfig(PreTrainedConfig):
     r"""

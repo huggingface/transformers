@@ -37,7 +37,7 @@ AUDIO_URL = url_to_local_path(
 class OmniASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = OmniASRProcessor
     audio_input_name = "input_values"
-    model_id = "bezzam/omniasr-llm-300m-v2"
+    model_id = "hf-audio/omniasr-llm-300m-v2"
 
     @classmethod
     def prepare_processor_dict(cls):

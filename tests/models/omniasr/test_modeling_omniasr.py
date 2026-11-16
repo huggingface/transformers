@@ -103,7 +103,7 @@ class OmniASRForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unittes
 
     def setUp(self):
         super().setUp()
-        self.checkpoint_name = "bezzam/omniasr-llm-300m-v2"
+        self.checkpoint_name = "hf-audio/omniasr-llm-300m-v2"
         self.dtype = torch.float32
         self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr"
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)

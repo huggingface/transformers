@@ -154,7 +154,7 @@ class OmniASRForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoProcessor, OmniASRForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "bezzam/omniasr-ctc-300m-v2"
+        >>> model_id = "hf-audio/omniasr-ctc-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = OmniASRForCTC.from_pretrained(model_id)
 
@@ -218,7 +218,7 @@ class OmniASRForCTC(OmniASRCTCPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoProcessor, OmniASRForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "bezzam/omniasr-ctc-300m-v2"
+        >>> model_id = "hf-audio/omniasr-ctc-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = OmniASRForCTC.from_pretrained(model_id)
 
