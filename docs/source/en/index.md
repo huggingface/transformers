@@ -21,14 +21,14 @@ rendered properly in your Markdown viewer.
 
 Transformers is the model-definition framework for machine learning models in text, computer vision, audio, video, and multimodal tasks. It defines each model once, in PyTorch, and you use that definition for both inference and training.
 
-The rest of the ecosystem builds on the model definition instead of writing its own. Training frameworks, inference engines, and local runtimes all use the model definition from Transformers, so a model supported in Transformers is compatible with most of these tools.
+Training frameworks, inference engines, and local runtimes build on that definition instead of writing their own. Transformers adds new architectures as they're released and matches each one to its original results, so the tools that build on it get every new model without reimplementing it.
 
 <div class="not-prose relative flex items-center mb-28">
   <div class="peer group pr-4">
     <a class="flex h-10 items-center" href="./community_integrations/vllm">
       <span class="relative block h-10 w-10">
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM"/>
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain absolute inset-0 h-full w-full opacity-0 group-hover:opacity-100" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt=""/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM" width="40" height="40"/>
+        <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg) center / contain no-repeat;"></span>
       </span>
     </a>
     <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
@@ -39,8 +39,8 @@ The rest of the ecosystem builds on the model definition instead of writing its 
   <div class="peer group pr-4">
     <a class="flex h-10 items-center" href="./community_integrations/sglang">
       <span class="relative block h-6 w-20">
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang"/>
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain absolute inset-0 h-full w-full opacity-0 group-hover:opacity-100" src="https://www.sglang.io/images/logo.png" alt=""/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang" width="80" height="24"/>
+        <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://www.sglang.io/images/logo.png) center / contain no-repeat;"></span>
       </span>
     </a>
     <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
@@ -51,8 +51,8 @@ The rest of the ecosystem builds on the model definition instead of writing its 
   <div class="peer group pr-4">
     <a class="flex h-10 items-center" href="./community_integrations/llama_cpp">
       <span class="relative block h-7 w-7">
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp"/>
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain absolute inset-0 h-full w-full opacity-0 group-hover:opacity-100" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt=""/>
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50 dark:invert" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp" width="28" height="28"/>
+        <span class="absolute inset-0 opacity-0 group-hover:opacity-100 dark:invert" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg) center / contain no-repeat;"></span>
       </span>
     </a>
     <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
@@ -61,10 +61,10 @@ The rest of the ecosystem builds on the model definition instead of writing its 
     </div>
   </div>
   <div class="order-first pr-4 peer-hover:hidden">
-    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth"/></a>
+    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth" width="32" height="32"/></a>
   </div>
   <div class="order-first pr-4 hidden peer-hover:block">
-    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8 grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt=""/></a>
+    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><span class="block h-8 w-8 grayscale opacity-50" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp) center / contain no-repeat;"></span></a>
   </div>
   <div class="peer-hover:hidden absolute left-0 top-full w-full pt-3">
     <div class="text-gray-500 dark:text-gray-400">Unsloth</div>
@@ -72,7 +72,7 @@ The rest of the ecosystem builds on the model definition instead of writing its 
   </div>
 </div>
 
-Transformers implements each model to match the results of its original release. A tool that builds on Transformers gets each new model without implementing it again.
+Transformers is also designed to be read and changed by coding agents. Each model is plain PyTorch in one file that reads from top to bottom. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
 
 ## Try a model
 
