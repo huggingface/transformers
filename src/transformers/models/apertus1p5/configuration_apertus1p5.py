@@ -111,7 +111,7 @@ class Apertus1p5TextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "apertus1p5_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 12000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -213,7 +213,7 @@ class Apertus1p5Config(PreTrainedConfig):
     ```"""
 
     model_type = "apertus1p5"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
