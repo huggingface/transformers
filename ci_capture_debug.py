@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture_keep_kernels")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture_defer_unload")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
@@ -465,7 +465,8 @@ def _summarize_garbage(objs, top=40):
     )
 
 
-_force_gc_state = {"done": False}
+_force_gc_state = {"done": False, "capturing": False}
+_deferred_unloads = []  # (CUmodule handle, kernel name) whose unload was deferred until after capture_end
 
 
 def _patch_force_gc_in_capture():
@@ -486,6 +487,7 @@ def _patch_force_gc_in_capture():
 
     def capture_begin(self, *args, **kwargs):
         out = orig_begin(self, *args, **kwargs)
+        _force_gc_state["capturing"] = True  # pure-Python flag read by the deferring CompiledKernel.__del__ below
         if S.is_target and S.repeat_index == 0 and not _force_gc_state["done"]:
             _force_gc_state["done"] = True
             gc.set_debug(gc.DEBUG_SAVEALL)
@@ -505,15 +507,10 @@ def _patch_force_gc_in_capture():
                     log(f"    ORT/ONNX garbage object: {type(o).__module__}.{type(o).__qualname__} {o!r:.200}")
                 except Exception as e:
                     log(f"    ORT/ONNX garbage object: {type(o)} (repr failed: {e!r})")
-            if PLUGIN_MODE == "force_gc_in_capture_keep_kernels":
-                # Control experiment: identical, except Triton / inductor-runtime kernel objects (CompiledKernel,
-                # StaticallyLaunchedCudaKernel, ...) are kept alive during the capture and released after capture_end.
-                kept = [o for o in garbage if type(o).__module__.startswith(("triton.", "torch._inductor.runtime"))]
-                _force_gc_state["kept"] = kept
-                kept_types = collections.Counter(f"{type(o).__module__}.{type(o).__qualname__}" for o in kept)
+            if PLUGIN_MODE == "force_gc_in_capture_defer_unload":
                 log(
-                    f"force_gc_in_capture_keep_kernels: keeping {len(kept)} Triton/inductor-runtime objects alive until "
-                    f"after capture_end: {kept_types.most_common(20)}"
+                    f"force_gc_in_capture_defer_unload: {len(_deferred_unloads)} CompiledKernel module unload(s) deferred "
+                    "so far during this capture (by the forced gc.collect() above)"
                 )
             log("force_gc_in_capture: releasing the cyclic garbage NOW (inside the capture)")
             del garbage, ort_objs  # frees everything (DEBUG_SAVEALL kept it alive) -> destructors run inside capture
@@ -522,20 +519,54 @@ def _patch_force_gc_in_capture():
 
     G.capture_begin = capture_begin
 
-    if PLUGIN_MODE == "force_gc_in_capture_keep_kernels":
-        orig_end = G.capture_end
+    orig_end = G.capture_end
 
-        def capture_end(self, *args, **kwargs):
-            try:
-                return orig_end(self, *args, **kwargs)
-            finally:
-                kept = _force_gc_state.pop("kept", None)
-                if kept is not None:
-                    log(f"force_gc_in_capture_keep_kernels: capture ended; releasing the {len(kept)} kept objects NOW")
-                    kept.clear()
-                    log("force_gc_in_capture_keep_kernels: kept objects released (outside the capture)")
+    def capture_end(self, *args, **kwargs):
+        try:
+            return orig_end(self, *args, **kwargs)
+        finally:
+            _force_gc_state["capturing"] = False
+            if _deferred_unloads:
+                pending = list(_deferred_unloads)
+                _deferred_unloads.clear()
+                log(
+                    f"force_gc_in_capture_defer_unload [{S.test}]: capture ended; unloading {len(pending)} deferred "
+                    f"CompiledKernel module(s) NOW (outside the capture): {[name for _, name in pending][:20]}"
+                )
+                from triton.compiler import compiler as triton_compiler
 
-        G.capture_end = capture_end
+                for module, _ in pending:
+                    triton_compiler.driver.active.utils.unload_module(module)
+                log("force_gc_in_capture_defer_unload: deferred modules unloaded")
+
+    G.capture_end = capture_end
+
+    if PLUGIN_MODE == "force_gc_in_capture_defer_unload":
+        # Control experiment: identical to `force_gc_in_capture` (b3a8def521), except that Triton's
+        # `CompiledKernel.__del__` does NOT call `unload_module` (cuModuleUnload) while a capture is active: it records
+        # the module and the capture_end wrapper above unloads it right after the capture ended.
+        try:
+            from triton.compiler import compiler as triton_compiler
+        except ImportError as e:
+            log(f"force_gc_in_capture_defer_unload: triton not importable, __del__ NOT patched: {e!r}")
+            return
+
+        orig_del = triton_compiler.CompiledKernel.__del__
+
+        def __del__(self):
+            if (
+                _force_gc_state.get("capturing")
+                and getattr(self, "module", None) is not None
+                and getattr(self, "_module_pid", None) == os.getpid()
+            ):
+                _deferred_unloads.append((self.module, getattr(self, "name", "?")))
+                self.module = None
+                self._module_pid = None
+                return
+            orig_del(self)
+
+        triton_compiler.CompiledKernel.__del__ = __del__
+        log("force_gc_in_capture_defer_unload: CompiledKernel.__del__ patched (unload deferred while capturing)")
     log(
         "force_gc_in_capture: CUDAGraph.capture_begin patched (forced GC inside the first capture of each target original)"
     )
@@ -964,7 +995,7 @@ class CaptureDebugPlugin:
             _patch_triton_launch()
             log("triton_wrapper_only: CachingAutotuner.run wrapped (pass-through)")
             return
-        if PLUGIN_MODE in ("force_gc_in_capture", "force_gc_in_capture_keep_kernels"):
+        if PLUGIN_MODE in ("force_gc_in_capture", "force_gc_in_capture_defer_unload"):
             _patch_force_gc_in_capture()
             return
         faulthandler.enable(file=sys.stderr, all_threads=True)
