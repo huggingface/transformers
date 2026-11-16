@@ -478,19 +478,18 @@ class WeatherNext2ForecastOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+@auto_docstring(custom_intro="Output of [`WeatherNext2GenerationMixin.generate`].")
 @dataclass
 class WeatherNext2GenerationOutput(ModelOutput):
-    """Output of [`WeatherNext2GenerationMixin.generate`].
-
-    Args:
-        forecasts (`list[dict[str, torch.Tensor]]`):
-            One postprocessed forecast in physical units per generated time step. With `num_members > 1` the batch
-            axis holds every member of every initial condition: member `m` of initial condition `i` is row
-            `i * num_members + m`.
-        state (`dict[str, torch.Tensor]`):
-            Conditioning state after the final forecast has been appended.
-        valid_time (`torch.Tensor`):
-            Valid time, as Unix seconds, of the next forecast that would be generated.
+    r"""
+    forecasts (`list[dict[str, torch.Tensor]]`):
+        One postprocessed forecast in physical units per generated time step. With `num_members > 1` the batch
+        axis holds every member of every initial condition: member `m` of initial condition `i` is row
+        `i * num_members + m`.
+    state (`dict[str, torch.Tensor]`):
+        Conditioning state after the final forecast has been appended.
+    valid_time (`torch.Tensor`):
+        Valid time, as Unix seconds, of the next forecast that would be generated.
     """
 
     forecasts: list[dict[str, torch.Tensor]] | None = None
