@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2MoE model."""
 
+import copy
 import unittest
 
 import pytest
@@ -210,6 +211,8 @@ class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         # Assisted generation
         assistant_model = model
+        # `model` is shared by the class: restore its generation config afterwards, even if the test fails
+        self.addCleanup(setattr, model, "generation_config", copy.deepcopy(model.generation_config))
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
@@ -232,14 +235,14 @@ class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_speculative_generation(self):
         expectations = Expectations(
             {
-                (None, None): "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl",
+                (None, None): "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl",
                 ("xpu", 5): "To be or not to be, that is the question. The answer is to be, but not to be in the way",
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
-        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
+        model = self.get_model()
         assistant_model = model
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
