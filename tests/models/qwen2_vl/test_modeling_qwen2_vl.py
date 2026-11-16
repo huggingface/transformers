@@ -278,6 +278,54 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 generation_output.logits[0], generation_output_second.logits[0], rtol=1e-4, atol=1e-4
             )
 
+    def test_generate_with_cache_and_new_image(self):
+        """
+        Tests that `generate` with a cache from an earlier call gives the same logits as generating from scratch,
+        when the new turn adds an image. The `rope_deltas` stored by the earlier call must not be reused for the
+        positions of the new image tokens.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        patch_size = config.vision_config.patch_size
+        temporal_patch_size = config.vision_config.temporal_patch_size
+        num_special_tokens = 6  # ids 0 to 5 are bos, eos, pad, vision start, image and video
+        generation_kwargs = {
+            "max_new_tokens": 3,
+            "do_sample": False,
+            "eos_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+
+            # First turn is text only
+            input_ids = ids_tensor([1, 8], config.text_config.vocab_size - num_special_tokens) + num_special_tokens
+            first_turn = model.generate(
+                input_ids=input_ids, attention_mask=torch.ones_like(input_ids), **generation_kwargs
+            )
+
+            # Second turn adds an image of 2x2 patches, so its tokens get different height and width positions
+            image_grid_thw = torch.tensor([[1, 2, 2]], device=torch_device)
+            new_ids = torch.tensor(
+                [[config.vision_start_token_id] + [config.image_token_id] * 4 + [10, 11, 12]], device=torch_device
+            )
+            input_ids = torch.cat([first_turn.sequences, new_ids], dim=1)
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": torch.ones_like(input_ids),
+                "mm_token_type_ids": (input_ids == config.image_token_id).long(),
+                "image_grid_thw": image_grid_thw,
+                "pixel_values": floats_tensor(
+                    [4, self.model_tester.num_channels * patch_size**2 * temporal_patch_size]
+                ),
+            }
+
+            with_cache = model.generate(**inputs, cache=first_turn.cache, **generation_kwargs)
+            from_scratch = model.generate(**inputs, **generation_kwargs)
+            torch.testing.assert_close(
+                torch.stack(with_cache.logits), torch.stack(from_scratch.logits), rtol=1e-4, atol=1e-4
+            )
+
     def test_vision_position_ids(self):
         """
         Tests that vision position ids are built correctly for images and for videos.

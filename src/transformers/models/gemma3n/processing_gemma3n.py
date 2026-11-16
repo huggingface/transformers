@@ -20,17 +20,12 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False, "return_mm_token_type_ids": True},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Gemma3nProcessor(ProcessorMixin):
-    valid_processor_kwargs = Gemma3nProcessorKwargs
+    return_mm_token_type_ids = True
 
     def __init__(
         self,
@@ -76,7 +71,7 @@ class Gemma3nProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
-        **kwargs: Unpack[Gemma3nProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         model_inputs = super().__call__(images=images, text=text, audio=audio, **kwargs)
         if "mm_token_type_ids" in model_inputs:
@@ -138,5 +133,7 @@ class Gemma3nProcessor(ProcessorMixin):
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma3nProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma3nProcessor"]

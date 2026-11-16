@@ -98,7 +98,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     def test_subprocessor_defaults_1_images(self):
-        # overriden - pop certina keys from `merged_kwargs` which are used only by processor
         parameterized_config = MODALITY_TEST_SPECS["images"]
         subprocessor = self.get_component(parameterized_config["component_key"])
 
@@ -119,8 +118,6 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
         kwargs = merged_kwargs["images_kwargs"]
-        kwargs.pop("num_image_tokens")
-        kwargs.pop("multi_page")
 
         input_subproc = subprocessor(modality_input, **kwargs)
         try:

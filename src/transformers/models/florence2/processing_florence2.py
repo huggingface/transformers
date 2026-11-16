@@ -22,6 +22,7 @@ from typing import Any
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -30,20 +31,11 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
-
-
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
-    valid_processor_kwargs = Florence2ProcessorKwargs
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
 
     def __init__(
         self,
@@ -687,5 +679,7 @@ class Florence2PostProcessor:
 
         return parsed_dict
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Florence2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Florence2Processor"]

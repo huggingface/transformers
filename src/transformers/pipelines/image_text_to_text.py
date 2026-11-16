@@ -158,6 +158,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Forward kwargs
         if generate_kwargs is not None:
+            generate_kwargs = generate_kwargs.copy()
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
             if generate_kwargs is None:
@@ -194,6 +195,8 @@ class ImageTextToTextPipeline(Pipeline):
         if skip_special_tokens is not None:
             postprocess_params["skip_special_tokens"] = skip_special_tokens
 
+        if "tools" in kwargs:
+            postprocess_params["tools"] = kwargs["tools"]
         return preprocess_params, forward_kwargs, postprocess_params
 
     @overload
@@ -348,7 +351,19 @@ class ImageTextToTextPipeline(Pipeline):
             # Handle Mistral tokenizer which does not accept processing kwargs
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
-                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                    k: v
+                    for k, v in chat_template_kwargs.items()
+                    if k
+                    in (
+                        "continue_final_message",
+                        "add_generation_prompt",
+                        "tokenize",
+                        "return_dict",
+                        "return_tensors",
+                        "padding",
+                        "truncation",
+                        "max_length",
+                    )
                 }
 
             model_inputs = self.processor.apply_chat_template(
@@ -403,6 +418,7 @@ class ImageTextToTextPipeline(Pipeline):
         return_type=ReturnType.FULL_TEXT,
         continue_final_message=None,
         skip_special_tokens=None,
+        tools=None,
         **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
@@ -458,12 +474,17 @@ class ImageTextToTextPipeline(Pipeline):
                         continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                     if continue_final_message:
                         # With assistant prefill, concat onto the end of the last message
-                        new_text = dict(prompt_text.messages[-1]["content"][-1].items())
-                        new_text["text"] += generated_text
+                        content = prompt_text.messages[-1]["content"]
+                        if isinstance(content, str):
+                            content += generated_text
+                        else:
+                            new_text = dict(content[-1].items())
+                            new_text["text"] += generated_text
+                            content = content[:-1] + [new_text]
                         generated_text = list(prompt_text.messages)[:-1] + [
                             {
                                 "role": prompt_text.messages[-1]["role"],
-                                "content": prompt_text.messages[-1]["content"][:-1] + [new_text],
+                                "content": content,
                             }
                         ]
                     else:
@@ -472,7 +493,9 @@ class ImageTextToTextPipeline(Pipeline):
                             # New-style templates need to see the prompt as `prefix`, because chat
                             # templates often pre-write part of the assistant message (e.g. an
                             # opening <think> tag), which affects parsing.
-                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                            assistant_message = self.tokenizer.parse_response(
+                                generated_text, prefix=decoded_input, tools=tools
+                            )
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
                         generated_text = list(prompt_text.messages) + [assistant_message]

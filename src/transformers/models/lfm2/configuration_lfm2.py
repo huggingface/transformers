@@ -52,7 +52,7 @@ class Lfm2Config(PreTrainedConfig):
     """
 
     model_type = "lfm2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     vocab_size: int = 65536

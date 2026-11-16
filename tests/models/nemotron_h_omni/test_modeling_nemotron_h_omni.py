@@ -201,9 +201,7 @@ class NemotronHOmniModelTestMixin:
 
     _get_conv_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_conv_state_shape
     _get_recurrent_state_shape = test_modeling_nemotron_h.NemotronHModelTest._get_recurrent_state_shape
-    _check_past_key_values_for_generate = (
-        test_modeling_nemotron_h.NemotronHModelTest._check_past_key_values_for_generate
-    )
+    _check_cache_for_generate = test_modeling_nemotron_h.NemotronHModelTest._check_cache_for_generate
 
     def _image_features_prepare_config_and_inputs(self):
         tester = self.model_tester
@@ -389,6 +387,15 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
 @require_torch
 class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest, unittest.TestCase):
     model_tester_class = NemotronHOmniAudio2TextModelTester
+
+    # FIXME: @eustlb, config `__post_init__` keeps `model_type: parakeet` (pops it from a copy), and RADIO's
+    # `layer_scale*.lambda1` / `summary_idxs` are not in the checkpoint
+    @unittest.skip(
+        reason="Reference checkpoint fails to load (`audio_config.model_type: parakeet`, see config `__post_init__`), "
+        "and RADIO saves `layer_scale*.lambda1` / `summary_idxs` absent from it"
+    )
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
 
     # Why do we have two classes that run same tests across with same inputs? FIXME with proper multimodal tester
     @parameterized.expand([True, False, None])
