@@ -498,7 +498,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         self.norm = Llama4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Llama4TextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.has_chunked_layers = "chunked_attention" in self.config.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -541,12 +540,14 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "cache": cache,
                 "position_ids": position_ids,
             }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+            # Create the masks, only for the layer types that are present
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "chunked_attention": lambda: create_chunked_causal_mask(**mask_kwargs),
             }
-            if self.has_chunked_layers:
-                causal_mask_mapping["chunked_attention"] = create_chunked_causal_mask(**mask_kwargs)
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
 
         hidden_states = inputs_embeds
 
