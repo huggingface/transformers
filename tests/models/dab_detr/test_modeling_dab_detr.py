@@ -231,6 +231,14 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_dab_detr_object_detection_head_model(*config_and_inputs)
 
+    def test_half_precision_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for dtype in (torch.float16, torch.bfloat16):
+            model = DabDetrForObjectDetection(config).to(torch_device).to(dtype).eval()
+            with torch.no_grad():
+                outputs = model(pixel_values=inputs_dict["pixel_values"].to(dtype))
+            self.assertEqual(outputs.logits.dtype, dtype)
+
     def test_load_bbox_head_saved_under_decoder_name(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = DabDetrForObjectDetection(config)

@@ -1301,7 +1301,9 @@ class DabDetrModel(DabDetrPreTrainedModel):
         # Fifth, sent query embeddings + object_queries through the decoder (which is conditioned on the encoder output)
         num_queries = reference_position_embeddings.shape[1]
         if self.num_patterns == 0:
-            queries = torch.zeros(batch_size, num_queries, self.hidden_size, device=device)
+            queries = torch.zeros(
+                batch_size, num_queries, self.hidden_size, device=device, dtype=reference_position_embeddings.dtype
+            )
         else:
             queries = (
                 self.patterns.weight[:, None, None, :]
