@@ -84,6 +84,7 @@ class OpenAIPrivacyFilterConfig(GptOssConfig):
     eos_token_id: int | list[int] | None = 199999
     layer_types = AttributeError()  # SWA only
     hidden_act = AttributeError()  # Not used as it's expert MLPs only
+    base_model_tp_plan = AttributeError()  # No head to tie the embedding to
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

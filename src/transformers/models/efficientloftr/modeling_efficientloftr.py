@@ -121,7 +121,6 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         feats_height, feats_width = x.shape[-2:]
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1

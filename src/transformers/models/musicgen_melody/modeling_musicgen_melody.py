@@ -143,7 +143,6 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         return emb.to(torch.get_default_dtype())
 
-    @torch.no_grad()
     # Ignore copy
     def forward(self, inputs_embeds: torch.Tensor, cache_length: int = 0):
         bsz, seq_len, _ = inputs_embeds.size()

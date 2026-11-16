@@ -752,7 +752,6 @@ class MllamaRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     # Ignore copy
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
