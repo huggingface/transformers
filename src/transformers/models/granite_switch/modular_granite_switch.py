@@ -1958,15 +1958,24 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, GraniteSwitchForCausalLM
 
-        >>> model = GraniteSwitchForCausalLM.from_pretrained("ibm-granite/granite-switch-example")
-        >>> tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-switch-example")
+        >>> model = GraniteSwitchForCausalLM.from_pretrained("ibm-granite/granite-switch-4.1-3b-preview")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-switch-4.1-3b-preview")
 
-        >>> # The adapter is selected by a control token in the prompt, so a plain prompt runs the
-        >>> # base model and the same prompt behind `<|adapter|>` runs that adapter.
-        >>> inputs = tokenizer("<|adapter|>Summarize the document.", return_tensors="pt")
+        >>> # The chat template places the adapter's control token; leave out `adapter_name` to run
+        >>> # the base model.
+        >>> messages = [{"role": "user", "content": "When was the Eiffel Tower completed?"}]
+        >>> documents = [{"doc_id": "1", "text": "The Eiffel Tower was completed in 1889."}]
+        >>> inputs = tokenizer.apply_chat_template(
+        ...     messages,
+        ...     documents=documents,
+        ...     adapter_name="answerability",
+        ...     add_generation_prompt=True,
+        ...     return_tensors="pt",
+        ...     return_dict=True,
+        ... )
 
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=10)
+        >>> tokenizer.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         ```"""
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
