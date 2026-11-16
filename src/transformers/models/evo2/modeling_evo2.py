@@ -52,11 +52,10 @@ class Evo2RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return self.weight * (
+            hidden_states
+            / (hidden_states.norm(2, dim=-1, keepdim=True) * (hidden_states.shape[-1] ** -0.5) + self.variance_epsilon)
+        )
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -341,9 +340,11 @@ class Evo2ShortConv(nn.Module):
         decay = torch.exp(log_poles * torch.arange(seq_len, device=x1v.device))  # [hidden, state, seq]
         filter_ = (residues[..., None] * decay).sum(1)
         fft_size = 2 * seq_len
-        y = torch.fft.irfft(torch.fft.rfft(x1v.float(), n=fft_size) * torch.fft.rfft(filter_, n=fft_size), n=fft_size)[
-            ..., :seq_len
-        ]
+        y = torch.fft.irfft(
+            torch.fft.rfft(x1v.float(), n=fft_size) * torch.fft.rfft(filter_, n=fft_size) / fft_size,
+            n=fft_size,
+            norm="forward",
+        )[..., :seq_len]
         if cache is None:
             return y.to(x1v.dtype)
         state = (x1v.float()[:, :, None] @ decay.flip(-1).transpose(1, 2)).squeeze(2)  # [batch, hidden, state]

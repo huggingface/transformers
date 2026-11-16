@@ -14,11 +14,25 @@
 """Convert original Evo 2 (StripedHyena 2 / Vortex) checkpoints to Hugging Face format."""
 
 import argparse
+import io
 
 import torch
 from huggingface_hub import hf_hub_download
 
 from transformers import Evo2Config, Evo2ForCausalLM, Evo2Tokenizer
+
+
+def load_original_evo2_checkpoint(weights_path: str) -> dict[str, torch.Tensor]:
+    """Safely load an original Evo 2 `.pt` checkpoint using `weights_only=True`."""
+    safe_globals: list[type] = [io.BytesIO]
+    try:
+        from transformer_engine.common.recipe import DelayedScaling, Format, _FormatHelper
+
+        safe_globals.extend([DelayedScaling, Format, _FormatHelper])
+    except ImportError:
+        pass
+    with torch.serialization.safe_globals(safe_globals):
+        return torch.load(weights_path, map_location="cpu", weights_only=True)
 
 
 def infer_config_from_original_weights(
@@ -128,10 +142,18 @@ def convert_original_weights_to_transformers(
 
         if mixer_type == "attention":
             wqkv = original_weights[f"{orig_prefix}.inner_mha_cls.Wqkv.weight"]
-            q, k, v = torch.split(wqkv, config.hidden_size, dim=0)
-            new_state_dict[f"{new_prefix}.self_attn.q_proj.weight"] = q
-            new_state_dict[f"{new_prefix}.self_attn.k_proj.weight"] = k
-            new_state_dict[f"{new_prefix}.self_attn.v_proj.weight"] = v
+            head_dim = config.hidden_size // config.num_attention_heads
+            wqkv = wqkv.t().reshape(config.hidden_size, config.num_attention_heads, 3, head_dim)
+            q, k, v = wqkv.unbind(dim=2)
+            new_state_dict[f"{new_prefix}.self_attn.q_proj.weight"] = (
+                q.reshape(config.hidden_size, -1).t().contiguous()
+            )
+            new_state_dict[f"{new_prefix}.self_attn.k_proj.weight"] = (
+                k.reshape(config.hidden_size, -1).t().contiguous()
+            )
+            new_state_dict[f"{new_prefix}.self_attn.v_proj.weight"] = (
+                v.reshape(config.hidden_size, -1).t().contiguous()
+            )
             new_state_dict[f"{new_prefix}.self_attn.o_proj.weight"] = original_weights[
                 f"{orig_prefix}.inner_mha_cls.out_proj.weight"
             ]
@@ -207,7 +229,7 @@ def main():
 
     filename = args.filename or f"{args.model_id.split('/')[-1]}.pt"
     weights_path = hf_hub_download(args.model_id, filename)
-    original_weights = torch.load(weights_path, map_location="cpu", weights_only=True)
+    original_weights = load_original_evo2_checkpoint(weights_path)
 
     config = infer_config_from_original_weights(
         original_weights,
@@ -217,7 +239,8 @@ def main():
     new_state_dict, config = convert_original_weights_to_transformers(original_weights, config=config)
 
     model = Evo2ForCausalLM(config)
-    model.load_state_dict(new_state_dict, strict=True)
+    model.load_state_dict(new_state_dict, strict=True, assign=True)
+    model.tie_weights()
 
     tokenizer = Evo2Tokenizer()
     model.save_pretrained(args.output_dir)

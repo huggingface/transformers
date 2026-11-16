@@ -32,7 +32,10 @@ if is_torch_available():
     from torch import nn
 
     from transformers import Evo2ForCausalLM, Evo2Model, Evo2Tokenizer
-    from transformers.models.evo2.convert_evo2_weights import convert_original_weights_to_transformers
+    from transformers.models.evo2.convert_evo2_weights import (
+        convert_original_weights_to_transformers,
+        load_original_evo2_checkpoint,
+    )
 
 
 class Evo2ModelTester(CausalLMModelTester):
@@ -210,12 +213,13 @@ class Evo2InferenceTest(unittest.TestCase):
         from huggingface_hub import hf_hub_download
 
         weights_path = hf_hub_download("arcinstitute/evo2_1b_base", "evo2_1b_base.pt")
-        original_weights = torch.load(weights_path, map_location="cpu", weights_only=True)
+        original_weights = load_original_evo2_checkpoint(weights_path)
         new_state_dict, config = convert_original_weights_to_transformers(original_weights)
 
         model = Evo2ForCausalLM(config)
-        model.load_state_dict(new_state_dict, strict=True)
-        model = model.to(device=torch_device, dtype=torch.bfloat16).eval()
+        model.load_state_dict(new_state_dict, strict=True, assign=True)
+        model.tie_weights()
+        model = model.to(device=torch_device).eval()
 
         tokenizer = Evo2Tokenizer()
         nucleotide_indices = [65, 67, 71, 84]  # 'A', 'C', 'G', 'T'
@@ -223,26 +227,26 @@ class Evo2InferenceTest(unittest.TestCase):
         expected_nucleotide_logits = {
             "ACGT": torch.tensor(
                 [
-                    [0.91796875, 1.0234375, 0.828125, 0.8046875],
-                    [0.984375, 0.8515625, 0.6953125, 0.90625],
-                    [0.8828125, 0.84375, 0.7734375, 0.9140625],
-                    [0.6171875, 0.9921875, 0.8203125, 1.0078125],
+                    [0.921875, 1.0078125, 0.8203125, 0.8125],
+                    [0.95703125, 0.86328125, 0.69140625, 0.90625],
+                    [0.859375, 0.8203125, 0.6953125, 1.015625],
+                    [0.66796875, 0.88671875, 0.640625, 1.2109375],
                 ]
             ),
             "ACGTACGTACGT": torch.tensor(
                 [
-                    [0.921875, 1.0234375, 0.828125, 0.8046875],
-                    [0.98828125, 0.8515625, 0.6953125, 0.90625],
-                    [0.890625, 0.84375, 0.765625, 0.91015625],
-                    [0.62109375, 0.9921875, 0.8203125, 1.0078125],
+                    [0.921875, 1.0078125, 0.81640625, 0.80859375],
+                    [0.95703125, 0.86328125, 0.6875, 0.90625],
+                    [0.859375, 0.82421875, 0.6953125, 1.015625],
+                    [0.66796875, 0.88671875, 0.640625, 1.2109375],
                 ]
             ),
             "AAAAAAAAAA": torch.tensor(
                 [
-                    [0.921875, 1.015625, 0.828125, 0.8046875],
-                    [1.0859375, 0.73828125, 0.66796875, 0.94921875],
-                    [1.125, 0.66796875, 0.63671875, 0.99609375],
-                    [1.1328125, 0.68359375, 0.62109375, 0.984375],
+                    [0.921875, 1.0078125, 0.81640625, 0.80859375],
+                    [1.03125, 0.77734375, 0.671875, 0.93359375],
+                    [0.97265625, 0.734375, 0.609375, 1.0703125],
+                    [0.96484375, 0.7109375, 0.515625, 1.171875],
                 ]
             ),
         }
@@ -253,7 +257,7 @@ class Evo2InferenceTest(unittest.TestCase):
                 logits = model(input_ids).logits
             self.assertEqual(logits.shape, (1, len(seq), config.vocab_size))
             actual_slice = logits[0, :4, nucleotide_indices].float().cpu()
-            torch.testing.assert_close(actual_slice, expected_slice, rtol=0.02, atol=0.02)
+            torch.testing.assert_close(actual_slice, expected_slice, rtol=1e-2, atol=1e-2)
 
 
 if __name__ == "__main__":
