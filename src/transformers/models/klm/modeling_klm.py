@@ -18,6 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import importlib
+import inspect
 import math
 from collections.abc import Callable
 
@@ -29,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -37,11 +40,22 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_flash_linear_attention_available,
+    is_torchdynamo_compiling,
+    is_torchdynamo_exporting,
+    logging,
+)
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_klm import KlmConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -178,6 +192,34 @@ class KlmNgramEmbedding(nn.Module):
         return self.bigram_proj(bigram_embeds) + self.trigram_proj(trigram_embeds)
 
 
+def torch_klm_fused_attnres(query, residuals, rms_weight, output_rms_weight=None, rms_eps=1e-6, checkpoint_level=1):
+    """Portable reference for the fused residual/prenorm training adapter."""
+    with maybe_autocast(device_type=query.device.type, enabled=False):
+        scores = torch.stack(
+            [
+                F.rms_norm(value.float(), (value.shape[-1],), eps=rms_eps) @ (query * rms_weight).float()
+                for value in residuals
+            ],
+            dim=-1,
+        )
+        weights = scores.softmax(-1).unbind(-1)
+        output = sum(weight[..., None] * value.float() for weight, value in zip(weights, residuals))
+        if output_rms_weight is not None:
+            output = F.rms_norm(output, (output.shape[-1],), output_rms_weight.float(), rms_eps)
+    return output.to(residuals[0].dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("fused_attnres", "fla", internal_path="ops.attnres")
+def klm_fused_attnres(query, residuals, rms_weight, output_rms_weight=None, rms_eps=1e-6, checkpoint_level=1):
+    return torch_klm_fused_attnres(query, residuals, rms_weight, output_rms_weight, rms_eps, checkpoint_level)
+
+
+def normalize_residual_states(hidden_states: torch.Tensor, eps: float) -> torch.Tensor:
+    """Scales `hidden_states` to a unit root mean square in float32, the form `KlmBlockResidual` scores states in."""
+    return F.rms_norm(hidden_states.float(), (hidden_states.shape[-1],), eps=eps)
+
+
+@use_kernelized_func(klm_fused_attnres)
 class KlmBlockResidual(nn.Module):
     """
     Block attention residual. Instead of adding to a single residual stream, every sublayer reads its own softmax mix
@@ -189,16 +231,37 @@ class KlmBlockResidual(nn.Module):
         super().__init__()
         self.query = nn.Parameter(torch.empty(config.hidden_size))
         self.weight = nn.Parameter(torch.empty(config.hidden_size))
+        self.rms_norm_eps = config.rms_norm_eps
 
     def forward(
-        self, hidden_states: tuple[torch.Tensor, ...], normalized_hidden_states: tuple[torch.Tensor, ...]
+        self,
+        hidden_states: tuple[torch.Tensor, ...],
+        normalized_hidden_states: tuple[torch.Tensor, ...] | None = None,
+        use_fla: bool = False,
+        output_norm: nn.Module | None = None,
     ) -> torch.Tensor:
+        if use_fla:
+            with maybe_autocast(device_type=hidden_states[0].device.type, enabled=False):
+                output = klm_fused_attnres(
+                    self.query.float(),
+                    tuple(value.float() for value in hidden_states),
+                    self.weight.float(),
+                    output_rms_weight=output_norm.weight.float() if output_norm is not None else None,
+                    rms_eps=self.rms_norm_eps,
+                    checkpoint_level=1,
+                )
+            return output.to(hidden_states[0].dtype)
+        if normalized_hidden_states is None:
+            normalized_hidden_states = tuple(
+                normalize_residual_states(value, self.rms_norm_eps) for value in hidden_states
+            )
         query = (self.query * self.weight).float()
         with maybe_autocast(device_type=query.device.type, enabled=False):
             scores = torch.stack([states @ query for states in normalized_hidden_states], dim=-1)
             weights = scores.softmax(dim=-1)
         weights = weights.to(hidden_states[0].dtype).unsqueeze(-1).unbind(dim=-2)
-        return sum(weight * states for weight, states in zip(weights, hidden_states))
+        output = sum(weight * states for weight, states in zip(weights, hidden_states))
+        return output_norm(output) if output_norm is not None else output
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -306,6 +369,7 @@ class KlmAttention(nn.Module):
         attention_mask: torch.Tensor | None,
         first_value_states: torch.Tensor | None = None,
         cache: Cache | None = None,
+        attention_implementation: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
         r"""
@@ -336,7 +400,7 @@ class KlmAttention(nn.Module):
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            attention_implementation or self.config._attn_implementation, eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
@@ -363,6 +427,87 @@ def l2norm(x: torch.Tensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+def torch_klm_causal_conv1d(
+    x, weight, activation=None, backend="triton", cu_seqlens=None, cu_seqlens_cpu=None, output_final_state=False
+):
+    """Portable segmented convolution for fresh sequences; cached decoding uses the original model path."""
+    if output_final_state:
+        raise ValueError("The KLM training convolution adapter does not return a decoding cache.")
+    batch_size, length, _ = x.shape
+    positions = torch.arange(length, device=x.device).expand(batch_size, -1)
+    starts = torch.zeros(batch_size * length, dtype=torch.bool, device=x.device)
+    if cu_seqlens is not None:
+        starts[cu_seqlens[:-1].long()] = True
+    first = torch.where(starts.reshape(batch_size, length), positions, 0).cummax(-1).values
+    lags = torch.arange(weight.shape[-1] - 1, -1, -1, device=x.device)
+    valid = (positions - first)[..., None] >= lags
+    windows = F.pad(x.transpose(1, 2), (weight.shape[-1] - 1, 0)).unfold(-1, weight.shape[-1], 1)
+    output = (windows * weight[:, None].to(x.dtype) * valid[:, None]).sum(-1).transpose(1, 2)
+    if activation is not None:
+        output = ACT2FN[activation](output)
+    return output, None
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d", "fla", internal_path="modules.causal_conv1d")
+def klm_causal_conv1d(
+    x, weight, activation=None, backend="triton", cu_seqlens=None, cu_seqlens_cpu=None, output_final_state=False
+):
+    return torch_klm_causal_conv1d(x, weight, activation, backend, cu_seqlens, cu_seqlens_cpu, output_final_state)
+
+
+def torch_klm_chunk_gdn2(
+    q,
+    k,
+    v,
+    g,
+    b,
+    w,
+    scale=None,
+    output_final_state=False,
+    use_qk_l2norm_in_kernel=False,
+    cu_seqlens=None,
+    cu_seqlens_cpu=None,
+):
+    """Fresh-sequence GDN-2 reference with the kernel's already-normalized operand convention."""
+    if output_final_state:
+        raise ValueError("The KLM training recurrence adapter does not return a decoding cache.")
+    batch_size, length = k.shape[:2]
+    starts = torch.zeros(batch_size * length, dtype=torch.bool, device=q.device)
+    if cu_seqlens is not None:
+        starts[cu_seqlens[:-1].long()] = True
+    output, _ = torch_recurrent_gated_delta_rule_2(
+        q,
+        k,
+        v,
+        g,
+        b,
+        w,
+        starts.reshape(batch_size, length),
+        use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+        scale=scale,
+    )
+    return output, None
+
+
+@use_kernel_func_from_hub_with_fallback("chunk_gdn2", "fla", internal_path="ops.gdn2")
+def klm_chunk_gdn2(
+    q,
+    k,
+    v,
+    g,
+    b,
+    w,
+    scale=None,
+    output_final_state=False,
+    use_qk_l2norm_in_kernel=False,
+    cu_seqlens=None,
+    cu_seqlens_cpu=None,
+):
+    return torch_klm_chunk_gdn2(
+        q, k, v, g, b, w, scale, output_final_state, use_qk_l2norm_in_kernel, cu_seqlens, cu_seqlens_cpu
+    )
+
+
 def torch_recurrent_gated_delta_rule_2(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -372,6 +517,9 @@ def torch_recurrent_gated_delta_rule_2(
     write: torch.Tensor,
     document_starts: torch.Tensor,
     initial_state: torch.Tensor | None = None,
+    *,
+    use_qk_l2norm_in_kernel: bool = True,
+    scale: float | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Computes Gated DeltaNet-2 linear attention by iterating over each token of the sequence. Each head keeps a
@@ -398,6 +546,10 @@ def torch_recurrent_gated_delta_rule_2(
             Whether each token is the first one of a document.
         initial_state (`torch.Tensor` of shape `(batch_size, num_heads, head_dim, head_dim)`, *optional*):
             The recurrent state after the previous tokens. Starts from an empty state when not given.
+        use_qk_l2norm_in_kernel (`bool`, *optional*, defaults to `True`):
+            Whether to normalize queries and keys. The FLA adapter supplies already-normalized operands.
+        scale (`float`, *optional*):
+            Query scaling, defaulting to the inverse square root of `head_dim`.
 
     Returns:
         The attention output of shape `(batch_size, sequence_length, num_heads, head_dim)` and the recurrent state
@@ -408,8 +560,9 @@ def torch_recurrent_gated_delta_rule_2(
     query, key, value, decay, erase, write = [
         x.transpose(1, 2).to(torch.float32) for x in (query, key, value, decay, erase, write)
     ]
-    query = l2norm(query, dim=-1, eps=1e-6) * head_dim**-0.5
-    key = l2norm(key, dim=-1, eps=1e-6)
+    if use_qk_l2norm_in_kernel:
+        query, key = l2norm(query, dim=-1, eps=1e-6), l2norm(key, dim=-1, eps=1e-6)
+    query = query * (head_dim**-0.5 if scale is None else scale)
     erase_key = erase * key
     write_value = write * value
     # The decay of a token that starts a document empties the state
@@ -507,6 +660,7 @@ def torch_chunk_gated_delta_rule_2(
     return torch.cat(outputs, dim=2).transpose(1, 2), recurrent_state
 
 
+@use_kernelized_func([klm_chunk_gdn2, klm_causal_conv1d])
 class KlmGatedDeltaNet(nn.Module):
     """
     Gated DeltaNet-2 linear attention: short causal convolutions on queries, keys and values, per-channel erase and
@@ -557,6 +711,8 @@ class KlmGatedDeltaNet(nn.Module):
         document_starts: torch.BoolTensor,
         conv_mask: torch.Tensor,
         cache: Cache | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        cu_seqlens_cpu: torch.Tensor | None = None,
     ) -> torch.Tensor:
         r"""
         document_starts (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):
@@ -570,19 +726,34 @@ class KlmGatedDeltaNet(nn.Module):
 
         mixed_qkv = torch.cat(
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
-        ).transpose(1, 2)
+        )
 
         recurrent_state = None
-        if cache is not None:
-            recurrent_state = cache.get_recurrent_state(self.layer_idx)
-            # Prepends the inputs cached by the previous forward, and caches the last ones for the next forward
-            mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-
-        # Causal depthwise convolution, in which no window reaches back past the start of a document
-        mixed_qkv = F.pad(mixed_qkv, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
-        mixed_qkv = mixed_qkv.unfold(-1, self.conv_kernel_size, 1)
-        mixed_qkv = (mixed_qkv * self.conv1d.weight.to(mixed_qkv.dtype) * conv_mask[:, None]).sum(dim=-1)
-        mixed_qkv = ACT2FN[self.activation](mixed_qkv).transpose(1, 2)
+        use_fla = cu_seqlens is not None and cache is None
+        if use_fla:
+            weight = self.conv1d.weight.squeeze(1).to(mixed_qkv.dtype).float()
+            with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
+                mixed_qkv, _ = klm_causal_conv1d(
+                    mixed_qkv.float().reshape(1, batch_size * seq_len, -1),
+                    weight,
+                    activation="silu" if self.activation == "swish" else self.activation,
+                    backend="triton",
+                    cu_seqlens=cu_seqlens,
+                    cu_seqlens_cpu=cu_seqlens_cpu,
+                    output_final_state=False,
+                )
+            mixed_qkv = mixed_qkv.reshape(batch_size, seq_len, -1)
+        else:
+            mixed_qkv = mixed_qkv.transpose(1, 2)
+            if cache is not None:
+                recurrent_state = cache.get_recurrent_state(self.layer_idx)
+                # Prepends the inputs cached by the previous forward, and caches the last ones for the next forward
+                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
+            # No convolution window reaches back past the start of a document.
+            mixed_qkv = F.pad(mixed_qkv, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
+            mixed_qkv = mixed_qkv.unfold(-1, self.conv_kernel_size, 1)
+            mixed_qkv = (mixed_qkv * self.conv1d.weight.to(mixed_qkv.dtype) * conv_mask[:, None]).sum(dim=-1)
+            mixed_qkv = ACT2FN[self.activation](mixed_qkv).transpose(1, 2)
         query, key, value = [x.reshape(hidden_shape) for x in mixed_qkv.split(self.qkv_dim, dim=-1)]
 
         # Log decay of every channel of the state, in float32
@@ -595,9 +766,31 @@ class KlmGatedDeltaNet(nn.Module):
         # Single token decoding iterates, anything longer is solved chunk by chunk. Always in float32.
         gated_delta_rule = torch_recurrent_gated_delta_rule_2 if seq_len == 1 else torch_chunk_gated_delta_rule_2
         with maybe_autocast(device_type=hidden_states.device.type, enabled=False):
-            output, recurrent_state = gated_delta_rule(
-                query, key, value, decay, erase, write, document_starts=document_starts, initial_state=recurrent_state
-            )
+            if use_fla:
+                query, key = l2norm(query.float(), eps=1e-6), l2norm(key.float(), eps=1e-6)
+                output, _ = klm_chunk_gdn2(
+                    *(
+                        operand.float().reshape(1, batch_size * seq_len, self.num_heads, self.head_dim).contiguous()
+                        for operand in (query, key, value, decay, erase, write)
+                    ),
+                    scale=self.head_dim**-0.5,
+                    use_qk_l2norm_in_kernel=False,
+                    output_final_state=False,
+                    cu_seqlens=cu_seqlens,
+                    cu_seqlens_cpu=cu_seqlens_cpu,
+                )
+                output = output.reshape(hidden_shape)
+            else:
+                output, recurrent_state = gated_delta_rule(
+                    query,
+                    key,
+                    value,
+                    decay,
+                    erase,
+                    write,
+                    document_starts=document_starts,
+                    initial_state=recurrent_state,
+                )
 
         if cache is not None:
             cache.update_recurrent_state(recurrent_state, self.layer_idx)
@@ -605,11 +798,6 @@ class KlmGatedDeltaNet(nn.Module):
         gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
         output = self.o_norm(output.to(hidden_states.dtype)) * torch.sigmoid(gate)
         return self.o_proj(output.reshape(batch_size, seq_len, -1))
-
-
-def normalize_residual_states(hidden_states: torch.Tensor, eps: float) -> torch.Tensor:
-    """Scales `hidden_states` to a unit root mean square in float32, the form `KlmBlockResidual` scores states in."""
-    return F.rms_norm(hidden_states.float(), (hidden_states.shape[-1],), eps=eps)
 
 
 class KlmDecoderLayer(GradientCheckpointingLayer):
@@ -633,13 +821,17 @@ class KlmDecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         residual_states: tuple[torch.Tensor, ...],
-        normalized_residual_states: tuple[torch.Tensor, ...],
+        normalized_residual_states: tuple[torch.Tensor, ...] | None,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         first_value_states: torch.Tensor | None = None,
         document_starts: torch.BoolTensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
+        use_fla: bool = False,
+        cu_seqlens: torch.Tensor | None = None,
+        cu_seqlens_cpu: torch.Tensor | None = None,
+        attention_implementation: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
@@ -656,13 +848,21 @@ class KlmDecoderLayer(GradientCheckpointingLayer):
         conv_mask (`torch.Tensor` of shape `(batch_size, sequence_length, linear_conv_kernel_dim)`, *optional*):
             Which inputs of each convolution window belong to the document of its last token.
         """
+        source_dtype = hidden_states.dtype
         residual_states = (*residual_states, hidden_states)
 
-        hidden_states = self.input_residual(residual_states, normalized_residual_states)
-        hidden_states = self.input_layernorm(hidden_states)
+        if use_fla:
+            hidden_states = self.input_residual(residual_states, use_fla=True, output_norm=self.input_layernorm)
+        else:
+            hidden_states = self.input_layernorm(self.input_residual(residual_states, normalized_residual_states))
         if self.layer_type == "linear_attention":
             attn_output = self.linear_attn(
-                hidden_states, document_starts=document_starts, conv_mask=conv_mask, cache=cache
+                hidden_states,
+                document_starts=document_starts,
+                conv_mask=conv_mask,
+                cache=cache,
+                cu_seqlens=cu_seqlens,
+                cu_seqlens_cpu=cu_seqlens_cpu,
             )
         else:
             attn_output, _, first_value_states = self.self_attn(
@@ -671,16 +871,26 @@ class KlmDecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 first_value_states=first_value_states,
                 cache=cache,
+                attention_implementation=attention_implementation,
                 **kwargs,
             )
 
         # The MLP also reads the output of the layer's own attention
-        hidden_states = self.post_attention_residual(
-            (*residual_states, attn_output),
-            (*normalized_residual_states, normalize_residual_states(attn_output, self.rms_norm_eps)),
-        )
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        if use_fla:
+            hidden_states = self.post_attention_residual(
+                (*residual_states, attn_output.to(source_dtype)),
+                use_fla=True,
+                output_norm=self.post_attention_layernorm,
+            )
+        else:
+            hidden_states = self.post_attention_residual(
+                (*residual_states, attn_output),
+                (*normalized_residual_states, normalize_residual_states(attn_output, self.rms_norm_eps)),
+            )
+            hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = attn_output + self.mlp(hidden_states)
+        if use_fla:
+            hidden_states = hidden_states.to(source_dtype)
         return hidden_states, first_value_states
 
 
@@ -693,6 +903,7 @@ class KlmPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["KlmDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_sdpa = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
     # The recurrent states of the linear attention layers cannot be rolled back
     _is_stateful = True
@@ -723,6 +934,28 @@ class KlmPreTrainedModel(PreTrainedModel):
             init.copy_(module.dt_bias, dt + torch.log(-torch.expm1(-dt)))
 
 
+def _klm_fla_capabilities_available():
+    if not is_flash_linear_attention_available():
+        return False
+    requirements = (
+        ("fla.ops.gdn2", "chunk_gdn2", {"q", "k", "v", "g", "b", "w", "cu_seqlens", "use_qk_l2norm_in_kernel"}),
+        ("fla.ops.attnres", "fused_attnres", {"residuals", "output_rms_weight", "checkpoint_level"}),
+        ("fla.modules.causal_conv1d", "causal_conv1d", {"x", "weight", "cu_seqlens", "backend"}),
+    )
+    try:
+        return all(
+            callable(function := getattr(importlib.import_module(module), name, None))
+            and parameters.issubset(inspect.signature(function).parameters)
+            for module, name, parameters in requirements
+        )
+    except Exception:
+        # Optional compiled dependencies must not prevent the portable model from loading.
+        return False
+
+
+is_klm_fla_available = _klm_fla_capabilities_available()
+
+
 def document_mask_function(first_positions: torch.Tensor, offset: int) -> Callable:
     """
     Returns the mask function that keeps a query from attending before the start of its document.
@@ -748,9 +981,55 @@ class KlmModel(KlmPreTrainedModel):
         self.norm = KlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = KlmRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self._use_fla_kernels = is_klm_fla_available
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def _can_use_fla(self, input_ids, cache):
+        return (
+            self._use_fla_kernels
+            and input_ids.device.type == "cuda"
+            and cache is None
+            and self.embed_tokens.weight.dtype == torch.float32
+            and self.config.hidden_act in ("silu", "swish")
+            and 8 <= self.config.linear_head_dim <= 256
+            and not is_torchdynamo_compiling()
+            and not is_torchdynamo_exporting()
+            # Offload hooks can materialize norm weights and move CPU sequence metadata. Keep their reference flow.
+            and not any(getattr(module, "_hf_hook", None) is not None for module in self.modules())
+        )
+
+    def _can_use_flash_attention(self, input_ids):
+        return (
+            is_flash_attention_requested(self.config)
+            and torch.is_autocast_enabled(input_ids.device.type)
+            and torch.get_autocast_dtype(input_ids.device.type) in (torch.float16, torch.bfloat16)
+        )
+
+    def _prepare_packed_inputs(self, input_ids, attention_mask, keep_padding=False):
+        """Pack complete documents, retaining original RoPE columns and gaps in a padding mask."""
+        batch_size, length = input_ids.shape
+        valid = torch.ones_like(input_ids, dtype=torch.bool) if attention_mask is None else attention_mask.bool()
+        indices = (
+            torch.arange(input_ids.numel(), device=input_ids.device)
+            if keep_padding
+            else valid.flatten().nonzero().flatten()
+        )
+        if indices.numel() == 0:
+            return None
+        starts = torch.zeros_like(input_ids, dtype=torch.bool)
+        starts[:, 0] = True
+        if self.config.eos_token_id is not None:
+            starts[:, 1:] |= input_ids[:, :-1] == self.config.eos_token_id
+        starts[:, 1:] |= valid[:, 1:] & ~valid[:, :-1]
+        packed_starts = starts.flatten()[indices].unsqueeze(0)
+        packed_starts[:, 0] = True
+        if not keep_padding:
+            packed_starts[:, 1:] |= (indices[1:] // length != indices[:-1] // length) | (
+                indices[1:] != indices[:-1] + 1
+            )
+        return input_ids.flatten()[indices].unsqueeze(0), indices % length, packed_starts, indices
 
     @merge_with_config_defaults
     @capture_outputs
@@ -776,12 +1055,33 @@ class KlmModel(KlmPreTrainedModel):
 
             With a cache, include both cached and current positions in the mask.
         """
+        if self.gradient_checkpointing and self.training and use_cache and cache is None:
+            logger.warning_once(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            use_cache = False
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
 
+        original_shape = input_ids.shape
+        capture_hidden = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
+        capture_attention = kwargs.get("output_attentions", getattr(self.config, "output_attentions", False))
+        use_fla = self._can_use_fla(input_ids, cache) and not (capture_hidden or capture_attention)
+        use_flash = use_fla and self._can_use_flash_attention(input_ids)
+        packed_indices = None
+        keep_padding = kwargs.pop("_keep_padding", False)
+        if use_flash:
+            packed = self._prepare_packed_inputs(input_ids, attention_mask, keep_padding)
+            if packed is None:
+                use_fla = use_flash = False
+            else:
+                input_ids, packed_positions, packed_starts, packed_indices = packed
+
         batch_size, seq_len = input_ids.shape
         past_seen_tokens = cache.get_seq_length() if cache is not None else 0
-        position_ids = torch.arange(seq_len, device=input_ids.device) + past_seen_tokens
+        position_ids = (
+            packed_positions if use_flash else torch.arange(seq_len, device=input_ids.device) + past_seen_tokens
+        )
 
         # A sequence can hold several documents separated by `eos_token_id`. Every document is read on its own: the
         # attention mask, the recurrent states, the convolutions and the n-grams all restart at its first token. What
@@ -794,20 +1094,24 @@ class KlmModel(KlmPreTrainedModel):
         else:
             previous_ids = document_state[:, :2, 0]
 
-        document_starts = torch.zeros_like(input_ids, dtype=torch.bool)
-        if self.config.eos_token_id is not None:
-            previous_token = torch.cat([previous_ids[:, 1:], input_ids[:, :-1]], dim=1)
-            document_starts = previous_token == self.config.eos_token_id
-        if attention_mask is not None:
-            is_token = attention_mask[:, -seq_len:].bool()
-            document_starts[:, 1:] |= is_token[:, 1:] & ~is_token[:, :-1]
-            if past_seen_tokens > 0 and attention_mask.shape[1] > seq_len:
-                document_starts[:, 0] |= is_token[:, 0] & ~attention_mask[:, -seq_len - 1].bool()
-        if document_state is None:
-            document_starts[:, 0] = True
+        if use_flash:
+            document_starts = packed_starts
+        else:
+            document_starts = torch.zeros_like(input_ids, dtype=torch.bool)
+            if self.config.eos_token_id is not None:
+                previous_token = torch.cat([previous_ids[:, 1:], input_ids[:, :-1]], dim=1)
+                document_starts = previous_token == self.config.eos_token_id
+            if attention_mask is not None:
+                is_token = attention_mask[:, -seq_len:].bool()
+                document_starts[:, 1:] |= is_token[:, 1:] & ~is_token[:, :-1]
+                if past_seen_tokens > 0 and attention_mask.shape[1] > seq_len:
+                    document_starts[:, 0] |= is_token[:, 0] & ~attention_mask[:, -seq_len - 1].bool()
+            if document_state is None:
+                document_starts[:, 0] = True
 
         # Position of the first token of the document of each token
-        first_positions = torch.where(document_starts, position_ids, -1).cummax(dim=1).values
+        sequence_positions = torch.arange(seq_len, device=input_ids.device) if use_flash else position_ids
+        first_positions = torch.where(document_starts, sequence_positions, -1).cummax(dim=1).values
         if document_state is not None:
             first_positions = torch.where(first_positions < 0, document_state[:, 2], first_positions)
 
@@ -815,27 +1119,54 @@ class KlmModel(KlmPreTrainedModel):
         ngram_embeds = self.embed_ngrams(input_ids, previous_ids, document_starts).to(inputs_embeds.dtype)
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids[None])
 
+        cu_seqlens = cu_seqlens_cpu = None
+        if use_fla:
+            offsets = document_starts.flatten().nonzero().flatten()
+            cu_seqlens = torch.cat([offsets, offsets.new_tensor([input_ids.numel()])]).to(torch.int32)
+            cu_seqlens_cpu = cu_seqlens.cpu()
+        attention_implementation = self.config._attn_implementation
+        portable_attention = capture_attention or (is_flash_attention_requested(self.config) and not use_flash)
+        if capture_attention:
+            attention_implementation = "eager"
+        elif is_flash_attention_requested(self.config) and not use_flash:
+            attention_implementation = "sdpa"
+
         # The padding mask is left out on purpose, the document starts already account for it. Rows that hold a single
         # document from their first position on only need the plain causal mask.
         and_mask_function = None
-        if (first_positions > 0).any():
+        if not use_flash and (first_positions > 0).any():
             and_mask_function = document_mask_function(first_positions, past_seen_tokens)
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=None,
-            cache=cache,
-            and_mask_function=and_mask_function,
-        )
+        if use_flash:
+            causal_mask = None
+            longest = int(cu_seqlens_cpu.diff().max())
+            kwargs.update(
+                cu_seq_lens_q=cu_seqlens, cu_seq_lens_k=cu_seqlens, max_length_q=longest, max_length_k=longest
+            )
+        else:
+            mask_config = self.config
+            if portable_attention:
+                mask_config = copy.copy(self.config)
+                mask_config._attn_implementation = attention_implementation
+            causal_mask = create_causal_mask(
+                config=mask_config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=None,
+                cache=cache,
+                and_mask_function=and_mask_function,
+            )
         # A convolution input that is `lag` tokens old is only read by tokens at least that far into their document
         lags = torch.arange(self.config.linear_conv_kernel_dim - 1, -1, -1, device=input_ids.device)
-        conv_mask = ((position_ids - first_positions)[..., None] >= lags).to(inputs_embeds.dtype)
+        conv_mask = None if use_fla else ((position_ids - first_positions)[..., None] >= lags).to(inputs_embeds.dtype)
 
         hidden_states = inputs_embeds
         residual_states = (ngram_embeds,)
         normalized_residual_states = (
-            normalize_residual_states(ngram_embeds, self.config.rms_norm_eps),
-            normalize_residual_states(inputs_embeds, self.config.rms_norm_eps),
+            None
+            if use_fla
+            else (
+                normalize_residual_states(ngram_embeds, self.config.rms_norm_eps),
+                normalize_residual_states(inputs_embeds, self.config.rms_norm_eps),
+            )
         )
         first_value_states = None
         for decoder_layer in self.layers:
@@ -849,17 +1180,31 @@ class KlmModel(KlmPreTrainedModel):
                 document_starts=document_starts,
                 conv_mask=conv_mask,
                 cache=cache,
+                use_fla=use_fla,
+                cu_seqlens=cu_seqlens,
+                cu_seqlens_cpu=cu_seqlens_cpu,
+                attention_implementation=attention_implementation,
                 **kwargs,
             )
             residual_states = (*residual_states, hidden_states)
             hidden_states, first_value_states = layer_outputs
-            normalized_residual_states = (
-                *normalized_residual_states,
-                normalize_residual_states(hidden_states, self.config.rms_norm_eps),
-            )
+            if not use_fla:
+                normalized_residual_states = (
+                    *normalized_residual_states,
+                    normalize_residual_states(hidden_states, self.config.rms_norm_eps),
+                )
 
-        hidden_states = self.output_residual((*residual_states, hidden_states), normalized_residual_states)
-        hidden_states = self.norm(hidden_states)
+        if use_fla:
+            hidden_states = self.output_residual(
+                (*residual_states, hidden_states), use_fla=True, output_norm=self.norm
+            )
+        else:
+            hidden_states = self.norm(
+                self.output_residual((*residual_states, hidden_states), normalized_residual_states)
+            )
+        if packed_indices is not None:
+            padded = hidden_states.new_zeros(original_shape.numel(), hidden_states.shape[-1])
+            hidden_states = padded.index_copy(0, packed_indices, hidden_states.squeeze(0)).view(*original_shape, -1)
 
         if cache is not None:
             previous_ids = torch.cat([previous_ids, input_ids], dim=1)[:, -2:]
@@ -932,12 +1277,31 @@ class KlmForCausalLM(KlmPreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=20)
         >>> text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
+        model_kwargs = kwargs
+        if (
+            attention_mask is not None
+            and self.model._can_use_fla(input_ids, cache)
+            and self.model._can_use_flash_attention(input_ids)
+        ):
+            # A padding-position logit can still predict a supervised next token (notably with left padding).
+            # Keep those positions' context instead of replacing their hidden states with the unpadding fill value.
+            model_kwargs = dict(kwargs)
+            shift_labels = kwargs.get("shift_labels")
+            if labels is None:
+                # External loss functions (including Trainer's label smoother) may use padding-position logits.
+                model_kwargs["_keep_padding"] = True
+            else:
+                if shift_labels is None:
+                    supervised_padding = ~attention_mask[:, :-1].bool() & labels[:, 1:].ne(-100)
+                else:
+                    supervised_padding = ~attention_mask.bool() & shift_labels.ne(-100)
+                model_kwargs["_keep_padding"] = bool(supervised_padding.any())
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             cache=cache,
             use_cache=use_cache,
-            **kwargs,
+            **model_kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
