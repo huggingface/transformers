@@ -307,9 +307,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             torch_accel = getattr(torch, torch_device)
             per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
             cls.max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-            cls.max_memory["cpu"] = (
-                f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
-            )
+            cls.max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
 
     @classmethod
     def get_model(cls):
