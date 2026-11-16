@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-11-09.*
+*This model was published in HF papers on 2025-06-12 and contributed to Hugging Face Transformers on 2026-11-16.*
 
 # WeatherNext 2
 
@@ -50,6 +50,15 @@ frames six hours apart, on the checkpoint's grid with ascending latitude and the
 Include the static fields `geopotential_at_surface` and `land_sea_mask`, and all configured input variables.
 [`~WeatherNext2FeatureExtractor.compute_forcings`] derives the clock forcings; they do not need fetching.
 
+```python
+import numpy as np
+from transformers import WeatherNext2FeatureExtractor
+
+processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext2-mini")
+conditioning_times = np.array([["2024-10-06T18:00", "2024-10-07T00:00"]], dtype="datetime64[s]").astype(np.int64)
+forcings = processor.compute_forcings(conditioning_times)
+```
+
 ## Usage
 
 [`WeatherNext2FeatureExtractor`] normalizes physical inputs, derives forecast-time forcings, and decodes predictions
@@ -57,7 +66,11 @@ back into physical units. It accepts NumPy arrays or tensors and returns PyTorch
 
 The example below downloads the 1° HRES sample from the
 [official demo](https://github.com/google-deepmind/weathernext/blob/main/docs/weathernext2/wn2_demo.ipynb), also used
-by Earth2Studio. Install `h5netcdf` and `xarray` to read it.
+by Earth2Studio. Install the dependencies to read it:
+
+```bash
+pip install h5netcdf xarray
+```
 
 ```python
 from urllib.parse import quote
@@ -66,6 +79,7 @@ import numpy as np
 import torch
 import xarray
 from transformers import WeatherNext2FeatureExtractor, WeatherNext2ForWeatherForecasting
+
 
 def load_example(processor, resolution):
     """Downloads an HRES sample and returns the conditioning state and the valid time of the first forecast."""
@@ -103,7 +117,7 @@ inputs = processor(
 with torch.no_grad():
     outputs = model(**inputs)
 
-forecast = processor.postprocess(outputs.prediction, state)
+forecast = processor.postprocess_forecasts(outputs.prediction, state)
 print(forecast["2m_temperature"].shape)  # torch.Size([1, 181, 360])
 ```
 
@@ -111,7 +125,7 @@ print(forecast["2m_temperature"].shape)  # torch.Size([1, 181, 360])
 
 Each member is one draw of the 32-dimensional noise vector through the same weights, so an ensemble is a batch.
 [`~WeatherNext2GenerationMixin.generate`] builds it: `num_members` repeats every initial condition and gives each member
-its own noise.
+its own noise. By default, all members run together in one forward pass per forecast step.
 
 ```python
 outputs = model.generate(
@@ -165,9 +179,7 @@ radii, alongside the weather fields. It uses the 0.25° HRES sample rather than 
 and `load_example` from [Usage](#usage), the following generates one 6-hour forecast in physical units:
 
 ```python
-model = WeatherNext2ForWeatherForecasting.from_pretrained(
-    "kashif/weathernext-cyclones", device_map="auto", attn_implementation="flex_attention"
-)
+model = WeatherNext2ForWeatherForecasting.from_pretrained("kashif/weathernext-cyclones", device_map="auto")
 processor = WeatherNext2FeatureExtractor.from_pretrained("kashif/weathernext-cyclones")
 state, valid_time = load_example(processor, resolution="0.25")
 
@@ -176,7 +188,7 @@ inputs = processor(
 ).to(device=model.device, dtype=model.dtype)
 with torch.no_grad():
     outputs = model(**inputs)
-forecast = processor.postprocess(outputs.prediction, state)
+forecast = processor.postprocess_forecasts(outputs.prediction, state)
 print(forecast["cyclone_exists_gaussian_unit_mode"].shape)  # torch.Size([1, 721, 1440])
 ```
 
@@ -242,7 +254,7 @@ model = WeatherNext2ForWeatherForecasting.from_pretrained(
 
 [[autodoc]] WeatherNext2FeatureExtractor
     - __call__
-    - postprocess
+    - postprocess_forecasts
     - advance_state
     - compute_forcings
 
