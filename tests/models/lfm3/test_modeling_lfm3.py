@@ -108,7 +108,7 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
                 altered_last = model(input_ids=altered, use_cache=False).logits[:, -1]
                 cached = model(
                     input_ids=input_ids[:, -1:],
-                    past_key_values=model(input_ids=input_ids[:, :-1], use_cache=True).past_key_values,
+                    cache=model(input_ids=input_ids[:, :-1], use_cache=True).cache,
                 ).logits[:, -1]
             # the first token is far outside the sliding window and the conv taps: only full attention can see it
             self.assertFalse(torch.allclose(last, altered_last, rtol=1e-4, atol=1e-4), layer_types)
