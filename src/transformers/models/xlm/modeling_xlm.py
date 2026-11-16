@@ -39,6 +39,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_xlm import XLMConfig
 
 
@@ -87,28 +88,28 @@ def get_masks(slen, lengths, causal, padding_mask=None):
 @dataclass
 class XLMSquadHeadOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
         Classification loss as the sum of start token, end token (and is_impossible if provided) classification
         losses.
-    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    start_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top config.start_n_top start token possibilities (beam-search).
     start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top config.start_n_top start token possibilities (beam-search).
-    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    end_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
         (beam-search).
     end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    cls_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the `is_impossible` label of the answers.
     """
 
-    loss: torch.FloatTensor | None = None
-    start_top_log_probs: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    start_top_log_probs: torch.Tensor | None = None
     start_top_index: torch.LongTensor | None = None
-    end_top_log_probs: torch.FloatTensor | None = None
+    end_top_log_probs: torch.Tensor | None = None
     end_top_index: torch.LongTensor | None = None
-    cls_logits: torch.FloatTensor | None = None
+    cls_logits: torch.Tensor | None = None
 
 
 class XLMPoolerStartLogits(nn.Module):
@@ -124,17 +125,17 @@ class XLMPoolerStartLogits(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
 
-    def forward(self, hidden_states: torch.FloatTensor, p_mask: torch.FloatTensor | None = None) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, p_mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
         Returns:
-            `torch.FloatTensor`: The start logits for SQuAD.
+            `torch.Tensor`: The start logits for SQuAD.
         """
         x = self.dense(hidden_states).squeeze(-1)
 
@@ -166,20 +167,20 @@ class XLMPoolerEndLogits(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        start_states: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
-        p_mask: torch.FloatTensor | None = None,
-    ) -> torch.FloatTensor:
+        p_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
@@ -191,7 +192,7 @@ class XLMPoolerEndLogits(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The end logits for SQuAD.
+            `torch.Tensor`: The end logits for SQuAD.
         """
         assert start_states is not None or start_positions is not None, (
             "One of start_states, start_positions should be not None"
@@ -233,16 +234,16 @@ class XLMPoolerAnswerClass(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        start_states: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         cls_index: torch.LongTensor | None = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
@@ -257,7 +258,7 @@ class XLMPoolerAnswerClass(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The SQuAD 2.0 answer class.
+            `torch.Tensor`: The SQuAD 2.0 answer class.
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
@@ -303,16 +304,16 @@ class XLMSQuADHead(nn.Module):
     @auto_docstring
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         cls_index: torch.LongTensor | None = None,
         is_impossible: torch.LongTensor | None = None,
-        p_mask: torch.FloatTensor | None = None,
+        p_mask: torch.Tensor | None = None,
         return_dict: bool = False,
-    ) -> XLMSquadHeadOutput | tuple[torch.FloatTensor]:
+    ) -> XLMSquadHeadOutput | tuple[torch.Tensor]:
         r"""
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+        hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
             Final hidden states of the model on the sequence tokens.
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Positions of the first token for the labeled span.
@@ -322,7 +323,7 @@ class XLMSQuADHead(nn.Module):
             Position of the CLS token for each sentence in the batch. If `None`, takes the last token.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Whether the question has a possible answer in the paragraph or not.
-        p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+        p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
             Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
             should be masked.
         """
@@ -448,20 +449,18 @@ class XLMSequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: torch.LongTensor | None = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -507,6 +506,7 @@ class MultiHeadAttention(nn.Module):
         self.v_lin = nn.Linear(dim, dim)
         self.out_lin = nn.Linear(dim, dim)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input,
@@ -531,17 +531,17 @@ class MultiHeadAttention(nn.Module):
                 is_updated = cache.is_updated.get(self.layer_id)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = cache.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = cache.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = cache
+                curr_cache = cache
 
         current_states = kv if is_cross_attention else input
         if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            k = curr_past_key_values.key_cache[self.layer_id]
-            v = curr_past_key_values.value_cache[self.layer_id]
+            k = curr_cache.key_cache[self.layer_id]
+            v = curr_cache.value_cache[self.layer_id]
         else:
             k = self.k_lin(current_states)
             v = self.v_lin(current_states)
@@ -550,7 +550,7 @@ class MultiHeadAttention(nn.Module):
 
             if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                k, v = curr_past_key_values.update(k, v, self.layer_id)
+                k, v = curr_cache.update(k, v, self.layer_id, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
                     cache.is_updated[self.layer_id] = True
@@ -639,35 +639,35 @@ class XLMPreTrainedModel(PreTrainedModel):
 @dataclass
 class XLMForQuestionAnsweringOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
         Classification loss as the sum of start token, end token (and is_impossible if provided) classification
         losses.
-    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    start_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top config.start_n_top start token possibilities (beam-search).
     start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top config.start_n_top start token possibilities (beam-search).
-    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    end_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
         (beam-search).
     end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    cls_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the `is_impossible` label of the answers.
     """
 
-    loss: torch.FloatTensor | None = None
-    start_top_log_probs: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    start_top_log_probs: torch.Tensor | None = None
     start_top_index: torch.LongTensor | None = None
-    end_top_log_probs: torch.FloatTensor | None = None
+    end_top_log_probs: torch.Tensor | None = None
     end_top_index: torch.LongTensor | None = None
-    cls_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    cls_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 class XLMModel(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         # encoder / decoder, output layer
@@ -763,7 +763,7 @@ class XLMModel(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -915,7 +915,7 @@ class XLMPredLayer(nn.Module):
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
@@ -987,7 +987,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1038,7 +1038,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     """
 )
 class XLMForSequenceClassification(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1079,7 +1079,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -1144,7 +1144,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     """
 )
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         self.transformer = XLMModel(config)
@@ -1184,7 +1184,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -1243,7 +1243,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForQuestionAnswering(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         self.transformer = XLMModel(config)
@@ -1286,7 +1286,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         is_impossible (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1294,7 +1294,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the classification token to use as input for computing plausibility of the
             answer.
-        p_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        p_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
 
@@ -1361,7 +1361,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForTokenClassification(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1402,7 +1402,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
         """
@@ -1446,7 +1446,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForMultipleChoice(XLMPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: XLMConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.transformer = XLMModel(config)
@@ -1506,10 +1506,10 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.Tensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.

@@ -797,6 +797,10 @@ def convert_to_rgb(
         if num_channels == 1:
             image_rgb = np.repeat(image, 3, axis=-1)
         elif num_channels == 4:
+            if np.issubdtype(image.dtype, np.floating) and (image.min() < 0.0 or image.max() > 1.0):
+                raise ValueError(
+                    f"The image to be converted to RGB contains values outside the range [0, 1], got [{image.min()}, {image.max()}]."
+                )
             white = 255 if np.issubdtype(image.dtype, np.integer) else 1.0
             alpha = image[..., 3:4] / white
             composite = alpha * image[..., :3] + (1 - alpha) * white  # blend onto white

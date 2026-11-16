@@ -267,52 +267,52 @@ class Sam2ImageProcessor(SamImageProcessor):
 @dataclass
 class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_hidden_states (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_position_encoding (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
-    fpn_hidden_states: torch.FloatTensor | None = None
-    fpn_position_encoding: torch.FloatTensor | None = None
+    fpn_hidden_states: torch.Tensor | None = None
+    fpn_position_encoding: torch.Tensor | None = None
 
 
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
 @dataclass
 class Sam2ImageSegmentationOutput(ModelOutput):
     r"""
-    iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
+    iou_scores (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks)`):
         The Intersection over Union (IoU) scores of the predicted masks.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
+    object_score_logits (`torch.Tensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
-    image_embeddings (`tuple(torch.FloatTensor)`):
-        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.FloatTensor` where each
+    image_embeddings (`tuple(torch.Tensor)`):
+        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.Tensor` where each
         tensor has shape `(batch_size, channels, height, width)`.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
+    vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
         Hidden-states of the vision model at the output of each stage.
-    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    vision_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the vision model.
-    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    mask_decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor | None = None
-    pred_masks: torch.FloatTensor | None = None
-    object_score_logits: torch.FloatTensor | None = None
-    image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
-    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
+    iou_scores: torch.Tensor | None = None
+    pred_masks: torch.Tensor | None = None
+    object_score_logits: torch.Tensor | None = None
+    image_embeddings: tuple[torch.Tensor, ...] = None
+    vision_hidden_states: tuple[torch.Tensor, ...] | None = None
+    vision_attentions: tuple[torch.Tensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class Sam2PatchEmbeddings(nn.Module):
@@ -320,12 +320,12 @@ class Sam2PatchEmbeddings(nn.Module):
     Turns pixel values into patch embeddings for transformer consumption.
 
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`Sam2ImageProcessor.__call__`] for details.
 
     Returns:
-        embeddings (`torch.FloatTensor`):
+        embeddings (`torch.Tensor`):
             Patch embeddings depend on image_size, patch_kernel_size, patch_stride and patch_padding
     """
 
@@ -563,7 +563,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states  # batch_size, height, width, channel
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -611,16 +611,16 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
 @dataclass
 class Sam2HieraDetModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, height, width, hidden_size)`):
         hidden-states at the output of the last layer of the model.
-    intermediate_hidden_states (`tuple[torch.FloatTensor]` of shape `(batch_size, height, width, hidden_size)`):
+    intermediate_hidden_states (`tuple[torch.Tensor]` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the intermediate layers of the model.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: tuple[torch.Tensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -704,7 +704,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
     @capture_outputs
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam2HieraDetModelOutput:
         if pixel_values is None:
@@ -756,7 +756,7 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam2VisionEncoderOutput:
         if pixel_values is None:
@@ -1187,14 +1187,14 @@ class Sam2Model(SamModel):
     @torch.no_grad()
     def get_image_embeddings(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
@@ -1216,11 +1216,11 @@ class Sam2Model(SamModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam2VisionEncoderOutput:
         r"""
-        pixel_values (`torch.FloatTensor`):
+        pixel_values (`torch.Tensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam2VisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
@@ -1250,19 +1250,19 @@ class Sam2Model(SamModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
-        input_points: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        input_points: torch.Tensor | None = None,
         input_labels: torch.LongTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_masks: torch.LongTensor | None = None,
-        image_embeddings: torch.FloatTensor | None = None,
+        image_embeddings: torch.Tensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: torch.FloatTensor | None = None,
-        target_embedding: torch.FloatTensor | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam2ImageSegmentationOutput:
         r"""
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+        input_points (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
             better results. The points can be obtained by passing a list of list of list to the processor that will
             create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
@@ -1285,7 +1285,7 @@ class Sam2Model(SamModel):
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
 
             The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
@@ -1296,11 +1296,11 @@ class Sam2Model(SamModel):
             - `y1`: the y coordinate of the top left point of the input box
             - `x2`: the x coordinate of the bottom right point of the input box
             - `y2`: the y coordinate of the bottom right point of the input box
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+        input_masks (`torch.Tensor` of shape `(batch_size, image_size, image_size)`):
             SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
             generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
             manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+        image_embeddings (`torch.Tensor` of shape `(batch_size, output_channels, window_size, window_size)`):
             Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
@@ -1308,10 +1308,10 @@ class Sam2Model(SamModel):
             In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
-        attention_similarity (`torch.FloatTensor`, *optional*):
+        attention_similarity (`torch.Tensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
+        target_embedding (`torch.Tensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
 

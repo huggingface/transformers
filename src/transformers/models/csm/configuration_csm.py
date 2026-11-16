@@ -46,7 +46,7 @@ class CsmDepthDecoderConfig(PreTrainedConfig):
 
     model_type = "csm_depth_decoder_model"
     base_config_key = "depth_decoder_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "codebook_size": "vocab_size",
     }
@@ -121,7 +121,7 @@ class CsmConfig(PreTrainedConfig):
 
     model_type = "csm"
     base_config_key = "csm_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 500000.0
     sub_configs_defaults = {
         "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="mimi"),

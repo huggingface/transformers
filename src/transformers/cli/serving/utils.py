@@ -237,6 +237,7 @@ def build_response_parser(
     processor,
     model: "PreTrainedModel",
     input_ids,
+    tools=None,
 ) -> "ResponseParser | None":
     """Build a streaming :class:`ResponseParser` for the current generation.
 
@@ -253,7 +254,7 @@ def build_response_parser(
     if template is None:
         return None
     tokenizer = getattr(processor, "tokenizer", processor)
-    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids))
+    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools)
 
 
 def _normalize_tool_call(value: dict) -> ToolCall:
@@ -293,6 +294,7 @@ def parse_assistant_message(
     generated_ids,
     input_ids,
     cleaned_content: str = "",
+    tools=None,
 ) -> tuple[str, str | None, list[ToolCall] | None]:
     """Parse a full assistant message into ``(content, reasoning, tool_calls)``.
 
@@ -308,7 +310,9 @@ def parse_assistant_message(
     if template is None:
         return cleaned_content, None, None
     tokenizer = getattr(processor, "tokenizer", processor)
-    parsed = tokenizer.parse_response(generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids))
+    parsed = tokenizer.parse_response(
+        generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools
+    )
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")

@@ -20,7 +20,7 @@ import warnings
 import numpy as np
 import pytest
 
-from transformers.image_utils import load_image
+from transformers.image_utils import get_image_size, load_image, to_numpy_array
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -48,6 +48,13 @@ class VitMatteImageProcessingTester(ImageProcessingTester):
         kwargs.setdefault("size_divisor", 10)
 
         super().__init__(**kwargs)
+
+    def prepare_processor_inputs(self, **kwargs):
+        inputs = super().prepare_processor_inputs(**kwargs)
+        inputs["trimaps"] = [
+            np.random.randint(0, 3, size=get_image_size(to_numpy_array(image))) for image in inputs["images"]
+        ]
+        return inputs
 
 
 @require_torch
