@@ -39,16 +39,13 @@ if is_torch_available():
         Exaone4_5_ForConditionalGeneration,
         Exaone4_5_Model,
         Exaone4_5_Processor,
-        Exaone4_5_VisionConfig,
-        Exaone4Config,
     )
 
 
 class Exaone4_5_ModelTester(VLMModelTester):
     base_model_class = Exaone4_5_Model
     config_class = Exaone4_5_Config
-    text_config_class = Exaone4Config
-    vision_config_class = Exaone4_5_VisionConfig
+
     conditional_generation_class = Exaone4_5_ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -56,9 +53,9 @@ class Exaone4_5_ModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("vision_start_token_id", 5)
         kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
@@ -86,7 +83,7 @@ class Exaone4_5_ModelTester(VLMModelTester):
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
     def get_config(self):
         config = super().get_config()

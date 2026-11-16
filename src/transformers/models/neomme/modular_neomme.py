@@ -697,18 +697,18 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
 @dataclass
 class NeoMMEForRetrievalOutput(BaseModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Retrieval loss. This value is always `None`.
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
         Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Score them with MeanMaxSim.
-    dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
+    dense_embeddings (`torch.Tensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
         A normalized mean-pooled embedding for each input. When `dense_dim` is set, the last dimension is `dense_dim`.
         Score them with cosine similarity.
     """
 
-    loss: torch.FloatTensor | None = None
-    embeddings: torch.FloatTensor | None = None
-    dense_embeddings: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    embeddings: torch.Tensor | None = None
+    dense_embeddings: torch.Tensor | None = None
 
 
 class NeoMMEMultiVectorHead(nn.Module):

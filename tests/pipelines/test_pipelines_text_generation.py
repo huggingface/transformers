@@ -303,6 +303,67 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @require_torch
+    def test_small_chat_model_forwards_tool_schema(self):
+        text_generator = pipeline(
+            "text-generation",
+            model="hf-internal-testing/tiny-gpt2-with-chatml-template",
+        )
+        text_generator.tokenizer.chat_template = (
+            "{% for m in messages %}"
+            "{{ '<|im_start|>' + m['role'] + '\n' + m['content'] + '<|im_end|>\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\n<tool_call>\n<function=set_alarm>\n'"
+            " + '<parameter=hour>7</parameter>\n'"
+            " + '<parameter=enabled>false</parameter>\n'"
+            " + '</function>\n</tool_call>' }}"
+            "{% endif %}"
+        )
+        text_generator.tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<|im_start|>assistant\n",
+            "fields": {
+                "tool_calls": {
+                    "open_pattern": r"<tool_call>\s*<function=(?P<name>\w+)>",
+                    "close": "</tool_call>",
+                    "repeats": True,
+                    "content": "xml-inline",
+                    "content_args": {"tag_pattern": r"<parameter=(?P<key>\w+)>\s*(?P<value>.*?)\s*</parameter>"},
+                    "transform": {
+                        "type": "function",
+                        "function": {
+                            "name": "{name}",
+                            "arguments": "{content}",
+                        },
+                    },
+                }
+            },
+        }
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "set_alarm",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "hour": {"type": "integer"},
+                            "enabled": {"type": "boolean"},
+                        },
+                    },
+                },
+            }
+        ]
+        result = text_generator(
+            [{"role": "user", "content": "Set alarm"}],
+            tools=tools,
+            do_sample=False,
+            max_new_tokens=1,
+        )
+        arguments = result[0]["generated_text"][-1]["tool_calls"][0]["function"]["arguments"]
+        self.assertEqual(arguments, {"hour": 7, "enabled": False})
+
+    @require_torch
     def test_return_full_text_false_with_chat_template(self):
         """Regression test for #45854: return_full_text=False must not include prompt when using chat template."""
         text_generator = pipeline(
@@ -663,6 +724,42 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+    def test_return_dict_in_generate_batched_metadata(self):
+        generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
+        generator.tokenizer.pad_token = generator.tokenizer.eos_token
+        generator.tokenizer.padding_side = "left"
+        texts = ["Artificial intelligence is", "Hello world"]
+        args = {"return_dict_in_generate": True, "output_scores": True, "do_sample": False}
+
+        greedy = generator(texts, batch_size=2, **args)
+        self.assertTrue(all("scores" in group[0] for group in greedy))
+
+        beam_args = dict(args, num_beams=3, num_return_sequences=2)
+        inputs = generator.tokenizer(texts, padding=True, return_tensors="pt").to(generator.model.device)
+        direct = generator.model.generate(**inputs, max_new_tokens=2, **beam_args)
+        outputs = generator(texts, batch_size=2, **beam_args)
+        for i, group in enumerate(outputs):
+            self.assertEqual(len(group), 2)
+            for j, candidate in enumerate(group):
+                self.assertIn("beam_indices", candidate)
+                self.assertAlmostEqual(
+                    candidate["sequences_scores"], direct.sequences_scores[i * 2 + j].item(), places=4
+                )
+
+        single = generator(texts, batch_size=2, **dict(args, num_beams=3, num_return_sequences=1))
+        self.assertTrue(all(isinstance(group[0]["sequences_scores"], float) for group in single))
+        self.assertTrue(all(isinstance(group[0]["beam_indices"], list) for group in single))
+
+        sampled = generator(
+            texts,
+            batch_size=2,
+            num_return_sequences=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+            do_sample=True,
+        )
+        self.assertTrue(all("scores" in record for group in sampled for record in group))
 
     @require_torch
     def test_pipeline_assisted_generation(self):

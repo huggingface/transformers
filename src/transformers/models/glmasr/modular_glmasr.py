@@ -23,8 +23,9 @@ from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -34,7 +35,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
-from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
+from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..glm.modeling_glm import GlmRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
@@ -46,9 +47,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
 @requires(backends=("torch",))
@@ -94,7 +92,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         tokenize: bool = True,
-        **kwargs: Unpack[GlmAsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
@@ -201,6 +199,7 @@ class GlmAsrAttention(LlamaAttention):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
+    @no_inherit_decorator
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -353,7 +352,7 @@ class GlmAsrModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -390,15 +389,16 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         self.model = GlmAsrModel(config)
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -432,7 +432,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
@@ -440,6 +440,8 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
             **kwargs,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"GlmAsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "GlmAsrEncoder",

@@ -206,12 +206,12 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         Converts the box parameterization predicted by the bbox heads into normalized corner coordinates.
 
         Args:
-            pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+            pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
                 Boxes as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` in sigmoid space, with the corner offsets
                 shifted by `+0.5`.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_queries, 4, 2)`: The four corners in top-left, top-right,
+            `torch.Tensor` of shape `(batch_size, num_queries, 4, 2)`: The four corners in top-left, top-right,
             bottom-right, bottom-left order, normalized to `[0, 1]`.
         """
         num_coords = pred_boxes.shape[-1]

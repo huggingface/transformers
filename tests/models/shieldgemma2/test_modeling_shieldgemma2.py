@@ -18,9 +18,7 @@ import unittest
 
 from transformers import (
     BitsAndBytesConfig,
-    Gemma3TextConfig,
     ShieldGemma2Config,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -49,8 +47,6 @@ if is_torch_available():
 
 class ShieldGemma2ModelTester(VLMModelTester):
     config_class = ShieldGemma2Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
 
     if is_torch_available():
         base_model_class = Gemma3Model
@@ -74,8 +70,7 @@ class ShieldGemma2ModelTester(VLMModelTester):
         kwargs.setdefault("num_channels", 3)
         kwargs.setdefault("mm_tokens_per_image", 4)
         kwargs.setdefault("num_image_tokens", kwargs["mm_tokens_per_image"])
-        kwargs.setdefault("image_token_index", 0)
-        kwargs.setdefault("image_token_id", kwargs["image_token_index"])
+        kwargs.setdefault("image_token_id", 0)
         kwargs.setdefault("tie_word_embeddings", True)
         kwargs.setdefault("pad_token_id", 1)
         kwargs.setdefault("eos_token_id", 2)
@@ -87,7 +82,7 @@ class ShieldGemma2ModelTester(VLMModelTester):
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {
-            self.image_token_index,
+            self.image_token_id,
             self.yes_token_index,
             self.no_token_index,
         }
@@ -97,9 +92,6 @@ class ShieldGemma2ModelTester(VLMModelTester):
         config.yes_token_index = self.yes_token_index
         config.no_token_index = self.no_token_index
         return config
-
-    def create_attention_mask(self, input_ids):
-        return input_ids.ne(self.pad_token_id).to(torch_device)
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         token_type_ids = torch.zeros_like(input_ids)

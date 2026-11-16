@@ -35,6 +35,7 @@ from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
 )
+from transformers.processing_utils import ImagesKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -975,7 +976,7 @@ class ImageProcessingTestMixin:
             "aria", "beit", "bit", "blip", "bridgetower", "chameleon", "chinese_clip",
             "clip", "cohere2_vision", "conditional_detr", "convnext", "deepseek_vl",
             "deepseek_vl_hybrid", "deformable_detr", "deit", "depth_pro", "detr",
-            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "eomt",
+            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "emu3", "eomt",
             "flava", "fuyu", "gemma3", "glm4v", "glpn", "got_ocr2", "grounding_dino",
             "idefics", "idefics2", "idefics3", "imagegpt", "janus", "kosmos2_5",
             "layoutlmv2", "layoutlmv3", "levit", "superglue", "lightglue", "llama4",
@@ -1063,6 +1064,16 @@ class ImageProcessingTestMixin:
                         f"`{method_name}`, add the `{mixin_class.__name__}` inheritance instead."
                     ),
                 )
+
+    def test_valid_kwargs_set(self):
+        """Check that valid_kwargs is set to the correct class."""
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class(**self.image_processor_dict)
+            processor_module = sys.modules[processor.__class__.__module__]
+            expected_kwargs_class = vars(processor_module).get(
+                f"{processor.__class__.__name__.removesuffix('Pil')}Kwargs", ImagesKwargs
+            )
+            self.assertIs(processor.valid_kwargs, expected_kwargs_class)
 
 
 class PostProcessSemanticSegmentationTestMixin:

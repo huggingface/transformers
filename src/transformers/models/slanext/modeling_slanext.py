@@ -185,9 +185,9 @@ class SLANeXtAttentionGRUCell(nn.Module):
 
     def forward(
         self,
-        prev_hidden: torch.FloatTensor,
-        batch_hidden: torch.FloatTensor,
-        char_onehots: torch.FloatTensor,
+        prev_hidden: torch.Tensor,
+        batch_hidden: torch.Tensor,
+        char_onehots: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_hidden_proj = self.input_to_hidden(batch_hidden)
@@ -275,11 +275,11 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
 @dataclass
 class SLANeXtVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: torch.FloatTensor | None = None
+    image_embeds: torch.Tensor | None = None
 
 
 class SLANeXtMLPBlock(nn.Module):
@@ -359,7 +359,7 @@ class SLANeXtVisionLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states[:, :height, :width, :].contiguous()
         return hidden_states
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
         # Window partition
@@ -503,7 +503,7 @@ class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SLANeXtVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -567,7 +567,7 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
     @filter_output_hidden_states
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -599,14 +599,14 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
 @dataclass
 class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
-    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+    head_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Hidden-states of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
-    head_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+    head_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Attentions of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` attentions (depending on early exits).
     """
 
-    head_hidden_states: torch.FloatTensor | None = None
-    head_attentions: torch.FloatTensor | None = None
+    head_hidden_states: torch.Tensor | None = None
+    head_attentions: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -625,8 +625,8 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.Tensor] | SLANeXtForTableRecognitionOutput:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         head_outputs = self.head(backbone_outputs.last_hidden_state, **kwargs)
         return SLANeXtForTableRecognitionOutput(

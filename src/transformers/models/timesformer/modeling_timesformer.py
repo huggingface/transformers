@@ -479,12 +479,12 @@ class TimesformerModel(TimesformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
+    ) -> tuple[torch.Tensor] | BaseModelOutput:
         r"""
         Examples:
 

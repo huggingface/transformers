@@ -1,5 +1,5 @@
-# Who reviews what. Read by the `Assign PR Reviewers` workflow, and checked against this tree by
-# `utils/check_reviewers.py`. See the "Reviewer assignment" section of docs/source/en/pr_checks.md.
+# Who reviews what. Checked against this tree by `utils/check_reviewers.py`. See the "Reviewer
+# assignment" section of docs/source/en/pr_checks.md.
 #
 # Keep this file outside src/, tests/, docs/ and utils/. The PR CI security gate only lets a PR
 # from a non-collaborator touch those four directories, and that is the whole reason a fork cannot

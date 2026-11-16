@@ -533,7 +533,7 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
             trainer = get_regression_trainer(
                 per_device_train_batch_size=1,
                 learning_rate=0.1,
-                gradient_checkpointing=True,
+                activation_checkpointing=True,
                 output_dir=tmp_dir,
             )
             previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
@@ -546,6 +546,28 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
                     torch.allclose(previous_params[k], v, rtol=1e-4, atol=1e-4),
                     f"Model weights for {k} have not been updated",
                 )
+
+    def test_gradient_checkpointing_on_a_model_outside_pretrained_model(self):
+        # A model that is not a `PreTrainedModel` and only defines the deprecated `gradient_checkpointing_enable`
+        # (e.g. sentence-transformers) is still enabled through it until v6
+        class Model(RegressionModel):
+            def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, **kwargs):
+                self.checkpointing_kwargs = gradient_checkpointing_kwargs
+
+        model = Model()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                activation_checkpointing=True,
+                activation_checkpointing_kwargs={"use_reentrant": False},
+                max_steps=1,
+                report_to="none",
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=RegressionDataset())
+            with self.assertWarnsRegex(FutureWarning, "only defines `gradient_checkpointing_enable`"):
+                trainer.train()
+
+        self.assertEqual(model.checkpointing_kwargs, {"use_reentrant": False})
 
 
 # ---------------------------------------------------------------------------

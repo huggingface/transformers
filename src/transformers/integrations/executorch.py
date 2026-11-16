@@ -570,13 +570,13 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for layer in self.static_cache.layers:
             layer.cumulative_length.copy_(cache_position[0])
 
-        past_key_values = self.static_cache
+        cache = self.static_cache
 
         outs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=True,
         )
         if hasattr(outs, "logits"):
@@ -746,7 +746,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
-            past_key_values=self.cache,
+            cache=self.cache,
             use_cache=True,
         )
 
@@ -867,7 +867,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=self.cache,
+            cache=self.cache,
             use_cache=True,
         )
 
@@ -1043,7 +1043,7 @@ def export_with_dynamic_cache(
             {
                 "input_ids": example_input_ids,
                 "attention_mask": example_attention_mask,
-                "past_key_values": DynamicCache(config=model.config),
+                "cache": DynamicCache(config=model.config),
                 "use_cache": True,
             },
             strict=False,
