@@ -52,7 +52,6 @@ class Lfm2Config(PreTrainedConfig):
     """
 
     model_type = "lfm2"
-    # Only the embedding is sharded for now, on the vocab like the `lm_head` that can be tied to it
     base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0

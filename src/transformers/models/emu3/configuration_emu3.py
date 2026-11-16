@@ -93,7 +93,6 @@ class Emu3TextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "emu3_text_model"
-    # Only the embedding is sharded for now, on the vocab like the `lm_head` that can be tied to it
     base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     base_config_key = "text_config"
     keys_to_ignore_at_inference = ["cache"]
