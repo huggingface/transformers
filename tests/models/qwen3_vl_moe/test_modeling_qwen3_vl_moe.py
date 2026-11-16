@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -297,31 +298,32 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         cls.model = None
         cls.offload_dir = None
 
+    @staticmethod
+    def get_max_memory():
+        # device_map="auto" fills GPUs to ~100%, leaving no room for the transpose temporary
+        # buffer that fuses per-expert weight shards into a single gate_up_proj tensor during
+        # from_pretrained — causing CUDA OOM on multi-GPU runners. A 70% per-GPU max_memory cap
+        # reserves the headroom.
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            max_memory["cpu"] = (
+                f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
+            )
+            return max_memory
+        return None
+
     @classmethod
     def get_model(cls):
         if cls.model is None:
             cls.offload_dir = tempfile.TemporaryDirectory()
-            # device_map="auto" fills GPUs to ~100%, leaving no room for the transpose temporary
-            # buffer that fuses per-expert weight shards into a single gate_up_proj tensor during
-            # from_pretrained — causing CUDA OOM on multi-GPU runners. A 70% per-GPU max_memory cap
-            # reserves the headroom.
-            n = backend_device_count(torch_device)
-            if n > 0 and torch_device != "cpu":
-                torch_accel = getattr(torch, torch_device)
-                per_device = int(
-                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
-                )
-                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
-                max_memory["cpu"] = (
-                    f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"  # To avoid runner failing with exit code 137.
-                )
-            else:
-                max_memory = None
             cls.model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
                 "Qwen/Qwen3-VL-30B-A3B-Instruct",
                 dtype="auto",
                 device_map="auto",
-                max_memory=max_memory,
+                max_memory=cls.get_max_memory(),
                 offload_folder=cls.offload_dir.name,
             )
         return cls.model
@@ -459,9 +461,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct", max_image_size={"longest_edge": 50176}
         )
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype=torch.float16, device_map="auto"
-        )
+        model = self.get_model()
         questions = ["How long is the video? Describe the it in short."]
         video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
         messages = [
@@ -610,16 +610,24 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we keep the
+    # loaded model (without FA) in `cls.model`. If this test is not run first, there is already a loaded model in
+    # `cls.model` when loading the flash attention model here, and we will get GPU OOM.
+    @run_first
     @slow
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
+            max_memory=self.get_max_memory(),
+            offload_folder=offload_dir.name,
         )
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
@@ -659,16 +667,24 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we keep the
+    # loaded model (without FA) in `cls.model`. If this test is not run first, there is already a loaded model in
+    # `cls.model` when loading the flash attention model here, and we will get GPU OOM.
+    @run_first
     @slow
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
+            max_memory=self.get_max_memory(),
+            offload_folder=offload_dir.name,
         )
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
