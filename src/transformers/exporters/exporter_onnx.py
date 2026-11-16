@@ -181,12 +181,7 @@ class OnnxExporter(DynamoExporter):
         apply_onnx_ir_fixes(onnx_program)
 
         if ort_fusions is not None:
-            # Token types mark blocks attended bidirectionally (PaliGemma's prefix, Gemma3's images), as may a custom
-            # 4D mask (the one PaliGemma's language model takes, built from them).
-            mask = sample_inputs.get("attention_mask")
-            custom_mask = isinstance(mask, torch.Tensor) and mask.dim() == 4
-            causal = "token_type_ids" not in sample_inputs and not custom_mask
-            fuse_for_onnxruntime(onnx_program.model, ort_fusions, causal=causal)
+            fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
         record_output_structure(metadata, traced_outputs[-1])
