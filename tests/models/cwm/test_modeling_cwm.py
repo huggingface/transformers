@@ -17,10 +17,12 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -87,13 +89,27 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class CwmIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @staticmethod
+    def _get_max_memory():
+        # `facebook/cwm` (~64 GB in bf16) does not fit on the GPUs, so `device_map="auto"` offloads part of it (incl.
+        # `lm_head`, 1.47 GiB) to CPU and fills the GPUs almost entirely. The offloaded modules are moved to GPU 0 at
+        # forward time, which then OOMs. A 70% per-GPU cap keeps room for them and for the activations.
+        n = backend_device_count(torch_device)
+        if n == 0 or torch_device == "cpu":
+            return None
+        torch_accel = getattr(torch, torch_device)
+        per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+        return dict.fromkeys(range(n), f"{per_device}GiB")
+
     @slow
     @require_deterministic_for_xpu
     def test_cwm_integration(self):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
-        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
+        model = CwmForCausalLM.from_pretrained(
+            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, max_memory=self._get_max_memory()
+        )
 
         self.assertIsNotNone(model.config.sliding_window)
         self.assertIsNotNone(model.config.layer_types)
@@ -141,7 +157,11 @@ class CwmIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
         # original `sliding_window` is `8192`, but it causes GPU OOM on A10
         model = CwmForCausalLM.from_pretrained(
-            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, sliding_window=4096
+            "facebook/cwm",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            sliding_window=4096,
+            max_memory=self._get_max_memory(),
         )
 
         sliding_window = model.config.sliding_window
@@ -193,7 +213,9 @@ class CwmIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
-        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
+        model = CwmForCausalLM.from_pretrained(
+            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, max_memory=self._get_max_memory()
+        )
 
         system_prompt = "You are a helpful AI assistant. You always reason before responding, using the following format:\n\n<think>\nyour internal reasoning\n</think>\nyour external response"
         messages = [
