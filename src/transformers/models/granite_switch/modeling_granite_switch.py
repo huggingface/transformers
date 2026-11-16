@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_granite_switch import GraniteSwitchConfig
 from .switch_codes import KerdockDGCodeGenerator, recover_count_from_signal
@@ -357,8 +357,7 @@ class MultiSwitch(nn.Module):
         # fp32 Q/K/V and the fp32 mask down to bf16; for the memory head that is fatal, since its
         # keys are `code(n) * memory_gain` and the mask is the fp32 floor, which together overflow
         # the bf16 softmax to NaN and clamp to base.
-        autocast_device = device.type if device.type in ("cuda", "cpu") else "cuda"
-        with torch.autocast(device_type=autocast_device, enabled=False):
+        with maybe_autocast(device_type=device.type, enabled=False):
             count_output, _ = attention_interface(
                 self.counting_attn_module,
                 query_states_count,
@@ -385,7 +384,7 @@ class MultiSwitch(nn.Module):
         query_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
         query_states_memory[:, 0, :, : self.memory_dim] = code_vectors
 
-        with torch.autocast(device_type=autocast_device, enabled=False):
+        with maybe_autocast(device_type=device.type, enabled=False):
             memory_output, _ = attention_interface(
                 self.memory_attn_module,
                 query_states_memory,
