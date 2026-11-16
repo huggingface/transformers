@@ -998,8 +998,6 @@ class WhisperGenerationMixin(GenerationMixin):
         needs_fallback = [False for _ in range(cur_bsz)]
         should_skip = [False for _ in range(cur_bsz)]
         fallback_index_map = list(range(cur_bsz))
-        if generation_config.no_speech_threshold is not None:
-            self._setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs)
 
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature is not None and temperature > 0.0
@@ -1026,6 +1024,10 @@ class WhisperGenerationMixin(GenerationMixin):
                     generate_kwargs["encoder_outputs"] = F.pad(
                         generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0
                     )
+
+            if generation_config.no_speech_threshold is not None:
+                # set up on every fallback round so that `no_speech_prob` lines up with the (possibly reduced) batch
+                self._setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, generate_kwargs)
 
             if attention_mask is None and generate_kwargs.get("cache") is not None:
                 # This will force slicing of decoder_input_ids = decoder_input_ids[:, cache_length:] as the first tokens
@@ -1088,7 +1090,8 @@ class WhisperGenerationMixin(GenerationMixin):
                         seek_sequence = seek_sequence[:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
-                needs_fallback[i], should_skip[i] = self._need_fallback(
+                # `i` indexes the current fallback batch, `should_skip` is indexed like the input batch
+                needs_fallback[i], should_skip[fallback_index_map[i]] = self._need_fallback(
                     seek_sequence,
                     seek_outputs,
                     i,

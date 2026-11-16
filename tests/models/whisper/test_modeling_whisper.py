@@ -20,6 +20,7 @@ import re
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -1124,6 +1125,53 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
+
+    def test_longform_generate_multi_batch_fallback_skip_index(self):
+        # Only the second sample falls back, and is then flagged as no-speech at the second temperature.
+        # Its skip decision must not be applied to the first sample.
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["input_features"][:2].to(torch_device)
+        long_input_features = torch.cat([input_features.repeat(1, 1, 4), input_features[:, :, :10]], dim=-1)
+        attention_mask = torch.ones(long_input_features.shape[::2], dtype=torch.long, device=torch_device)
+
+        vocab_size = model.config.vocab_size
+        num_timestamp_tokens = 20
+        max_new_tokens = 16
+        timestamp_begin = vocab_size - num_timestamp_tokens
+        model.generation_config.no_timestamps_token_id = timestamp_begin - 1
+        model.generation_config.eos_token_id = None
+        model.config.eos_token_id = None
+        model.generation_config._detect_timestamp_from_logprob = False
+        model.generation_config.max_initial_timestamp_index = 0
+        model.generation_config.prev_bos_token_id = timestamp_begin - 3
+
+        logits_processor = [
+            DummyTimestampLogitProcessor(
+                timestamp_begin, vocab_size, batch_size=2, max_length=max_new_tokens, min_space=4, seed=0
+            )
+        ]
+
+        def need_fallback(seek_sequence, seek_outputs, index, logits_processor, generation_config, vocab_size, temp):
+            if temp == 0.0:
+                # (needs_fallback, should_skip): only the second sample of the batch falls back
+                return index == 1, False
+            # the fallback round only contains the second sample, now detected as no-speech
+            return False, True
+
+        with patch.object(model, "_need_fallback", side_effect=need_fallback):
+            outputs = model.generate(
+                long_input_features,
+                attention_mask=attention_mask,
+                logits_processor=logits_processor,
+                max_new_tokens=max_new_tokens,
+                temperature=(0.0, 0.2),
+                return_segments=True,
+            )
+
+        self.assertGreater(len(outputs["segments"][0]), 0, "first sample must not be skipped")
+        self.assertEqual(outputs["segments"][1], [], "second sample must be skipped")
 
     @is_flaky()  # TODO (joao, sanchit): fails ~9% of the times. Does the original test have the same issue?
     def test_custom_4d_attention_mask(self):
