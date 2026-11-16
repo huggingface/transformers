@@ -939,6 +939,18 @@ class DeepseekOcr2Model(LlavaNextModel):
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
 
+    def get_image_num_patches(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
+    def get_pack_index(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
+    def get_image_embeddings(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
 
@@ -1063,6 +1075,12 @@ class DeepseekOcr2Model(LlavaNextModel):
 class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
+
+    def get_image_embeddings(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
 
     @can_return_tuple
     @auto_docstring
