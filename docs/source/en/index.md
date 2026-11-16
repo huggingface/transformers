@@ -23,53 +23,59 @@ Transformers is the model-definition framework for machine learning models in te
 
 Training frameworks, inference engines, and local runtimes build on that definition instead of writing their own. Transformers adds new architectures as they're released and matches each one to its original results, so the tools that build on it get every new model without reimplementing it.
 
-<div class="not-prose relative flex items-center mb-28">
-  <div class="peer group pr-4">
+<div class="not-prose relative mb-28">
+<table class="block !border-0" style="font: inherit; color: inherit;">
+<tbody class="block">
+<tr class="flex items-center">
+  <td class="peer group !border-0">
     <a class="flex h-10 items-center" href="./community_integrations/vllm">
       <span class="relative block h-10 w-10">
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM" width="40" height="40"/>
-        <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg) center / contain no-repeat;"></span>
+      <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM" width="40" height="40"/>
+      <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg) center / contain no-repeat;"></span>
       </span>
     </a>
     <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
       <div class="text-gray-500 dark:text-gray-400">vLLM</div>
       Serve LLMs at scale. vLLM batches requests continuously and keeps KV cache memory compact with PagedAttention.
     </div>
-  </div>
-  <div class="peer group pr-4">
+  </td>
+  <td class="peer group !border-0">
     <a class="flex h-10 items-center" href="./community_integrations/sglang">
       <span class="relative block h-6 w-20">
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang" width="80" height="24"/>
-        <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://www.sglang.io/images/logo.png) center / contain no-repeat;"></span>
+      <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang" width="80" height="24"/>
+      <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://www.sglang.io/images/logo.png) center / contain no-repeat;"></span>
       </span>
     </a>
     <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
       <div class="text-gray-500 dark:text-gray-400">SGLang</div>
       Serve LLMs with low latency. SGLang is a high-throughput inference engine with a frontend language for agentic workflows.
     </div>
-  </div>
-  <div class="peer group pr-4">
+  </td>
+  <td class="peer group !border-0">
     <a class="flex h-10 items-center" href="./community_integrations/llama_cpp">
       <span class="relative block h-7 w-7">
-        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50 dark:invert" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp" width="28" height="28"/>
-        <span class="absolute inset-0 opacity-0 group-hover:opacity-100 dark:invert" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg) center / contain no-repeat;"></span>
+      <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50 dark:invert" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp" width="28" height="28"/>
+      <span class="absolute inset-0 opacity-0 group-hover:opacity-100 dark:invert" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg) center / contain no-repeat;"></span>
       </span>
     </a>
     <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
       <div class="text-gray-500 dark:text-gray-400">llama.cpp</div>
       Run LLMs locally without Python. llama.cpp is a C/C++ inference engine that runs quantized models in the GGUF format.
     </div>
-  </div>
-  <div class="order-first pr-4 peer-hover:hidden">
+  </td>
+  <td class="order-first !border-0 peer-hover:hidden">
     <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth" width="32" height="32"/></a>
-  </div>
-  <div class="order-first pr-4 hidden peer-hover:block">
+    <div class="absolute left-0 top-full w-full pt-3">
+      <div class="text-gray-500 dark:text-gray-400">Unsloth</div>
+      Fine-tune with less memory. Unsloth trains LLMs in 4-bit, 8-bit, and 16-bit precision with custom kernels.
+    </div>
+  </td>
+  <td class="order-first !border-0 hidden peer-hover:block">
     <a class="flex h-10 items-center" href="./community_integrations/unsloth"><span class="block h-8 w-8 grayscale opacity-50" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp) center / contain no-repeat;"></span></a>
-  </div>
-  <div class="peer-hover:hidden absolute left-0 top-full w-full pt-3">
-    <div class="text-gray-500 dark:text-gray-400">Unsloth</div>
-    Fine-tune with less memory. Unsloth trains LLMs in 4-bit, 8-bit, and 16-bit precision with custom kernels.
-  </div>
+  </td>
+</tr>
+</tbody>
+</table>
 </div>
 
 Transformers is also designed to be read and changed by coding agents. Each model is plain PyTorch in one file that reads from top to bottom. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
