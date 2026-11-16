@@ -158,6 +158,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Forward kwargs
         if generate_kwargs is not None:
+            generate_kwargs = generate_kwargs.copy()
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
             if generate_kwargs is None:
