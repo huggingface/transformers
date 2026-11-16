@@ -122,6 +122,19 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(plain.num_hidden_layers, num_decoder_layers)
         self.assertEqual(plain.to_dict()["num_hidden_layers"], num_decoder_layers)
 
+    def test_config_rejects_legacy_checkpoints(self):
+        """SingleSwitch and unfused Shadow Residual checkpoints raise instead of loading wrong."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        on_disk = config.to_dict()
+        legacy_single = {k: v for k, v in on_disk.items() if k != "ms_code_m"}
+        for config_dict in (legacy_single, {**on_disk, "switch_type": "single"}):
+            with self.assertRaisesRegex(ValueError, "SingleSwitch"):
+                GraniteSwitchConfig.from_dict(config_dict)
+        # A stale `switch_type: "multi"` is accepted and dropped.
+        self.assertFalse(hasattr(GraniteSwitchConfig.from_dict({**on_disk, "switch_type": "multi"}), "switch_type"))
+        with self.assertRaisesRegex(ValueError, "unfused_qkv"):
+            GraniteSwitchConfig.from_dict({**on_disk, "unfused_qkv": True})
+
     def test_base_reset_token_routes_back_to_base(self):
         """A leading base-reset token sends the tokens after it back to adapter 0."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
