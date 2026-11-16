@@ -94,6 +94,7 @@ markers = [
     "is_training_test: marks tests that use the TrainingTesterMixin (deselect with '-m \"not is_training_test\"')",
     "is_tensor_parallel_test: marks tests that use the TensorParallelTesterMixin (deselect with '-m \"not is_tensor_parallel_test\"')",
     "is_expert_parallel_test: marks tests that use the ExpertParallelTesterMixin (deselect with '-m \"not is_expert_parallel_test\"')",
+    "is_sequence_parallel_test: marks tests that use the SequenceParallelTesterMixin (deselect with '-m \"not is_sequence_parallel_test\"')",
     "is_fsdp_test: marks tests that use the FSDPTesterMixin (deselect with '-m \"not is_fsdp_test\"')",
 ]
 log_cli = 1
