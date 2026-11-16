@@ -330,7 +330,7 @@ After Concatenate(dim=1):
 ### Pattern matching rules
 
 - Source patterns are full regexes evaluated with `re.search()`. `^` anchors to the start of the **scoped** key (after `scope_prefix` stripping).
-- A pattern that ends in a letter or digit matches up to the end of a name only. `weight` matches `q_proj.weight` but not `q_proj.weight_scale_inv`. A pattern that ends in `_` matches the start of a name.
+- A pattern that ends in a letter or digit matches up to the end of a dotted segment only. `weight` matches `q_proj.weight` but not `q_proj.weight_scale_inv`. A pattern that ends in `_` matches the start of a segment.
 - `*` is a per-index wildcard that collects all matching tensors under the same source pattern (preserving checkpoint order for correct concatenation).
 - Capturing groups in source patterns can be referenced as `\1`, `\2`, ... in target patterns to keep parts of the original key (e.g. layer indices).
 - Scoped transforms (`scope_prefix` set) only match keys that start with `f"{scope_prefix}."`.

@@ -173,6 +173,8 @@ Keep the quantizer on the op as `self.hf_quantizer`. The loader checks for this 
 
 When the config sets `dequantize=True`, the quantizer uses the `"dequantize"` op instead of the `"deserialize"` op. [`CompressedTensorsConfig`], [`FineGrainedFP8Config`], [`MetalConfig`], and [`Mxfp4Config`] support this. To support it, add a `dequantize` argument to your config.
 
+When `dequantize=True`, skip the module replacement in `_process_model_before_weight_loading` so the model keeps its full-precision modules. The dequantize op only runs when the model has no parameter for the saved companions.
+
 The dequantize op also runs before the model's own conversion ops, because a merge op like `MergeModulelist` combines per-expert weights that each have their own scales. It receives the weights and their saved companions and returns only the weights. `Fp8Dequantize` is a reference implementation.
 
 ### Load MoE and fused weights
@@ -186,4 +188,4 @@ Override `update_weight_conversions` only to handle a checkpoint-specific quirk,
 
 ### Match saved names
 
-A source pattern that ends in a letter or digit only matches up to the end of a name. `weight` matches `q_proj.weight` and doesn't match `q_proj.weight_scale_inv`, so you don't need to anchor patterns with `$`. A pattern that ends in `_`, like `hc_`, matches the start of a name such as `hc_fn`.
+A source pattern that ends in a letter or digit only matches up to the end of a dotted segment. `weight` matches `q_proj.weight` and doesn't match `q_proj.weight_scale_inv`, so you don't need to anchor patterns with `$`. A pattern that ends in `_`, like `hc_`, matches the start of a segment such as `hc_fn`.
