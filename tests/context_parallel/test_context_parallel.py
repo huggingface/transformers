@@ -435,7 +435,7 @@ class TestUlyssesCheck(unittest.TestCase):
     def _check(self, config, cp_size=2):
         model = torch.nn.Module()
         model.config = config
-        UlyssesAttention().check(model, _MeshStub(cp_size))
+        UlyssesAttention().install_forward(model, _MeshStub(cp_size))
 
     def test_refuses_attention_it_cannot_route(self):
         for attn_implementation in ("eager", "flex_attention"):

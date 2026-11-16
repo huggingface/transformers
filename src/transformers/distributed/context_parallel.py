@@ -11,23 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Context parallelism: each rank of the `cp` mesh holds a contiguous slice of every sequence.
-
-A context parallel plan pairs two kinds of styles:
-
-- `"cp_split_sequence"` on the decoder layers, which run on this rank's slice. The model built the attention mask and
-  the position embeddings for the whole sequence before the first layer.
-- An attention style, `"cp_ulysses"`, on their attention modules, whose attention function runs over the whole
-  sequence while the module runs. [`UlyssesAttention`] all-to-alls the query, key and value, so that every rank holds the whole sequence for
-  `num_heads / cp_size` heads, runs the model's own attention function with the model's own mask, and all-to-alls the
-  output back. Another algorithm is a [`ContextParallelAttention`] subclass added to `ALL_CP_STYLES`.
-
-Every `cp_plan` also names the model itself, `""`, with `"cp_model"` ([`ModelContextParallel`]): it refuses a cache,
-pads the sequences to a multiple of `cp_size`, gives the loss this rank's slice of the shifted labels, and reports the
-loss of the whole sequences on every rank. `apply_context_parallelism` checks the model, then installs the plan on it.
-The styles share [`ContextParallelLayer`], which has the `install_forward` contract of the tensor and expert parallel
-styles.
-"""
 
 from __future__ import annotations
 
@@ -98,9 +81,15 @@ class ContextParallelLayer:
 
 class SplitSequenceParallel(ContextParallelLayer):
     """
-    Decoder layer: run on this rank's slice of the sequence. The first layer of the plan cuts `hidden_states`, and every
-    layer cuts the `position_embeddings` the model computed for the whole sequence. The attention mask and
-    `position_ids` stay those of the whole sequence, which the attention style gives the attention function.
+    Give each decoder layer only the tokens assigned to this rank:
+
+        Before the first layer:           [0 1 2 3 | 4 5 6 7]  (full sequence)
+        Rank 0, first layer:              [0 1 2 3]            (split hidden states and positions)
+        Rank 1, first layer:              [4 5 6 7]
+        Rank 0/1, later layers:           already-local hidden states; split only positions
+
+    The model computes `position_embeddings` for all tokens before the layers run, and passes them to every layer.
+    Each layer therefore takes the positions matching its local hidden states.
     """
 
     def transform_inputs_pre_forward(
@@ -121,14 +110,14 @@ class SplitSequenceParallel(ContextParallelLayer):
 
 class ContextParallelAttention(ContextParallelLayer):
     """
-    Attention module: run its attention function over the whole sequence, when each rank of `cp_mesh` holds a slice
-    of it. While the module runs, its entry in `ALL_ATTENTION_FUNCTIONS` is `attention` around the registered
-    function, and it is restored after; the module's forward itself stays as is. A subclass is an algorithm, added
-    to `ALL_CP_STYLES` and named in the plan like any style.
-    """
+    Keep the attention module unchanged, but temporarily wrap its attention function (e.g. SDPA):
 
-    def check(self, module: nn.Module, cp_mesh: DeviceMesh) -> None:
-        """Raise a `ValueError` if this attention cannot run on `module` (or on a whole model)."""
+    1) On entry, save the selected function in `ALL_ATTENTION_FUNCTIONS` and replace it with
+       `partial(self.attention, cp_mesh, original_attention)`.
+    2) At `yield`, the module's forward pass runs. Its attention lookup now returns the wrapper, which can
+       exchange data across ranks before and after calling the original attention function.
+    3) On exit, restore the original entry in `finally`, even if the forward pass raises an error.
+    """
 
     def attention(self, cp_mesh: DeviceMesh, attention_function, module, query, key, value, attention_mask, **kwargs):
         raise NotImplementedError
@@ -138,23 +127,41 @@ class ContextParallelAttention(ContextParallelLayer):
         from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
         attn_implementation = module.config._attn_implementation
-        # the function registered now, so that a hub kernel loaded since the model was built is the one run
-        attention_function = ALL_ATTENTION_FUNCTIONS[attn_implementation]
-        ALL_ATTENTION_FUNCTIONS.register(attn_implementation, partial(self.attention, cp_mesh, attention_function))
+        original_attention = ALL_ATTENTION_FUNCTIONS[attn_implementation]
+        cp_attention = partial(self.attention, cp_mesh, original_attention)
+        ALL_ATTENTION_FUNCTIONS.register(attn_implementation, cp_attention)
         try:
             yield
         finally:
-            ALL_ATTENTION_FUNCTIONS.register(attn_implementation, attention_function)
-
-    def install_forward(self, module: nn.Module, cp_mesh: DeviceMesh):
-        self.check(module, cp_mesh)
-        return super().install_forward(module, cp_mesh)
+            ALL_ATTENTION_FUNCTIONS.register(attn_implementation, original_attention)
 
 
 class UlyssesAttention(ContextParallelAttention):
-    """All-to-all to the whole sequence with `num_heads / cp_size` heads, run the attention, all-to-all back."""
+    """
+    Trade sequence slices for head slices, so attention on each rank can see every token.
+    Example: eight tokens (0-7), four heads (h0-h3), two ranks:
 
-    def check(self, module: nn.Module, cp_mesh: DeviceMesh) -> None:
+                                  Rank 0                           Rank 1
+        Local Q/K/V          tokens [0 1 2 3], heads [h0 h1 h2 h3]    tokens [4 5 6 7], heads [h0 h1 h2 h3]
+                                             |                                    |
+                                             +-------- first all-to-all --------+
+                                             |                                    |
+        Attention Q/K/V      tokens [0 1 2 3 4 5 6 7], heads [h0 h1]   tokens [0 1 2 3 4 5 6 7], heads [h2 h3]
+                             attend with full mask                    attend with full mask
+                                             |                                    |
+                                             +-------- second all-to-all -------+
+                                             |                                    |
+        Local output        tokens [0 1 2 3], heads [h0 h1 h2 h3]    tokens [4 5 6 7], heads [h0 h1 h2 h3]
+
+    The first exchange gathers the whole sequence for each rank's assigned heads. The original attention function
+    runs on those heads; the second exchange returns each token's output with all heads to its original rank.
+    """
+
+    def install_forward(self, module: nn.Module, cp_mesh: DeviceMesh):
+        self._validate_attention(module, cp_mesh)
+        return super().install_forward(module, cp_mesh)
+
+    def _validate_attention(self, module: nn.Module, cp_mesh: DeviceMesh) -> None:
         from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
         attn_implementation = module.config._attn_implementation
@@ -194,30 +201,34 @@ class UlyssesAttention(ContextParallelAttention):
         return _all_to_all(output), attn_weights
 
 
-def pad_sequence(tensor: torch.Tensor, pad_len: int, value) -> torch.Tensor:
-    """`tensor` with `pad_len` copies of `value` appended along its sequence dimension 1."""
-    padding = tensor.new_full((tensor.shape[0], pad_len, *tensor.shape[2:]), value)
-    return torch.cat([tensor, padding], dim=1)
-
-
 class ModelContextParallel(ContextParallelLayer):
     """
-    The model itself, `"cp_model"`, the `""` of every `cp_plan`. Its inputs lose the cache, which context parallelism
-    does not split, are padded at the end to a multiple of `cp_size` before the model builds its masks from them, and
-    carry this rank's slice of the shifted labels with the token count of the whole sequences. Its loss is the one of
-    the whole sequences, which every rank reports.
+    Handle the model-level work for context parallelism. In a `cp_plan`, the empty path `""` selects the model itself
+    and applies this style under the name `"cp_model"`.
+
+    Pre-forward (`transform_inputs_pre_forward`):
+      1) Reject a past-key-value cache and disable caching.
+      2) Pad the inputs so the sequence divides evenly across CP ranks.
+      3) Give each rank its slice of shifted labels, but count valid labels across the full sequence so all partial
+         losses use the same denominator.
+
+    Post-forward (`transform_output_post_forward`):
+      1) Sum the partial losses so every rank reports the full-sequence loss.
+      2) Scale each rank's local loss gradient to account for gradient averaging during distributed training.
     """
 
     def transform_inputs_pre_forward(self, module: nn.Module, args: tuple, kwargs: dict, cp_mesh: DeviceMesh):
+        # 1) Reject a cache (past tokens are not sharded) and bind positional inputs by name.
         if kwargs.get("past_key_values") is not None:
             raise ValueError(
                 "Context parallelism only supports training: `past_key_values` are not allowed. Run the model on full "
                 "sequences without a cache, or disable context parallelism."
             )
         kwargs["use_cache"] = False
-        if args:  # `model(input_ids, ...)`: by name, like the rest
+        if args:
             kwargs, args = {**inspect.signature(module.forward).bind_partial(*args).arguments, **kwargs}, ()
 
+        # 2) Pad the full sequence before the model builds masks and splits it across ranks.
         tokens = kwargs["inputs_embeds"] if kwargs.get("input_ids") is None else kwargs["input_ids"]
         if pad_len := -tokens.shape[1] % cp_mesh.size():
             padding_values = {
@@ -228,13 +239,15 @@ class ModelContextParallel(ContextParallelLayer):
                 "shift_labels": -100,
             }
             for name, value in padding_values.items():
-                if kwargs.get(name) is not None:
-                    kwargs[name] = pad_sequence(kwargs[name], pad_len, value)
+                if (tensor := kwargs.get(name)) is not None:
+                    padding = tensor.new_full((tensor.shape[0], pad_len, *tensor.shape[2:]), value)
+                    kwargs[name] = torch.cat([tensor, padding], dim=1)
             if (position_ids := kwargs.get("position_ids")) is not None:
                 # the padding continues the positions of the last document of every row
                 steps = torch.arange(1, pad_len + 1, device=position_ids.device)
                 kwargs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
 
+        # 3) Give each rank its own shifted labels, but normalize by the full sequence's valid-token count.
         if (labels := kwargs.get("labels")) is not None:
             shift_labels = kwargs.get("shift_labels")
             if shift_labels is None:
@@ -245,15 +258,13 @@ class ModelContextParallel(ContextParallelLayer):
         return args, kwargs
 
     def transform_output_post_forward(self, module: nn.Module, output, cp_mesh: DeviceMesh):
-        """
-        The loss of the whole sequences from this rank's partial loss. Its gradient stays this rank's, multiplied by
-        `cp_size`, so that FSDP2's average over the cp ranks gives the gradient of the full-sequence loss.
-        """
         loss = getattr(output, "loss", None)
         if loss is None:
             return output
         total = loss.detach().clone()
+        # 1) Sum the partial losses so every rank reports the full-sequence loss.
         dist.all_reduce(total, group=cp_mesh.get_group())
+        # 2) Scale each rank's local loss gradient to account for gradient averaging during distributed training.
         output.loss = total + (loss - loss.detach()) * cp_mesh.size()
         return output
 
@@ -266,12 +277,6 @@ ALL_CP_STYLES: dict[str, ContextParallelLayer] = {
 
 
 def apply_context_parallelism(model: nn.Module, cp_mesh: DeviceMesh, cp_plan: dict[str, str]) -> nn.Module:
-    """
-    Let the ranks of `cp_mesh` split every sequence: install `cp_plan`, whose `""` is `"cp_model"` on the model itself,
-    whose `"cp_split_sequence"` decoder layers run on this rank's slice and whose attention modules run their attention
-    over the whole sequence. Raises a `ValueError` if context parallelism would silently change the logits or the loss
-    of `model`.
-    """
     if not model._supports_attention_backend:
         raise ValueError(
             f"Context parallelism routes attention through `ALL_ATTENTION_FUNCTIONS`, but {model.__class__.__name__} "
