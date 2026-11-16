@@ -256,17 +256,19 @@ class Ovis2_5ImageProcessorPil(PilBackend):
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
         size = images_kwargs.get("size", self.size)
-        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
-        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
-        # Ovis2.5 uses the same custom smart_resize policy to compute the patch count.
+
+        factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=patch_size * merge_size,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
+            num_frames=self.temporal_patch_size,
+            height=height,
+            width=width,
+            factor=factor,
+            min_pixels=size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge,
+            max_pixels=size["longest_edge"] if isinstance(size, dict) else size.longest_edge,
+            temporal_factor=self.temporal_patch_size,
         )
-        return (resized_height // patch_size) * (resized_width // patch_size)
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
 __all__ = ["Ovis2_5ImageProcessorPil"]

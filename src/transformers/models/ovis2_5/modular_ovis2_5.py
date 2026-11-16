@@ -126,36 +126,6 @@ class Ovis2_5ImageProcessor(Glm4vImageProcessor):
     merge_size = 2
     valid_kwargs = Ovis2_5ImageProcessorKwargs
 
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
-        """
-        A utility that returns number of image patches for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of image patches per image.
-        """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-        size = images_kwargs.get("size", self.size)
-        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
-        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
-        # Ovis2.5 uses the same custom smart_resize policy to compute the patch count.
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=patch_size * merge_size,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
-        )
-        return (resized_height // patch_size) * (resized_width // patch_size)
-
 
 class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
     resample = PILImageResampling.BILINEAR
@@ -166,36 +136,6 @@ class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
     temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Ovis2_5ImageProcessorKwargs
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
-        """
-        A utility that returns number of image patches for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of image patches per image.
-        """
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        merge_size = images_kwargs.get("merge_size", self.merge_size)
-        size = images_kwargs.get("size", self.size)
-        min_pixels = size["shortest_edge"] if isinstance(size, dict) else size.shortest_edge
-        max_pixels = size["longest_edge"] if isinstance(size, dict) else size.longest_edge
-        # Ovis2.5 uses the same custom smart_resize policy to compute the patch count.
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=patch_size * merge_size,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
-        )
-        return (resized_height // patch_size) * (resized_width // patch_size)
 
 
 class Ovis2_5VideoProcessorInitKwargs(VideosKwargs, total=False):
