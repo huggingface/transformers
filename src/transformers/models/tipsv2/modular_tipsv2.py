@@ -31,7 +31,7 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator, torch_int
 from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -450,6 +450,7 @@ class Tipsv2SinusoidalPositionalEmbedding(Speech2TextSinusoidalPositionalEmbeddi
             num_embeddings=config.max_position_embeddings, embedding_dim=config.hidden_size, padding_idx=None
         )
 
+    @no_inherit_decorator
     def forward(self, position_ids: torch.LongTensor) -> torch.Tensor:
         return self.weights[position_ids]
 
