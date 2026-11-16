@@ -44,6 +44,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.configuration_auto import AutoConfig
@@ -69,11 +70,11 @@ class MusicgenMelodyOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
         Sequence of conditional hidden-states representing the concatenation of the projected text encoder output and the projected audio encoder output.
         Used as a conditional signal.
@@ -81,7 +82,7 @@ class MusicgenMelodyOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     encoder_hidden_states: torch.Tensor | None = None
@@ -144,13 +145,13 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
 
     @torch.no_grad()
     # Ignore copy
-    def forward(self, inputs_embeds: torch.Tensor, past_key_values_length: int = 0):
+    def forward(self, inputs_embeds: torch.Tensor, cache_length: int = 0):
         bsz, seq_len, _ = inputs_embeds.size()
         # Create the position ids from the input token ids.
-        position_ids = torch.arange(seq_len, device=inputs_embeds.device) + past_key_values_length
+        position_ids = torch.arange(seq_len, device=inputs_embeds.device) + cache_length
         # expand embeddings if needed
-        if seq_len + past_key_values_length > self.weights.size(0):
-            self.make_weights(seq_len + past_key_values_length, self.embedding_dim)
+        if seq_len + cache_length > self.weights.size(0):
+            self.make_weights(seq_len + cache_length, self.embedding_dim)
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
@@ -220,11 +221,12 @@ class MusicgenMelodyAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
@@ -246,33 +248,33 @@ class MusicgenMelodyAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
             key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2)
             value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -321,11 +323,12 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=False)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -334,7 +337,7 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            past_key_values (`Cache`): cached past key and value projection states
+            cache (`Cache`): cached past key and value projection states
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -342,7 +345,7 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -424,13 +427,14 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -478,10 +482,10 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_length = cache.get_seq_length() if cache is not None else 0
         if inputs_embeds is None:
             inputs_embeds = sum(self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks))
 
@@ -502,11 +506,11 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         # embed positions
-        positions = self.embed_positions(inputs_embeds, past_key_values_length)
+        positions = self.embed_positions(inputs_embeds, cache_length)
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -520,7 +524,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -530,7 +534,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -553,13 +557,14 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
     # Ignore copy
     @capture_outputs
     @merge_with_config_defaults
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -600,7 +605,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -608,7 +613,7 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
         )
@@ -652,13 +657,14 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
     @capture_outputs
     @auto_docstring
     # Ignore copy
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
@@ -708,7 +714,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -746,19 +752,20 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
         return MusicgenMelodyOutputWithPast(
             loss=loss,
             logits=lm_logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
     # Ignore copy
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_values=None,
+        cache=None,
         use_cache=True,
         delay_pattern_mask=None,
         guidance_scale=None,
@@ -804,7 +811,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
             "attention_mask": attention_mask,
             "encoder_hidden_states": encoder_hidden_states,
             "encoder_attention_mask": encoder_attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "use_cache": use_cache,
         }
 
@@ -1388,6 +1395,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1395,7 +1403,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         input_features: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
@@ -1536,7 +1544,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            past_key_values=past_key_values,
+            cache=cache,
             labels=labels,
             **kwargs_decoder,
         )
@@ -1544,17 +1552,18 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return MusicgenMelodyOutputWithPast(
             loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
             encoder_hidden_states=encoder_hidden_states,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
         encoder_hidden_states=None,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         decoder_attention_mask=None,
         use_cache=None,
@@ -1592,7 +1601,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
         return {
             "input_ids": None,  # encoder_hidden_states is defined. input_ids not needed
             "encoder_hidden_states": encoder_hidden_states,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
@@ -1948,7 +1957,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
-        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - different models have a different cache name expected by the model (default = "cache")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
         if (

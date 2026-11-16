@@ -43,6 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_gpt2 import GPT2Config
@@ -141,10 +142,11 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: tuple[torch.Tensor] | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
@@ -152,16 +154,16 @@ class GPT2Attention(nn.Module):
         **kwargs,
     ) -> tuple[torch.Tensor | tuple[torch.Tensor], ...]:
         is_cross_attention = encoder_hidden_states is not None
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         if is_cross_attention:
             if not hasattr(self, "q_attn"):
@@ -173,9 +175,9 @@ class GPT2Attention(nn.Module):
             attention_mask = encoder_attention_mask
 
             # Try to get key/value states from cache if possible
-            if past_key_values is not None and is_updated:
-                key_states = curr_past_key_values.layers[self.layer_idx].keys
-                value_states = curr_past_key_values.layers[self.layer_idx].values
+            if cache is not None and is_updated:
+                key_states = curr_cache.layers[self.layer_idx].keys
+                value_states = curr_cache.layers[self.layer_idx].values
             else:
                 key_states, value_states = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
                 shape_kv = (*key_states.shape[:-1], -1, self.head_dim)
@@ -190,13 +192,13 @@ class GPT2Attention(nn.Module):
         shape_q = (*query_states.shape[:-1], -1, self.head_dim)
         query_states = query_states.view(shape_q).transpose(1, 2)
 
-        if (past_key_values is not None and not is_cross_attention) or (
-            past_key_values is not None and is_cross_attention and not is_updated
+        if (cache is not None and not is_cross_attention) or (
+            cache is not None and is_cross_attention and not is_updated
         ):
-            key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if is_cross_attention:
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
 
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -259,10 +261,11 @@ class GPT2Block(GradientCheckpointingLayer):
 
         self.mlp = GPT2MLP(inner_dim, config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: tuple[torch.Tensor] | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
@@ -273,7 +276,7 @@ class GPT2Block(GradientCheckpointingLayer):
         hidden_states = self.ln_1(hidden_states)
         attn_output, _ = self.attn(
             hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             use_cache=use_cache,
             **kwargs,
@@ -292,7 +295,7 @@ class GPT2Block(GradientCheckpointingLayer):
             hidden_states = self.ln_cross_attn(hidden_states)
             cross_attn_output, _ = self.crossattention(
                 hidden_states,
-                past_key_values=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
@@ -413,7 +416,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -464,18 +467,18 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     mc_logits (`torch.Tensor` of shape `(batch_size, num_choices)`):
         Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     """
 
     loss: torch.Tensor | None = None
     mc_loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
     mc_logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
 
@@ -509,10 +512,11 @@ class GPT2Model(GPT2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -524,11 +528,11 @@ class GPT2Model(GPT2PreTrainedModel):
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -557,17 +561,17 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # based on pattern from src/transformers/models/whisper/modeling_whisper.py::WhisperDecoder
         if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache(config=self.config)
+            if cache is None:
+                cache = DynamicCache(config=self.config)
 
-            if self.config.add_cross_attention and not isinstance(past_key_values, EncoderDecoderCache):
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache(config=self.config))
+            if self.config.add_cross_attention and not isinstance(cache, EncoderDecoderCache):
+                cache = EncoderDecoderCache(cache, DynamicCache(config=self.config))
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -582,7 +586,7 @@ class GPT2Model(GPT2PreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -605,7 +609,7 @@ class GPT2Model(GPT2PreTrainedModel):
         for i, block in enumerate(self.h):
             hidden_states = block(
                 hidden_states,
-                past_key_values if not (self.gradient_checkpointing and self.training) else None,
+                cache if not (self.gradient_checkpointing and self.training) else None,
                 causal_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
@@ -618,10 +622,10 @@ class GPT2Model(GPT2PreTrainedModel):
 
         hidden_states = hidden_states.view(output_shape)
 
-        past_key_values = past_key_values if use_cache else None
+        cache = cache if use_cache else None
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -644,10 +648,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -661,11 +666,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
     ) -> CausalLMOutputWithCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -679,7 +684,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         """
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -707,7 +712,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
             cross_attentions=transformer_outputs.cross_attentions,
@@ -737,10 +742,11 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -753,11 +759,11 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
     ) -> GPT2DoubleHeadsModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -802,7 +808,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         ```"""
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -833,7 +839,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
             mc_loss=mc_loss,
             logits=lm_logits,
             mc_logits=mc_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
@@ -865,10 +871,11 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -879,11 +886,11 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
     ) -> SequenceClassifierOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -893,7 +900,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         """
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -952,7 +959,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
@@ -979,10 +986,11 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -993,11 +1001,11 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
     ) -> TokenClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -1011,7 +1019,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         """
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1064,11 +1072,11 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
     ) -> QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and

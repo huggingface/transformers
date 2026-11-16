@@ -69,7 +69,7 @@ class Zamba2Config(PreTrainedConfig):
 
     model_type = "zamba2"
     attribute_map = {"layer_types": "layers_block_type", "head_dim": "attention_head_dim"}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 32000
     max_position_embeddings: int = 4096

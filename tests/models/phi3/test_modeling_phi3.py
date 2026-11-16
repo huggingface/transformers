@@ -56,7 +56,7 @@ if is_torch_available():
                 input_ids=input_ids,
                 use_cache=True,
                 return_dict=True,
-                past_key_values=self.cache,
+                cache=self.cache,
             ).logits
 
         @staticmethod

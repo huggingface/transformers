@@ -265,7 +265,7 @@ def pipeline_parallel_naive_forward(
     if stage.pp_is_last_stage:
         # Last stage: compute the logits.
         outputs = original_forward(**fwd_kwargs)
-        logits, past_key_values = outputs.logits, outputs.past_key_values
+        logits, cache = outputs.logits, outputs.cache
     else:
         # Non-last stages: Compute and send the activations to the next stage.
         # We need the base models because hidden_states is getting slices in the causal_lm models + we want last_hidden_state
@@ -273,11 +273,11 @@ def pipeline_parallel_naive_forward(
         base_kwargs = {k: v for k, v in fwd_kwargs.items() if k not in {"labels", "logits_to_keep"}}
         base_outputs = base_model(**base_kwargs)
         stage.communicate("send_forward", device=device, dtype=dtype, tensor=base_outputs.last_hidden_state)
-        logits, past_key_values = None, base_outputs.past_key_values
+        logits, cache = None, base_outputs.cache
 
     # Only the last stage computed the logits, so broadcast them to every rank (they will be waiting)
     # TODO(3outeille): very naive implementation to make it work seamless with generate().
     # In long term, we want only the last stage to hold the logits not every stages that will require changes in generate() directly
     logits = stage.broadcast_from_last(logits, dtype=dtype, device=device)
 
-    return CausalLMOutputWithPast(logits=logits, past_key_values=past_key_values)
+    return CausalLMOutputWithPast(logits=logits, cache=cache)

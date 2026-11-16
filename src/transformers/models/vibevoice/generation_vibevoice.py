@@ -263,7 +263,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         not over-allocated to the positive branch's length. Only the code paths exercised by VibeVoice are kept:
         decoder-only dynamic and static caches.
         """
-        cache_name = "past_key_values"
+        cache_name = "cache"
 
         # Quick escape route 1: if the user specifies a cache, we only need to check for conflicting arguments.
         user_defined_cache = model_kwargs.get(cache_name)
@@ -274,9 +274,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     "Cache object) is unsupported. Please use only one of the two."
                 )
             if isinstance(user_defined_cache, tuple):
-                raise ValueError(
-                    "Passing a tuple of `past_key_values` is not supported anymore. Please use a `Cache` instance."
-                )
+                raise ValueError("Passing a tuple of `cache` is not supported anymore. Please use a `Cache` instance.")
             return
 
         # Quick escape route 2: if the user specifies no cache is to be used.
@@ -395,10 +393,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         negative_input_ids[:, -1] = torch.where(
             diffusion_start_mask, torch.full_like(last_input_id, self.config.audio_bos_token_id), last_input_id
         )
-        if negative_model_kwargs.get("past_key_values") is not None:
+        if negative_model_kwargs.get("cache") is not None:
             mask_4d = diffusion_start_mask.view(-1, 1, 1, 1)
             # Reset the KV cache
-            for layer in negative_model_kwargs["past_key_values"].layers:
+            for layer in negative_model_kwargs["cache"].layers:
                 if isinstance(layer, BaseQuantizedLayer):
                     continue
                 if layer.keys is not None and layer.values is not None:
@@ -739,7 +737,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=cache,
+                cache=cache,
                 audio=generated_audio,
             )
         else:

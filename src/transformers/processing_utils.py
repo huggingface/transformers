@@ -439,7 +439,8 @@ class AudioKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
-            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
+            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"soundfile"`, `"torchaudio"`
+            (`"librosa"` is a deprecated alias of `"soundfile"`).
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
