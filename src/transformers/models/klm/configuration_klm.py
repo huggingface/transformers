@@ -101,9 +101,22 @@ class KlmConfig(PreTrainedConfig):
     eos_token_id: int | None = 2
 
     def __post_init__(self, **kwargs):
+        # Names used by the original Hub checkpoint's remote-code config.
+        for original, current in {
+            "gdn_heads": "linear_num_heads",
+            "gdn_head_dim": "linear_head_dim",
+            "gdn_norm_eps": "linear_norm_eps",
+            "decay_floor": "linear_decay_floor",
+            "n_bigrams": "num_bigrams",
+            "n_trigrams": "num_trigrams",
+            "ngram_dim": "ngram_embedding_size",
+        }.items():
+            if original in kwargs:
+                setattr(self, current, kwargs.pop(original))
+        attention_every = kwargs.pop("attention_every", 4)
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if layer_idx % 4 == 3 else "linear_attention"
+                "full_attention" if layer_idx % attention_every == attention_every - 1 else "linear_attention"
                 for layer_idx in range(self.num_hidden_layers)
             ]
         super().__post_init__(**kwargs)

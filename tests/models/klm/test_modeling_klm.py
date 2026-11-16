@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch KLM model."""
 
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -224,13 +225,70 @@ class KlmModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_autocast(self):
         """The recurrence of the linear attention layers stays in float32 under autocast."""
-        model = self._get_model()
-        input_ids = ids_tensor((2, 40), model.config.vocab_size).to(torch_device)
-        with torch.no_grad():
-            expected = model(input_ids).last_hidden_state
-            with torch.autocast(torch_device, dtype=torch.bfloat16):
+        torch.manual_seed(0)
+        model = self._get_model(self.model_tester.get_config())
+        input_ids = torch.arange(80, device=torch_device).reshape(2, 40) % model.config.vocab_size
+
+        def check_recurrence(*args, **kwargs):
+            self.assertFalse(torch.is_autocast_enabled(torch_device))
+            output, state = torch_chunk_gated_delta_rule_2(*args, **kwargs)
+            self.assertEqual(output.dtype, torch.float32)
+            self.assertEqual(state.dtype, torch.float32)
+            # Compare the same projected operands, so this checks recurrence precision independently of BF16
+            # projection rounding and its amplification by the randomly initialized residual routing.
+            expected_output, expected_state = torch_recurrent_gated_delta_rule_2(*args, **kwargs)
+            torch.testing.assert_close(output, expected_output, rtol=1e-4, atol=1e-5)
+            torch.testing.assert_close(state, expected_state, rtol=1e-4, atol=1e-5)
+            return output, state
+
+        with patch(
+            "transformers.models.klm.modeling_klm.torch_chunk_gated_delta_rule_2", side_effect=check_recurrence
+        ) as recurrence:
+            with torch.no_grad(), torch.autocast(torch_device, dtype=torch.bfloat16):
                 output = model(input_ids).last_hidden_state
-        torch.testing.assert_close(output.float(), expected, rtol=0.1, atol=0.1)
+        self.assertEqual(recurrence.call_count, model.config.layer_types.count("linear_attention"))
+        self.assertTrue(torch.isfinite(output).all())
+
+    @parameterized.expand([("single_token", 1), ("shorter_padding", 2), ("longer_padding", 3), ("inside_document", 4)])
+    def test_cached_left_padding(self, _, chunk_size):
+        model = self._get_model()
+        input_ids = torch.tensor([[0, 0, 0, 5, 6, 7], [0, 0, 3, 8, 9, 4]], device=torch_device)
+        attention_mask = input_ids.ne(0)
+        with torch.no_grad():
+            expected = model(input_ids, attention_mask=attention_mask, use_cache=False).last_hidden_state
+            cache = DynamicCache(config=model.config)
+            outputs = []
+            for start in range(0, input_ids.shape[1], chunk_size):
+                end = min(start + chunk_size, input_ids.shape[1])
+                outputs.append(
+                    model(
+                        input_ids[:, start:end], attention_mask=attention_mask[:, :end], cache=cache, use_cache=True
+                    ).last_hidden_state
+                )
+        actual = torch.cat(outputs, dim=1)
+        torch.testing.assert_close(actual[attention_mask], expected[attention_mask], rtol=1e-4, atol=1e-4)
+
+    def test_generate_chunked_prefill_left_padding(self):
+        torch.manual_seed(41)
+        config = self.model_tester.get_config()
+        model = KlmForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[0, 0, 0, 5, 6, 7], [0, 0, 3, 8, 9, 4]], device=torch_device)
+        kwargs = {
+            "input_ids": input_ids,
+            "attention_mask": input_ids.ne(0),
+            "max_new_tokens": 3,
+            "do_sample": False,
+            "eos_token_id": None,
+            "pad_token_id": 0,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+        with torch.no_grad():
+            expected = model.generate(**kwargs)
+            actual = model.generate(**kwargs, prefill_chunk_size=3)
+        torch.testing.assert_close(actual.sequences, expected.sequences)
+        for actual_scores, expected_scores in zip(actual.scores, expected.scores):
+            torch.testing.assert_close(actual_scores, expected_scores, rtol=1e-4, atol=1e-4)
 
     def test_ngram_embeddings(self):
         """N-grams are looked up by key and do not reach back past the start of a document."""

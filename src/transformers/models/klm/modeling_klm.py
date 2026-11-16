@@ -773,6 +773,8 @@ class KlmModel(KlmPreTrainedModel):
 
             The first token that follows padding starts a document, so left padding is never read. Padding on the right
             only comes after the tokens it could affect.
+
+            With a cache, include both cached and current positions in the mask.
         """
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
@@ -799,6 +801,8 @@ class KlmModel(KlmPreTrainedModel):
         if attention_mask is not None:
             is_token = attention_mask[:, -seq_len:].bool()
             document_starts[:, 1:] |= is_token[:, 1:] & ~is_token[:, :-1]
+            if past_seen_tokens > 0 and attention_mask.shape[1] > seq_len:
+                document_starts[:, 0] |= is_token[:, 0] & ~attention_mask[:, -seq_len - 1].bool()
         if document_state is None:
             document_starts[:, 0] = True
 
@@ -913,6 +917,8 @@ class KlmForCausalLM(KlmPreTrainedModel, GenerationMixin):
 
             The first token that follows padding starts a document, so left padding is never read. Padding on the right
             only comes after the tokens it could affect.
+
+            With a cache, include both cached and current positions in the mask.
 
         Example:
 

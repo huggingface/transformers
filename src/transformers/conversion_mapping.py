@@ -30,6 +30,7 @@ from .core_model_loading import (
     PrefixChange,
     Split,
     Transpose,
+    Unbind,
     WeightConverter,
     WeightRenaming,
     WeightTransform,
@@ -2557,11 +2558,65 @@ def _build_checkpoint_conversion_mapping():
 _checkpoint_conversion_mapping_cache = None
 
 
-def get_checkpoint_conversion_mapping(model_type):
+def _get_klm_conversion_mapping(config):
+    # These targets depend on the checkpoint's layer layout, not a fixed attention period or layer count.
+    renamings = [
+        WeightRenaming(r"(^|model\.)embed\.", r"\1embed_tokens."),
+        WeightRenaming(r"memory\.bigram\.", "embed_ngrams.bigram_embeddings."),
+        WeightRenaming(r"memory\.trigram\.", "embed_ngrams.trigram_embeddings."),
+        WeightRenaming(r"memory\.(bigram_keys|trigram_keys|bigram_proj|trigram_proj)", r"embed_ngrams.\1"),
+        WeightRenaming(r"blocks\.(\d+)\.mixer_norm\.", r"layers.\1.input_layernorm."),
+        WeightRenaming(r"blocks\.(\d+)\.ffn_norm\.", r"layers.\1.post_attention_layernorm."),
+        WeightRenaming(r"blocks\.(\d+)\.ffn\.gate\.", r"layers.\1.mlp.gate_proj."),
+        WeightRenaming(r"blocks\.(\d+)\.ffn\.up\.", r"layers.\1.mlp.up_proj."),
+        WeightRenaming(r"blocks\.(\d+)\.ffn\.down\.", r"layers.\1.mlp.down_proj."),
+    ]
+    conversions = []
+    residuals = []
+    for layer_idx, layer_type in enumerate(config.layer_types):
+        attention = "self_attn" if layer_type == "full_attention" else "linear_attn"
+        prefix = f"layers.{layer_idx}.{attention}"
+        if layer_type == "linear_attention":
+            renamings.append(
+                WeightRenaming(
+                    rf"blocks\.{layer_idx}\.mixer\.(q_proj|k_proj|v_proj|b_proj|w_proj|A_log|dt_bias|o_norm|o_proj)",
+                    rf"{prefix}.\1",
+                )
+            )
+            for projection in ("f", "g"):
+                for component, letter in enumerate(("a", "b")):
+                    renamings.append(
+                        WeightRenaming(
+                            rf"blocks\.{layer_idx}\.mixer\.{projection}_proj\.{component}\.",
+                            f"{prefix}.{projection}_{letter}_proj.",
+                        )
+                    )
+            conversions.append(
+                WeightConverter(
+                    [f"blocks.{layer_idx}.mixer.{component}_conv1d.weight" for component in "qkv"],
+                    f"{prefix}.conv1d.weight",
+                    operations=[Concatenate(dim=0)],
+                )
+            )
+        else:
+            renamings.append(WeightRenaming(rf"blocks\.{layer_idx}\.mixer\.", f"{prefix}."))
+        residuals.extend([f"layers.{layer_idx}.input_residual", f"layers.{layer_idx}.post_attention_residual"])
+    residuals.append("output_residual")
+    for original, target in (("attn_res_query", "query"), ("attn_res_norm", "weight")):
+        conversions.append(
+            WeightConverter(original, [f"{residual}.{target}" for residual in residuals], operations=[Unbind(dim=0)])
+        )
+    return renamings + conversions
+
+
+def get_checkpoint_conversion_mapping(model_type, config=None):
     global _checkpoint_conversion_mapping_cache
     if _checkpoint_conversion_mapping_cache is None:
         _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
-    return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
+    mapping = _checkpoint_conversion_mapping_cache.get(model_type)
+    if mapping is None and model_type == "klm" and config is not None:
+        return _get_klm_conversion_mapping(config)
+    return deepcopy(mapping)
 
 
 USER_REGISTERED_MAPPINGS = set()
@@ -2608,7 +2663,7 @@ def extract_weight_conversions_for_model(
     # Class name takes priority — allows ForXxx-specific overrides
     conversions = get_checkpoint_conversion_mapping(class_name)
     if conversions is None and model_type:
-        conversions = get_checkpoint_conversion_mapping(model_type)
+        conversions = get_checkpoint_conversion_mapping(model_type, config=model.config)
     return conversions
 
 
@@ -2680,7 +2735,7 @@ def get_model_conversion_mapping(
             ):
                 continue
             if model_type is not None:
-                conversions = get_checkpoint_conversion_mapping(model_type)
+                conversions = get_checkpoint_conversion_mapping(model_type, config=submodule.config)
 
         if conversions is None:
             continue

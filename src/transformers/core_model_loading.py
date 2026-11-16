@@ -229,6 +229,60 @@ class Concatenate(ConversionOps):
         return Chunk(self.dim, self.num_shards_attribute)
 
 
+class Unbind(ConversionOps):
+    """Split a tensor into one tensor per target, removing the selected dimension."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad()
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        if len(input_dict) != 1:
+            raise ValueError("Unbind needs exactly one source tensor.")
+        tensors = next(iter(input_dict.values()))
+        if isinstance(tensors, list) and len(tensors) != 1:
+            raise ValueError("Unbind needs exactly one source tensor.")
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        if tensor.shape[self.dim] != len(target_patterns) or len(set(target_patterns)) != len(target_patterns):
+            raise ValueError("Unbind needs one tensor and one target for each entry of the selected dimension.")
+        return dict(zip(target_patterns, tensor.unbind(self.dim)))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Stack(self.dim)
+
+
+class Stack(ConversionOps):
+    """Stack one tensor per source, preserving the declared source order."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad()
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        if len(target_patterns) != 1:
+            raise ValueError("Stack needs exactly one target.")
+        if (
+            not source_patterns
+            or len(set(source_patterns)) != len(source_patterns)
+            or set(input_dict) != set(source_patterns)
+        ):
+            raise ValueError("Stack needs exactly one entry for each declared source.")
+        tensors = []
+        for pattern in source_patterns:
+            values = input_dict.pop(pattern)
+            if isinstance(values, list):
+                if len(values) != 1:
+                    raise ValueError("Stack needs exactly one tensor per source.")
+                values = values[0]
+            tensors.append(values)
+        return {target_patterns[0]: torch.stack(tensors, dim=self.dim)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Unbind(self.dim)
+
+
 class Interleave(ConversionOps):
     """Deinterleaves a tensor along `dim` by splitting in two and transposing. Reshapes param back to its original size."""
 
