@@ -42,7 +42,12 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_cu_seqlens,
@@ -698,7 +703,16 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         target_dtype = self.patch_embedding.weight.dtype
         embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+        interp_indices, interp_weights = self.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
+        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
+        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
+
+        return embeddings
+
+    def get_interpolation_inputs(self, grid_thw: torch.Tensor, kwargs: dict | None = None):
+        """The position table's interpolation indices and weights for each patch, or `kwargs`' when precomputed."""
+        return get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
@@ -707,11 +721,6 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
             padding=self.interpolation_padding,
             kwargs=kwargs,
         )
-        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
-
-        return embeddings
 
 
 class MuseGlimmerVisionRotaryEmbedding(nn.Module):
@@ -832,6 +841,40 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the full and window attention's `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position
+        table's `interp_indices` and `interp_weights`, the rotary `position_ids` and the merger's
+        `pixel_shuffle_index`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
+        operations. Those already in `kwargs` are returned as they are; only the config and the tower's constants are
+        read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        interp_indices, interp_weights = self.patch_embedder.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
+        pixel_shuffle_index = get_vision_pixel_shuffle_index(grid_thw, self.merge_size, kwargs=kwargs)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "position_ids": position_ids,
+            "pixel_shuffle_index": pixel_shuffle_index,
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -845,23 +888,26 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width patch-grid dimensions for each packed image or video.
         """
-        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
-        window_index, cu_window_seqlens = get_vision_window_index(
-            grid_thw,
-            spatial_merge_size=self.spatial_merge_size,
-            window_size=self.window_size,
-            patch_size=self.patch_size,
-            kwargs=kwargs,
+        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
+        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
+        cu_seqlens = data_dependent_inputs["cu_seqlens"]
+        window_index, cu_window_seqlens = (
+            data_dependent_inputs["window_index"],
+            data_dependent_inputs["cu_window_seqlens"],
         )
 
-        inputs_embeds = self.patch_embedder(pixel_values, grid_thw, **kwargs)
+        inputs_embeds = self.patch_embedder(
+            pixel_values,
+            grid_thw,
+            interp_indices=data_dependent_inputs["interp_indices"],
+            interp_weights=data_dependent_inputs["interp_weights"],
+            **kwargs,
+        )
         hidden_states = self.ln_pre(inputs_embeds)
         hidden_states = hidden_states[window_index, :]
 
         # Add `1` because ref implementation's position offset is `1`!
-        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
-        position_ids = position_ids.flip(-1) + 1
+        position_ids = data_dependent_inputs["position_ids"].flip(-1) + 1
         position_ids = position_ids[window_index, :]
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -880,7 +926,9 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         hidden_states = self.ln_post(hidden_states)
-        hidden_states = self.pixel_shuffle(hidden_states, grid_thw, **kwargs)
+        hidden_states = self.pixel_shuffle(
+            hidden_states, grid_thw, pixel_shuffle_index=data_dependent_inputs["pixel_shuffle_index"], **kwargs
+        )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
@@ -914,8 +962,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @can_return_tuple
-    @auto_docstring
+    @accepts_precomputed_kwargs(modality="image")
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -1092,6 +1139,22 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        tower's (see [`MuseGlimmerVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
+        `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export`
+        free of those operations. Only the config and the tower's constants are read.
+
+        Args:
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of each image's patch grid.
+        """
+        if image_grid_thw is None:
+            return {}
+        tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
 
 
 @auto_docstring
