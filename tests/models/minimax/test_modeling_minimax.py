@@ -101,14 +101,14 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
         self.assertEqual(len(attentions), (output_length - prompt_length))
-        use_cache = decoder_past_key_values is not None
+        use_cache = decoder_cache is not None
 
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -127,8 +127,8 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 if config.layer_types[layer_idx] == "full_attention":
                     self.assertEqual(layer_attention.shape, expected_shape)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, MiniMaxCache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, MiniMaxCache)
 
         # (batch, head, seq_length, head_features)
         key_value_cache_expected_shape = (
@@ -147,10 +147,10 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 
         for layer_idx in range(config.num_hidden_layers):
             if config.layer_types[layer_idx] == "full_attention":
-                self.assertEqual(past_key_values.layers[layer_idx].keys.shape, key_value_cache_expected_shape)
-                self.assertEqual(past_key_values.layers[layer_idx].values.shape, key_value_cache_expected_shape)
+                self.assertEqual(cache.layers[layer_idx].keys.shape, key_value_cache_expected_shape)
+                self.assertEqual(cache.layers[layer_idx].values.shape, key_value_cache_expected_shape)
             else:
-                self.assertEqual(past_key_values.linear_cache[layer_idx].shape, linear_cache_expected_shape)
+                self.assertEqual(cache.linear_cache[layer_idx].shape, linear_cache_expected_shape)
 
     def _check_caches_are_equal(self, cache1: MiniMaxCache, cache2: MiniMaxCache):
         if not isinstance(cache1, MiniMaxCache) or not isinstance(cache2, MiniMaxCache):

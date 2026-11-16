@@ -1091,8 +1091,9 @@ def is_nncf_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
-def is_onnxruntime_available() -> bool:
-    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+def is_onnxruntime_available(min_version: str | None = None) -> bool:
+    available, onnxruntime_version = _is_package_available("onnxruntime", return_version=True)
+    return available and (min_version is None or version.parse(onnxruntime_version) >= version.parse(min_version))
 
 
 @lru_cache
@@ -1615,7 +1616,13 @@ def is_soundfile_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_timm_available() -> bool:
-    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
+    # timm requires PIL/torchvision under the hood so we check all of deps here once
+    return (
+        is_vision_available()
+        and is_torchvision_available()
+        and is_torch_available()
+        and _is_package_available("timm")[0]
+    )
 
 
 @lru_cache
@@ -1654,6 +1661,19 @@ def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
         return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
+
+
+@lru_cache
+@_make_compile_constant
+def is_soxr_available() -> bool:
+    return _is_package_available("soxr")[0]
+
+
+@lru_cache
+@_make_compile_constant
+def is_audio_available() -> bool:
+    """The audio core's dependencies, installed with `transformers[audio]`: soundfile to decode, soxr to resample."""
+    return is_soundfile_available() and is_soxr_available()
 
 
 @lru_cache
@@ -2047,6 +2067,12 @@ def is_training_run_on_sagemaker() -> bool:
 
 
 # docstyle-ignore
+AUDIO_IMPORT_ERROR = """
+{0} requires soundfile and soxr, which were not found in your environment. You can install them with pip:
+`pip install transformers[audio]`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
 ```
@@ -2213,6 +2239,13 @@ runtime.
 """
 
 # docstyle-ignore
+SOXR_IMPORT_ERROR = """
+{0} requires the soxr library but it was not found in your environment. You can install it with pip:
+`pip install transformers[audio]`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
@@ -2223,7 +2256,8 @@ Please note that you may need to restart your runtime after installation.
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
+`pip install phonemizer`. phonemizer also needs the `espeak-ng` system library, which pip cannot install (e.g.
+`apt install espeak-ng` on Debian/Ubuntu, `brew install espeak-ng` on macOS).
 """
 # docstyle-ignore
 UROMAN_IMPORT_ERROR = """
@@ -2393,6 +2427,7 @@ MISTRAL_COMMON_IMPORT_ERROR = """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("audio", (is_audio_available, AUDIO_IMPORT_ERROR)),
         ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
@@ -2417,6 +2452,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
+        ("soxr", (is_soxr_available, SOXR_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),

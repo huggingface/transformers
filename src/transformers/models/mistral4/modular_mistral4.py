@@ -24,6 +24,7 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
@@ -102,13 +103,14 @@ class Mistral4MoE(DeepseekV3MoE):
 
 
 class Mistral4Attention(DeepseekV3Attention):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -134,8 +136,8 @@ class Mistral4Attention(DeepseekV3Attention):
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
@@ -159,6 +161,7 @@ class Mistral4Attention(DeepseekV3Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -188,7 +191,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Mistral4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -49,6 +49,8 @@ Then run:
 
 ```bash
 make run-mic MODEL=bert  # only the contracts for this model directory under src/transformers/models/
+make run-mic MODEL=Wav2Vec2  # a model name works too (case and punctuation are ignored)
+make run-mic MODEL=qwen+    # every matching model directory: + stands for any characters
 make run-mic             # contracts affected by local changes
 make run-mic ALL=1       # all fixtures in the fleet
 make run-mic BASE=main   # use a different Git comparison base
