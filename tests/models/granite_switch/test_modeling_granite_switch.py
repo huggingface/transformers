@@ -19,7 +19,14 @@ import unittest
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -27,7 +34,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import GraniteSwitchConfig, GraniteSwitchForCausalLM, GraniteSwitchModel
+    from transformers import AutoTokenizer, GraniteSwitchConfig, GraniteSwitchForCausalLM, GraniteSwitchModel
     from transformers.models.granite_switch.configuration_granite_switch import SWITCH_LAYER_SLOTS
 
 
@@ -449,7 +456,7 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
             with self.subTest(overrides=overrides), self.assertRaises(StrictDataclassClassValidationError):
                 type(config)(**{**config_dict, **overrides})
 
-        # The last decoder layer is a valid read layer: the switch takes no layer slots.
+        # The last decoder layer is a valid read layer: `probe_read_layers` counts decoder layers only.
         type(config)(**{**config_dict, "probe_read_layers": [None, config.num_hidden_layers - 1]})
 
     def test_base_reset_token_does_not_shift_the_probe_slots(self):
@@ -463,3 +470,75 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
         model = GraniteSwitchModel(type(config)(**config_dict))
         self.assertEqual(model.probe_control_token_ids, [ADAPTER_TOKEN_IDS[1]])
         torch.testing.assert_close(model.switch.adapter_kind_lut, torch.tensor([False, False, True]))
+
+
+@slow
+@require_torch_accelerator
+class GraniteSwitchIntegrationTest(unittest.TestCase):
+    model_id = "ibm-granite/granite-switch-4.1-3b-preview"
+    messages = [{"role": "user", "content": "When was the Eiffel Tower completed?"}]
+    documents = [{"doc_id": "1", "text": "The Eiffel Tower was completed in 1889 for the World's Fair."}]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_id)
+        cls.model = GraniteSwitchForCausalLM.from_pretrained(
+            cls.model_id, device_map=torch_device, dtype=torch.bfloat16
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        cleanup(torch_device, gc_collect=True)
+
+    def _inputs(self, adapter_name=None):
+        kwargs = {"adapter_name": adapter_name} if adapter_name else {}
+        return self.tokenizer.apply_chat_template(
+            self.messages,
+            documents=self.documents,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+            **kwargs,
+        ).to(torch_device)
+
+    def test_model_logits_bf16(self):
+        """The last positions' logits, with the adapter and without. They agree until the control token."""
+        # fmt: off
+        EXPECTED_MEANS = {
+            "answerability": Expectations({("mps", None): torch.tensor([0.7986, -0.6247, -3.5927, -2.3329, -4.7504])}),
+            None: Expectations({("mps", None): torch.tensor([0.7986, -0.6247, 1.1428, 0.6827, -0.9518])}),
+        }
+        EXPECTED_SLICES = {
+            "answerability": Expectations({("mps", None): torch.tensor([-1.3828, 34.5000, 4.4375, 4.1562, 3.0781, 1.0781, 18.2500, 6.3750, 6.9375, 4.3438, 5.9375, 4.6875, 7.0000, -5.7500, 2.2031])}),
+            None: Expectations({("mps", None): torch.tensor([9.0625, 24.0000, 18.0000, 17.7500, 15.6250, 13.3125, 20.0000, 21.3750, 12.8750, 20.8750, 15.6250, 11.8750, 21.7500, 13.8750, 16.7500])}),
+        }
+        # fmt: on
+        for adapter_name in ("answerability", None):
+            with self.subTest(adapter_name=adapter_name), torch.no_grad():
+                logits = self.model(**self._inputs(adapter_name)).logits.float()
+                torch.testing.assert_close(
+                    logits[0, -5:].mean(-1),
+                    EXPECTED_MEANS[adapter_name].get_expectation().to(torch_device),
+                    rtol=1e-2,
+                    atol=1e-2,
+                )
+                torch.testing.assert_close(
+                    logits[0, -1, :15],
+                    EXPECTED_SLICES[adapter_name].get_expectation().to(torch_device),
+                    rtol=1e-2,
+                    atol=1e-2,
+                )
+
+    def test_model_generation(self):
+        """The adapter answers in its own format, and the same prompt without it gets the base model's answer."""
+        EXPECTED_TEXTS = {
+            "answerability": Expectations({("mps", None): '"answerable"'}),
+            None: Expectations({("mps", None): "The Eiffel Tower was completed in 1889."}),
+        }
+        for adapter_name in ("answerability", None):
+            with self.subTest(adapter_name=adapter_name):
+                inputs = self._inputs(adapter_name)
+                output = self.model.generate(**inputs, max_new_tokens=20, do_sample=False)
+                text = self.tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+                self.assertEqual(text, EXPECTED_TEXTS[adapter_name].get_expectation())
