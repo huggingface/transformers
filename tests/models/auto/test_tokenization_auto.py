@@ -202,6 +202,7 @@ class AutoTokenizerTest(unittest.TestCase):
             ("hf-internal-testing/llama3-tokenizer-tiktoken", "tokenizers", "TokenizersBackend"),
             ("mistralai/Ministral-8B-Instruct-2410", "tokenizers", "TokenizersBackend"),
             ("mistralai/Ministral-8B-Instruct-2410", "mistral_common", "MistralCommonBackend"),
+            ("mistralai/Mistral-7B-Instruct-v0.3", "mistral_common", "MistralCommonBackend"),
         ]
     )
     def test_backend_kwarg(self, repo_id, backend, backend_class_name):
@@ -221,10 +222,12 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     @require_tiktoken
+    @require_mistral_common
     @parameterized.expand(
         [
             ("google-bert/bert-base-cased", "sentencepiece", "has no SentencePiece model file"),
             ("hf-internal-testing/llama3-tokenizer-tiktoken", "sentencepiece", "has no SentencePiece model file"),
+            ("google-t5/t5-small", "mistral_common", "has no mistral-common tokenizer file"),
             ("google-bert/bert-base-cased", "pil", "not a tokenizer backend"),
         ]
     )
