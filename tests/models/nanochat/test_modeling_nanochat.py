@@ -20,6 +20,7 @@ from transformers.testing_utils import (
     cleanup,
     require_kernels,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -50,6 +51,7 @@ class NanoChatModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = NanoChatModelTester
 
     @require_kernels
+    @require_torch_accelerator
     def test_rotary_kernel_not_inherited(self):
         model = NanoChatModel(self.model_tester.get_config())
 
