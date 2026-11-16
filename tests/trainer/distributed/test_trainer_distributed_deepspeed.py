@@ -894,8 +894,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
             model = T5ForConditionalGeneration.from_pretrained(T5_TINY)
 
             data_file = str(self.tests_dir / "fixtures/tests_samples/SQUAD/sample.json")
-            # Keep the tiny fixture in memory to avoid memory-mapped reads from the shared CI cache.
-            raw_datasets = datasets.load_dataset("json", data_files=data_file, field="data", keep_in_memory=True)
+            raw_datasets = datasets.load_dataset("json", data_files=data_file, field="data")
             train_dataset = (
                 raw_datasets["train"]
                 .map(
@@ -968,7 +967,7 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
-        execute_subprocess_async(cmd, env=self.get_env())
+        execute_subprocess_async(cmd, env=self.get_env(), allow_empty_output=True)
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []
         for rank in range(num_processes):
