@@ -366,10 +366,11 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
     pooler_output (`tuple[torch.Tensor]`):
-        One `(num_codes, hidden_size)` tensor of embedded image codes per input image.
+        One `(num_tokens, hidden_size)` tensor of embedded image tokens per input image.
     image_tokens (`list[torch.LongTensor]`):
-        One grid of discrete codebook indices per input image, of shape `(height // factor, width // factor)`
-        where `factor` is `config.spatial_scale_factor` (16 by default).
+        One flat tensor of shared-vocabulary token ids per input image: its `(height // factor) * (width // factor)`
+        codes in row-major order, offset by `config.image_token_offset`, where `factor` is the vision tokenizer's
+        `spatial_scale_factor` (16 by default).
     """
 
     pooler_output: tuple[torch.Tensor] | None = None
@@ -381,9 +382,10 @@ class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
 class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
     pooler_output (`tuple[torch.Tensor]`):
-        One `(num_codes, hidden_size)` tensor of embedded audio codes per input clip.
+        One `(num_tokens, hidden_size)` tensor of embedded audio tokens per input clip.
     audio_tokens (`list[torch.LongTensor]`):
-        One 1D tensor of `ceil(length / hop)` discrete codebook indices per input clip.
+        One tensor of `ceil(num_valid_samples / hop_length)` shared-vocabulary token ids per input clip, offset by
+        `config.audio_token_offset`.
     """
 
     pooler_output: tuple[torch.Tensor] | None = None
@@ -562,8 +564,7 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    # per-image / per-audio-clip tokenizer loops are data-dependent control flow
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _no_split_modules = [
@@ -654,17 +655,10 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         self.audio_tokenizer = AutoModel.from_config(config.audio_config)
         self.post_init()
 
-    def _encode_images(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
-        """Crop batch padding and retain the raw code grid from each individually encoded image."""
-        image_tokens = []
-        for image, size in zip(pixel_values, image_sizes):
-            image = image[None, :, : int(size[0]), : int(size[1])]
-            image_tokens.append(self.vision_tokenizer.encode(image).image_tokens[0])
-        return image_tokens
-
-    def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
+    def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
         """
-        Tokenizes each unpadded image and returns flattened shared-vocabulary ids.
+        Tokenizes each image at its own size, since batch padding would change its codes, and maps the codes into the
+        shared vocabulary.
 
         Args:
             pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
@@ -673,28 +667,31 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
                 The true size of each image, being (height, width).
 
         Returns:
-            `torch.LongTensor`: Image code ids offset by `config.image_token_offset`.
+            `list[torch.LongTensor]`: One flat tensor of token ids per image, in row-major order and offset by
+            `config.image_token_offset`.
         """
-        image_tokens = self._encode_images(pixel_values, image_sizes)
-        return torch.cat([codes.flatten() for codes in image_tokens]) + self.config.image_token_offset
+        image_tokens = []
+        for image, (height, width) in zip(pixel_values, image_sizes.tolist()):
+            codes = self.vision_tokenizer.encode(image[None, :, :height, :width]).image_tokens
+            image_tokens.append(codes.flatten() + self.config.image_token_offset)
+        return image_tokens
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Tokenizes images and embeds their discrete codes with the text embedding layer.")
+    @auto_docstring(custom_intro="Tokenizes images and embeds their token ids with the text embedding layer.")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
-        image_tokens = self._encode_images(pixel_values, image_sizes)
-        vocab_ids = torch.cat([codes.flatten() for codes in image_tokens]) + self.config.image_token_offset
-        image_embeddings = self.get_input_embeddings()(vocab_ids)
-        image_features = torch.split(image_embeddings, [codes.numel() for codes in image_tokens])
+        image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        image_features = tuple(self.get_input_embeddings()(tokens) for tokens in image_tokens)
         return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
 
-    def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> torch.LongTensor:
+    def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> list[torch.LongTensor]:
         """
-        Tokenizes each unpadded audio clip and returns flattened shared-vocabulary ids.
+        Tokenizes each clip at its own length, since batch padding would change its codes, and maps the codes into the
+        shared vocabulary.
 
         Args:
             input_values (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
@@ -703,7 +700,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
                 Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
 
         Returns:
-            `torch.LongTensor`: Audio code ids offset by `config.audio_token_offset`.
+            `list[torch.LongTensor]`: One tensor of token ids per clip, offset by `config.audio_token_offset`.
         """
         if input_values.dim() == 2:
             input_values = input_values.unsqueeze(1)
@@ -715,20 +712,15 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             raise ValueError(
                 "`padding_mask` must be right-padded (valid samples first), as returned by the feature extractor."
             )
-        vocab_ids_list = []
-        for clip, length in zip(input_values, audio_lengths):
-            clip = clip[None, :, : int(length)].to(self.audio_tokenizer.dtype)
+        audio_tokens = []
+        for clip, length in zip(input_values, audio_lengths.tolist()):
+            clip = clip[None, :, :length].to(self.audio_tokenizer.dtype)
             codes = self.audio_tokenizer.encode(clip, return_dict=True).audio_codes
-            vocab_ids_list.append(codes.flatten() + self.config.audio_token_offset)
-        return torch.cat(vocab_ids_list)
-
-    def _get_audio_token_counts(self, padding_mask: torch.Tensor) -> list[int]:
-        """Number of audio codes per clip: one per started `hop_length` window of valid samples."""
-        hop_length = self.audio_tokenizer.config.hop_length
-        return ((padding_mask.sum(dim=-1) + hop_length - 1) // hop_length).tolist()
+            audio_tokens.append(codes.flatten() + self.config.audio_token_offset)
+        return audio_tokens
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Tokenizes audio and embeds its discrete codes with the text embedding layer.")
+    @auto_docstring(custom_intro="Tokenizes audio and embeds its token ids with the text embedding layer.")
     def get_audio_features(
         self,
         input_values: torch.Tensor,
@@ -739,11 +731,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         padding_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
         """
-        vocab_ids = self.get_audio_tokens(input_values, padding_mask)
-        split_sizes = self._get_audio_token_counts(padding_mask)
-        audio_embeddings = self.get_input_embeddings()(vocab_ids)
-        audio_features = torch.split(audio_embeddings, split_sizes)
-        audio_tokens = [ids - self.config.audio_token_offset for ids in torch.split(vocab_ids, split_sizes)]
+        audio_tokens = self.get_audio_tokens(input_values, padding_mask)
+        audio_features = tuple(self.get_input_embeddings()(tokens) for tokens in audio_tokens)
         return Apertus1p5AudioTokenizerModelOutput(audio_tokens=audio_tokens, pooler_output=audio_features)
 
     def get_placeholder_mask(
@@ -976,7 +965,8 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         else:
             raise ValueError("Either `input_ids` or `inputs_embeds` must be provided for multimodal expansion.")
 
-        audio_token_counts = self.model._get_audio_token_counts(model_kwargs["padding_mask"])
+        hop_length = self.model.audio_tokenizer.config.hop_length
+        audio_token_counts = ((model_kwargs["padding_mask"].sum(dim=-1) + hop_length - 1) // hop_length).tolist()
         audio_nums = []
         audio_idx = 0
         for expected_tokens in placeholder_mask.sum(dim=-1).tolist():

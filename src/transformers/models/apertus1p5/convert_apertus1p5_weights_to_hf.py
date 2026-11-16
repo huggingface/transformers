@@ -461,7 +461,7 @@ def verify_composite(composite_dir: str, max_new_tokens: int = 12):
     torch.manual_seed(0)
     image = torch.rand(1, 3, 256, 256) * 2 - 1  # [-1, 1], multiple of 16
     with torch.no_grad():
-        image_ids = model.model.get_image_tokens(image, torch.tensor([[256, 256]]))
+        image_ids = model.model.get_image_tokens(image, torch.tensor([[256, 256]]))[0]
     in_range = bool(
         (image_ids >= config.image_token_offset).all()
         and (image_ids < config.image_token_offset + config.vision_config.codebook_size).all()
@@ -480,7 +480,7 @@ def verify_composite(composite_dir: str, max_new_tokens: int = 12):
     t = torch.arange(24000) / 24000.0
     sine = (0.5 * torch.sin(2 * torch.pi * 440.0 * t))[None, None, :]
     with torch.no_grad():
-        audio_ids = model.model.get_audio_tokens(sine, torch.ones(1, 24000, dtype=torch.long))
+        audio_ids = model.model.get_audio_tokens(sine, torch.ones(1, 24000, dtype=torch.long))[0]
     in_range = bool(
         (audio_ids >= config.audio_token_offset).all()
         and (audio_ids < config.audio_token_offset + config.audio_config.codebook_size).all()
