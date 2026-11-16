@@ -278,9 +278,9 @@ class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
     @property
     def vision_model_output(self):
         logger.warning_once(
-            "`vision_model_output` is deprecated and will be removed in v5.30; Use `modality_outputs['image']` to obtain pooled features."
+            "`vision_model_output` is deprecated and will be removed in v5.30; Use `image_outputs` to obtain pooled features."
         )
-        return self.modality_outputs["image"]
+        return self.image_outputs
 
     @property
     def image_embeds(self):
@@ -292,9 +292,9 @@ class Kosmos2_5ModelOutput(MultimodalBaseModelOutputWithPast):
     @property
     def projection_attentions(self):
         logger.warning_once(
-            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_outputs.projection_attentions` to obtain pooled features."
         )
-        return self.image_projection_attentions
+        return self.image_outputs.projection_attentions
 
 
 @auto_docstring
@@ -313,9 +313,9 @@ class Kosmos2_5ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithP
     @property
     def vision_model_output(self):
         logger.warning_once(
-            "`vision_model_output` is deprecated and will be removed in v5.30; Use `modality_outputs['image']` to obtain pooled features."
+            "`vision_model_output` is deprecated and will be removed in v5.30; Use `image_outputs` to obtain pooled features."
         )
-        return self.modality_outputs["image"]
+        return self.image_outputs
 
     @property
     def image_embeds(self):
@@ -327,9 +327,9 @@ class Kosmos2_5ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithP
     @property
     def projection_attentions(self):
         logger.warning_once(
-            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_outputs.projection_attentions` to obtain pooled features."
         )
-        return self.image_projection_attentions
+        return self.image_outputs.projection_attentions
 
 
 # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructLayerNorm with Pix2Struct->Kosmos2_5
@@ -1242,7 +1242,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             attentions=outputs.attentions,
             width=width,
             height=height,
-            modality_outputs={"image": vision_model_output},
+            image_outputs=vision_model_output,
         )
 
 
@@ -1536,7 +1536,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             attentions=lm_outputs.attentions,
             width=width,
             height=height,
-            modality_outputs={"image": vision_model_output},
+            image_outputs=vision_model_output,
         )
 
     def prepare_inputs_for_generation(

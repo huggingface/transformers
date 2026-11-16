@@ -309,7 +309,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs={"image": image_outputs})
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=image_outputs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

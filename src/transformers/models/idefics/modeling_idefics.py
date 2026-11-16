@@ -33,7 +33,12 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import ModelOutput, MultimodalBaseModelOutputWithPast, MultimodalCausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -943,7 +948,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
             position_ids = position_ids.unsqueeze(0)
 
-        mm_encoder_outputs = {}
+        image_outputs = None
         if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
@@ -951,10 +956,10 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         elif pixel_values is not None:
             pixel_values = pixel_values.flatten(0, 1).to(dtype=self.dtype, device=device).contiguous()
-            mm_encoder_outputs["image"] = self.vision_model(
+            image_outputs = self.vision_model(
                 pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
             )
-            image_hidden_states = mm_encoder_outputs["image"].last_hidden_state
+            image_hidden_states = image_outputs.last_hidden_state
 
         elif image_encoder_embeddings is not None:
             image_hidden_states = (
@@ -962,8 +967,10 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 if image_encoder_embeddings.ndim == 4
                 else image_encoder_embeddings
             )
+            image_outputs = BaseModelOutputWithPooling(last_hidden_state=image_hidden_states)
         else:
             image_hidden_states = perceiver_embeddings
+            image_outputs = BaseModelOutputWithPooling(last_hidden_state=image_hidden_states)
 
         if self.config.use_resampler:
             if perceiver_embeddings is None:
@@ -1040,7 +1047,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            image_outputs=mm_encoder_outputs.get("image"),
+            image_outputs=image_outputs,
         )
 
 
@@ -1218,7 +1225,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
                 model_kwargs["image_attention_mask"] = torch.cat([image_attention_mask, last_mask], dim=1)
 
         # Get the precomputed image_hidden_states
-        model_kwargs["image_hidden_states"] = outputs.image_last_hidden_state
+        model_kwargs["image_hidden_states"] = outputs.image_outputs.last_hidden_state
         return model_kwargs
 
 

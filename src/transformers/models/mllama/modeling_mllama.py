@@ -1381,7 +1381,7 @@ class MllamaModel(MllamaPreTrainedModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs={"image": vision_outputs})
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=vision_outputs)
 
 
 @auto_docstring(

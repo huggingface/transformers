@@ -166,16 +166,16 @@ class Kosmos2ModelOutput(MultimodalBaseModelOutputWithPast):
     @property
     def projection_attentions(self):
         logger.warning_once(
-            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_outputs.projection_attentions` to obtain pooled features."
         )
-        return self.image_projection_attentions
+        return self.image_outputs.projection_attentions
 
     @property
     def vision_model_output(self):
         logger.warning_once(
-            "`vision_model_output` is deprecated and will be removed in v5.30; Use `modality_outputs['image']` to obtain pooled features."
+            "`vision_model_output` is deprecated and will be removed in v5.30; Use `image_outputs` to obtain pooled features."
         )
-        return self.modality_outputs["image"]
+        return self.image_outputs
 
     @property
     def image_embeds(self):
@@ -191,14 +191,14 @@ class Kosmos2ForConditionalGenerationModelOutput(MultimodalCausalLMOutputWithPas
     @property
     def projection_attentions(self):
         logger.warning_once(
-            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_projection_attentions` to obtain pooled features."
+            "`projection_attentions` is deprecated and will be removed in v5.30; Use `image_outputs.projection_attentions` to obtain pooled features."
         )
-        return self.image_projection_attentions
+        return self.image_outputs.projection_attentions
 
     @property
     def vision_model_output(self):
         logger.warning_once(
-            "`vision_model_output` is deprecated and will will be removed in v5.30; Use `modality_outputs['image']` to obtain pooled features."
+            "`vision_model_output` is deprecated and will will be removed in v5.30; Use `image_outputs` to obtain pooled features."
         )
         return self.modality_outputs["image"]
 
@@ -1461,7 +1461,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            modality_outputs={"image": image_outputs},
+            image_outputs=image_outputs,
         )
 
 
@@ -1629,7 +1629,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
             past_key_values=lm_outputs.past_key_values,
             hidden_states=lm_outputs.hidden_states,
             attentions=lm_outputs.attentions,
-            modality_outputs={"image": image_outputs},
+            image_outputs=image_outputs,
         )
 
     @torch.no_grad()

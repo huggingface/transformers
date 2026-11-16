@@ -60,16 +60,16 @@ class UltraVBertMaskedLMOutput(MultimodalModelOutput):
         sequence_length)`.
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
-    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-        encoder. Contains only the modalities that were processed.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -316,7 +316,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
             **kwargs,
         )
 
-        return MultimodalBaseModelOutputWithPast(**outputs, modality_outputs={"image": image_outputs})
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=image_outputs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

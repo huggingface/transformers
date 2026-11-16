@@ -64,9 +64,9 @@ class ColPaliForRetrievalOutput(MultimodalModelOutput):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    modality_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-        Mapping from modality name (e.g. `"image"`, `"video"`, `"audio"`) to the output of the corresponding
-        encoder. Contains only the modalities that were processed.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
     loss: torch.Tensor | None = None
@@ -74,7 +74,7 @@ class ColPaliForRetrievalOutput(MultimodalModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
-    modality_outputs: dict[str, BaseModelOutputWithPooling] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 @auto_docstring(
@@ -140,7 +140,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
             past_key_values=vlm_output.past_key_values,
-            modality_outputs=vlm_output.modality_outputs,
+            image_outputs=vlm_output.image_outputs,
         )
 
 
