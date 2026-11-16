@@ -15,7 +15,6 @@
 
 import copy
 import unittest
-from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -209,25 +208,6 @@ class Molmo2ModelTest(VLMModelTest, unittest.TestCase):
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
-
-    def flash_attn_from_config(self, attn_implementation: str, test_fwd_in_train: bool = True):
-        super().flash_attn_from_config(attn_implementation, test_fwd_in_train=False)
-
-    def flash_attn_inference_equivalence(
-        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
-    ):
-        # The common test keeps one sample with `[:1]`, which cannot slice the flat `image_token_pooling`,
-        # so the check runs on text-only inputs.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"].clone()
-        input_ids[input_ids == config.image_patch_id] = self.model_tester.pad_token_id
-        text_inputs = {"input_ids": input_ids, "attention_mask": inputs_dict["attention_mask"]}
-        with patch.object(
-            self.model_tester,
-            "prepare_config_and_inputs_for_common",
-            side_effect=lambda: (copy.deepcopy(config), copy.deepcopy(text_inputs)),
-        ):
-            super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol=atol, rtol=rtol)
 
     @unittest.skip(
         reason="Multimodal special tokens live in the extra-vocab rows beyond `vocab_size`; standard resize is ill-defined"

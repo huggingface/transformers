@@ -2068,6 +2068,8 @@ class Gemma3nMultimodalEmbedder(nn.Module):
     """
 )
 class Gemma3nModel(PaliGemmaModel):
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
+
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
@@ -2326,6 +2328,8 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     accepts_loss_kwargs = False
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

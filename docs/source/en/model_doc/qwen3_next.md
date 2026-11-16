@@ -30,7 +30,7 @@ Built on this architecture, we trained and open-sourced Qwen3-Next-80B-A3B — 8
 Despite its ultra-efficiency, it outperforms Qwen3-32B on downstream tasks — while requiring **less than 1/10 of the training cost**.
 Moreover, it delivers over **10x higher inference throughput** than Qwen3-32B when handling contexts longer than 32K tokens.
 
-For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](https://qwenlm.github.io/blog/qwen3_next/)).
+For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](https://qwen.ai/blog?id=4074cca80393150c248e508aa62983f9cb7d27cd)).
 
 ## Usage examples
 
