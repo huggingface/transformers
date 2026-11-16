@@ -39,9 +39,6 @@ class EetqHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "EetqConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
     def validate_environment(self, *args, **kwargs):
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")

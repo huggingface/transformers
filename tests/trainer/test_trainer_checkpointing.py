@@ -27,7 +27,6 @@ import re
 import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -65,9 +64,7 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     is_staging_test,
     mockenv_context,
-    require_accelerate,
     require_deepspeed,
-    require_non_hpu,
     require_peft,
     require_tensorboard,
     require_torch,
@@ -626,6 +623,30 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(parameters, parameters1)
         self.check_trainer_state_are_the_same(state, state1)
 
+    @require_peft
+    def test_peft_root_adapter_restored_with_adapter_subfolders(self):
+        from peft import LoraConfig, get_peft_model
+
+        # PEFT saves the "default" adapter at the checkpoint root and other adapters in subfolders,
+        # so resuming must restore both (see #50204)
+        MODEL_ID = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        peft_config = LoraConfig(r=4, lora_alpha=16, task_type="CAUSAL_LM", init_lora_weights=False)
+
+        def get_model(seed):
+            torch.manual_seed(seed)
+            peft_model = get_peft_model(AutoModelForCausalLM.from_pretrained(MODEL_ID), peft_config)
+            peft_model.add_adapter("ref", peft_config)
+            return peft_model
+
+        trained_model = get_model(0)
+        checkpoint = self.get_auto_remove_tmp_dir()
+        trained_model.save_pretrained(checkpoint)
+        model = get_model(1)
+        trainer = Trainer(model, TrainingArguments(checkpoint, use_cpu=True))
+        trainer._load_from_checkpoint(checkpoint)
+        for (name, expected), (_, actual) in zip(trained_model.named_parameters(), model.named_parameters()):
+            torch.testing.assert_close(actual, expected, msg=f"{name} was not restored")
+
 
 # ---------------------------------------------------------------------------
 # Auto batch size finder tests
@@ -640,41 +661,28 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
-    @slow
-    @require_non_hpu
-    @require_accelerate
-    @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
-        if torch.cuda.is_available():
-            torch.backends.cudnn.deterministic = True
+        train_dataset = RegressionDataset(length=128)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
 
-        SRC_DIR = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "examples", "pytorch", "text-classification")
-        )
-        sys.path.append(SRC_DIR)
-        import run_glue
+        def make_trainer(auto_find_batch_size):
+            args = RegressionTrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                max_steps=2,
+                save_strategy="no",
+                per_device_train_batch_size=16,
+                auto_find_batch_size=auto_find_batch_size,
+            )
+            return Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-                run_glue.py
-                --model_name_or_path distilbert/distilbert-base-uncased
-                --task_name mrpc
-                --do_train
-                --do_eval
-                --max_seq_len 128
-                --per_device_train_batch_size 4096
-                --learning_rate 2e-5
-                --num_train_epochs 1
-                --output_dir {tmpdir}
-                --auto_find_batch_size 0
-                """.split()
-            with self.assertRaises(RuntimeError):
-                with patch.object(sys, "argv", testargs):
-                    run_glue.main()
+        # Without the finder, the OOM reaches the user
+        with self.assertRaisesRegex(RuntimeError, "CUDA out of memory"):
+            make_trainer(auto_find_batch_size=False).train()
 
-        testargs[-1] = "1"
-        with patch.object(sys, "argv", testargs):
-            run_glue.main()
+        # With it, training shrinks the batch size until it fits
+        trainer = make_trainer(auto_find_batch_size=True)
+        trainer.train()
+        self.assertLess(trainer._train_batch_size, 16)
 
     @require_deepspeed
     @require_torch_non_multi_accelerator

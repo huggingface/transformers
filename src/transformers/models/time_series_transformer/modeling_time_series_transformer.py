@@ -37,6 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
@@ -208,15 +209,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: torch.Tensor | None = 
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
 
     Args:
-        input_tensor (`torch.FloatTensor`):
+        input_tensor (`torch.Tensor`):
             Input tensor, of which the average must be computed.
-        weights (`torch.FloatTensor`, *optional*):
+        weights (`torch.Tensor`, *optional*):
             Weights tensor, of the same shape as `input_tensor`.
         dim (`int`, *optional*):
             The dim along which to average `input_tensor`.
 
     Returns:
-        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+        `torch.Tensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
         weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
@@ -250,13 +251,13 @@ class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
+        self, input_ids_shape: torch.Size, cache_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
             bsz, seq_len = input_ids_shape[:2]
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+                cache_length, cache_length + seq_len, dtype=torch.long, device=self.weight.device
             )
         return super().forward(position_ids)
 
@@ -342,11 +343,12 @@ class TimeSeriesTransformerAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -367,22 +369,22 @@ class TimeSeriesTransformerAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -390,11 +392,11 @@ class TimeSeriesTransformerAttention(nn.Module):
             key_states = key_states.view(kv_shape).transpose(1, 2)
             value_states = value_states.view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -440,8 +442,8 @@ class TimeSeriesTransformerEncoderLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -502,13 +504,14 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -517,7 +520,7 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -533,7 +536,7 @@ class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -611,7 +614,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
     def forward(
         self,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = self.value_embedding(inputs_embeds)
@@ -629,7 +632,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -683,13 +686,14 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
@@ -702,7 +706,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -713,36 +717,32 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+                cross-attention blocks) that can be used (see `cache` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                If `cache` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
         """
 
-        # initialize `past_key_values`
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        # initialize `cache`
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        self_attn_cache = (
-            past_key_values.self_attention_cache
-            if isinstance(past_key_values, EncoderDecoderCache)
-            else past_key_values
-        )
+        self_attn_cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
 
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=self_attn_cache,
+            cache=self_attn_cache,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -752,13 +752,13 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         )
 
         hidden_states = self.value_embedding(inputs_embeds)
-        embed_pos = self.embed_positions(inputs_embeds.size(), past_key_values_length=self.config.context_length)
+        embed_pos = self.embed_positions(inputs_embeds.size(), cache_length=self.config.context_length)
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
@@ -768,13 +768,13 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -920,6 +920,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         past_values: torch.Tensor,
@@ -930,13 +931,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         future_values: torch.Tensor | None = None,
         future_time_features: torch.Tensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSModelOutput | tuple:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
             to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
@@ -954,7 +955,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+        past_time_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
             Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
             could also be so-called "age" features, which basically help the model know "at which point in life" a
@@ -983,13 +984,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-        static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+        static_real_features (`torch.Tensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
+        future_values (`torch.Tensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`.
 
@@ -1002,7 +1003,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+        future_time_features (`torch.Tensor` of shape `(batch_size, prediction_length, num_features)`):
             Required time features for the prediction window, which the model internally will add to `future_values`.
             These could be things like "month of year", "day of the month", etc. encoded as vectors (for instance as
             Fourier features). These could also be so-called "age" features, which basically help the model know "at
@@ -1019,7 +1020,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             must but known at prediction time.
 
             The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -1090,14 +1091,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
         return Seq2SeqTSModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1148,6 +1149,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1159,13 +1161,13 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         future_time_features: torch.Tensor | None = None,
         future_observed_mask: torch.Tensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSModelOutput | tuple:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
             to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
@@ -1183,7 +1185,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+        past_time_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
             Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
             could also be so-called "age" features, which basically help the model know "at which point in life" a
@@ -1212,13 +1214,13 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-        static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+        static_real_features (`torch.Tensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
+        future_values (`torch.Tensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`.
 
@@ -1231,7 +1233,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+        future_time_features (`torch.Tensor` of shape `(batch_size, prediction_length, num_features)`):
             Required time features for the prediction window, which the model internally will add to `future_values`.
             These could be things like "month of year", "day of the month", etc. encoded as vectors (for instance as
             Fourier features). These could also be so-called "age" features, which basically help the model know "at
@@ -1256,7 +1258,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
             This mask is used to filter out missing values for the final loss calculation.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -1319,7 +1321,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             future_time_features=future_time_features,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1345,7 +1347,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         return Seq2SeqTSPredictionOutput(
             loss=prediction_loss,
             params=params,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1373,7 +1375,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         Greedily generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
                 Past values of the time series, that serve as context in order to predict the future. The sequence size
                 of this tensor must be larger than the `context_length` of the model, since the model will use the
                 larger size to construct lag features, i.e. additional values from the past which are added in order to
@@ -1391,7 +1393,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
                 For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number
                 of variates in the time series per time step.
-            past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+            past_time_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
                 Required time features, which the model internally will add to `past_values`. These could be things
                 like "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features).
                 These could also be so-called "age" features, which basically help the model know "at which point in
@@ -1408,7 +1410,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
                 features must but known at prediction time.
 
                 The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
-            future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+            future_time_features (`torch.Tensor` of shape `(batch_size, prediction_length, num_features)`):
                 Required time features for the prediction window, which the model internally will add to sampled
                 predictions. These could be things like "month of year", "day of the month", etc. encoded as vectors
                 (for instance as Fourier features). These could also be so-called "age" features, which basically help
@@ -1440,7 +1442,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
                 time).
 
                 A typical example of a static categorical feature is a time series ID.
-            static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+            static_real_features (`torch.Tensor` of shape `(batch_size, number of static real features)`, *optional*):
                 Optional static real features which the model will add to the values of the time series.
 
                 Static real features are features which have the same value for all time steps (static over time).

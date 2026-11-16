@@ -35,6 +35,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto import AutoConfig, AutoTokenizer
+from ..models.auto.auto_factory import _BaseAutoModelClass
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
@@ -236,6 +237,10 @@ def load_model(
         all_traceback = {}
         for model_class in class_tuple:
             kwargs = model_kwargs.copy()
+            if not issubclass(model_class, _BaseAutoModelClass):
+                # Only the Auto classes understand `code_revision`, because they're the ones that load remote code.
+                # Concrete classes from `config.architectures` would pass it to the model `__init__` and crash
+                kwargs.pop("code_revision", None)
 
             try:
                 model = model_class.from_pretrained(model, **kwargs)

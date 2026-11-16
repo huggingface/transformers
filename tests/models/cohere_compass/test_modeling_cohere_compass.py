@@ -16,14 +16,15 @@
 import unittest
 
 from transformers import (
+    AutoProcessor,
     CohereCompassConfig,
     CohereCompassTextConfig,
-    CohereCompassVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -38,7 +39,6 @@ if is_torch_available():
         CohereCompassModel,
         CohereCompassTextForSequenceClassification,
         CohereCompassTextModel,
-        CohereCompassVisionModel,
     )
     from transformers.modeling_outputs import BaseModelOutputWithPast
 
@@ -156,8 +156,7 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
 class CohereCompassModelTester(VLMModelTester):
     base_model_class = CohereCompassModel
     config_class = CohereCompassConfig
-    text_config_class = CohereCompassTextConfig
-    vision_config_class = CohereCompassVisionConfig
+
     conditional_generation_class = CohereCompassForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -174,10 +173,10 @@ class CohereCompassModelTester(VLMModelTester):
         kwargs.setdefault("vision_start_token_id", 6)
         kwargs.setdefault("vision_end_token_id", 7)
         kwargs.setdefault("video_token_id", 8)
-        kwargs.setdefault("image_size", 32)
+        kwargs.setdefault("image_size", 64)
         kwargs.setdefault("patch_size", 16)
         kwargs.setdefault("num_position_embeddings", 64)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("depth", 2)
         kwargs.setdefault("num_heads", 4)
@@ -220,10 +219,8 @@ class CohereCompassModelTester(VLMModelTester):
 
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
-        for token_id in self._special_token_ids:
-            input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, 0] = self.vision_start_token_id
-        input_ids[:, 1] = self.image_token_id
+        input_ids[:, 0] = config.vision_start_token_id
+        input_ids[:, 1 : self.num_image_tokens + 1] = config.image_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
@@ -231,21 +228,9 @@ class CohereCompassModelTester(VLMModelTester):
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 4, 4]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_config(self):
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
 
     def prepare_text_inputs(self):
         input_ids = torch.randint(3, self.vocab_size, (self.batch_size, self.seq_length), device=torch_device)
@@ -275,24 +260,6 @@ class CohereCompassModelTester(VLMModelTester):
         attention_mask = torch.ones_like(input_ids)
         mm_token_type_ids = (input_ids == self.image_token_id).int()
         return input_ids, attention_mask, pixel_values, image_grid_thw, mm_token_type_ids
-
-
-@require_torch
-class CohereCompassVisionModelTest(unittest.TestCase):
-    all_model_classes = (CohereCompassVisionModel,)
-
-    def test_forward(self):
-        config = CohereCompassModelTester(self).get_vision_config()
-        model = CohereCompassVisionModel(config).to(torch_device).eval()
-        grid_thw = torch.tensor([[1, 2, 2]], device=torch_device)
-        patch_dim = config.in_channels * config.temporal_patch_size * config.patch_size**2
-        hidden_states = torch.randn(4, patch_dim, device=torch_device)
-
-        with torch.no_grad():
-            output = model(hidden_states, grid_thw)
-
-        self.assertEqual(output.last_hidden_state.shape, (4, config.hidden_size))
-        self.assertEqual(output.pooler_output.shape, (1, config.out_hidden_size))
 
 
 @require_torch
@@ -336,3 +303,89 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
+
+
+@slow
+@require_torch_accelerator
+class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "CohereLabs/North-Micro-Vision-Instruct"
+    image_messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
+                },
+                {"type": "text", "text": "What kind of dog is this?"},
+            ],
+        }
+    ]
+    text_messages = [{"role": "user", "content": [{"type": "text", "text": "Write a haiku about the ocean."}]}]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Dropped again by the mixin's `tearDownClass`.
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = CohereCompassForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype="auto", device_map="auto"
+            )
+        return cls.model
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+
+    def test_small_model_integration_test(self):
+        model = self.get_model()
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+            }
+        )  # fmt: skip
+
+        inputs = self.processor.apply_chat_template(
+            self.image_messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )
+
+    def test_small_model_integration_test_batch(self):
+        model = self.get_model()
+        expected_texts = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+                    "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
+                ]
+            }
+        )  # fmt: skip
+
+        # Mixed image and text-only prompts, left-padded to the same length.
+        inputs = self.processor.apply_chat_template(
+            [self.image_messages, self.text_messages],
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True, "padding_side": "left"},
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )

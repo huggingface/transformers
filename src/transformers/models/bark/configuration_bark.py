@@ -42,7 +42,7 @@ class BarkSubModelConfig(PreTrainedConfig):
         Whether or not to use bias in the linear layers and layer norm layers.
     """
 
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_attention_heads": "num_heads",
@@ -230,9 +230,9 @@ class BarkConfig(PreTrainedConfig):
 
     model_type = "bark"
     sub_configs_defaults = {
-        "semantic_config": SubConfigSpec(config_class=BarkSemanticConfig),
-        "coarse_acoustics_config": SubConfigSpec(config_class=BarkCoarseConfig),
-        "fine_acoustics_config": SubConfigSpec(config_class=BarkFineConfig),
+        "semantic_config": BarkSemanticConfig,
+        "coarse_acoustics_config": BarkCoarseConfig,
+        "fine_acoustics_config": BarkFineConfig,
         "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
     }
 

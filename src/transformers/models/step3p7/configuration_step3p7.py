@@ -20,7 +20,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -108,7 +108,7 @@ class Step3p7TextConfig(PreTrainedConfig):
     """
 
     model_type = "step3p5"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Same as `MiniMaxM3VLTextConfig.base_model_tp_plan` plus `g_proj` (sharded like q/k/v, since it
     # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
     # generated files have no cross-model imports, so that name wouldn't resolve there.
@@ -315,8 +315,8 @@ class Step3p7TextConfig(PreTrainedConfig):
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
-        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+        "vision_config": Step3p7VisionConfig,
+        "text_config": Step3p7TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

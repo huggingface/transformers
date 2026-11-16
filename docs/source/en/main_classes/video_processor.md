@@ -20,7 +20,7 @@ A **Video Processor** is a utility responsible for preparing input features for 
 
 The video processor extends the functionality of image processors by allowing Vision Large Language Models (VLMs) to handle videos with a distinct set of arguments compared to images. It serves as the bridge between raw video data and the model, ensuring that input features are optimized for the VLM.
 
-When adding a new VLM or updating an existing one to enable distinct video preprocessing, saving and reloading the processor configuration will store the video related arguments in a dedicated file named `video_preprocessing_config.json`. Don't worry if you haven't updated your VLM, the processor will try to load video related configurations from a file named `preprocessing_config.json`.
+Video processor settings are saved in `video_preprocessor_config.json`. Older checkpoints may store them in `preprocessor_config.json`. See [Save and reload](#save-and-reload) for custom backend registration when reloading.
 
 ## Usage Example
 
@@ -32,9 +32,7 @@ from transformers import AutoVideoProcessor
 processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
 ```
 
-Currently, if using base image processor for videos, it processes video data by treating each frame as an individual image and applying transformations frame-by-frame. While functional, this approach is not highly efficient. Using `AutoVideoProcessor` allows us to take advantage of **fast video processors**, leveraging the [torchvision](https://pytorch.org/vision/stable/index.html) library. Fast processors handle the whole batch of videos at once, without iterating over each video or frame. These updates introduce GPU acceleration and significantly enhance processing speed, especially for tasks requiring high throughput.
-
-Fast video processors are available for all models and are loaded by default when an `AutoVideoProcessor` is initialized. When using a fast video processor, you can also set the `device` argument to specify the device on which the processing should be done. By default, the processing is done on the same device as the inputs if the inputs are tensors, or on the CPU otherwise. For even more speed improvement, we can compile the processor when using an accelerator as device.
+Preprocessing runs on the input tensor's device, or on the CPU for other inputs. Set `device` to move videos to another device before preprocessing; this does not change the backend. You can also compile torchvision preprocessing with `torch.compile` when using an accelerator.
 
 ```python
 import torch
@@ -48,6 +46,53 @@ processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0
 processor = torch.compile(processor)
 processed_video = processor(video, return_tensors="pt")
 ```
+
+## Video processor backends
+
+Built-in video processors use [torchvision](https://pytorch.org/vision/stable/index.html) for batched resizing, rescaling, and normalization. Install PyTorch and torchvision to use them. Unlike image processors, built-in video processors do not provide a PIL backend.
+
+[`AutoVideoProcessor`] selects the `torchvision` backend by default. You can also request it explicitly and inspect the loaded processor's `backend` attribute.
+
+```python
+from transformers import AutoVideoProcessor
+
+model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+video_processor = AutoVideoProcessor.from_pretrained(model_id, backend="torchvision")
+print(video_processor.backend)
+# torchvision
+```
+
+The `backend` argument selects the preprocessing implementation, not the video decoder. See [Sampling behavior](#sampling-behavior) for decoding and frame sampling.
+
+### Custom backends
+
+[`~video_processing_utils.BaseVideoProcessor`] provides torchvision-based preprocessing. For a non-torchvision implementation, you can subclass [`~video_processing_utils.VideoProcessorMixin`] and override `preprocess` to return a [`BatchFeature`] containing the inputs expected by the model.
+
+Register custom classes with [`AutoVideoProcessor.register`], and use `video_processor_classes` to map backend names to classes. The example below assumes `NewCustomVideoProcessor` is defined with the preprocessing required by the LLaVA-OneVision checkpoint.
+
+```python
+from transformers import LlavaOnevisionConfig
+
+AutoVideoProcessor.register(
+    LlavaOnevisionConfig,
+    video_processor_classes={"custom": NewCustomVideoProcessor},
+    exist_ok=True,
+)
+custom_processor = AutoVideoProcessor.from_pretrained(model_id, backend="custom")
+```
+
+Use `exist_ok=True` because `LlavaOnevisionConfig` is already registered. The supplied entries are merged into its backend mapping where matching names are replaced, and entries not supplied, such as `torchvision`, are preserved.
+
+### Save and reload
+
+[`~video_processing_utils.VideoProcessorMixin.save_pretrained`] saves the preprocessing configuration, not the backend mappings added with [`AutoVideoProcessor.register`]. In the same Python process, reload the saved processor with `backend="custom"`:
+
+```python
+custom_processor.save_pretrained("./saved-video-processor")
+custom_processor = AutoVideoProcessor.from_pretrained("./saved-video-processor", backend="custom")
+```
+
+Custom registrations apply to the current Python process. In a new process, define or import the custom class and register it again before loading.
 
 ## Sampling behavior
 

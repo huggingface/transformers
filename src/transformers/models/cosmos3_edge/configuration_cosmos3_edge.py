@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -41,7 +41,7 @@ class Cosmos3EdgeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cosmos3_edge_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -156,10 +156,10 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
 
     model_type = "cosmos3_edge"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Cosmos3EdgeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Cosmos3EdgeTextConfig),
+        "vision_config": Cosmos3EdgeVisionConfig,
+        "text_config": Cosmos3EdgeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: Cosmos3EdgeTextConfig | dict | None = None
     vision_config: Cosmos3EdgeVisionConfig | dict | None = None

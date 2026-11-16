@@ -37,7 +37,6 @@ job_to_test_map = {
     "run_models_gpu": "Models",
     "run_trainer_and_fsdp_gpu": "Trainer & DDP & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
-    "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
     "run_kernels_gpu": "Kernels",
@@ -48,7 +47,6 @@ test_to_result_name = {
     "Models": "model",
     "Trainer & DDP & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
-    "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
     "Kernels": "kernels",
@@ -1358,13 +1356,11 @@ if __name__ == "__main__":
     # Additional runs
     additional_files = {
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
-        "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
         "Kernels": "run_kernels_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
-        del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
         del additional_files["DeepSpeed"]

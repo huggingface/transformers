@@ -45,7 +45,12 @@ class PhimoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "phimoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

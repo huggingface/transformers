@@ -141,13 +141,40 @@ outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
-## Multi-token prediction (MTP)
+## Multi-token prediction (MTP) layer
 
-Multi-token prediction (MTP) drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head. Every MTP layer drafts one token, so the number of candidates per step matches the checkpoint's MTP layer count. The main model verifies the drafts in one forward pass.
+Multi-token prediction (MTP) layer drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head. Every MTP layer drafts one token, so the number of candidates per step matches the checkpoint's MTP layer count. The main model verifies the drafts in one forward pass.
 
 MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These checkpoints carry MTP weights and set `num_mtp_layers` in their config, listed as `num_nextn_predict_layers` in `config.json`.
 
 Pass `use_mtp=True` to [`~GenerationMixin.generate`], which raises an error if the model has no MTP layers. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
+
+Here, MTP refers to prediction layers included in the target checkpoint, as in DeepSeek-V3 and GLM-4.5. Gemma 4 uses a separate assistant checkpoint for MTP decoding. Pass it as `assistant_model` (see [Multi-token prediction drafter](#multi-token-prediction-drafter)).
+
+The `text-generation` pipeline and [`~GenerationMixin.generate`] both accept `use_mtp=True`.
+
+```py
+from transformers import pipeline
+
+pipe = pipeline(
+    "text-generation",
+    model="zai-org/GLM-4.5-Air",
+    device_map="auto",
+)
+
+outputs = pipe(
+    "Hugging Face is an open-source company",
+    use_mtp=True,
+    do_sample=False,
+    max_new_tokens=50,
+    add_special_tokens=True,
+    return_full_text=True,
+)
+
+[output["generated_text"] for output in outputs]
+```
+
+Alternatively you can infer as follows.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -158,6 +185,55 @@ inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt"
 
 outputs = model.generate(**inputs, use_mtp=True, do_sample=False, max_new_tokens=50)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
+```
+
+## Multi-token prediction drafter
+
+An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative deocding.
+
+Unlike MTP layers, which are part of the target checkpoint and share its output head, an MTP drafter is a separate assistant model. It uses the target's input embeddings and KV cache to propose tokens.
+
+
+```py
+from transformers import AutoProcessor, AutoModelForCausalLM
+
+processor = AutoProcessor.from_pretrained("google/gemma-4-E4B-it")
+target_model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-4-E4B-it",
+    dtype="auto",
+    device_map="auto",
+
+)
+
+assistant_model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-4-E4B-it-assistant",
+    dtype="auto",
+    device_map="auto",
+)
+
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Write a short joke about saving RAM."},
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    add_generation_prompt=True,
+    enable_thinking=False
+).to(target_model.device)
+input_len = inputs["input_ids"].shape[-1]
+
+outputs = target_model.generate(
+    **inputs,
+    assistant_model=assistant_model,
+    max_new_tokens=256,
+)
+response = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
+
+processor.parse_response(response)
 ```
 
 ## Universal assisted decoding

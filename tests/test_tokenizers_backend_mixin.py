@@ -467,24 +467,20 @@ class TokenizersBackendTesterMixin:
         from transformers import AutoTokenizer
 
         pretrained_list = getattr(self, "from_pretrained_id", []) or []
+        if isinstance(pretrained_list, str):
+            pretrained_list = [pretrained_list]
+        kwargs = getattr(self, "from_pretrained_kwargs", None) or {}
         for pretrained_name in pretrained_list:
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                try:
-                    tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-                    # Now load with local_files_only=True
-                    tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
+                # Now load with local_files_only=True
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True, **kwargs)
 
-                    # Check that the two tokenizers are identical
-                    self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
-                    self.assertEqual(
-                        tokenizer_cached.all_special_tokens_extended,
-                        tokenizer_local.all_special_tokens_extended,
-                    )
-                except Exception as e:
-                    # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load tokenizer model: {e}")
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(tokenizer_cached.all_special_tokens, tokenizer_local.all_special_tokens)
 
 
 @slow

@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
@@ -314,8 +315,8 @@ class PPLCNetV3PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, (PPLCNetV3LearnableAffineBlock)):
-            nn.init.ones_(module.scale)
-            nn.init.zeros_(module.bias)
+            init.ones_(module.scale)
+            init.zeros_(module.bias)
 
 
 @auto_docstring(

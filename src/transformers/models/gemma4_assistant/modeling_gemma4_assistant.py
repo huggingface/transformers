@@ -32,11 +32,11 @@ from .configuration_gemma4_assistant import Gemma4AssistantConfig
 @dataclass
 class Gemma4AssistantOutput(BaseModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     """
 
-    logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
 
 
 class Gemma4AssistantMaskedEmbedder(nn.Module):
@@ -91,7 +91,6 @@ class Gemma4AssistantPreTrainedModel(PreTrainedModel):
     config: Gemma4AssistantConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

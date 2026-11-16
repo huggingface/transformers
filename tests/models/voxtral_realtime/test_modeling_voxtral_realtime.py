@@ -33,10 +33,6 @@ from transformers import (
     is_torch_available,
 )
 from transformers.audio_utils import load_audio
-from transformers.models.voxtral_realtime.configuration_voxtral_realtime import (
-    VoxtralRealtimeEncoderConfig,
-    VoxtralRealtimeTextConfig,
-)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -60,8 +56,6 @@ class VoxtralRealtimeModelTester(ALMModelTester):
     config_class = VoxtralRealtimeConfig
     base_model_class = VoxtralRealtimeModel
     conditional_generation_class = VoxtralRealtimeForConditionalGeneration
-    text_config_class = VoxtralRealtimeTextConfig
-    audio_config_class = VoxtralRealtimeEncoderConfig
 
     def __init__(self, parent, **kwargs):
         # VoxtralRealtime does additive audio/text fusion: seq_length must equal num_audio_embeds.
@@ -214,9 +208,9 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
         pass
 
     @unittest.skip(
-        reason="This test does not apply to VoxtralRealtime for now since encoder_past_key_values AND padding_cache are returned by generate"
+        reason="This test does not apply to VoxtralRealtime for now since encoder_cache AND padding_cache are returned by generate"
     )
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
     @unittest.skip(

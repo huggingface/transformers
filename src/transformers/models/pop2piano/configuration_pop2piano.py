@@ -36,7 +36,7 @@ class Pop2PianoConfig(PreTrainedConfig):
     """
 
     model_type = "pop2piano"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_hidden_layers": "num_layers", "hidden_size": "d_model", "num_attention_heads": "num_heads"}
 
     vocab_size: int = 2400

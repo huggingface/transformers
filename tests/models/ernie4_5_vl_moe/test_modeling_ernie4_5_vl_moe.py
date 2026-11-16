@@ -25,10 +25,6 @@ from transformers import (
     Ernie4_5_VLMoeModel,
     is_torch_available,
 )
-from transformers.models.ernie4_5_vl_moe.configuration_ernie4_5_vl_moe import (
-    Ernie4_5_VLMoeTextConfig,
-    Ernie4_5_VLMoeVisionConfig,
-)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -51,8 +47,7 @@ if is_torch_available():
 class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Ernie4_5_VLMoeModel
     config_class = Ernie4_5_VLMoeConfig
-    text_config_class = Ernie4_5_VLMoeTextConfig
-    vision_config_class = Ernie4_5_VLMoeVisionConfig
+
     conditional_generation_class = Ernie4_5_VLMoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -125,6 +120,13 @@ class Ernie4_5_VLMoeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Ernie4_5_VLMoeVisionText2TextModelTester
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     test_all_params_have_gradient = False  # e score correction bias + moe
+
+    @unittest.skip(
+        reason="Its TP and EP plans don't reach the text and vision experts yet; they come with their own PR, "
+        "together with the loading fix that splits the checkpoint's expert stack."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
+        pass
 
     def _video_features_prepare_config_and_inputs(self):
         """

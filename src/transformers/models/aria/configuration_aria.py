@@ -39,12 +39,15 @@ class AriaTextConfig(PreTrainedConfig):
     """
 
     model_type = "aria_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
+        "layers.*.mlp.experts.down_proj": "colwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -78,6 +81,11 @@ class AriaTextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     base_config_key = "text_config"
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
     moe_num_experts: int = 8
     moe_topk: int = 2
     moe_num_shared_experts: int = 2
@@ -111,7 +119,7 @@ class AriaConfig(PreTrainedConfig):
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
-        "text_config": SubConfigSpec(config_class=AriaTextConfig),
+        "text_config": AriaTextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

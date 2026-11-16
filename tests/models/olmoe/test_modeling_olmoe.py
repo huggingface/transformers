@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
@@ -177,7 +178,12 @@ class OlmoeModelTester:
 
 @require_torch
 class OlmoeModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
 ):
     all_model_classes = (OlmoeModel, OlmoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (

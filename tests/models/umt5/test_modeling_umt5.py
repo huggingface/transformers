@@ -193,7 +193,7 @@ class UMT5ModelTester:
         )
         result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
@@ -254,8 +254,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-    # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+    # `QAPipelineTests` is not working well with slow tokenizers (for some models)
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -563,8 +562,7 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if tokenizer_name is None:
             return True
 
-        # `UMT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        # `UMT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models)
         if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 

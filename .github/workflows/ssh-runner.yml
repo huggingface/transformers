@@ -138,6 +138,8 @@ jobs:
           # Create shared environment setup
           cat > /root/.env_setup << 'EOF'
           # Auto-setup (non-sensitive vars)
+          # Prepend venv bin to PATH if it exists (new images use uv + /opt/venv)
+          export PATH="/opt/venv/bin:$PATH"
           export HF_HOME=/mnt/cache
           export TRANSFORMERS_IS_CI=yes
           export OMP_NUM_THREADS=8

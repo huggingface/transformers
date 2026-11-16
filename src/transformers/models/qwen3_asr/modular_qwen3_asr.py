@@ -248,7 +248,7 @@ class Qwen3ASRModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -272,6 +272,7 @@ class Qwen3ASRModel(AudioFlamingo3Model):
 )
 class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def forward(self, **super_kwargs):
         r"""
