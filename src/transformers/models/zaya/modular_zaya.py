@@ -34,6 +34,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.configuration_laguna import LagunaConfig
@@ -207,19 +208,20 @@ class ZayaCCAProjection(nn.Module):
             stride=1,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         conv_mask: torch.Tensor | None = None,
     ):
         if conv_mask is not None:
             hidden_states = hidden_states * conv_mask[:, :, None].to(hidden_states.dtype)
 
         # Retrieve conv state if there is a cache. It may be None if the layer is not initialized.
-        if past_key_values is not None:
-            cached_qk_states = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_v_state = past_key_values.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            cached_qk_states = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_v_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             cached_qk_states, recurrent_v_state = None, None
 
@@ -242,10 +244,10 @@ class ZayaCCAProjection(nn.Module):
         else:
             qk_states = F.pad(qk_states, (self.conv_kernel_size, 0))
 
-        if past_key_values is not None:
+        if cache is not None:
             new_conv_state = qk_states[..., -self.conv_kernel_size :]
             new_conv_state = F.pad(new_conv_state, (self.conv_kernel_size - new_conv_state.shape[-1], 0))
-            past_key_values.update_conv_state(new_conv_state, self.layer_idx)
+            cache.update_conv_state(new_conv_state, self.layer_idx)
 
         qk_states = self.conv_qk_depthwise(qk_states)
         qk_states = self.conv_qk_grouped(qk_states).transpose(1, 2)
@@ -264,8 +266,8 @@ class ZayaCCAProjection(nn.Module):
             recurrent_v_state = self.v_proj_delayed(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([recurrent_v_state, delayed_v_state[:, :-1]], dim=1)
 
-        if past_key_values is not None:
-            past_key_values.update_recurrent_state(delayed_v_state[:, -1, :], self.layer_idx)
+        if cache is not None:
+            cache.update_recurrent_state(delayed_v_state[:, -1, :], self.layer_idx)
 
         value = torch.cat([value_current, value_delayed], dim=-1).view(*hidden_shape)
 
@@ -312,11 +314,12 @@ class ZayaAttention(Phi3Attention):
             layer_idx=layer_idx,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: dict[str, Any] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -327,7 +330,7 @@ class ZayaAttention(Phi3Attention):
         conv_mask = mask_mapping.get("conv")
 
         # ZAYA replaces the usual independent q/k/v projections with CCA projection followed by special q/k normalization.
-        query_states, key_states, value_states = self.qkv_proj(hidden_states, past_key_values, conv_mask)
+        query_states, key_states, value_states = self.qkv_proj(hidden_states, cache, conv_mask)
         query_states, key_states = self.qk_norm(query_states, key_states)
 
         query_states = query_states.transpose(1, 2)
@@ -337,8 +340,8 @@ class ZayaAttention(Phi3Attention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -368,12 +371,13 @@ class ZayaDecoderLayer(LlamaDecoderLayer):
         self.post_attention_residual_scale = ZayaResidualScaling(config.hidden_size)
         self.post_mlp_residual_scale = ZayaResidualScaling(config.hidden_size)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         prev_router_hidden_states: torch.Tensor | None = None,
         attention_mask: dict[str, Any] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -385,7 +389,7 @@ class ZayaDecoderLayer(LlamaDecoderLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -574,12 +578,13 @@ class ZayaModel(LagunaModel):
         self.input_hidden_states_scale = nn.Parameter(torch.ones(config.hidden_size))
         self.input_hidden_states_bias = nn.Parameter(torch.zeros(config.hidden_size))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -590,11 +595,11 @@ class ZayaModel(LagunaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -603,7 +608,7 @@ class ZayaModel(LagunaModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             mask_creation_functions = {
@@ -640,7 +645,7 @@ class ZayaModel(LagunaModel):
                     "causal": causal_mask_mapping[layer_type],
                     "conv": causal_mask_mapping.get("conv"),
                 },
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings[layer_type],
                 **kwargs,
             )
@@ -649,7 +654,7 @@ class ZayaModel(LagunaModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
@@ -666,7 +671,8 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
 
     @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         # ZAYA decoder layers are hybrid: attention consumes the causal/sliding mask, while CCA uses a 2D padding
         # mask to zero tokens before the convolutional projection.
         text_config = config.get_text_config()
@@ -674,7 +680,7 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
             "config": text_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
         mask_creation_functions = {

@@ -80,7 +80,7 @@ this reference line up. Look there for the exact ops and classes each stage hand
 
 ### DynamoExporter
 
-The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export`
+The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export_program`
 (see [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 1. Forward-signature patch: gives `model.forward` a flat argument signature so `torch.export`
@@ -135,6 +135,61 @@ starting with backend preparation (see
    `@register_fx_program_fix("executorch")`.
 5. FX node fixes: rewrite individual nodes, such as mapping Python sym ops to `executorch_prim.*` or
    rewriting `pow` as a `mul` chain. Extend with `@register_fx_node_fix("executorch")`.
+
+## Add a backend
+
+A backend is an [`HfExporter`] subclass, plus a config. `export_program` traces one graph and returns the
+backend's program with the metadata recorded while tracing it, `save_program` writes one program to disk, and
+`load_program` reads it back. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportedModel`] on top of
+them. Subclassing [`DynamoExporter`] reuses its trace and its metadata, so a backend only converts the
+`ExportedProgram`:
+
+```python
+from dataclasses import dataclass
+
+from transformers.exporters import DynamoConfig, DynamoExporter, register_backend
+
+
+@dataclass
+class MyConfig(DynamoConfig):
+    export_format: str = "my_format"
+
+
+class MyExporter(DynamoExporter):
+    export_format = "my_format"
+    config_class = MyConfig
+    program_suffix = ".bin"
+
+    def export_program(self, model, sample_inputs, config):
+        exported_program, metadata = super().export_program(model, sample_inputs, config)
+        return convert(exported_program), metadata
+
+    @classmethod
+    def save_program(cls, program, path):
+        program.save(path)
+
+    @classmethod
+    def load_program(cls, path):
+        return load(path)
+
+
+register_backend(MyExporter)
+```
+
+To call its exports, register a [`ModelRunner`] with it: `register_backend(MyExporter, MyRunner)`.
+
+The auto classes then dispatch `"my_format"` to them, and [`ExportedModel.from_pretrained`] loads its saved exports:
+
+```python
+from transformers.exporters import AutoExportConfig, AutoHfExporter, ExportedModel
+
+config = AutoExportConfig.from_dict({"export_format": "my_format", "dynamic": True})
+exported = AutoHfExporter.from_config(config).export(model, inputs, config)
+exported.save_pretrained("my-model-my_format")  # model.bin, export.json, config.json
+exported.push_to_hub("my-org/my-model-my_format")
+
+loaded = ExportedModel.from_pretrained("my-org/my-model-my_format")
+```
 
 ## Known upstream workarounds
 

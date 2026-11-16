@@ -88,7 +88,7 @@ class LlavaOnevision15Config(PreTrainedConfig):
         "vision_config": LlavaOnevision15VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

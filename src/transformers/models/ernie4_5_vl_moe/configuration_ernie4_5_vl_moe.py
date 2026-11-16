@@ -79,7 +79,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     """
 
     model_type = "ernie4_5_vl_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
     default_theta = 500000.0
 
@@ -187,7 +187,7 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "vision_config": Ernie4_5_VLMoeVisionConfig,
         "text_config": Ernie4_5_VLMoeTextConfig,

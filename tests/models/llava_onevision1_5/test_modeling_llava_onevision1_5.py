@@ -211,7 +211,7 @@ class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
                 sample["grid_thw"] = torch.tensor([[1, 2, 8], [2, 2, 8]], device=torch_device)
                 model, sample, _ = prepare_for_export(model, sample)
                 with torch.no_grad():
-                    actual = exported.module()(**sample)
+                    actual = exported(**sample)
                     expected = model(sample["pixel_values"], sample["grid_thw"])
                     separate = torch.cat(
                         [
