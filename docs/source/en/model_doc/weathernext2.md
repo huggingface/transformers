@@ -214,9 +214,9 @@ the checkpoint's `loss_weights` and `vars_with_nan_targets`.
   `model.generation_config` or a [`WeatherNext2GenerationConfig`] passed to `generate`; explicit arguments override them.
   For fixed per-member draws, pass `noise` shaped `(num_steps, initial_batch_size * num_members, noise_channels)` to
   `generate`.
-- With `use_kernels=True`, grid operations run in tiles of [`WeatherNext2Config.chunk_size`] rows, following
-  [Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext). The regular PyTorch path is not tiled;
-  `chunk_size=None` disables kernel tiling.
+- With `use_kernels=True`, graph networks and conditioned encoders use `graph_config.chunk_size`, while the
+  forecasting head uses `chunk_size`, following [Faster-WeatherNext](https://github.com/Raymondlol/Faster-WeatherNext).
+  Set both to `None` to disable kernel tiling. The regular PyTorch path is not tiled.
 - The grid-to-mesh and mesh-to-grid graphs are persistent buffers in `model.geometry`, and the banded mesh mask is
   `attention_mask.safetensors`, which the feature extractor loads and adds to the model inputs. Building them needs
   `scipy` and `trimesh` and takes minutes at 0.25°, so the conversion script does it once and loading needs neither.

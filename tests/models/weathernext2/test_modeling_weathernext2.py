@@ -88,7 +88,12 @@ class WeatherNext2ModelTester:
             intermediate_size=self.intermediate_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            graph_config={"edge_hidden_size": self.edge_hidden_size, "aggregate_normalization": None},
+            graph_config={
+                "hidden_size": self.hidden_size,
+                "edge_hidden_size": self.edge_hidden_size,
+                "noise_channels": self.noise_channels,
+                "aggregate_normalization": None,
+            },
             noise_channels=self.noise_channels,
             mesh_splits=self.mesh_splits,
             attention_k_hop=self.attention_k_hop,
@@ -211,6 +216,12 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        config.graph_config.hidden_size = config.hidden_size
+        return config
 
     @with_grad
     def test_loss_gradient_accumulation(self):

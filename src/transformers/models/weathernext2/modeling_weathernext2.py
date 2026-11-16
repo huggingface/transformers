@@ -36,7 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_weathernext2 import WeatherNext2Config
+from .configuration_weathernext2 import WeatherNext2Config, WeatherNext2GraphConfig
 from .generation_weathernext2 import WeatherNext2GenerationConfig, WeatherNext2GenerationMixin
 
 
@@ -58,7 +58,7 @@ class WeatherNext2MLP(nn.Module):
 class WeatherNext2ConditionedNorm(nn.Module):
     """LayerNorm with scale and offset derived from the global noise conditioning."""
 
-    def __init__(self, config: WeatherNext2Config, num_features: int):
+    def __init__(self, config: WeatherNext2Config | WeatherNext2GraphConfig, num_features: int):
         super().__init__()
         self.norm = nn.LayerNorm(num_features, eps=config.layer_norm_eps, elementwise_affine=False)
         self.linear = nn.Linear(config.noise_channels, 2 * num_features)
@@ -75,10 +75,10 @@ class WeatherNext2ConditionedNorm(nn.Module):
 class WeatherNext2ConditionedMlp(nn.Module):
     """Two linear projections followed by a globally conditioned LayerNorm."""
 
-    def __init__(self, config: WeatherNext2Config, in_features: int, hidden_size: int | None = None):
+    def __init__(self, config: WeatherNext2GraphConfig, in_features: int, hidden_size: int | None = None):
         super().__init__()
         hidden_size = hidden_size or config.hidden_size
-        self.activation_fn = ACT2FN[config.graph_config.hidden_act]
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(in_features, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
@@ -105,13 +105,13 @@ class WeatherNext2ConditionedMlp(nn.Module):
 class WeatherNext2GridToMeshEdgeUpdate(nn.Module):
     """Updates edge features using the sending grid nodes."""
 
-    def __init__(self, config: WeatherNext2Config):
+    def __init__(self, config: WeatherNext2GraphConfig):
         super().__init__()
         # Apply the shared bias once, through the edge projection.
-        self.edge_proj = nn.Linear(config.graph_config.edge_hidden_size, config.hidden_size)
+        self.edge_proj = nn.Linear(config.edge_hidden_size, config.hidden_size)
         self.sender_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.act_fn = ACT2FN[config.graph_config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
 
     def forward(
@@ -134,12 +134,12 @@ class WeatherNext2GridToMeshEdgeUpdate(nn.Module):
 class WeatherNext2MeshToGridEdgeUpdate(nn.Module):
     """Updates edge features using sending mesh nodes and receiving grid nodes."""
 
-    def __init__(self, config: WeatherNext2Config):
+    def __init__(self, config: WeatherNext2GraphConfig):
         super().__init__()
-        self.edge_proj = nn.Linear(config.graph_config.edge_hidden_size, config.hidden_size)
+        self.edge_proj = nn.Linear(config.edge_hidden_size, config.hidden_size)
         self.sender_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.act_fn = ACT2FN[config.graph_config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.norm = WeatherNext2ConditionedNorm(config, config.hidden_size)
         self.receiver_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
@@ -167,14 +167,13 @@ class WeatherNext2MeshToGridEdgeUpdate(nn.Module):
 class WeatherNext2GridToMesh(nn.Module):
     """Updates mesh nodes from receiver-sorted grid messages and applies a residual grid update."""
 
-    def __init__(self, config: WeatherNext2Config):
+    def __init__(self, config: WeatherNext2GraphConfig):
         super().__init__()
         self.config = config
-        graph_config = config.graph_config
         self.edge_encoder = WeatherNext2ConditionedMlp(
-            config, graph_config.num_edge_spatial_features, graph_config.edge_hidden_size
+            config, config.num_edge_spatial_features, config.edge_hidden_size
         )
-        self.aggregate_normalization = graph_config.aggregate_normalization
+        self.aggregate_normalization = config.aggregate_normalization
         self.edge_update = WeatherNext2GridToMeshEdgeUpdate(config)
         self.mesh_node_update = WeatherNext2ConditionedMlp(config, 2 * config.hidden_size)
         self.grid_node_update = WeatherNext2ConditionedMlp(config, config.hidden_size)
@@ -217,12 +216,11 @@ class WeatherNext2GridToMesh(nn.Module):
 class WeatherNext2MeshToGrid(nn.Module):
     """Updates grid nodes from three receiver-sorted mesh messages and applies a residual mesh update."""
 
-    def __init__(self, config: WeatherNext2Config):
+    def __init__(self, config: WeatherNext2GraphConfig):
         super().__init__()
         self.config = config
-        graph_config = config.graph_config
         self.edge_encoder = WeatherNext2ConditionedMlp(
-            config, graph_config.num_edge_spatial_features, graph_config.edge_hidden_size
+            config, config.num_edge_spatial_features, config.edge_hidden_size
         )
         self.edge_update = WeatherNext2MeshToGridEdgeUpdate(config)
         self.mesh_node_update = WeatherNext2ConditionedMlp(config, config.hidden_size)
@@ -581,11 +579,11 @@ class WeatherNext2Model(WeatherNext2PreTrainedModel):
     def __init__(self, config: WeatherNext2Config):
         super().__init__(config)
         self.noise_encoder = nn.Linear(config.noise_channels, config.noise_channels, bias=False)
-        self.grid_encoder = WeatherNext2ConditionedMlp(config, config.num_grid_input_channels)
-        self.mesh_encoder = WeatherNext2ConditionedMlp(config, config.num_mesh_input_channels)
-        self.grid_to_mesh = WeatherNext2GridToMesh(config)
+        self.grid_encoder = WeatherNext2ConditionedMlp(config.graph_config, config.num_grid_input_channels)
+        self.mesh_encoder = WeatherNext2ConditionedMlp(config.graph_config, config.num_mesh_input_channels)
+        self.grid_to_mesh = WeatherNext2GridToMesh(config.graph_config)
         self.mesh_transformer = WeatherNext2MeshEncoder(config)
-        self.mesh_to_grid = WeatherNext2MeshToGrid(config)
+        self.mesh_to_grid = WeatherNext2MeshToGrid(config.graph_config)
         self.geometry = WeatherNext2Geometry(config)
         self.post_init()
 

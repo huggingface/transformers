@@ -80,17 +80,28 @@ DEFAULT_PRESSURE_LEVELS = (50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850,
 @strict
 class WeatherNext2GraphConfig(PreTrainedConfig):
     r"""
+    hidden_size (`int`, *optional*, defaults to 768):
+        Latent width of the grid and mesh nodes. Must match `WeatherNext2Config.hidden_size`.
     edge_hidden_size (`int`, *optional*, defaults to 32):
         Latent width of the grid/mesh graph edges.
+    noise_channels (`int`, *optional*, defaults to 32):
+        Width of the shared noise conditioning. Must match `WeatherNext2Config.noise_channels`.
     num_edge_spatial_features (`int`, *optional*, defaults to 4):
         Number of spatial features describing each grid/mesh edge.
+    chunk_size (`int`, *optional*, defaults to 32768):
+        Number of rows per inference tile for the graph networks and conditioned encoders when
+        `use_kernels=True`. `None` disables their tiling.
     aggregate_normalization (`float`, *optional*, defaults to 4.0):
         Constant dividing summed grid-to-mesh messages. `None` disables normalization.
     """
 
+    hidden_size: int = 768
     edge_hidden_size: int = 32
+    noise_channels: int = 32
     num_edge_spatial_features: int = 4
     hidden_act: str = "silu"
+    layer_norm_eps: float = 1e-5
+    chunk_size: int | None = positive_int_field(default=32768)
     aggregate_normalization: float | int | None = 4.0
 
 
@@ -147,8 +158,8 @@ class WeatherNext2Config(WeatherNext2ChannelLayoutMixin, PreTrainedConfig):
     sigmoid_shifted_outputs (`dict[str, float]`, *optional*):
         Target variables that get `sigmoid(x - shift)` applied after decoding, mapped to their shift.
     chunk_size (`int`, *optional*, defaults to 32768):
-        Number of rows per inference tile when `use_kernels=True`: grid points for the grid encoder,
-        forecasting head and mesh-to-grid network, and edges for the grid-to-mesh network. `None` disables tiling.
+        Number of grid points per forecasting-head inference tile when `use_kernels=True`. `None` disables
+        head tiling. Graph networks and conditioned encoders use `graph_config.chunk_size`.
     loss_weights (`dict[str, float]`, *optional*):
         Per-variable CRPS weights from the original checkpoint. Unspecified variables have weight 1. An empty
         dictionary explicitly requests uniform weights; `None` disables loss computation until weights are supplied.
@@ -220,6 +231,15 @@ class WeatherNext2Config(WeatherNext2ChannelLayoutMixin, PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.graph_config.hidden_size != self.hidden_size:
+            raise ValueError(
+                f"The graph_config.hidden_size ({self.graph_config.hidden_size}) must match hidden_size ({self.hidden_size})."
+            )
+        if self.graph_config.noise_channels != self.noise_channels:
+            raise ValueError(
+                f"The graph_config.noise_channels ({self.graph_config.noise_channels}) must match "
+                f"noise_channels ({self.noise_channels})."
+            )
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "

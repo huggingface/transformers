@@ -532,7 +532,9 @@ def config_from_fiddle(fiddle: dict[str, Any], grid_latitudes: int, grid_longitu
         num_hidden_layers=transformer["num_layers"],
         num_attention_heads=transformer["num_heads"],
         graph_config={
+            "hidden_size": transformer["d_model"],
             "edge_hidden_size": architecture["points_to_mesh_model_ctor"]["edge_encoder_dense_kwargs"]["output_size"],
+            "noise_channels": architecture["norm_conditioning_latent_dense_kwargs"]["output_size"],
             "aggregate_normalization": _optional_float(
                 architecture["points_to_mesh_model_ctor"]["deep_gnn_kwargs"].get("aggregate_normalization")
             ),
