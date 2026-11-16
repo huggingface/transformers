@@ -228,6 +228,15 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def get_rope_index(self):
+        raise AttributeError("Not needed for HyperCLOVAXVisionV2")
+
+    def get_vision_position_ids(self):
+        raise AttributeError("Not needed for HyperCLOVAXVisionV2")
+
+    def compute_3d_position_ids(self):
+        raise AttributeError("Not needed for HyperCLOVAXVisionV2")
+
 
 @auto_docstring
 class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedModel, GenerationMixin):
@@ -375,6 +384,9 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
         # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
 __all__ = [

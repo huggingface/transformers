@@ -1199,6 +1199,9 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    def _prepare_position_ids_for_generation(self, **kwargs):
+        raise AttributeError("Kimi doesn't use m-rope!")
+
 
 __all__ = [
     "MuseGlimmerPreTrainedModel",

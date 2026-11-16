@@ -22,6 +22,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
@@ -34,6 +36,7 @@ from ...video_utils import VideoInput
 class Qwen2_5_VLProcessor(ProcessorMixin):
     return_mm_token_type_ids = True
     videos_kwargs = {"return_metadata": True}
+    tokens_per_second = 2  # temporal rope positions per second of video, `vision_config.tokens_per_second`
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
@@ -60,17 +63,19 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         num_video_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
         return self.video_token * num_video_tokens
 
-    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple[int, int, int]]] | None:
-        # video temporal positions are scaled by `second_per_grid_ts`, the model still computes those
-        if video_inputs.get("video_grid_thw") is not None:
-            return None
-        # the language model sees each grid after the vision tower's `merge_size` x `merge_size` spatial merge
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # the language model sees each grid after the `merge_size` x `merge_size` spatial merge, and video frame `i`
+        # at `i * tokens_per_second * second_per_grid_t` on the temporal axis
         image_merge, video_merge = self.image_processor.merge_size, self.video_processor.merge_size
         image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
         video_grids = np.asarray(video_inputs.get("video_grid_thw", [])).tolist()
+        seconds_per_grid = video_inputs.get("second_per_grid_ts", [])
         return {
-            1: [(t, h // image_merge, w // image_merge) for t, h, w in image_grids],
-            2: [(t, h // video_merge, w // video_merge) for t, h, w in video_grids],
+            1: [(t, h // image_merge, w // image_merge, 1) for t, h, w in image_grids],
+            2: [
+                (t, h // video_merge, w // video_merge, self.tokens_per_second * seconds)
+                for (t, h, w), seconds in zip(video_grids, seconds_per_grid)
+            ],
         }
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -139,7 +144,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "position_ids"]
 
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)
@@ -158,6 +163,11 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             )
         processed_data["second_per_grid_ts"] = second_per_grid_ts
         return processed_data, video_replacements
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        # only needed to build the temporal rope positions, see `get_mrope_grids`
+        return ["second_per_grid_ts"]
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Qwen2_5_VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})

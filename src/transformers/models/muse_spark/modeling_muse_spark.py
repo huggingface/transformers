@@ -1708,6 +1708,9 @@ class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, GenerationMixi
             router_logits=outputs.router_logits,
         )
 
+    def _prepare_position_ids_for_generation(self, **kwargs):
+        raise AttributeError("Kimi doesn't use m-rope!")
+
 
 __all__ = [
     "MuseSparkPreTrainedModel",

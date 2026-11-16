@@ -59,14 +59,14 @@ class Qwen2VLProcessor(ProcessorMixin):
         num_video_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length
         return self.video_token * num_video_tokens
 
-    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple[int, int, int]]]:
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
         # the language model sees each grid after the vision tower's `merge_size` x `merge_size` spatial merge
         image_merge, video_merge = self.image_processor.merge_size, self.video_processor.merge_size
         image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
         video_grids = np.asarray(video_inputs.get("video_grid_thw", [])).tolist()
         return {
-            1: [(t, h // image_merge, w // image_merge) for t, h, w in image_grids],
-            2: [(t, h // video_merge, w // video_merge) for t, h, w in video_grids],
+            1: [(t, h // image_merge, w // image_merge, 1) for t, h, w in image_grids],
+            2: [(t, h // video_merge, w // video_merge, 1) for t, h, w in video_grids],
         }
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):

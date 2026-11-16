@@ -2075,6 +2075,15 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
             router_logits=outputs.router_logits,
         )
 
+    def compute_3d_position_ids(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
+    def get_vision_position_ids(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
+    def get_rope_index(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
 
 def load_balancing_loss_func(
     gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
@@ -2355,6 +2364,9 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             if not is_split_images:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
         return mm_encoder_output
+
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        raise AttributeError()
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

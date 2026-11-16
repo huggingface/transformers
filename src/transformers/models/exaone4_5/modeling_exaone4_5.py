@@ -638,7 +638,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         super().__init__(config)
         self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -797,6 +796,15 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def compute_3d_position_ids(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
+    def get_vision_position_ids(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
+    def get_rope_index(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
+
 
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
     """
@@ -930,6 +938,9 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
         # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self, **kwargs):
+        raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
 __all__ = [

@@ -676,6 +676,15 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel):
             video_pooler_output=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
 
+    def get_vision_position_ids(self):
+        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
+
+    def get_rope_index(self):
+        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
+
+    def compute_3d_position_ids(self):
+        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
+
 
 @auto_docstring(
     custom_intro="""
@@ -803,6 +812,9 @@ class Lfm3VlForConditionalGeneration(Lfm3VlPreTrainedModel, GenerationMixin):
             image_pooler_output=outputs.image_pooler_output,
             video_pooler_output=outputs.video_pooler_output,
         )
+
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
 
 
 __all__ = ["Lfm3VlForConditionalGeneration", "Lfm3VlModel", "Lfm3VlPreTrainedModel", "Lfm3VlVisionModel"]

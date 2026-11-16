@@ -876,5 +876,8 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
         )
 
+    def _prepare_position_ids_for_generation(self, **kwargs):
+        raise AttributeError("Kimi doesn't use m-rope!")
+
 
 __all__ = ["Kimi_K25ForConditionalGeneration", "Kimi_K25Model", "Kimi_K25PreTrainedModel", "Kimi_K25VisionModel"]

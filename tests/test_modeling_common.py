@@ -6841,6 +6841,22 @@ def find_parent_traceback(full_param_name: str, model: PreTrainedModel) -> tuple
     return name, immediate_parent_class, pretrained_parent_class
 
 
+def mrope_position_ids(config, inputs_dict):
+    """3D RoPE `position_ids` for a model tester's inputs, laid out the way the processor does it."""
+    from transformers.processing_utils import create_mrope_position_ids
+
+    merge_size = config.vision_config.spatial_merge_size
+    grids = {
+        token_type: [(t, h // merge_size, w // merge_size, 1) for t, h, w in inputs_dict[key].tolist()]
+        for token_type, key in ((1, "image_grid_thw"), (2, "video_grid_thw"))
+        if inputs_dict.get(key) is not None
+    }
+    position_ids = create_mrope_position_ids(
+        inputs_dict["mm_token_type_ids"].tolist(), inputs_dict["attention_mask"].tolist(), grids
+    )
+    return torch.tensor(position_ids, device=inputs_dict["input_ids"].device)
+
+
 def ids_tensor(shape, vocab_size, rng=None, name=None):
     #  Creates a random int32 tensor of the shape within the vocab size
     if rng is None:
