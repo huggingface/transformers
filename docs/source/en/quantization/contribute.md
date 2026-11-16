@@ -42,7 +42,7 @@ Before integrating a new quantization method into Transformers, ensure the metho
 - The quantization method should be serializable. You can save the quantized weights locally or push them to the Hub.
 - Make sure the package containing the quantization kernels/primitive is stable (no frequent breaking changes).
 
-Some quantization methods may require "pre-quantizing" the model through data calibration (AWQ). In this case, we prefer to only support inference in Transformers and let the third-party library maintained by the ML community deal handle the model quantization itself.
+Some quantization methods may require "pre-quantizing" the model through data calibration (AWQ). In this case, we prefer to only support inference in Transformers and let the third-party library maintained by the ML community handle the model quantization itself.
 
 ## Create new HFQuantizer class
 
@@ -58,7 +58,7 @@ Some quantization methods may require "pre-quantizing" the model through data ca
    - `is_serializable`: A property method to determine whether the method is serializable or not.
    - `is_trainable`: A property method to determine whether you can fine-tune models on top of the quantization method (with or without PEFT approaches).
 
-4. Write the `validate_environment` and `update_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. Refer to other quantizers for an example of it is implemented.
+4. Write the `validate_environment` and `update_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. Refer to other quantizers for an example of how it is implemented.
 
 5. Write the `_process_model_before_weight_loading` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. This means the `_process_model_before_weight_loading` method takes care of manipulating the model skeleton to replace some modules ([nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)) with the target modules (quantization modules).
 
@@ -66,7 +66,7 @@ You can define module replacement logic or any other utility method by creating 
 
 6. Set `serialized_names` to the names a quantized parameter is saved under, and add the load methods for each case your method supports. See [Choose how weights load](#choose-how-weights-load) for which methods to add.
 
-7. Set `quantized_element_size` to the bytes per element of a quantized weight, for example `1` for FP8. Transformers uses it to estimate memory when it builds a device map.
+7. Override the `quantized_element_size` property to return the bytes per element of a quantized weight, for example `1` for FP8. Transformers uses it to estimate memory for parameters it quantizes on the fly when it builds a device map.
 
 8. Write the `_process_model_after_weight_loading` method if needed. This method enables implementing additional features that require manipulating the model after loading the weights.
 
@@ -171,7 +171,7 @@ Keep the quantizer on the op as `self.hf_quantizer`. The loader checks for this 
 
 ### Dequantize to full precision
 
-When the config sets `dequantize=True`, the quantizer uses the `"dequantize"` op instead of the `"deserialize"` op. [`CompressedTensorsConfig`], [`FineGrainedFP8Config`], and [`Mxfp4Config`] support this. To support it, add a `dequantize` argument to your config.
+When the config sets `dequantize=True`, the quantizer uses the `"dequantize"` op instead of the `"deserialize"` op. [`CompressedTensorsConfig`], [`FineGrainedFP8Config`], [`MetalConfig`], and [`Mxfp4Config`] support this. To support it, add a `dequantize` argument to your config.
 
 The dequantize op also runs before the model's own conversion ops, because a merge op like `MergeModulelist` combines per-expert weights that each have their own scales. It receives the weights and their saved companions and returns only the weights. `Fp8Dequantize` is a reference implementation.
 
@@ -182,7 +182,7 @@ The model's conversion mapping in [conversion_mapping.py](https://github.com/hug
 - If the model has a parameter for a companion of the target, like `experts.gate_up_proj_scale_inv`, a copy of the converter with the same ops merges the saved companions into it.
 - Otherwise, if the quantizer has a dequantize op, the converter also collects the companions and runs the dequantize op first.
 
-Override `update_weight_conversions` only to handle a checkpoint-specific quirk, and call `super()`. For example, the FP8 quantizer prepends a [`WeightRenaming`] for checkpoints that save scales under `.scale` instead of `.weight_scale_inv`.
+Override `update_weight_conversions` only to handle a checkpoint-specific quirk, and call `super()`. For example, the FP8 quantizer prepends two [`WeightRenaming`] entries for checkpoints that save scales under `.scale` or `.qscale_weight` instead of `.weight_scale_inv`.
 
 ### Match saved names
 
