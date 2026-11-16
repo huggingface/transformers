@@ -415,7 +415,10 @@ class Zonos3MiniForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unit
         return load_file(hf_hub_download(ZONOS3_MINI_CHECKPOINT, "voices/Savannah.safetensors"))
 
     def test_logits(self):
-        """Reproducer: zonos3_repro/reproducer.py `prompt` and `logits` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
+        """
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`prompt` and `logits`: the remote
+        code of Zyphra/ZONOS3-Mini-hf@e39d30d)
+        """
         expected_prompt, expected = self._load("expected_prompt.json"), self._load("expected_logits.json")
         processor = AutoProcessor.from_pretrained(ZONOS3_MINI_CHECKPOINT)
         model = Zonos3MiniForConditionalGeneration.from_pretrained(ZONOS3_MINI_CHECKPOINT, dtype=torch.float32)
@@ -435,7 +438,10 @@ class Zonos3MiniForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unit
         self.assertEqual(logits.argmax(-1).tolist(), expected["argmax"])
 
     def test_generate_reference_voice(self):
-        """Reproducer: zonos3_repro/reproducer.py `generate` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
+        """
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`generate`: the remote code of
+        Zyphra/ZONOS3-Mini-hf@e39d30d)
+        """
         expected_prompt, expected = self._load("expected_prompt.json"), self._load("expected_generate.json")
         processor = AutoProcessor.from_pretrained(ZONOS3_MINI_CHECKPOINT)
         model = Zonos3MiniForConditionalGeneration.from_pretrained(ZONOS3_MINI_CHECKPOINT, dtype=torch.float32)
@@ -457,7 +463,10 @@ class Zonos3MiniForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unit
         torch.testing.assert_close(audio[:4000], torch.tensor(expected["waveform"]), atol=1e-3, rtol=1e-3)
 
     def test_speaker_embedding(self):
-        """Reproducer: zonos3_repro/reproducer.py `speaker` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
+        """
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`speaker`: the remote code of
+        Zyphra/ZONOS3-Mini-hf@e39d30d)
+        """
         expected = self._load("expected_speaker_embedding.json")
         processor = AutoProcessor.from_pretrained(ZONOS3_MINI_CHECKPOINT)
         model = Zonos3MiniForConditionalGeneration.from_pretrained(ZONOS3_MINI_CHECKPOINT).to(torch_device).eval()

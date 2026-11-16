@@ -313,7 +313,10 @@ class Zonos3MiniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @slow
     def test_prompt_rows_match_reference(self):
-        """Reproducer: zonos3_repro/reproducer.py `prompt` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
+        """
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`prompt`: the remote code of
+        Zyphra/ZONOS3-Mini-hf@e39d30d)
+        """
         with open(
             Path(__file__).parent.parent.parent / "fixtures/zonos3_mini/expected_prompt.json", encoding="utf-8"
         ) as f:

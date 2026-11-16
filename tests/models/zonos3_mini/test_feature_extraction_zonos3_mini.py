@@ -23,6 +23,8 @@ from transformers import Zonos3MiniFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio, slow
 from transformers.utils import is_torch_available
 
+from ..zac.test_modeling_zac import load_reference_clip
+
 
 if is_torch_available():
     import torch
@@ -60,9 +62,10 @@ class Zonos3MiniFeatureExtractionTest(unittest.TestCase):
 
     @slow
     def test_integration(self):
-        """Reproducer: zonos3_repro/reproducer.py `fbank` (the remote code of Zyphra/ZONOS3-Mini-hf@e39d30d)."""
-        from ..zac.test_modeling_zac import load_reference_clip
-
+        """
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`fbank`: the remote code of
+        Zyphra/ZONOS3-Mini-hf@e39d30d)
+        """
         fixture = Path(__file__).parent.parent.parent / "fixtures/zonos3_mini/expected_speaker_features.json"
         with open(fixture, encoding="utf-8") as f:
             expected = json.load(f)

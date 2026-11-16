@@ -244,7 +244,8 @@ class ZacIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     def test_decode(self):
         """
-        Reproducer: zonos3_repro/reproducer.py `decode` (ZAC-1 `zac.load_decoder("keep2_plain")` on CPU in float32).
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`decode`: ZAC-1's
+        `zac.load_decoder("keep2_plain")` on CPU in float32)
         """
         with open(self.fixtures_path / "expected_decode.json", encoding="utf-8") as f:
             expected = json.load(f)
@@ -259,7 +260,8 @@ class ZacIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     def test_encode(self):
         """
-        Reproducer: zonos3_repro/reproducer.py `encode` (ZAC-1 encoder with its lane schedule on CPU in float32).
+        reproducer: https://gist.github.com/Ryu1845/8291260a331f48374ace60678ecd5f45 (`encode`: the ZAC-1 encoder with
+        its lane schedule on CPU in float32)
         """
         with open(self.fixtures_path / "expected_encode.json", encoding="utf-8") as f:
             expected = json.load(f)
