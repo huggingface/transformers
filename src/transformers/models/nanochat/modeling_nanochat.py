@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -174,7 +174,6 @@ def rotate_half(x):
     return torch.cat((x2, -x1), dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class NanoChatAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

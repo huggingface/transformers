@@ -24,7 +24,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, no_inherit_decorator
 from ...utils.deprecation import deprecate_kwarg
 from ..clip.modeling_clip import CLIPMLP
 from ..gemma2.modeling_gemma2 import Gemma2ForCausalLM
@@ -56,6 +56,8 @@ def rotate_half(x):
     return torch.cat((x2, -x1), dim=-1)
 
 
+# NanoChat's flipped rotary signs are incompatible with the inherited rotary kernel.
+@no_inherit_decorator
 class NanoChatAttention(Qwen3Attention):
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__(config, layer_idx)
