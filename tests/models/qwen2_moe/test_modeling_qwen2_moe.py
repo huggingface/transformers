@@ -232,14 +232,14 @@ class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_speculative_generation(self):
         expectations = Expectations(
             {
-                (None, None): "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl",
+                (None, None): "To be or not to be, that is the question. This is the question that every individual has to ask themselves at one",
                 ("xpu", 5): "To be or not to be, that is the question. The answer is to be, but not to be in the way",
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
-        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
+        model = self.get_model()
         assistant_model = model
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
