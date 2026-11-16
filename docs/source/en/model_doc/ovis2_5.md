@@ -35,25 +35,21 @@ original repositories still use legacy processor metadata. Weight names are mapp
 
 ## Usage
 
-<Tip warning={true}>
-
-Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
-
-The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
-Transformers generation API.
-
-</Tip>
+> [!WARNING]
+> Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
+>
+> The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
+> Transformers generation API.
 
 ### Image inference
 
 Use [`Ovis2_5Processor.apply_chat_template`] to load the image, format the conversation, and tokenize it in one call.
-For the 9B checkpoint, replace the model ID.
 
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
-model_id = "ovis-community/Ovis2.5-2B"
+model_id = "ovis-community/Ovis2.5-2B"  # ovis-community/ovis-2.5-9B
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
     model_id,
