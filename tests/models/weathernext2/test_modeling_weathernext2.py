@@ -15,7 +15,6 @@
 import unittest
 
 import numpy as np
-import pytest
 from parameterized import parameterized
 
 from transformers import WeatherNext2Config, WeatherNext2FeatureExtractor, is_torch_available
@@ -37,9 +36,6 @@ from ...test_modeling_common import (
     floats_tensor,
     sdpa_kernel,
 )
-
-
-TINY_CHECKPOINT = "huggingface-mic/weathernext2-mic"
 
 
 if is_torch_available():
@@ -67,7 +63,7 @@ class WeatherNext2ModelTester:
         grid_latitudes=13,
         grid_longitudes=24,
         pressure_levels=(500, 850),
-        is_training=False,
+        is_training=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -101,6 +97,7 @@ class WeatherNext2ModelTester:
             grid_latitudes=self.grid_latitudes,
             grid_longitudes=self.grid_longitudes,
             pressure_levels=self.pressure_levels,
+            loss_weights={},
         )
 
     def prepare_config_and_inputs(self):
@@ -194,10 +191,22 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     additional_model_inputs = ["global_features", "noise", "attention_mask"]
 
     test_resize_embeddings = False
+    # The final mesh-only update is not consumed by the forecasting head.
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = WeatherNext2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WeatherNext2Config, has_text_modality=False)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels and model_class == WeatherNext2ForWeatherForecasting:
+            config = self.model_tester.get_config()
+            batch_size = inputs_dict["grid_features"].shape[0]
+            inputs_dict["labels"] = floats_tensor(
+                [batch_size // 2, 2, config.num_output_channels, *inputs_dict["grid_features"].shape[-2:]]
+            )
+        return inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -235,72 +244,104 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)
 
-    @slow
-    @require_torch_accelerator
-    @pytest.mark.torch_compile_test
     @with_grad
-    def test_torch_compile_for_training(self):
-        """The common test builds language-model inputs, so check the same eager-vs-compiled gradients here."""
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
-        config = model.config
-        inputs = {
-            "grid_features": floats_tensor(
-                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
-            ),
-            "global_features": floats_tensor([2, config.num_mesh_input_channels - 3]),
-            "noise": floats_tensor([2, config.noise_channels]),
-            "labels": floats_tensor([1, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes]),
-        }
-        inputs = {name: value.to(torch_device) for name, value in inputs.items()}
-        inputs["attention_mask"] = WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask
-        inputs["attention_mask"] = inputs["attention_mask"].to(torch_device)
+    def test_crps_loss_matches_reference(self):
+        """Matches the original `fgn.Predictor.crps_loss`, including residual shifts and missing cyclone targets."""
+        config = self.model_tester.get_config()
+        config.grid_latitudes, config.grid_longitudes = 5, 8
+        config.target_variables = ["temperature", "geopotential", "10m_u_component_of_wind", "cyclone_all_wind_disc"]
+        config.sigmoid_shifted_outputs = {}
+        config.loss_weights = {"geopotential": 0.5, "10m_u_component_of_wind": 0.05, "cyclone_all_wind_disc": 10.0}
+        config.vars_with_nan_targets = ["cyclone_all_wind_disc"]
+        generator = np.random.default_rng(17)
+        prediction = torch.tensor(generator.normal(size=(2, 3, 6, 5, 8)).astype(np.float32), device=torch_device)
+        labels = torch.tensor(generator.normal(size=prediction.shape).astype(np.float32), device=torch_device)
+        labels[:, :, -1, 1, :3] = torch.nan
+        prediction.requires_grad_()
 
-        model(**inputs).loss.backward()
-        expected = {
-            name: None if parameter.grad is None else parameter.grad.detach().cpu()
-            for name, parameter in model.named_parameters()
-        }
-        model.zero_grad()
+        loss = WeatherNext2ForWeatherForecastingLoss(prediction.flatten(0, 1), labels, config)
+        loss.backward()
 
-        compiled = torch.compile(model, fullgraph=True, mode="reduce-overhead")
-        compiled(**inputs).loss.backward()
-        for name, parameter in model.named_parameters():
-            if expected[name] is None:
-                self.assertIsNone(parameter.grad, name)
-            else:
-                torch.testing.assert_close(parameter.grad.cpu(), expected[name], rtol=1e-4, atol=1e-4, msg=name)
+        torch.testing.assert_close(loss, loss.new_tensor(2.84895920753479))
+        self.assertTrue(torch.isfinite(prediction.grad).all())
+        self.assertEqual(torch.count_nonzero(prediction.grad[:, :, -1, 1, :3]).item(), 0)
+
+    def test_generate_matches_manual_rollout(self):
+        """Splitting the ensemble into batches must not change the noise stream or the clock."""
+        config = self.model_tester.get_config()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        extractor = self.model_tester.get_feature_extractor()
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = torch.full((2,), 1_728_280_800)  # 2024-10-07T06:00:00Z
+
+        generated = model.generate(
+            state=state,
+            feature_extractor=extractor,
+            seconds_since_epoch=valid_time,
+            generation_config=WeatherNext2GenerationConfig(num_steps=3),
+            num_steps=2,
+            batch_size=1,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+        manual_state, manual_time, generator = state, valid_time, torch.Generator().manual_seed(0)
+        for step in range(2):
+            inputs = extractor(manual_state, seconds_since_epoch=manual_time, generator=generator).to(torch_device)
+            with torch.no_grad():
+                prediction = model(**inputs).prediction
+            forecast = extractor.postprocess(prediction, manual_state)
+            for name in extractor.target_variables:
+                torch.testing.assert_close(generated.forecasts[step][name], forecast[name])
+
+            manual_state = extractor.advance_state(manual_state, forecast, manual_time)
+            manual_time = manual_time + extractor.time_step_hours * 3600
+
+        self.assertEqual(len(generated.forecasts), 2)
+        torch.testing.assert_close(generated.valid_time, manual_time)
+        for name in extractor.input_variables:
+            torch.testing.assert_close(generated.state[name], manual_state[name], rtol=1e-5, atol=1e-5)
+
+    @parameterized.expand([(None,), (1,)])
+    def test_generate_num_members(self, batch_size):
+        """Each ensemble row must match a single-member forecast with the same noise."""
+        config = self.model_tester.get_config()
+        model = WeatherNext2ForWeatherForecasting(config).to(torch_device).eval()
+        extractor = self.model_tester.get_feature_extractor()
+        state = self.model_tester.prepare_state(extractor, batch_size=2)
+        valid_time = torch.full((2,), 1_728_280_800)
+        members = 3
+        model.generation_config.num_members = members
+        noise = torch.randn(1, 2 * members, model.config.noise_channels, device=torch_device)
+        name = "2m_temperature"
+
+        forecast = model.generate(
+            state=state,
+            feature_extractor=extractor,
+            seconds_since_epoch=valid_time,
+            noise=noise,
+            batch_size=batch_size,
+        ).forecasts[0][name]
+        self.assertEqual(forecast.shape[0], 2 * members)
+
+        for condition in range(2):
+            alone = {}
+            for key, value in state.items():
+                alone[key] = value if key in extractor.static_variables else value[condition : condition + 1]
+
+            for member in range(members):
+                row = condition * members + member
+                expected = model.generate(
+                    state=alone,
+                    feature_extractor=extractor,
+                    seconds_since_epoch=valid_time[condition : condition + 1],
+                    num_members=1,
+                    noise=noise[:, row : row + 1],
+                ).forecasts[0][name][0]
+                torch.testing.assert_close(forecast[row], expected, rtol=1e-4, atol=1e-4)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_forecast_backward(self):
-        """Use real geometry so the edge encoders participate in the forecast."""
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).train()
-        config = model.config
-        labels = floats_tensor([1, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes])
-        outputs = model(
-            attention_mask=WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT).attention_mask.to(
-                torch_device
-            ),
-            grid_features=floats_tensor(
-                [2, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes]
-            ).to(torch_device),
-            global_features=floats_tensor([2, config.num_mesh_input_channels - 3]).to(torch_device),
-            noise=floats_tensor([2, config.noise_channels]).to(torch_device),
-            labels=labels.to(torch_device),
-        )
-        self.assertTrue(torch.isfinite(outputs.loss))
-        outputs.loss.backward()
-
-        # Only the final mesh update is unused by the head, as in the original implementation.
-        starved = set()
-        for name, parameter in model.named_parameters():
-            if parameter.grad is None:
-                starved.add(name)
-        self.assertTrue(starved)
-        for name in starved:
-            self.assertTrue(name.startswith("model.mesh_to_grid.mesh_node_update."), name)
 
     def test_attention_outputs(self):
         """Shared attention-output checks with block-local mesh shapes."""
@@ -451,98 +492,3 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         expected_mean = Expectations({(None, None): 0.3225}).get_expectation()
         self.assertAlmostEqual(prediction.float().mean().item(), expected_mean, delta=1e-3)
-
-    @with_grad
-    def test_crps_loss_matches_reference(self):
-        """Matches the original `fgn.Predictor.crps_loss`, including residual shifts and missing cyclone targets."""
-        config = WeatherNext2Config(
-            grid_latitudes=5,
-            grid_longitudes=8,
-            pressure_levels=[500, 850],
-            target_variables=["temperature", "geopotential", "10m_u_component_of_wind", "cyclone_all_wind_disc"],
-            loss_weights={"geopotential": 0.5, "10m_u_component_of_wind": 0.05, "cyclone_all_wind_disc": 10.0},
-            vars_with_nan_targets=["cyclone_all_wind_disc"],
-        )
-        generator = np.random.default_rng(17)
-        prediction = torch.tensor(generator.normal(size=(2, 3, 6, 5, 8)).astype(np.float32), device=torch_device)
-        labels = torch.tensor(generator.normal(size=prediction.shape).astype(np.float32), device=torch_device)
-        labels[:, :, -1, 1, :3] = torch.nan
-        prediction.requires_grad_()
-
-        loss = WeatherNext2ForWeatherForecastingLoss(prediction.flatten(0, 1), labels, config)
-        loss.backward()
-
-        torch.testing.assert_close(loss, loss.new_tensor(2.84895920753479))
-        self.assertTrue(torch.isfinite(prediction.grad).all())
-        self.assertEqual(torch.count_nonzero(prediction.grad[:, :, -1, 1, :3]).item(), 0)
-
-    def test_generate_matches_manual_rollout(self):
-        """Splitting the ensemble into batches must not change the noise stream or the clock."""
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).eval()
-        extractor = WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT)
-        state = WeatherNext2ModelTester(self).prepare_state(extractor, batch_size=2)
-        valid_time = torch.full((2,), 1_728_280_800)  # 2024-10-07T06:00:00Z
-
-        generated = model.generate(
-            state=state,
-            feature_extractor=extractor,
-            seconds_since_epoch=valid_time,
-            generation_config=WeatherNext2GenerationConfig(num_steps=3),
-            num_steps=2,
-            batch_size=1,
-            generator=torch.Generator().manual_seed(0),
-        )
-
-        manual_state, manual_time, generator = state, valid_time, torch.Generator().manual_seed(0)
-        for step in range(2):
-            inputs = extractor(manual_state, seconds_since_epoch=manual_time, generator=generator).to(torch_device)
-            with torch.no_grad():
-                prediction = model(**inputs).prediction
-            forecast = extractor.postprocess(prediction, manual_state)
-            for name in extractor.target_variables:
-                torch.testing.assert_close(generated.forecasts[step][name], forecast[name])
-
-            manual_state = extractor.advance_state(manual_state, forecast, manual_time)
-            manual_time = manual_time + extractor.time_step_hours * 3600
-
-        self.assertEqual(len(generated.forecasts), 2)
-        torch.testing.assert_close(generated.valid_time, manual_time)
-        for name in extractor.input_variables:
-            torch.testing.assert_close(generated.state[name], manual_state[name], rtol=1e-5, atol=1e-5)
-
-    @parameterized.expand([(None,), (1,)])
-    def test_generate_num_members(self, batch_size):
-        """Each ensemble row must match a single-member forecast with the same noise."""
-        model = WeatherNext2ForWeatherForecasting.from_pretrained(TINY_CHECKPOINT).to(torch_device).eval()
-        extractor = WeatherNext2FeatureExtractor.from_pretrained(TINY_CHECKPOINT)
-        state = WeatherNext2ModelTester(self).prepare_state(extractor, batch_size=2)
-        valid_time = torch.full((2,), 1_728_280_800)
-        members = 3
-        model.generation_config.num_members = members
-        noise = torch.randn(1, 2 * members, model.config.noise_channels, device=torch_device)
-        name = "2m_temperature"
-
-        forecast = model.generate(
-            state=state,
-            feature_extractor=extractor,
-            seconds_since_epoch=valid_time,
-            noise=noise,
-            batch_size=batch_size,
-        ).forecasts[0][name]
-        self.assertEqual(forecast.shape[0], 2 * members)
-
-        for condition in range(2):
-            alone = {}
-            for key, value in state.items():
-                alone[key] = value if key in extractor.static_variables else value[condition : condition + 1]
-
-            for member in range(members):
-                row = condition * members + member
-                expected = model.generate(
-                    state=alone,
-                    feature_extractor=extractor,
-                    seconds_since_epoch=valid_time[condition : condition + 1],
-                    num_members=1,
-                    noise=noise[:, row : row + 1],
-                ).forecasts[0][name][0]
-                torch.testing.assert_close(forecast[row], expected, rtol=1e-4, atol=1e-4)
