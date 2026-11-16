@@ -51,6 +51,7 @@ from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
+    build_glob_alternation,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
@@ -1452,6 +1453,21 @@ class PreTrainedModel(
         with ContextManagers(init_contexts):
             model = cls(config, **kwargs)
             patch_output_recorders(model)
+
+        # Upcast the `_keep_in_fp32_modules(_strict)` weights, matching them the same way as `from_pretrained`.
+        # Under ZeRO-3 the parameters are partitioned, so they are left as they are.
+        if (dtype_plan := model._get_dtype_plan(dtype)) and not needs_zero3_init:
+            dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan))
+            upcast_modules = set()
+            for name, tensor in model.state_dict(keep_vars=True).items():
+                if tensor.is_floating_point() and (match := dtype_policy_alt.search(name)) is not None:
+                    tensor.data = tensor.data.to(dtype_plan[dtype_policy_by_group_name[match.lastgroup]])
+                    upcast_modules.add(name.rpartition(".")[0])
+            # The weights were initialized in the low-precision dtype: initialize them again now that they are upcast.
+            # All the other modules are flagged as initialized already, so they are skipped.
+            for module_name in upcast_modules:
+                model.get_submodule(module_name)._is_hf_initialized = False
+            model.init_weights()
 
         # Under ZeRO-3, parameters were partitioned into empty tensors during construction,
         # so weight init was suppressed. Re-initialize using the ZeRO-3 variant which gathers

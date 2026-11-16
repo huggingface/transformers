@@ -1029,6 +1029,27 @@ class ModelTesterMixin(ExportTesterMixin):
                         else:
                             self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
 
+    def test_keep_in_fp32_modules_from_config(self):
+        """Test that `_from_config` keeps the same weights in fp32 as `from_pretrained`."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                if len(model._keep_in_fp32_modules) == 0 and len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest(
+                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules or _keep_in_fp32_modules_strict attribute defined"
+                    )
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    for dtype in (torch.float16, torch.bfloat16):
+                        loaded = model_class.from_pretrained(tmpdirname, dtype=dtype)
+                        built = model_class._from_config(copy.deepcopy(config), dtype=dtype)
+                        # integer buffers (e.g. step counters) are never cast
+                        built_dtypes = {n: p.dtype for n, p in built.state_dict().items() if p.is_floating_point()}
+                        loaded_dtypes = {n: p.dtype for n, p in loaded.state_dict().items() if n in built_dtypes}
+                        self.assertEqual(built_dtypes, loaded_dtypes)
+
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
