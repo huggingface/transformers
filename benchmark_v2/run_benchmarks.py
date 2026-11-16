@@ -62,7 +62,10 @@ if __name__ == "__main__":
     parser.add_argument("--commit-message", type=str, help="Git commit message")
 
     parser.add_argument(
-        "--no-gpu-monitoring", action="store_true", help="Disables GPU monitoring during benchmark runs"
+        "--gpu-monitoring",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Sample GPU utilization and memory during measurements (off by default: the sampling adds noise)",
     )
 
     parser.add_argument(
@@ -120,7 +123,7 @@ if __name__ == "__main__":
         args.batch_size,
         args.sequence_length,
         args.num_tokens_to_generate,
-        not args.no_gpu_monitoring,
+        args.gpu_monitoring,
     )
 
     if args.enable_tp:
