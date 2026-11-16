@@ -698,6 +698,90 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "ernie5_5_moe": [
+            # Every pattern must stay unambiguous in reverse, so that `save_pretrained` writes the released format
+            # back (e.g. the dense MLP of layer 0 is already called `mlp`, and the MLA layers already use `q_a_proj`)
+            WeightRenaming(source_patterns=r"^model\.lm_head\.multimax_", target_patterns=r"lm_head\.multimax_"),
+            WeightRenaming(source_patterns=r"mhc_contract\.hc_head_base", target_patterns=r"hc_head\.hc_base"),
+            WeightRenaming(source_patterns=r"mhc_contract\.hc_head_scale", target_patterns=r"hc_head\.hc_scale"),
+            # Hyper-Connections (the projections and scales are converted below)
+            WeightRenaming(
+                source_patterns=r"\.self_attention_hyper_connection\.bias", target_patterns=r"\.attn_hc\.base"
+            ),
+            WeightRenaming(source_patterns=r"\.mlp_hyper_connection\.bias", target_patterns=r"\.ffn_hc\.base"),
+            # Attention: the core-attention submodule is flattened into the attention module
+            WeightRenaming(source_patterns=r"\.core_attention\.attn_sink", target_patterns=r"\.sinks"),
+            WeightRenaming(source_patterns=r"\.core_attention\.softmax_offset", target_patterns=r"\.softmax_offset"),
+            WeightRenaming(source_patterns=r"\.core_attention\.indexer\.", target_patterns=r"\.indexer\."),
+            WeightRenaming(source_patterns=r"\.core_attention\.compressor\.", target_patterns=r"\.compressor\."),
+            WeightRenaming(source_patterns=r"\.compressor\.linear_wkv\.", target_patterns=r"\.compressor\.kv_proj\."),
+            WeightRenaming(
+                source_patterns=r"\.compressor\.linear_wgate\.", target_patterns=r"\.compressor\.gate_proj\."
+            ),
+            WeightRenaming(source_patterns=r"\.compressor\.ape", target_patterns=r"\.compressor\.position_bias"),
+            WeightRenaming(source_patterns=r"\.compressor\.norm\.", target_patterns=r"\.compressor\.kv_norm\."),
+            # Latent MoE. The `e_score_correction_bias` renaming comes last so that it is undone first when saving.
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.(gate|experts|shared_experts|fc1_latent_proj|fc2_latent_proj|latent_norm)\.",
+                target_patterns=r"\.mlp\.\1\.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.e_score_correction_bias",
+                target_patterns=r"\.mlp\.gate\.e_score_correction_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.shared_experts\.w1\.", target_patterns=r"\.shared_experts\.gate_proj\."
+            ),
+            WeightRenaming(
+                source_patterns=r"\.shared_experts\.w2\.", target_patterns=r"\.shared_experts\.down_proj\."
+            ),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r"\.shared_experts\.up_proj\."),
+            # The mHC projections are stored `[in_features, out_features]`
+            WeightConverter(
+                source_patterns=r"\.self_attention_hyper_connection\.mapping_proj\.weight",
+                target_patterns=r"\.attn_hc\.fn",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.mlp_hyper_connection\.mapping_proj\.weight",
+                target_patterns=r"\.ffn_hc\.fn",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"mhc_contract\.hc_head_fn",
+                target_patterns=r"hc_head\.hc_fn",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            # The three mHC scales are stored separately, in the order of the mapping projection's outputs
+            WeightConverter(
+                source_patterns=[
+                    r"\.self_attention_hyper_connection\.alpha_pre",
+                    r"\.self_attention_hyper_connection\.alpha_post",
+                    r"\.self_attention_hyper_connection\.alpha_res",
+                ],
+                target_patterns=r"\.attn_hc\.scale",
+                operations=[Concatenate(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    r"\.mlp_hyper_connection\.alpha_pre",
+                    r"\.mlp_hyper_connection\.alpha_post",
+                    r"\.mlp_hyper_connection\.alpha_res",
+                ],
+                target_patterns=r"\.ffn_hc\.scale",
+                operations=[Concatenate(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[r"\.experts.*.w1.weight", r"\.experts.*.w3.weight"],
+                target_patterns=r"\.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "glm5_next": [
             WeightRenaming(
                 source_patterns=r"self_attn\.f_a_proj\.",

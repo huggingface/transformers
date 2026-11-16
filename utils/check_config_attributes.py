@@ -235,6 +235,17 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_nextn_predict_layers",
         "router_jitter_noise",
     ],
+    "Ernie5_5_MoeConfig": [
+        # Keys of the released `config.json` that the modeling code never reads:
+        # `attention_bias` — no linear layer has a bias.
+        # `hidden_act` — every feed-forward block is SiTU-GLU, configured by `activation_situ_beta(_linear)`.
+        # `num_key_value_heads` — the HCA layers are shared-KV MQA (always 1), the MLA layers expand the latent KV.
+        # `qk_rope_head_dim` — only read by the config, to size both rotary tables (`partial_rotary_factor`).
+        "attention_bias",
+        "hidden_act",
+        "num_key_value_heads",
+        "qk_rope_head_dim",
+    ],
     "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "MistralLarge4TextConfig": ["layer_types", "first_k_dense_replace", "kv_source_layers"],

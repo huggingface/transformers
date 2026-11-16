@@ -149,6 +149,7 @@ if TYPE_CHECKING:
     from .ernie4_5 import *
     from .ernie4_5_moe import *
     from .ernie4_5_vl_moe import *
+    from .ernie5_5_moe import *
     from .esm import *
     from .esmc import *
     from .esmfold2 import *

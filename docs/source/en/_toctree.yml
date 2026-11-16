@@ -635,6 +635,8 @@
         title: Ernie4_5
       - local: model_doc/ernie4_5_moe
         title: Ernie4_5_MoE
+      - local: model_doc/ernie5_5_moe
+        title: ERNIE 5.5 MoE
       - local: model_doc/esm
         title: ESM
       - local: model_doc/esmc
