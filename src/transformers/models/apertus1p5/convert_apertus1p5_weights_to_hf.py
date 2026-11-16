@@ -206,7 +206,7 @@ def build_processor(apertus_checkpoint: str, audio_config: dict) -> Apertus1p5Pr
         )
     hop_length = int(math.prod(audio_config.get("upsampling_ratios", (6, 5, 5, 4))))
     feature_extractor = WavTokenizerFeatureExtractor(
-        sampling_rate=audio_config.get("sampling_rate", 24000), hop_length=hop_length
+        sampling_rate=audio_config.get("sampling_rate", 24000), hop_length=hop_length, normalize_audio=True
     )
     return Apertus1p5Processor(
         image_processor=Apertus1p5ImageProcessor(),

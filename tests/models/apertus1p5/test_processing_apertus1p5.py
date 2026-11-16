@@ -18,14 +18,10 @@ import unittest
 
 import numpy as np
 
-from transformers import Apertus1p5Processor, AutoProcessor, is_torch_available
+from transformers import Apertus1p5Processor, AutoProcessor
 from transformers.testing_utils import require_librosa, require_torchvision, slow
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
-
-
-if is_torch_available():
-    import torch
 
 
 @require_torchvision
@@ -115,15 +111,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(decoded, expected)
 
-    def test_audio_peak_normalized_to_minus_3_dbfs(self):
-        processor = self.get_processor()
-        out = processor(text="<|audio|>", audio=[self._clip(1200) * 20.0], return_tensors="pt")
-        peak = out["input_values"].abs().amax().item()
-        self.assertAlmostEqual(peak, 10 ** (-3 / 20), places=4)
-        # an all-zero clip must not produce NaNs
-        out = processor(text="<|audio|>", audio=[np.zeros(1200, dtype=np.float32)], return_tensors="pt")
-        self.assertFalse(torch.isnan(out["input_values"]).any())
-
     def test_audio_mask_tracks_valid_samples(self):
         """Masks, features and placeholder counts follow the valid samples of unpadded, padded and truncated clips."""
         processor = self.get_processor()
@@ -146,16 +133,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     np.testing.assert_array_equal(out["padding_mask"][index], np.arange(output_length) < valid)
                     self.assertEqual(np.shape(out["input_values"][index]), (1, output_length))
                     self.assertEqual(out["input_ids"][index].count(processor.audio_token_id), math.ceil(valid / hop))
-
-        # without padding the feature extractor returns no mask; the processor builds it in the requested format
-        for return_tensors, expected_type in [(None, list), ("np", np.ndarray), ("pt", torch.Tensor)]:
-            with self.subTest(return_tensors=return_tensors):
-                out = processor(
-                    text=["<|audio|>"] * 2,
-                    audio=[self._clip(hop)] * 2,
-                    audio_kwargs={"padding": False, "return_tensors": return_tensors},
-                )
-                self.assertIsInstance(out["padding_mask"], expected_type)
 
 
 @slow

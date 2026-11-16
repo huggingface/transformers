@@ -61,26 +61,10 @@ class Apertus1p5Processor(ProcessorMixin):
         return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        """Peak-normalize the clips, run the feature extractor, and build the replacements."""
-        # peak-normalize each clip to -3 dBFS in float32, as in the reference Apertus 1.5 pipeline
-        # (the codec feature extractor itself deliberately performs no normalization)
-        target_peak = 10.0 ** (-3.0 / 20.0)
-        clips = []
-        for clip in audio:
-            clip = np.asarray(clip, dtype=np.float32)
-            if clip.size > 0:
-                clip = clip * (target_peak / max(float(np.abs(clip).max()), 1e-10))
-            clips.append(clip)  # empty clips fall through to the feature extractor's clear error
-
+        """Run the feature extractor and build the placeholder replacements from the resulting code counts."""
         # bare arrays are assumed to already be 24 kHz mono, like the reference pipeline
         kwargs.setdefault("sampling_rate", self.feature_extractor.sampling_rate)
-        audio_inputs = self.feature_extractor(clips, **kwargs)
-        if "padding_mask" not in audio_inputs:
-            # Unpadded waveforms contain only valid samples, including after truncation.
-            audio_inputs["padding_mask"] = [
-                np.ones(values.shape[-1], dtype=np.int64) for values in audio_inputs["input_values"]
-            ]
-            audio_inputs.convert_to_tensors(kwargs.get("return_tensors"))
+        audio_inputs = self.feature_extractor(audio, **kwargs)
         # counts come from the feature-extractor OUTPUT so that truncation/max_length can never desync the
         # placeholder count from the features the model will actually encode
         audio_inputs["num_audio_codes"] = [
@@ -89,7 +73,7 @@ class Apertus1p5Processor(ProcessorMixin):
         ]
 
         audio_replacements = []
-        for idx in range(len(clips)):
+        for idx in range(len(audio_inputs["num_audio_codes"])):
             audio_replacements.append(self.replace_audio_token(audio_inputs, audio_idx=idx))
         return audio_inputs, audio_replacements
 

@@ -125,6 +125,23 @@ class WavTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         np.testing.assert_array_equal(processed.input_values[1, 0, : lengths[1]], batch[1])
         np.testing.assert_array_equal(processed.input_values[1, 0, lengths[1] :], 0.0)
 
+    def test_peak_normalization(self):
+        """`normalize_audio` scales each clip to the target peak, is off by default, and keeps silent clips finite."""
+        feat_extract_dict = self.feat_extract_tester.prepare_feat_extract_dict()
+        sampling_rate = feat_extract_dict["sampling_rate"]
+        clip = np.linspace(-20.0, 10.0, 1200, dtype=np.float32)
+
+        default = self.feature_extraction_class(**feat_extract_dict)
+        processed = default(clip, sampling_rate=sampling_rate, return_tensors="np")
+        np.testing.assert_array_equal(processed.input_values[0, 0], clip)
+
+        feat_extract = self.feature_extraction_class(**feat_extract_dict, normalize_audio=True)
+        processed = feat_extract(
+            [clip, np.zeros(1200, dtype=np.float32)], sampling_rate=sampling_rate, return_tensors="np"
+        )
+        self.assertAlmostEqual(float(np.abs(processed.input_values[0]).max()), 10 ** (-3 / 20), places=6)
+        self.assertFalse(np.isnan(processed.input_values[1]).any())
+
     def test_rejects_invalid_audio(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         sampling_rate = feat_extract.sampling_rate

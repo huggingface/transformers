@@ -15,6 +15,7 @@
 
 import numpy as np
 
+from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -37,6 +38,11 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
             The value that is used for padding.
         hop_length (`int`, *optional*, defaults to 600):
             Number of audio samples represented by a single audio code.
+        normalize_audio (`bool`, *optional*, defaults to `False`):
+            Whether to peak-normalize each clip to `target_peak_dB_FS` before padding. The original WavTokenizer does
+            not normalize; Apertus 1.5 enables it.
+        target_peak_dB_FS (`float`, *optional*, defaults to -3.0):
+            Target peak level in dB FS used when `normalize_audio` is `True`.
     """
 
     model_input_names = ["input_values", "padding_mask"]
@@ -47,10 +53,14 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
         hop_length: int = 600,
+        normalize_audio: bool = False,
+        target_peak_dB_FS: float = -3.0,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.hop_length = hop_length
+        self.normalize_audio = normalize_audio
+        self.target_peak_dB_FS = target_peak_dB_FS
 
     def get_num_audio_codes(self, num_samples: int) -> int:
         """
@@ -61,7 +71,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        audio: AudioInput,
         padding: bool | str | PaddingStrategy | None = None,
         truncation: bool | None = False,
         max_length: int | None = None,
@@ -72,7 +82,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
         Featurize and prepare one or several audio sequence(s) for the model.
 
         Args:
-            audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`, `list[list[float]]`):
                 The sequence or batch of sequences to be processed. Each sequence must be mono audio of shape
                 `(num_samples,)`, already sampled at this feature extractor's `sampling_rate`. Audio is not resampled
                 or downmixed.
@@ -96,7 +106,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
             - **input_values** -- Audio waveforms to be fed to the model, as a list of arrays of shape
               `(1, num_samples)`, or a tensor of shape `(batch_size, 1, num_samples)` when `return_tensors` is set.
             - **padding_mask** -- Mask indicating valid audio samples (1) versus padding (0), of shape
-              `(batch_size, num_samples)`. Only returned when `padding` is enabled (the default).
+              `(batch_size, num_samples)`.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -115,18 +125,7 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
             # by default let's pad the inputs
             padding = True
 
-        is_batched = bool(isinstance(audio, (list, tuple)) and (isinstance(audio[0], (np.ndarray, tuple, list))))
-
-        if is_batched:
-            audio = [np.asarray(example, dtype=np.float32) for example in audio]
-        elif not is_batched and not isinstance(audio, np.ndarray):
-            audio = np.asarray(audio, dtype=np.float32)
-        elif isinstance(audio, np.ndarray) and audio.dtype is np.dtype(np.float64):
-            audio = audio.astype(np.float32)
-
-        # always return batch
-        if not is_batched:
-            audio = [np.asarray(audio)]
+        audio = [np.asarray(example, dtype=np.float32) for example in make_list_of_audio(audio)]
 
         # verify inputs are valid
         for idx, example in enumerate(audio):
@@ -134,6 +133,10 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(f"Expected mono audio of shape (num_samples,) but got shape {example.shape}")
             if example.size == 0:
                 raise ValueError(f"Input audio at index {idx} is empty")
+
+        if self.normalize_audio:
+            target_peak = 10.0 ** (self.target_peak_dB_FS / 20.0)
+            audio = [example * (target_peak / max(float(np.abs(example).max()), 1e-10)) for example in audio]
 
         input_values = BatchFeature({"input_values": audio})
 
@@ -144,10 +147,9 @@ class WavTokenizerFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             padding=padding,
-            return_attention_mask=padding,
+            return_attention_mask=True,
         )
-        if padding:
-            padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
+        padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
 
         input_values = [example[np.newaxis, :] for example in padded_inputs.pop("input_values")]
         padded_inputs["input_values"] = input_values
