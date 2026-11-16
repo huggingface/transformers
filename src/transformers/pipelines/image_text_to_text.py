@@ -158,6 +158,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Forward kwargs
         if generate_kwargs is not None:
+            generate_kwargs = generate_kwargs.copy()
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
             if generate_kwargs is None:
@@ -350,7 +351,19 @@ class ImageTextToTextPipeline(Pipeline):
             # Handle Mistral tokenizer which does not accept processing kwargs
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
-                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                    k: v
+                    for k, v in chat_template_kwargs.items()
+                    if k
+                    in (
+                        "continue_final_message",
+                        "add_generation_prompt",
+                        "tokenize",
+                        "return_dict",
+                        "return_tensors",
+                        "padding",
+                        "truncation",
+                        "max_length",
+                    )
                 }
 
             model_inputs = self.processor.apply_chat_template(

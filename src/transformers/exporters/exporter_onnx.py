@@ -55,12 +55,13 @@ from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
-from .metadata import ExportMetadata
+from .metadata import ExportMetadata, record_output_structure
 from .utils import (
     apply_fx_node_fixes,
     apply_patches,
-    duplicate_leaf_tensors,
-    get_leaf_tensors,
+    disambiguate_io_names,
+    patch_model_outputs,
+    quantize_converted_model,
     register_fx_node_fix,
     register_patch,
 )
@@ -119,6 +120,7 @@ class OnnxExporter(DynamoExporter):
 
     >>> exporter = OnnxExporter()
     >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
+    >>> outputs = exported(**inputs)  # on ONNX Runtime
     >>> onnx_model = exported.program  # an `onnx_ir.Model`
     >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```
@@ -137,16 +139,16 @@ class OnnxExporter(DynamoExporter):
         sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig,
     ) -> tuple[onnx_ir.Model, ExportMetadata]:
-        quantizer = config.quantizer
         # A model quantized before export has no ops the fusions match.
+        quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
 
         with (
+            patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
             apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
-            patch_model_outputs(model) as (inputs_names, outputs_names),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -155,23 +157,21 @@ class OnnxExporter(DynamoExporter):
                 exported_program,
                 args=(),
                 input_names=inputs_names,
-                output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
                 opset_version=config.opset_version,
                 optimize=config.optimize,
             )
 
+        _name_graph_outputs(onnx_program.model.graph, outputs_names)
         apply_onnx_ir_fixes(onnx_program)
 
         if ort_fusions:
             fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
-        if quantizer is not None and not quantizer.quantizes_fx_graph:
-            onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
-
-        _update_onnx_metadata(metadata, onnx_program.model)
-        return onnx_program.model, metadata
+        onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
+        record_output_structure(metadata, traced_outputs[-1])
+        return onnx_model, metadata
 
     @classmethod
     def save_program(cls, program: onnx_ir.Model, path) -> None:
@@ -208,14 +208,7 @@ class OnnxExporter(DynamoExporter):
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
-# Model forward wrapper and I/O naming used by OnnxExporter.export.
-
-
-def _update_onnx_metadata(metadata: ExportMetadata, onnx_model: onnx_ir.Model) -> None:
-    """Record the graph's own input and output names: dotted leaf paths, with `input.` / `output.` prefixes on mutated
-    inputs."""
-    metadata.input_names = [value.name for value in onnx_model.graph.inputs]
-    metadata.output_names = [value.name for value in onnx_model.graph.outputs]
+# Experts implementation and output naming.
 
 
 @contextmanager
@@ -232,37 +225,17 @@ def use_experts_implementation(model, experts_implementation: str | None):
         model.set_experts_implementation(original)
 
 
-@contextmanager
-def patch_model_outputs(model):
-    """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
-    and capture the input/output tensor names from the traced forward in the yielded
-    `(inputs_names, outputs_names)` lists.
-    """
-
-    inputs_names: list[str] = []
-    outputs_names: list[str] = []
-    original_forward = model.forward
-
-    @functools.wraps(original_forward)
-    def patched_forward(*args, **kwargs):
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
-        outputs_names.extend(outputs.keys())
-        return outputs
-
-    try:
-        model.forward = patched_forward
-        yield inputs_names, outputs_names
-    finally:
-        model.forward = original_forward
-
-
-def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
-    """Prefix any name that appears in both lists with `input.` / `output.`."""
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-    return inputs_names, outputs_names
+def _name_graph_outputs(graph: onnx_ir.Graph, names: list[str]) -> None:
+    """Name the graph's outputs; one that returns an input as is goes through an `Identity`, so the input keeps its
+    name."""
+    for index, (value, name) in enumerate(zip(list(graph.outputs), names)):
+        if value.is_graph_input():
+            identity = onnx_ir.node("Identity", [value])
+            output = identity.outputs[0]
+            output.shape, output.type = value.shape, value.type
+            graph.append(identity)
+            graph.outputs[index] = value = output
+        value.name = name
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
@@ -430,38 +403,6 @@ def _patch_optimize_ir(original):
         return original(model, *args, **kwargs)
 
     return patch
-
-
-def _patch_cummax_or_cummin(original, *, mode: str):
-    """Decompose cummax/cummin via triangular-mask reduction (O(N^2) memory)."""
-
-    def patch(input, dim):
-        n = input.shape[dim]
-        x = input.movedim(dim, -1)  # (..., n)
-        x_grid = x.unsqueeze(-2).expand(*x.shape[:-1], n, n)  # (..., n, n)
-        include = torch.ones(n, n, dtype=torch.bool, device=input.device).tril()
-        if input.dtype == torch.bool:
-            fill_val = mode != "max"
-        elif input.is_floating_point():
-            fill_val = torch.finfo(input.dtype).min if mode == "max" else torch.finfo(input.dtype).max
-        else:
-            fill_val = torch.iinfo(input.dtype).min if mode == "max" else torch.iinfo(input.dtype).max
-        fill = torch.full((), fill_val, dtype=input.dtype, device=input.device)
-        masked = torch.where(include, x_grid, fill)
-        out = masked.max(dim=-1) if mode == "max" else masked.min(dim=-1)
-        return out.values.movedim(-1, dim), out.indices.movedim(-1, dim)
-
-    return patch
-
-
-@register_patch("onnx", "torch.cummax", "torch.Tensor.cummax")
-def _patch_cummax(original):
-    return _patch_cummax_or_cummin(original, mode="max")
-
-
-@register_patch("onnx", "torch.cummin", "torch.Tensor.cummin")
-def _patch_cummin(original):
-    return _patch_cummax_or_cummin(original, mode="min")
 
 
 @register_patch("onnx", "torch.chunk", "torch.Tensor.chunk")
@@ -694,6 +635,41 @@ def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
 
 
 @register_fx_node_fix("onnx")
+def _fix_bfloat16_convolution(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Run a bf16 convolution in fp32: ONNX's `Conv` takes no bf16 before opset 22 (Qwen3.5's causal conv1d)."""
+    # Each takes `(input, weight, bias, ...)`.
+    convolutions = (
+        torch.ops.aten.conv1d.default,
+        torch.ops.aten.conv2d.default,
+        torch.ops.aten.conv3d.default,
+        torch.ops.aten.convolution.default,
+    )
+    if node.target not in convolutions or node.meta.get("_bf16_convolution_cast"):
+        return False
+    value = node.args[0].meta.get("val") if isinstance(node.args[0], torch.fx.Node) else None
+    if value is None or value.dtype != torch.bfloat16:
+        return False
+
+    def to(argument, dtype):
+        if not isinstance(argument, torch.fx.Node):
+            return argument
+        with gm.graph.inserting_before(node):
+            cast = gm.graph.call_function(torch.ops.aten._to_copy.default, (argument,), {"dtype": dtype})
+        cast.meta["val"] = argument.meta["val"].to(dtype)
+        return cast
+
+    output = node.meta["val"]
+    node.args = (*(to(argument, torch.float32) for argument in node.args[:3]), *node.args[3:])
+    node.meta["val"] = output.to(torch.float32)
+    node.meta["_bf16_convolution_cast"] = True
+    with gm.graph.inserting_after(node):
+        cast = gm.graph.call_function(torch.ops.aten._to_copy.default, (node,), {"dtype": torch.bfloat16})
+    cast.meta["val"] = output
+    node.replace_all_uses_with(cast, delete_user_cb=lambda user: user is not cast)
+    return False
+
+
+@register_fx_node_fix("onnx")
 def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
     if node.target is not torch.ops.aten.alias.default:
@@ -808,28 +784,6 @@ def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> boo
     with gm.graph.inserting_before(node):
         new = gm.graph.call_function(torch.ops.aten.index_put.default, args=node.args, kwargs=node.kwargs)
     node.replace_all_uses_with(new)
-    gm.graph.erase_node(node)
-    return True
-
-
-_ASSERTION_OPS = set()
-if is_torch_available():
-    _ASSERTION_OPS.update(
-        {
-            torch.ops.aten._assert_async.default,
-            torch.ops.aten._assert_async.msg,
-            torch.ops.aten._assert_scalar.default,
-            torch.ops.aten._assert_tensor_metadata.default,
-            torch.ops.aten.sym_constrain_range_for_size.default,
-        }
-    )
-
-
-@register_fx_node_fix("onnx")
-def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
-    """Erase assertion / shape-constraint nodes that have no ONNX equivalent."""
-    if node.target not in _ASSERTION_OPS:
-        return False
     gm.graph.erase_node(node)
     return True
 
@@ -1271,8 +1225,8 @@ if is_onnxscript_available():
 # graph and every function via `apply_onnx_ir_fixes`.
 #
 # Unlike the other stages, this one is a plain `_IR_FIXES` list rather than a
-# decorator-driven registry — there's currently only one entry and we expect ORT
-# to fix the underlying bug upstream soon, so the registry boilerplate isn't worth it.
+# decorator-driven registry: there are few entries, each working around an ORT bug
+# expected to be fixed upstream, so the registry boilerplate isn't worth it.
 #
 # To add a new fix: implement `_fix_ir_*` and append to `_IR_FIXES`.
 
@@ -1284,8 +1238,42 @@ def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
             ir_node.attributes["sorted"] = onnx_ir.Attr("sorted", onnx_ir.AttributeType.INT, 1)
 
 
+def _fix_ir_constant_gather_nd(graph_like: onnx_ir.Graph) -> None:
+    """Read a `GatherND` at constant indices (a mask indexed by constant grids, `attention_mask[batch_idx, kv_idx]`) as
+    a `Gather` over the indexed dimensions flattened into one: the same elements, and ORT's CUDA `GatherND` kernel
+    can't be replayed in a CUDA graph (microsoft/onnxruntime#33875)."""
+    for node in list(graph_like):
+        if (
+            node.op_type != "GatherND"
+            or node.domain not in ("", "ai.onnx")
+            or node.attributes.get_int("batch_dims", 0)
+        ):
+            continue
+        data, indices = node.inputs
+        if indices.const_value is None or data.shape is None or not all(isinstance(dim, int) for dim in data.shape):
+            continue
+        values = indices.const_value.numpy()
+        depth = values.shape[-1]
+        if not 0 < depth <= len(data.shape):
+            continue
+        indexed, kept = list(data.shape[:depth]), list(data.shape[depth:])
+        # Negative indices count from the end, as `GatherND` reads them.
+        flat = np.ravel_multi_index(tuple(np.moveaxis(values % np.array(indexed), -1, 0)), indexed).astype(np.int64)
+        shape = onnx_ir.node("Constant", [], {"value": onnx_ir.tensor(np.array([np.prod(indexed), *kept], np.int64))})
+        rows = onnx_ir.node("Reshape", [data, shape.outputs[0]])
+        positions = onnx_ir.node("Constant", [], {"value": onnx_ir.tensor(flat)})
+        gather = onnx_ir.node("Gather", [rows.outputs[0], positions.outputs[0]], {"axis": 0})
+        gathered, replacement = node.outputs[0], gather.outputs[0]
+        replacement.shape, replacement.dtype = gathered.shape, gathered.dtype
+        graph_like.insert_before(node, [shape, rows, positions, gather])
+        onnx_ir.convenience.replace_all_uses_with(gathered, replacement, replace_graph_outputs=True)
+        graph_like.remove(node, safe=True)
+        replacement.name = gathered.name
+
+
 _IR_FIXES = [
     _fix_ir_topk_sorted,
+    _fix_ir_constant_gather_nd,
 ]
 
 

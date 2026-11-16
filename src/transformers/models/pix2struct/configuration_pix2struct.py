@@ -49,7 +49,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "pix2struct_text_model"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "hidden_size",
         "num_attention_heads": "num_heads",

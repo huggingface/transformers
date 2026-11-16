@@ -63,8 +63,7 @@ class ExportConfigMixin:
         Returns:
             [`ExportConfigMixin`]: The configuration object instantiated from those parameters.
         """
-        config = cls(**config_dict)
-        return config
+        return cls(**config_dict)
 
     def to_dict(self) -> dict[str, Any]:
         """

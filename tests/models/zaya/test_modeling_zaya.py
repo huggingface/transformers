@@ -71,17 +71,17 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.num_key_value_heads * config.head_dim // 2)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        if not isinstance(past_key_values, DynamicCache):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        if not isinstance(cache, DynamicCache):
             raise ValueError("The cache does not use the correct Cache")
 
         config = config.get_text_config(decoder=True)
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
         attention_shape = (batch_size, config.num_key_value_heads, seq_length, config.head_dim)
         conv_shape = self._get_conv_state_shape(batch_size, config)
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
-        for layer_type, layer in zip(config.layer_types, past_key_values.layers):
+        for layer_type, layer in zip(config.layer_types, cache.layers):
             expected_layer_class = (
                 LinearAttentionAndSlidingWindowAttentionLayer
                 if layer_type == "hybrid_sliding"
@@ -364,7 +364,7 @@ class ZayaIntegrationTest(unittest.TestCase):
             cached_logits = model(
                 input_ids=inputs.input_ids[:, -1:],
                 attention_mask=inputs.attention_mask,
-                past_key_values=prefill_outputs.past_key_values,
+                cache=prefill_outputs.cache,
                 use_cache=True,
                 return_dict=True,
             ).logits[:, -1]

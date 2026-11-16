@@ -41,7 +41,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.import_utils import requires
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -243,7 +243,7 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
     ```"""
 
     model_type = "moss_transcribe_diarize"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "audio_config": MossTranscribeDiarizeAudioConfig,
         "text_config": SubConfigSpec(
@@ -760,7 +760,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
 
         return MossTranscribeDiarizeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
@@ -778,13 +778,14 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -825,7 +826,7 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
             input_features=input_features,
             input_features_mask=input_features_mask,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             padding_mask=padding_mask,
             **kwargs,
@@ -844,7 +845,7 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         return MossTranscribeDiarizeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,

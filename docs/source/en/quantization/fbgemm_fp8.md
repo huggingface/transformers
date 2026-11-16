@@ -27,7 +27,7 @@ Install the FBGEMM_GPU package with the command below to ensure you have the lat
 pip install --upgrade accelerate fbgemm-gpu torch
 ```
 
-If you're having installation issues, try installing the [nightly release](https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries:~:text=found%20here.-,Install%20the%20FBGEMM_GPU%20Package,-Install%20through%20PyTorch).
+If you're having installation issues, try installing the [nightly release](https://docs.pytorch.org/FBGEMM/fbgemm_gpu/development/InstallationInstructions.html#fbgemm-gpu-install-libraries).
 
 Create a [`FbgemmFp8Config`] and pass it to [`~PreTrainedModel.from_pretrained`] to quantize a model to fp8.
 

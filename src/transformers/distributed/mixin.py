@@ -263,9 +263,15 @@ class DistributedMixin:
                     f"or set `{kind}_size=1`."
                 )
 
-        if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
+        if "ep_router" in ep_plan.values() or "moe_tp_experts" in ep_plan.values():
             raise ValueError(
-                "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
+                "The `ep_router` style was removed, and `moe_tp_experts` is a tensor-parallel style that belongs in "
+                "`tp_plan`. Drop the router rule and shard the experts by expert with `ep_dispatch_experts` and "
+                "`grouped_gemm`, e.g. `ep_plan={'layers.*.mlp.experts': 'ep_dispatch_experts', "
+                "'layers.*.mlp.experts.gate_up_proj': 'grouped_gemm', 'layers.*.mlp.experts.down_proj': "
+                "'grouped_gemm'}` (most MoE models default to this plan, so `ep_plan` can usually be left out). "
+                '`DistributedConfig(ep_implementation="all_reduce")` gives the masking and all-reduce of the old '
+                "`ep_router` + `moe_tp_experts` plan."
             )
 
         # EP rules take precedence: drop TP rules on EP modules and their children.
@@ -324,14 +330,12 @@ class DistributedMixin:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
-            if "megamoe_experts" in ep_plan.values() or {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
-                # Legacy masked EP, or Mega MoE dispatching inside its kernel: the EP group is the TP group, every
-                # rank keeps every token.
-                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
-            elif "ep_dispatch_experts" in ep_plan.values():
+            if "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
-                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
+                model = apply_expert_parallelism(
+                    model, ep_mesh, tp_mesh, ep_plan, ep_implementation=distributed_config.ep_implementation
+                )
 
         if distributed_config.dp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)

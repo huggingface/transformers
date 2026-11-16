@@ -8,9 +8,14 @@ Usage (see "Run Model Integration Contracts locally" in the testing guide):
     make run-mic FLEET=control  # the control fleet instead of the default prototypes fleet
 """
 
+import ast
+import difflib
+import fnmatch
 import importlib.util
 import json
 import os
+import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -36,7 +41,7 @@ FLEETS = ("prototypes", "control")
 FLEET_VARIANTS = {"prototypes": ("bfloat16",), "control": ("default", "bfloat16")}
 # Baselines are recorded (and checked in CI) with this many CPU threads; fewer or more can shift numerics.
 BASELINE_THREADS = 4
-INSTALL_HINT = 'transformers-mic or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
+INSTALL_HINT = 'transformers-mic>=0.1.2 or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
 STATUS = {
     "pass": "✓",
     "fail": "✗",
@@ -45,6 +50,14 @@ STATUS = {
     "unsupported": "-",
     "recorded": "+",
 }
+FAILED = ("fail", "error")
+
+
+def red(text):
+    """`text` in red when the checker shows this output in a terminal (`utils/checkers.py` sets CHECKERS_COLOR)."""
+    return f"\033[31m{text}\033[0m" if os.environ.get("CHECKERS_COLOR") == "1" else text
+
+
 # Raw runner lines kept for context when a run fails without explaining itself.
 TAIL_LINES = 30
 
@@ -199,15 +212,71 @@ def download_fixtures(contracts, names):
         snapshot_download(repo, revision=revision)
 
 
-def model_contracts(root, model, fleet_name="prototypes"):
-    """Fleet contracts with a fixture whose top-level `model_type` lives in `models/<model>`."""
+def normalize_model_name(name):
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def resolve_model(root, model):
+    """The `models/` directory MODEL names, as `(directory, [])`, else `(None, directories to suggest)`.
+
+    MODEL is a directory name, or anything that names one once case and punctuation are ignored:
+    a directory, a model type or a config class without "Config" (`Wav2Vec2`, `wav2vec-2`). A typo
+    is never resolved, only suggested: close names often belong to sibling models.
+    """
+    models = root / "src/transformers/models"
+    # Listed, not `is_dir()`: on a case-insensitive filesystem `models/Bert` would pass as a directory.
+    directories = {path.name for path in models.iterdir() if path.is_dir() and not path.name.startswith("_")}
+    if model in directories:
+        return model, []
+    if Path(model).name != model:
+        return None, []  # a path, not a name
+    use_local_source(root)
+    from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES, model_type_to_module_name
+
+    aliases = {}
+    names = [(directory, directory) for directory in directories]
+    for model_type, config in CONFIG_MAPPING_NAMES.items():
+        directory = model_type_to_module_name(model_type)
+        names += [(model_type, directory), (config.removesuffix("Config"), directory)]
+    for name, directory in names:
+        if directory in directories:
+            aliases.setdefault(normalize_model_name(name), set()).add(directory)
+    wanted = normalize_model_name(model)
+    found = aliases.get(wanted, set())
+    if len(found) == 1:
+        return found.pop(), []
+    if found:
+        return None, sorted(found)
+    close = difflib.get_close_matches(wanted, aliases, n=10, cutoff=0.75)
+    close += sorted(alias for alias in aliases if wanted and alias.startswith(wanted))
+    suggestions = []
+    for alias in close:
+        for directory in sorted(aliases[alias]):
+            if directory not in suggestions:
+                suggestions.append(directory)
+    return None, suggestions[:6]
+
+
+def match_models(root, pattern):
+    """The `models/` directories a MODEL pattern matches, sorted.
+
+    `+` stands for any characters (`qwen+`, `wav2vec2_+`): unlike `*`, the shell leaves it alone unquoted.
+    `*`, `?` and `[...]` work too, as in `fnmatch`.
+    """
+    models = root / "src/transformers/models"
+    directories = [path.name for path in models.iterdir() if path.is_dir() and not path.name.startswith("_")]
+    return sorted(fnmatch.filter(directories, pattern.lower().replace("+", "*")))
+
+
+def model_contracts(root, models, fleet_name="prototypes"):
+    """Fleet contracts with a fixture whose top-level `model_type` lives in one of the `models/` directories."""
     use_local_source(root)
     from transformers.models.auto.configuration_auto import model_type_to_module_name
 
     selected = []
     for name, folders in fixture_configs(fleet_contracts(root, fleet_name)).items():
         model_types = [json.loads((f / "config.json").read_text(encoding="utf-8"))["model_type"] for f in folders]
-        if any(model_type_to_module_name(model_type) == model for model_type in model_types):
+        if any(model_type_to_module_name(model_type) in models for model_type in model_types):
             selected.append(name)
     return selected
 
@@ -276,13 +345,38 @@ def format_record(record, note=""):
     variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
     seconds = f"  {record['seconds']:.1f}s" if "seconds" in record else ""
     label = f"{status} ({note})" if note else status
-    lines = [f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {label}{seconds}"]
+    headline = f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {label}{seconds}"
+    lines = [red(headline) if status in FAILED else headline]
     if status == "xfail":
         lines.append(f"    known failure: {record.get('known_failure', '?')}")
-    lines += [f"    {failure}" for failure in record.get("failures", [])]
+    for failure in record.get("failures", []):
+        lines += format_failure(failure)
     if status in ("fail", "error") and record.get("environment_differs"):
-        differs = ", ".join(f"{k} {v}" for k, v in record["environment_differs"].items())
-        lines.append(f"    environment differs from the baseline: {differs}")
+        lines.append("    environment differs from the baseline:")
+        lines += [f"      {k} {v}" for k, v in record["environment_differs"].items()]
+    return lines
+
+
+DICT_MISMATCH = re.compile(r"(?P<name>[^:]+): (?P<got>\{.*\}) != (?P<want>\{.*\})")
+
+
+def format_failure(failure):
+    """A failure line; the runner's `name: {got} != {want}` dict mismatch becomes one line per differing key."""
+    match = DICT_MISMATCH.fullmatch(failure)
+    try:
+        got, want = ast.literal_eval(match["got"]), ast.literal_eval(match["want"])
+    except (TypeError, ValueError, SyntaxError):
+        return [f"    {failure}"]
+    if not isinstance(got, dict) or not isinstance(want, dict):
+        return [f"    {failure}"]
+    lines = [f"    {match['name']} differs from the baseline:"]
+    for key in [*want, *(k for k in got if k not in want)]:
+        if key not in want:
+            lines.append(f"      {key}: {got[key]!r}  (not in the baseline)")
+        elif key not in got:
+            lines.append(f"      {key}: missing  (baseline: {want[key]!r})")
+        elif got[key] != want[key]:
+            lines.append(f"      {key}: {got[key]!r}  (baseline: {want[key]!r})")
     return lines
 
 
@@ -293,16 +387,45 @@ def format_selection(selection):
 
 
 def format_summary(counts, elapsed):
-    parts = [f"{counts[k]} {word}" for k, word in SUMMARY_WORDS.items() if counts.get(k)]
+    parts = [
+        red(f"{counts[k]} {word}") if k in FAILED else f"{counts[k]} {word}"
+        for k, word in SUMMARY_WORDS.items()
+        if counts.get(k)
+    ]
     return f"MIC: {', '.join(parts) or 'nothing ran'} in {elapsed:.1f}s"
 
 
-HEARTBEAT_SECONDS = 15
+def format_environment_warning(env_failures):
+    """End-of-run warning for failures that ran on other package versions than their baseline's.
+
+    They still fail the check; the warning says which numbers may be environment, not a regression.
+    """
+    if not env_failures:
+        return []
+    count = len(env_failures)
+    return [
+        "",
+        f"⚠ {count} failure{'s' if count > 1 else ''} ran on package versions other than the baseline's"
+        " (listed above, still counted as failures):",
+        *(f"    {name}" for name in env_failures),
+        "  Numeric deltas may be version drift: rerun on the pinned versions before calling them regressions.",
+        "  Outputs 'not in the baseline' are not version drift: the baseline is stale.",
+    ]
 
 
-def elapsed(seconds):
-    minutes, seconds = divmod(int(seconds), 60)
-    return f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
+def format_smoke_warning(smoke_only):
+    """End-of-run warning for targets that passed without a baseline: they ran, nothing was compared."""
+    lines = []
+    for platform, targets in smoke_only.items():
+        count = len(targets)
+        lines += [
+            "",
+            f"⚠ {count} target{'s' if count > 1 else ''} passed as a smoke test only: no reviewed {platform} baseline,"
+            " so the model loaded and ran but its outputs were not compared:",
+            *(f"    {target}" for target in targets),
+            f"  A regression in their outputs goes unnoticed here until a {platform} baseline is recorded.",
+        ]
+    return lines
 
 
 BAR_ABOVE = 10
@@ -310,63 +433,38 @@ BAR_WIDTH = 40
 
 
 class Progress:
-    """Reports the runner's results, with a heartbeat when it goes quiet.
+    """Reports the runner's results as they arrive.
 
-    The runner prints a target's record only once it has run (loading a model can take a while),
-    so without this a long run looks stuck between results. Up to BAR_ABOVE contracts, each result
-    gets a `[k/total]` line; above it, passing results only advance a progress bar redrawn in place
-    (a line starting with "\\r" replaces the previous one in the checker window), and anything else
-    is printed in full above it.
+    Up to BAR_ABOVE contracts, each result gets a `[k/total]` line; above it, passing results only
+    advance a progress bar redrawn in place (a line starting with "\\r" replaces the previous one in
+    the checker window), and anything else is printed in full above it. A blank line separates the
+    results from the setup lines above them. The checker window's title shows the elapsed time, so a
+    long wait between results needs no output here.
     """
 
     def __init__(self, total):
-        self.total, self.every = total, HEARTBEAT_SECONDS
+        self.total = total
         self.bar = bool(total) and total > BAR_ABOVE
-        self.bar_on_screen = False
-        self.done, self.last = set(), None
-        self.started = self.quiet_since = time.perf_counter()
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._beat, daemon=True)
-
-    def __enter__(self):
-        self._thread.start()
-        return self
-
-    def __exit__(self, *exc):
-        self._stop.set()
-        self._thread.join()
+        self.bar_on_screen = self.reported = False
+        self.done = set()
 
     def report(self, record, lines, quiet=False):
         """Count `record`'s contract and show `lines` for it; `quiet` lines only advance the bar."""
-        name = record.get("contract_name", record["contract"])
-        self.done.add(name)
-        self.last = name
-        self.touch()
+        self.done.add(record.get("contract_name", record["contract"]))
+        redraw = "\r" if self.bar_on_screen else ""
+        head = [] if self.reported else [""]
+        self.reported = True
         if not self.bar:
             prefix = f"[{len(self.done)}/{self.total}] " if self.total else ""
-            print(prefix + "\n".join(lines), flush=True)
+            print(redraw + "\n".join([*head, prefix + "\n".join(lines)]), flush=True)
             return
         if not quiet:
-            print(("\r" if self.bar_on_screen else "") + "\n".join(lines), flush=True)
-            self.bar_on_screen = False
+            print(redraw + "\n".join([*head, *lines]), flush=True)
+            redraw, head, self.bar_on_screen = "", [], False
         filled = BAR_WIDTH * len(self.done) // self.total
         bar = "█" * filled + "░" * (BAR_WIDTH - filled)
-        redraw = "\r" if self.bar_on_screen else ""
-        print(f"{redraw}{bar} {len(self.done)}/{self.total}", flush=True)
+        print(redraw + "\n".join([*head, f"{bar} {len(self.done)}/{self.total}"]), flush=True)
         self.bar_on_screen = True
-
-    def touch(self):
-        self.quiet_since = time.perf_counter()
-
-    def _beat(self):
-        while not self._stop.wait(1):
-            now = time.perf_counter()
-            # With a bar, the checker's spinner already shows the run is alive.
-            if now - self.quiet_since >= self.every and not self.bar_on_screen:
-                done = f"{len(self.done)}/{self.total} contracts done" if self.total else f"{len(self.done)} done"
-                last = f", last: {self.last}" if self.last else ", loading the first contract"
-                print(f"... {elapsed(now - self.started)} in, {done}{last}", flush=True)
-                self.quiet_since = now
 
 
 def stream(commands, env, fleet_name, on_record, announce=True, total=None, excuse=None):
@@ -406,24 +504,35 @@ def stream(commands, env, fleet_name, on_record, announce=True, total=None, excu
                         runners = f" in {len(commands)} parallel runners" if len(commands) > 1 else ""
                         shown = "failures print" if progress.bar else "results print as each one finishes"
                         print(f"Running {what}{runners}, {shown}...", flush=True)
-                    progress.touch()
                 elif "selection" in message:
                     print("\n".join(format_selection(message["selection"])), flush=True)
-                    progress.touch()
                 elif "status" in message and "target" in message:
                     excused = excused or bool(excuse and excuse(message))
                     on_record(message, progress)
         returncode = process.wait()
         results.append((0 if excused else returncode, tail))
 
-    with Progress(total) as progress:
-        threads = [threading.Thread(target=follow, args=(command,)) for command in commands]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+    progress = Progress(total)
+    threads = [threading.Thread(target=follow, args=(command,)) for command in commands]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
     failing = [result for result in results if result[0] != 0]
     return (failing or results or [(0, [])])[0]
+
+
+def format_command(command, env, run_all=False):
+    """`command` as one line to copy into a shell from the checkout root: `tmic` with the env it runs with."""
+    args = command[3:] if command[1:3] == ["-m", "transformers_mic.cli"] else command
+    if run_all:
+        args = [*without_selection(args), "--run-all"]
+    settings = {
+        "OMP_NUM_THREADS": runner_env(env)["OMP_NUM_THREADS"],
+        "HF_HUB_OFFLINE": env.get("HF_HUB_OFFLINE"),
+        "PYTHONPATH": "src",
+    }
+    return shlex.join([*(f"{k}={v}" for k, v in settings.items() if v), "tmic", *args])
 
 
 def shard(command, jobs):
@@ -476,9 +585,18 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     missing = []
     started = time.perf_counter()
 
+    env_failures, smoke_only = [], {}
+
     def count(record, key=None):
         key = key or record["status"]
         counts[key] = counts.get(key, 0) + 1
+        name = record.get("contract_name", record["contract"])
+        variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
+        label = f"{name}{variant}  {record['target']}"
+        if key in ("fail", "error") and record.get("environment_differs"):
+            env_failures.append(label)
+        if key == "unchecked":
+            smoke_only.setdefault(record.get("platform", "this platform"), []).append(label)
 
     def first_pass(record, progress):
         if record.get("baseline_missing"):
@@ -519,13 +637,26 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     if returncode != 0 and not failed and tail:
         # The runner failed before (or without) reporting a failing target: show what it said.
         print("Runner output:\n" + "\n".join(f"  {line}" for line in tail), flush=True)
-    print(format_summary(counts, time.perf_counter() - started), flush=True)
+    print("\n" + format_summary(counts, time.perf_counter() - started), flush=True)
+    warning = format_smoke_warning(smoke_only) + format_environment_warning(env_failures)
+    if warning:
+        print("\n".join(warning), flush=True)
     return 1 if failed else returncode
 
 
+def installed_mic_version():
+    from importlib.metadata import version
+
+    return version("transformers-mic")
+
+
 def missing_requirements():
-    """Check if mic and hf-doc-builder are installed"""
+    """Check if mic (0.1.2 or newer: its runtime extra pulls num2words) and hf-doc-builder are installed"""
     if importlib.util.find_spec("transformers_mic") is None:
+        return True
+    from packaging.version import Version
+
+    if Version(installed_mic_version()) < Version("0.1.2"):
         return True
     try:
         from doc_builder.testing import DocIntegrationTest  # noqa: F401
@@ -552,9 +683,26 @@ def main():
         print("Use MODEL=<model_directory> or ALL=1, not both.", file=sys.stderr)
         return 2
     if model:
-        if Path(model).name != model or not (ROOT / "src/transformers/models" / model).is_dir():
-            print(f"Unknown model directory: {model!r}. Use a name from src/transformers/models/.", file=sys.stderr)
-            return 2
+        usage = (
+            "Use a directory name from src/transformers/models/ or a model name (MODEL=wav2vec2, MODEL=Wav2Vec2),"
+            " or a pattern for several, with + for any characters (MODEL=qwen+)."
+        )
+        if any(char in model for char in "+*?["):
+            model_dirs = match_models(ROOT, model)
+            if not model_dirs:
+                print(f"No model directory matches {model!r}. {usage}", file=sys.stderr)
+                return 2
+            print(f"MODEL={model} matches {len(model_dirs)} model directories: {', '.join(model_dirs)}", flush=True)
+        else:
+            resolved, suggestions = resolve_model(ROOT, model)
+            if resolved is None:
+                hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                print(f"Unknown model: {model!r}.{hint} {usage}", file=sys.stderr)
+                return 2
+            if resolved != model:
+                print(f"MODEL={model} is models/{resolved}", flush=True)
+                model = resolved
+            model_dirs = [model]
     elif all_fixtures != "1":
         try:
             paths = changed_files(ROOT, base)
@@ -576,7 +724,7 @@ def main():
     if supports_allow_missing_baseline(env):
         command.append("--allow-missing-baseline")
     if model:
-        names = model_contracts(ROOT, model, fleet_name)
+        names = model_contracts(ROOT, model_dirs, fleet_name)
         if not names:
             print(f"No MIC contract has a models/{model} fixture in the pinned {fleet_name} fleet; nothing to run.")
             return 0
@@ -614,6 +762,9 @@ def main():
         if len(variants) > 1:
             print(f"Variant {variant}:", flush=True)
         code = run([*command, "--variant", variant], env, fleet_name, total=len(names), jobs=jobs)
+        if code:
+            rerun = format_command([*command, "--variant", variant], env, run_all=all_fixtures == "1")
+            print(f"\nTo rerun from the checkout root:\n  {rerun}", flush=True)
         returncode = returncode or code
     return returncode
 
