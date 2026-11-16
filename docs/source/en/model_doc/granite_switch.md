@@ -13,121 +13,129 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-11.*
+*This model was contributed to Hugging Face Transformers on 2026-11-16.*
+
+<div class="flex flex-wrap space-x-1">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 # GraniteSwitch
 
 ## Overview
 
-GraniteSwitch is a Granite model that carries several LoRA adapters inside a single checkpoint and
-picks which one to apply **per token**, from control tokens in the prompt. One request can switch
-adapters any number of times, so a multi-turn conversation can use a different adapter per turn
-without reloading weights or paying for a second model.
+GraniteSwitch is a [GraniteMoeHybrid](./granitemoehybrid) model that ships several LoRA adapters inside
+one checkpoint and chooses which adapter to apply for each token, based on control tokens in the
+prompt. A single request can change adapters as often as it needs to. A multi-turn conversation can
+use a different adapter on every turn without reloading weights or running a second model.
 
-The adapters are frozen at inference time and stacked into the model's own projections, so there is
-no adapter loading step and no separate adapter graph: a token routed to adapter *i* takes that
-adapter's low-rank update inside the same matmul that every other token uses.
+The adapters are frozen and stored inside the model's own projections. There is no adapter loading
+step and no separate adapter graph: a token routed to adapter *i* gets that adapter's low-rank update
+inside the same matmul every other token uses.
 
-### Routing
+You can find the GraniteSwitch checkpoints under the [IBM Granite](https://huggingface.co/ibm-granite)
+organization, for example [ibm-granite/granite-switch-4.1-3b-preview](https://huggingface.co/ibm-granite/granite-switch-4.1-3b-preview).
+The tools that compose a checkpoint from a base model and a set of adapters live in the
+[granite-switch](https://github.com/generative-computing/granite-switch) repository.
 
-Each adapter owns a control token. Routing happens in two stages:
+### How routing works
 
-1. **`MultiSwitch`** reads the raw `input_ids` and emits a per-token `adapter_indices` tensor, where
-   `0` means "base model, no adapter". It does this with two small attention heads rather than a
-   learned classifier: a *counting* head turns "how many control tokens have been seen so far" into
-   an address, and a *coded-memory* head reads back which adapter was written at that address, using
-   a constructed Kerdock / Delsarte-Goethals codebook. Nothing here is trained — the codebook is
-   generated from the config.
-2. **Token exchange** rewrites each control token to a substitute id before the embedding lookup, so
-   the decoder never embeds a control token and the adapter marker stays invisible to the model.
+Each adapter owns a control token. Before the decoder runs, the model does two things with the raw
+`input_ids`:
 
-Routing is latest-wins, and a checkpoint composed with a base-reset token can also route back to the
-base model mid-sequence.
+1. **It computes an adapter index for every token**, where `0` means the base model with no adapter.
+   The most recent control token wins. Two small attention heads do the work: one counts how many
+   control tokens came before each position, and the other looks up which adapter that control
+   token selected, using a fixed Kerdock / Delsarte-Goethals codebook. These heads are generated
+   from the config and have no trained weights.
+2. **It replaces each control token with a substitute id** before the embedding lookup, so the
+   decoder never sees a control token.
 
-Both heads are computed from `input_ids` alone — no hidden state enters routing — so the switch
-keeps no cache and holds no state between calls. It is instead replayed over the whole sequence on
-every forward pass, and the model keeps the tail that matches the tokens it is decoding.
-`prepare_inputs_for_generation` is what supplies that sequence, as `switch_input_ids`, since a
-decode step's single new token says nothing about which control tokens preceded it.
+A checkpoint composed with a base-reset token can also switch back to the base model in the middle
+of a sequence.
+
+Routing depends only on the token ids, not on hidden states, so it keeps no cache and no state
+between calls. On each forward pass it runs over the full sequence and keeps the part that lines up
+with the tokens being decoded. During generation,
+[`~GraniteSwitchForCausalLM.prepare_inputs_for_generation`] passes that full sequence as
+`switch_input_ids`, because a single decode token cannot tell which control tokens came before it.
 
 ### Shadow Residual
 
-When `dual_stream=True` the model runs two streams through the same layer: a frozen base stream and
-a LoRA'd adapter stream. Every parameter is shared — the base stream is the same modules called with
-`adapter_indices=None` — and K/V always come from the base stream. The two are connected by a single
-low-rank `cross_stream` injection per layer, which is initialized to exactly zero, so an untrained
-Shadow Residual model is numerically identical to the base model.
+With `dual_stream=True` each layer runs two streams: a frozen base stream and an adapter stream
+with LoRA applied. Both streams share every parameter, and keys and values always come from the base
+stream. A low-rank `cross_stream` projection per layer connects them. It starts at exactly zero, so
+an untrained Shadow Residual model produces the same outputs as the base model.
 
-A checkpoint holds either Shadow Residual adapters or standard LoRA adapters, never a mix.
+A checkpoint contains either Shadow Residual adapters or standard LoRA adapters, never both.
 
 ### Activation probes
 
-An adapter slot does not have to hold a LoRA adapter. A slot whose entry in `adapter_kinds` is
-`"probe"` holds an *activation probe* instead: a small linear head over one hidden state, for
-detection requests such as a safety check. It keeps the slot's control token and adapter index, so
-it is selected exactly like an adapter, and LoRA and probe slots can share a checkpoint.
+An adapter slot can hold an *activation probe* instead of a LoRA adapter. You mark it with
+`"probe"` in `adapter_kinds`. A probe is a small linear head on one hidden state, for detection tasks
+such as a safety check. It is selected with its control token like any adapter, and LoRA and probe
+slots can live in the same checkpoint.
 
-A probe request ends with the slot's control token. The LoRA path is a no-op at that token, so the
-head reads a base-model hidden state there — the final normalized one by default, or the output of
-the decoder layer named in `probe_read_layers` — and produces one score per label. The verdict is
-not returned as a separate output: the model rewrites the logits of the control token so that only
-the slot's label words (`probe_label_token_ids`) can be generated next, each carrying its score. A
-probe therefore answers through ordinary generation, and the first generated token is the label.
-
-```python
-messages = [{"role": "user", "content": "How do I pick a lock?"}]
-# The chat template of a probe slot ends the prompt with its control token, so no generation
-# prompt is added.
-inputs = tokenizer.apply_chat_template(
-    messages, adapter_name="<probe-slot-name>", return_tensors="pt", return_dict=True
-).to(model.device)
-
-output = model.generate(**inputs, max_new_tokens=1)
-print(tokenizer.decode(output[0, -1]))
-```
+A probe request ends with the probe's control token. At that position the probe reads a base-model
+hidden state (the final normalized one by default, or the output of a layer listed in
+`probe_read_layers`) and scores each label. The model then rewrites the logits at that position so
+only the probe's label tokens (`probe_label_token_ids`) can be generated, each with its score. The
+answer comes back through normal generation: the first generated token is the label.
 
 ## Usage
+
+The chat template places the control tokens. Pass `adapter_name` to pick an adapter, or leave it out
+to use the base model.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_path = "<granite-switch-checkpoint>"
-tokenizer = AutoTokenizer.from_pretrained(model_path)
+model_id = "ibm-granite/granite-switch-4.1-3b-preview"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
-# drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
-model.eval()
+messages = [{"role": "user", "content": "When was the Eiffel Tower completed?"}]
+documents = [{"doc_id": "1", "text": "The Eiffel Tower was completed in 1889 for the World's Fair."}]
 
-messages = [{"role": "user", "content": "Summarize the attached document."}]
+# Route through the "answerability" adapter
 inputs = tokenizer.apply_chat_template(
-    messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+    messages,
+    documents=documents,
+    adapter_name="answerability",
+    add_generation_prompt=True,
+    return_tensors="pt",
+    return_dict=True,
 ).to(model.device)
 
-output = model.generate(**inputs, max_new_tokens=100)
-print(tokenizer.batch_decode(output, skip_special_tokens=True)[0])
+output = model.generate(**inputs, max_new_tokens=20)
+print(tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
+
+# Same prompt, base model
+inputs = tokenizer.apply_chat_template(
+    messages, documents=documents, add_generation_prompt=True, return_tensors="pt", return_dict=True
+).to(model.device)
+output = model.generate(**inputs, max_new_tokens=50)
+print(tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
 ```
 
-The chat template places the control tokens, so selecting an adapter is a property of the prompt
-rather than of the model object.
+`model.config.adapter_names` lists the adapters a checkpoint contains.
 
 ## Notes
 
-- Setting `num_adapters=0` builds a plain Granite model: `MultiSwitch` is not constructed, every
-  projection is an ordinary `nn.Linear`, and no control tokens exist.
-- The model does not support `torch.compile` in fullgraph mode. The switched LoRA layers call
-  `.unique()` on the per-token adapter indices to find which adapters are present in a batch, which
-  is data-dependent, so `_can_compile_fullgraph` is `False`.
-- Control tokens are freely generatable; nothing suppresses them during decoding.
-- Passing `inputs_embeds` instead of `input_ids` leaves routing nothing to read, and every token
-  takes the base model. Pass `switch_input_ids` alongside the embeddings to route anyway. Token
-  exchange cannot be recovered that way — an embedding the caller computed from a control token is
-  already the control token's own — so place control tokens through `input_ids`.
-- The control token of a probe slot must be the last token of its sequence, padding aside, because the
-  verdict replaces that token's logits. The model raises otherwise. `GraniteSwitchModel` returns the
-  raw scores as `probe_logits`, next to `probe_indices`, for callers that want them without the LM
-  head.
-- Granite's scalar multipliers all apply: `attention_multiplier`, `embedding_multiplier`,
-  `residual_multiplier` and `logits_scaling`.
+- `num_adapters=0` builds a plain Granite model: no router, no control tokens, and every projection
+  is a regular `nn.Linear`.
+- `torch.compile` with `fullgraph=True` is not supported. The LoRA layers call `.unique()` on the
+  adapter indices to find which adapters a batch uses, which is data-dependent.
+- Control tokens are ordinary tokens and the model can generate them.
+- If you pass `inputs_embeds` instead of `input_ids`, routing has no ids to read and every token
+  uses the base model. Pass `switch_input_ids` with the embeddings to route anyway. Control tokens
+  still need to go through `input_ids`, because an embedding computed from a control token cannot be
+  swapped for its substitute.
+- A probe's control token must be the last token of its sequence (padding aside), since the verdict
+  replaces that position's logits. The model raises an error otherwise. [`GraniteSwitchModel`]
+  returns the raw scores as `probe_logits` together with `probe_indices`.
+- The Granite multipliers `attention_multiplier`, `embedding_multiplier`, `residual_multiplier` and
+  `logits_scaling` all apply.
 - Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## GraniteSwitchConfig
