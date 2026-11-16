@@ -678,7 +678,7 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     ]
     supports_gradient_checkpointing = True
     _can_record_outputs = None  # override
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_flex_attn = True
 
     @torch.no_grad()
@@ -1306,8 +1306,6 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel, T5Gemma2Model):
         "encoder.language_model.embed_tokens.weight": "decoder.embed_tokens.weight",
     }
 
-    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
-
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
         self.encoder = DiffusionGemmaEncoderModel(config)
@@ -1408,8 +1406,6 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
     _tp_plan = {"lm_head": "colwise_gather_output"}
-
-    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
