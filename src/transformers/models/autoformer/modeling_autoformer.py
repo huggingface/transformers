@@ -32,6 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_autoformer import AutoformerConfig
@@ -51,7 +52,7 @@ class AutoFormerDecoderOutput(ModelOutput):
     last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
 
-        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     trend (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Trend tensor for each time series.
@@ -59,7 +60,7 @@ class AutoFormerDecoderOutput(ModelOutput):
 
     last_hidden_state: torch.Tensor | None = None
     trend: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     cross_attentions: tuple[torch.Tensor] | None = None
@@ -76,15 +77,15 @@ class AutoformerModelOutput(ModelOutput):
     last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
 
-        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+        If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
         hidden_size)` is output.
     trend (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Trend tensor for each time series.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-        blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        blocks) that can be used (see `cache` input) to speed up sequential decoding.
     loc (`torch.Tensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
         Shift values of each time series' context window which is used to give the model inputs of the same
         magnitude and then used to shift back to the original magnitude.
@@ -97,7 +98,7 @@ class AutoformerModelOutput(ModelOutput):
 
     last_hidden_state: torch.Tensor | None = None
     trend: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     decoder_hidden_states: tuple[torch.Tensor] | None = None
     decoder_attentions: tuple[torch.Tensor] | None = None
     cross_attentions: tuple[torch.Tensor] | None = None
@@ -320,13 +321,13 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
+        self, input_ids_shape: torch.Size, cache_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
             bsz, seq_len = input_ids_shape[:2]
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+                cache_length, cache_length + seq_len, dtype=torch.long, device=self.weight.device
             )
         return super().forward(position_ids)
 
@@ -428,11 +429,12 @@ class AutoformerAttention(nn.Module):
 
         self.autocorrelation_factor = autocorrelation_factor
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -447,33 +449,33 @@ class AutoformerAttention(nn.Module):
         query_states = self.q_proj(hidden_states)
 
         is_updated = False
-        if past_key_values is not None:
-            if isinstance(past_key_values, EncoderDecoderCache):
-                is_updated = past_key_values.is_updated.get(self.layer_idx)
+        if cache is not None:
+            if isinstance(cache, EncoderDecoderCache):
+                is_updated = cache.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_values = past_key_values.cross_attention_cache
+                    curr_cache = cache.cross_attention_cache
                 else:
-                    curr_past_key_values = past_key_values.self_attention_cache
+                    curr_cache = cache.self_attention_cache
             else:
-                curr_past_key_values = past_key_values
+                curr_cache = cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_values is not None and is_updated:
+        if is_cross_attention and cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
             key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
             value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
-                    past_key_values.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(cache, EncoderDecoderCache):
+                    cache.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -697,13 +699,14 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
             bias=False,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -716,7 +719,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            past_key_values (`Cache`): cached past key and value projection states
+            cache (`Cache`): cached past key and value projection states
             use_cache: (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should return the `present_key_value` state to be used for subsequent
                 decoding.
@@ -726,7 +729,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -744,7 +747,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -913,13 +916,14 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         trend: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -946,13 +950,13 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
                 It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+                cross-attention blocks) that can be used (see `cache` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                If `cache` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -960,11 +964,11 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
             use_cache (`bool`, *optional*):
-                If `use_cache` is True, `past_key_values` key value states are returned and can be used to speed up
-                decoding (see `past_key_values`).
+                If `use_cache` is True, `cache` key value states are returned and can be used to speed up
+                decoding (see `cache`).
         """
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -975,7 +979,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(
-            inputs_embeds.size(), past_key_values_length=self.config.context_length - self.config.label_length
+            inputs_embeds.size(), cache_length=self.config.context_length - self.config.label_length
         )
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -993,7 +997,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -1005,7 +1009,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         return AutoFormerDecoderOutput(
             last_hidden_state=hidden_states,
             trend=trend,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1180,6 +1184,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1191,7 +1196,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         future_time_features: torch.Tensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: list[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> AutoformerModelOutput:
@@ -1352,7 +1357,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 inputs_embeds=decoder_input,
                 attention_mask=decoder_attention_mask,
                 encoder_hidden_states=encoder_outputs.last_hidden_state,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -1362,7 +1367,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         return AutoformerModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             trend=decoder_outputs.trend,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -1412,6 +1417,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1424,7 +1430,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         future_observed_mask: torch.Tensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         encoder_outputs: list[torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSPredictionOutput:
@@ -1599,7 +1605,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             future_time_features=future_time_features,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -1625,7 +1631,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         return Seq2SeqTSPredictionOutput(
             loss=prediction_loss,
             params=params,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,

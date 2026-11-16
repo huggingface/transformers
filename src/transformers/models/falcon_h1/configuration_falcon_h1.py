@@ -55,7 +55,7 @@ class FalconH1Config(PreTrainedConfig):
 
     model_type = "falcon_h1"
     attribute_map = {"layer_types": "layers_block_type"}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 128000
     tie_word_embeddings: bool = False

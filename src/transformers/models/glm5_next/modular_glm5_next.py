@@ -60,7 +60,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -294,7 +294,7 @@ class Glm5NextConfig(PreTrainedConfig):
         "vision_config": Glm5NextVisionConfig,
         "text_config": Glm5NextTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -639,10 +639,11 @@ class Glm5NextTextLinearAttention(nn.Module):
         self.layer_type = config.layer_types[layer_idx]
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -663,9 +664,9 @@ class Glm5NextTextLinearAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -681,10 +682,8 @@ class Glm5NextTextLinearAttention(nn.Module):
         # Multi token prefill or simple "full" prefill
         else:
             # Concatenated state for prefill
-            if cache_params is not None:
-                mixed_qkv = cache_params.update_conv_state(
-                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-                )
+            if cache is not None:
+                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
 
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
@@ -720,7 +719,7 @@ class Glm5NextTextLinearAttention(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=cache_params is not None,
+                output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
@@ -732,13 +731,13 @@ class Glm5NextTextLinearAttention(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=cache_params is not None,
+                output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
 
-        if cache_params is not None:
-            cache_params.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+        if cache is not None:
+            cache.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
 
         # Final gated norm and proj
         gate = self.g_b_proj(self.g_a_proj(hidden_states)).view(hidden_shape)
@@ -758,7 +757,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
 
     **Cache strategy**: the indexer state cache lives on the per-layer `DynamicIndexedLayer`
     (or the `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `past_key_values.update_indexer()`.
+    `cache.update_indexer()`.
     """
 
     def __init__(self, config, layer_idx: int):
@@ -771,12 +770,13 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         attention_mask: torch.BoolTensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
     ) -> torch.LongTensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA) based on grouping pools (and tails).
@@ -785,7 +785,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
             hidden_states: Input hidden states `[B, S, hidden_size]`.
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             attention_mask: Local boolean padding mask of shape `[B, S]`.
-            past_key_values: Cache object containing the indexer state cache for this layer.
+            cache: Cache object containing the indexer state cache for this layer.
 
         Returns:
             `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]` (or `[B, S, 2*topk - 1]` with tail).
@@ -804,10 +804,10 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
 
         kv_len = seq_len
         current_length = seq_len
-        if past_key_values is not None:
-            cache_layer = past_key_values.layers[self.layer_idx]
+        if cache is not None:
+            cache_layer = cache.layers[self.layer_idx]
 
-            packed_states = past_key_values.update_indexer(packed_states, self.layer_idx)
+            packed_states = cache.update_indexer(packed_states, self.layer_idx)
             # Only different on static caches where key is a static full tensor to max len
             kv_len = cache_layer.keys.shape[-2]
             current_length = cache_layer.get_seq_length()
@@ -1035,11 +1035,12 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
@@ -1056,8 +1057,8 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
 
@@ -1066,7 +1067,7 @@ class Glm5NextTextAttention(GlmMoeDsaAttention):
                 hidden_states=hidden_states,
                 q_resid=q_resid,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
         else:
             if prev_topk_indices is None:
@@ -1153,12 +1154,13 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
         self.attn_hc = Glm5NextTextHyperConnection(config)
         self.ffn_hc = Glm5NextTextHyperConnection(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -1174,7 +1176,7 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
         if self.block_type == "linear_attention":
             hidden_states = self.self_attn(
                 hidden_states=hidden_states,
-                cache_params=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -1183,7 +1185,7 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 prev_topk_indices=prev_topk_indices,
@@ -1219,7 +1221,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
     # 2. linear attention not being considered atm
@@ -1310,12 +1312,13 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1323,14 +1326,14 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
-            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
 
@@ -1339,7 +1342,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
             # Guarantee the mask to exist for the indexer
             if attention_mask is None:
@@ -1367,13 +1370,13 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
                 # Key change using NoPE
                 position_embeddings=None,
                 input_ids=input_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 prev_topk_indices=topk_indices,
                 **kwargs,
             )
 
         hidden_states = self.norm(self.hc_head(hidden_states))
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 class Glm5NextVisionMLP(GlmOcrVisionMlp):
@@ -1509,12 +1512,13 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -1568,7 +1572,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1577,7 +1581,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         # Only change is the output type to Moe
         return MoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
@@ -1600,12 +1604,13 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1663,7 +1668,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             video_grid_thw=video_grid_thw,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
@@ -1696,7 +1701,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
@@ -1706,7 +1711,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         raise AttributeError()
 
     @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, **_):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, **_):
         # We only use the base 2D mask as the indexer is reliant on the padding, not the expanded masks.
         # I.e. 4D masks are built afterwards after subsets have been selected in the indexer.
         # Linear attention can reuse the mask as is, making the layer type difference only
@@ -1715,7 +1721,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             config=config.get_text_config(),
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )
         # Guarantee the mask to exist for the indexer
         if attention_mask is None:
