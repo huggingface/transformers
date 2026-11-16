@@ -53,6 +53,9 @@ def smart_resize(
     factor: int = 32,
     min_pixels: int = 448 * 448,
     max_pixels: int = 1344 * 1792,
+    *,
+    num_frames: int = 1,
+    temporal_factor: int = 1,
 ) -> tuple[int, int]:
     """Rescales the image so that the following conditions are met:
 
@@ -61,6 +64,8 @@ def smart_resize(
     2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
 
     3. The aspect ratio of the image is maintained as closely as possible.
+
+    The temporal arguments are accepted for the inherited resize wrappers; the pixel budget is per frame.
 
     """
     # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.

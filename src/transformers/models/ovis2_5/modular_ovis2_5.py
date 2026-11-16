@@ -15,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -24,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -75,6 +74,9 @@ def smart_resize(
     factor: int = 32,
     min_pixels: int = 448 * 448,
     max_pixels: int = 1344 * 1792,
+    *,
+    num_frames: int = 1,
+    temporal_factor: int = 1,
 ) -> tuple[int, int]:
     """Rescales the image so that the following conditions are met:
 
@@ -83,6 +85,8 @@ def smart_resize(
     2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
 
     3. The aspect ratio of the image is maintained as closely as possible.
+
+    The temporal arguments are accepted for the inherited resize wrappers; the pixel budget is per frame.
 
     """
     # Unlike Qwen, Ovis expands dimensions below the factor and clamps aspect ratios above 200.
@@ -121,35 +125,6 @@ class Ovis2_5ImageProcessor(Glm4vImageProcessor):
     temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Ovis2_5ImageProcessorKwargs
-
-    def resize(
-        self,
-        images: torch.Tensor,
-        size: SizeDict,
-        resample: PILImageResampling | int | None,
-        factor: int,
-        temporal_factor: int,
-        **kwargs,
-    ) -> torch.Tensor:
-        """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        # Ovis2.5 uses its custom smart_resize policy instead of GLM4V's default resize.
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
-        return TorchvisionBackend.resize(
-            self,
-            image=images,
-            size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
-        )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
@@ -191,35 +166,6 @@ class Ovis2_5ImageProcessorPil(Glm4vImageProcessorPil):
     temporal_patch_size = 1
     merge_size = 2
     valid_kwargs = Ovis2_5ImageProcessorKwargs
-
-    def resize(
-        self,
-        image: Any,
-        size: SizeDict,
-        resample: PILImageResampling | int | None,
-        factor: int,
-        temporal_factor: int,
-        **kwargs,
-    ) -> Any:
-        """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        # Ovis2.5 uses its custom smart_resize policy instead of GLM4V's default resize.
-        height, width = image.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
-        return PilBackend.resize(
-            self,
-            image=image,
-            size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
-        )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
