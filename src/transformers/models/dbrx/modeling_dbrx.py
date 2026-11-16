@@ -446,7 +446,6 @@ class DbrxPreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "wte"
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         std = self.config.initializer_range

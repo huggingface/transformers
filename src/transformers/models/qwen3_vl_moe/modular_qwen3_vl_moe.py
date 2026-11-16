@@ -206,7 +206,6 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         PreTrainedModel._init_weights(self, module)

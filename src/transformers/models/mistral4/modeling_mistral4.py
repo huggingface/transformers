@@ -572,7 +572,6 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = []
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Mistral4TopkRouter):

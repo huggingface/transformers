@@ -323,7 +323,6 @@ class HiggsAudioV2PreTrainedModel(PreTrainedModel):
         "attentions": HiggsAudioV2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 

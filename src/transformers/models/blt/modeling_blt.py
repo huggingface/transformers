@@ -418,7 +418,6 @@ class BltPreTrainedModel(PreTrainedModel):
     }
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize BLT weights following the original ByteLatentTransformer:

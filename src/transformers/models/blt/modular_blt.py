@@ -367,7 +367,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     # (or 1 / sqrt(hidden_dim) for FFN outputs), and unit initialization for normalization layers.
     # We follow the same scheme here, but expressed in the Transformers APIs.
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize BLT weights following the original ByteLatentTransformer:

@@ -611,7 +611,6 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, MistralLarge4TextTopkRouter):

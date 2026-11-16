@@ -476,7 +476,6 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
     input_modalities = ("text", "image", "video")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm4vMoeTextTopkRouter):

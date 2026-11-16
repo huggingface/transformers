@@ -567,7 +567,6 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, TimeSeriesSinusoidalPositionalEmbedding):

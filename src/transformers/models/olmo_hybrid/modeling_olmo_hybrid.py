@@ -863,7 +863,6 @@ class OlmoHybridPreTrainedModel(PreTrainedModel):
     _is_stateful = True
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, OlmoHybridGatedDeltaNet):

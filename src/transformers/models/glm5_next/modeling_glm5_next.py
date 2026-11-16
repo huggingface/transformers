@@ -1390,7 +1390,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     ]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm5NextTextForgetGate):

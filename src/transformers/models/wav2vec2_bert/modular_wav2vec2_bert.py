@@ -582,7 +582,6 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(Wav2Vec2BertSelfAttention, index=1, layer_name="encoder"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Wav2Vec2BertSelfAttention):

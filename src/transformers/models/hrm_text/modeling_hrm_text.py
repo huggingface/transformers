@@ -338,7 +338,6 @@ class HrmTextPreTrainedModel(PreTrainedModel):
                 )
         return super()._check_and_adjust_attn_implementation(attn_implementation, is_init_check, allow_all_kernels)
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, HrmTextModel):

@@ -363,7 +363,6 @@ class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, HunYuanMoEV1Experts):

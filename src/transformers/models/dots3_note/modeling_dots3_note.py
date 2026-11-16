@@ -677,7 +677,6 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         r"^model\.(language_model\.)?mtp\.",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteTextTopkRouter):
@@ -1497,7 +1496,6 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteVisionTopKRouter):

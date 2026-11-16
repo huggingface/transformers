@@ -1462,7 +1462,6 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):

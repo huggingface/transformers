@@ -324,7 +324,6 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
         "attentions": GptOssAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range

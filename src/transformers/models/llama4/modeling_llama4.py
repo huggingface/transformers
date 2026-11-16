@@ -455,7 +455,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = (

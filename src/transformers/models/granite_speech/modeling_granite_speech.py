@@ -288,7 +288,6 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         super()._init_weights(module)

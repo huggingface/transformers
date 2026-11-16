@@ -364,7 +364,6 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
 

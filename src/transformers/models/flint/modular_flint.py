@@ -234,7 +234,6 @@ class FlintPreTrainedModel(Qwen3MoePreTrainedModel):
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _keep_in_fp32_modules_strict = ["gate.weight", "sinks"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, FlintAttention):

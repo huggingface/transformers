@@ -461,7 +461,6 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["mtp"]
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Ernie4_5_MoeStatics):

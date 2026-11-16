@@ -331,7 +331,6 @@ class NomicBertPreTrainedModel(PreTrainedModel):
     # and causing mismatch when loading from a checkpoint that doesn't have them
     _keys_to_ignore_on_load_unexpected = ["inv_freq", "original_inv_freq"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

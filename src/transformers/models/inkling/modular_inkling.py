@@ -746,7 +746,6 @@ class InklingPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(InklingTopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.get_text_config().initializer_range

@@ -398,7 +398,6 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
         "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2TopkRouter):

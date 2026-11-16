@@ -689,7 +689,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)

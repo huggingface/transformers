@@ -540,7 +540,6 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Nemotron3DiarizationForAudioFrameClassification):

@@ -225,7 +225,6 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
         "attentions": Phi4MultimodalVisionAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -849,7 +848,6 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
@@ -1405,7 +1403,6 @@ class Phi4MultimodalPreTrainedModel(PreTrainedModel):
     _version = "0.0.5"
     input_modalities = ("image", "audio", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalImageEmbedding):

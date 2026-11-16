@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 
 import torch
@@ -426,7 +427,6 @@ class MellumPreTrainedModel(PreTrainedModel):
     }
     _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range

@@ -559,7 +559,6 @@ class JetMoePreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)

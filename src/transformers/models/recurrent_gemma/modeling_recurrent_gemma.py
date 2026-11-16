@@ -547,7 +547,6 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
         "attentions": RecurrentGemmaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
