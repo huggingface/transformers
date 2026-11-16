@@ -1417,7 +1417,6 @@ class GraniteSwitchPreTrainedModel(PreTrainedModel):
     # is a data-dependent shape, so the model cannot be captured as a single static graph.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
-    _is_stateful = True
     # Both decoder layers are listed because they are siblings, not parent and child: a recorder on
     # one does not match the other, and a Shadow Residual model would silently record no hidden
     # states. Only one of the two is ever built, so there is no double-install.
