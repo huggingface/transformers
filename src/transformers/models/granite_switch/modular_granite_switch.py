@@ -219,7 +219,7 @@ class GraniteSwitchConfig(GraniteMoeHybridConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         if self.layer_types is None:
-            # Length must equal `num_hidden_layers`, cache slots included: they are attention too.
+            # Every decoder layer is attention; the switch takes no layer slots.
             self.layer_types = [ATTENTION_LAYER_TYPE] * self.num_hidden_layers
 
         if self.shared_intermediate_size is None:
@@ -1602,8 +1602,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embedding_multiplier = config.embedding_multiplier
 
-        # CODEPATH: a `num_adapters == 0` skin has no switch and is then plain Granite, which is
-        # what the composer builds to check its own weight transfer.
+        # CODEPATH: with `num_adapters == 0` there is no switch, and the model is plain Granite.
         if config.num_adapters > 0:
             self.switch = MultiSwitch(config)
         else:

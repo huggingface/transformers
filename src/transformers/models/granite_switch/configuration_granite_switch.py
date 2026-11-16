@@ -208,7 +208,7 @@ class GraniteSwitchConfig(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         if self.layer_types is None:
-            # Length must equal `num_hidden_layers`, cache slots included: they are attention too.
+            # Every decoder layer is attention; the switch takes no layer slots.
             self.layer_types = [ATTENTION_LAYER_TYPE] * self.num_hidden_layers
 
         if self.shared_intermediate_size is None:
