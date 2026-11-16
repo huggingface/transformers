@@ -332,7 +332,7 @@ Once quantized, you can [`~PreTrainedModel.dequantize`] a model to the original 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m", BitsAndBytesConfig(load_in_4bit=True))
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m", quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 model.dequantize()
 ```
 
