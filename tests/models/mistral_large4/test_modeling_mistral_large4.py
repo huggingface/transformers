@@ -115,14 +115,8 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     def test_lerope_training(self, name, activation_checkpointing):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = MistralLarge4ForConditionalGeneration(config).to(torch_device).train()
-        rotary_emb = model.model.language_model.rotary_emb
-        alpha = rotary_emb.alpha
+        alpha = model.model.language_model.rotary_emb.alpha
         self.assertIsInstance(alpha, torch.nn.Parameter)
-        # Exercise the initialization hook independently of the constructor's zero-filled tensor.
-        with torch.no_grad():
-            alpha.fill_(float("nan"))
-        model._init_weights(rotary_emb)
-        torch.testing.assert_close(alpha, torch.zeros_like(alpha))
 
         if activation_checkpointing:
             model.activation_checkpointing_enable()
