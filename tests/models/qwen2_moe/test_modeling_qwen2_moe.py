@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2MoE model."""
 
+import copy
 import unittest
 
 import pytest
@@ -210,6 +211,8 @@ class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         # Assisted generation
         assistant_model = model
+        # `model` is shared by the class: restore its generation config afterwards, even if the test fails
+        self.addCleanup(setattr, model, "generation_config", copy.deepcopy(model.generation_config))
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
@@ -232,7 +235,7 @@ class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_speculative_generation(self):
         expectations = Expectations(
             {
-                (None, None): "To be or not to be, that is the question. This is the question that every individual has to ask themselves at one",
+                (None, None): "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl",
                 ("xpu", 5): "To be or not to be, that is the question. The answer is to be, but not to be in the way",
             }
         )  # fmt: skip
