@@ -150,6 +150,34 @@ class ExpertsOffloadTest(unittest.TestCase):
                     else:
                         self.assertEqual(store.prefetched, 0)
 
+    def test_prefill_readahead_matches_eager(self):
+        reference = tiny_qwen3_moe(3)
+        expected = greedy(reference, IDS, tokens=8)
+        with tempfile.TemporaryDirectory() as directory:
+            reference.save_pretrained(directory)
+            # The 7-token prompt has 14 routes per layer, decode steps 2: a threshold of 8 reads ahead in prefill only.
+            for routes in (0, 8):
+                with self.subTest(prefill_readahead_routes=routes):
+                    model = self.load(directory, io_threads=2, prefetch_depth=0, prefill_readahead_routes=routes)
+                    layers = model.model.layers
+                    next_prefix = layers[1].mlp.experts.offload_prefix
+                    self.assertEqual(layers[0].mlp.experts.offload_next_prefix, next_prefix)
+                    self.assertIsNone(layers[1].mlp.experts.offload_next_prefix)
+                    store = model.experts_offload_store
+                    calls = []
+                    prefetch = store.prefetch
+
+                    def spy(prefix, experts):
+                        calls.append((prefix, experts))
+                        return prefetch(prefix, experts)
+
+                    with mock.patch.object(store, "prefetch", side_effect=spy):
+                        torch.testing.assert_close(greedy(model, IDS, tokens=8), expected)
+                    self.assertEqual(store.pending, {})
+                    readahead = [call for call in calls if call == (next_prefix, range(EXPERTS))]
+                    # Once per forward of layer 0 with enough routes: the prompt, not the decode steps.
+                    self.assertEqual(len(readahead), 1 if routes else 0)
+
     def test_mps_commit_hooks(self):
         reference = tiny_qwen3_moe(3)
         expected = greedy(reference, IDS, tokens=8)

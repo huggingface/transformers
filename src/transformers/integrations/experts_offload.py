@@ -836,6 +836,10 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
     if experts and not (experts[0] >= 0 and experts[-1] < module.num_experts):
         raise ValueError("Expert parallelism and sentinel expert IDs are unsupported")
     store.prefetch(prefix, experts[: store.window])
+    readahead = module.offload_readahead_routes
+    if readahead and module.offload_next_prefix is not None and top_k_index.numel() >= readahead:
+        # A long prompt routes to nearly every expert of every layer: read the next layer's while this one computes.
+        store.prefetch(module.offload_next_prefix, range(module.num_experts))
     width = top_k_index.shape[0] * (next_layer[1].top_k if predict else 0)
     guessed = torch.unique(routes[top_k_index.numel() : top_k_index.numel() + width]).tolist() if predict else []
     if predict:
@@ -929,6 +933,7 @@ _OPTIONS = {
     "mps_commit",
     "host_cache_bytes",
     "host_preload",
+    "prefill_readahead_routes",
 }
 
 
@@ -947,6 +952,9 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         experts_implementation (`str`, defaults to `"grouped_mm"`): kernel for cached BF16 experts, or `"batched_mm"`.
         token_chunk_size (`int`, defaults to 256): row chunk for experts that run uncached.
         predict_max_routes (`int`, defaults to 64): prefetch only for calls with at most this many routes (decode).
+        prefill_readahead_routes (`int`, defaults to 4096): calls with at least this many routes (long prompts) also
+            start reading every expert of the next MoE layer, which such a prompt nearly all uses, so storage keeps
+            reading while the device computes. 0 disables.
         host_cache_bytes (`int`, defaults to 0): host memory (pinned on accelerators) kept as a tier of quantized
             experts between storage and the device cache; for discrete GPUs with more host than device memory.
         host_preload (`bool`, defaults to `False`): read every expert into the host tier at load time.
@@ -1000,6 +1008,7 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         module.offload_token_chunk_size = options.get("token_chunk_size", 256)
         module.offload_predict_max_routes = options.get("predict_max_routes", 64)
         module.offload_next = module.offload_after_next = None
+        module.offload_readahead_routes = options.get("prefill_readahead_routes", 4096)
     depth = options.get("prefetch_depth", 2)
     routers = []
     for name, module in experts:
@@ -1007,6 +1016,7 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         usable = router is not None and hasattr(router, "weight") and hasattr(router, "top_k")
         routers.append((module.offload_prefix, router) if usable else None)
     for index, (_, module) in enumerate(experts):
+        module.offload_next_prefix = experts[index + 1][1].offload_prefix if index + 1 < len(experts) else None
         if depth >= 1 and index + 1 < len(routers):
             module.offload_next = routers[index + 1]
         if depth >= 2 and index + 2 < len(routers):
