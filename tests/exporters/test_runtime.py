@@ -285,7 +285,7 @@ class ExportedModelTest(unittest.TestCase):
                 (
                     "from_pretrained",
                     ExportedModel.from_pretrained(
-                        directory, device=device, trust_remote_code=exporter.loading_runs_code
+                        directory, device=device, trust_remote_code=exporter.requires_trust_remote_code
                     ),
                 ),
             ):
@@ -442,7 +442,7 @@ class ExportedModelTest(unittest.TestCase):
             exported.save_pretrained(directory)
             torch.utils._pytree._deregister_pytree_node(DynamicCache)
             outputs = ExportedModel.from_pretrained(
-                directory, device="cpu", trust_remote_code=exporter.loading_runs_code
+                directory, device="cpu", trust_remote_code=exporter.requires_trust_remote_code
             )(**inputs)
         self.assertIsInstance(outputs.cache, DynamicCache)
 

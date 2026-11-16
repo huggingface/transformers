@@ -55,7 +55,7 @@ class SaveLoadTesterMixin:
         written = {path.name for path in Path(directory).iterdir()} - {"export.json", "config.json"}
         self.assertIn(entry["file"], written)
         self.assertLessEqual(written, set(exporter.program_files(entry["file"])))
-        loaded = ExportedModel.from_pretrained(directory, trust_remote_code=exporter.loading_runs_code)
+        loaded = ExportedModel.from_pretrained(directory, trust_remote_code=exporter.requires_trust_remote_code)
         self.assertEqual(loaded.components["model"].metadata, exported.components["model"].metadata)
         return entry, loaded
 

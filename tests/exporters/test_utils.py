@@ -239,7 +239,7 @@ class ExportedModelTest(unittest.TestCase):
         from a local directory, unless `trust_remote_code=True`."""
 
         class _PickledStubExporter(_StubExporter):
-            loading_runs_code = True
+            requires_trust_remote_code = True
 
         components = {"model": ExportedComponent("program", ExportMetadata())}
         with mock.patch.dict(EXPORT_BACKENDS):

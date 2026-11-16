@@ -279,7 +279,7 @@ class ExportedModel(PushToHubMixin):
                 f"transformers reads ({EXPORT_SCHEMA_VERSION}): some fields might be ignored or misinterpreted."
             )
         exporter = get_exporter_class(manifest["export_format"])
-        if exporter.loading_runs_code:
+        if exporter.requires_trust_remote_code:
             # Gated as remote code even from a local directory, as `custom_generate` is
             trust_remote_code = resolve_trust_remote_code(
                 trust_remote_code,
@@ -348,8 +348,8 @@ class HfExporter(ABC):
     program_suffix: str
     # Only for formats whose extension doesn't name them (OpenVINO's `.xml` / `.bin`).
     program_prefix: str = ""
-    # Whether loading a saved program runs code from it (a pickle), so that it needs `trust_remote_code`.
-    loading_runs_code: bool = False
+    # Whether loading a saved program runs code from it (a pickle), so `from_pretrained` needs `trust_remote_code`.
+    requires_trust_remote_code: bool = False
 
     required_packages: list[str] = []
     # Hard minimum versions — the exporter raises below these (features it relies on are absent).
