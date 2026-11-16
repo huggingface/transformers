@@ -258,9 +258,6 @@ SPECIAL_CASES_TO_ALLOW = {
         # maximum, which it reads as `max_lora_rank`.
         "adapter_names",
         "adapter_ranks",
-        # Superseded by `ms_counting_head_dim`, which is what the switch heads read. Kept so that
-        # checkpoints written with the older key still round-trip.
-        "switch_head_dim",
     ],
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.

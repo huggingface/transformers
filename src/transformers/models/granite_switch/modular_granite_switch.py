@@ -103,8 +103,6 @@ class GraniteSwitchConfig(GraniteMoeHybridConfig):
         Zero-based decoder layer each probe reads. `None` reads the final normalized hidden state.
     control_token_gain (`float`, *optional*, defaults to 15.0):
         Attention gain that separates control tokens from ordinary tokens in the switch heads.
-    switch_head_dim (`int`, *optional*, defaults to 32):
-        Unused. Kept so checkpoints that set it still load; the switch heads read `ms_counting_head_dim`.
     ms_code_m (`int`, *optional*, defaults to 6):
         Codebook parameter. A Kerdock codebook holds `2 ** (2 * m - 1)` codewords of dimension `2 ** m`.
     ms_code_type (`str`, *optional*, defaults to `"kerdock"`):
@@ -158,7 +156,6 @@ class GraniteSwitchConfig(GraniteMoeHybridConfig):
     probe_read_layers: list[int | None] | None = None
 
     control_token_gain: float = 15.0
-    switch_head_dim: int = 32
 
     ms_code_m: int = 6
     ms_code_type: str = "kerdock"
