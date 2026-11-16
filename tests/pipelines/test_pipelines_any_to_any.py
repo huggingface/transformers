@@ -57,6 +57,17 @@ if is_torch_available():
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
 
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        outputs = pipe(text=messages, return_tensors=True, generation_mode="text", max_new_tokens=2)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
     def test_multiple_candidates_tiny_model(self):
         pipe = pipeline(
             "any-to-any",
