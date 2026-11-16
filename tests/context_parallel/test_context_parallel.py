@@ -255,7 +255,7 @@ def _test_context_parallel_loss(rank, cp_size):
 
 def _install_default_plan(model, cp_mesh):
     """`apply_context_parallelism` with the plan a `base_model_cp_plan` of a decoder-only model would resolve to."""
-    plan = {}
+    plan = {"": "cp_model"}
     for layer in range(model.config.num_hidden_layers):
         plan[f"model.layers.{layer}"] = "cp_split_sequence"
         plan[f"model.layers.{layer}.self_attn"] = "cp_ulysses"
@@ -560,7 +560,7 @@ class TestContextParallelChecks(unittest.TestCase):
         config.layer_types = ["full_attention", "sliding_attention"]
         _install_default_plan(LlamaForCausalLM(config), _MeshStub(2))
         # a base model computes no loss of its own, so the caller's loss is theirs to shard
-        model, plan = LlamaModel(_tiny_config()), {}
+        model, plan = LlamaModel(_tiny_config()), {"": "cp_model"}
         for layer in range(model.config.num_hidden_layers):
             plan[f"layers.{layer}"], plan[f"layers.{layer}.self_attn"] = "cp_split_sequence", "cp_ulysses"
         apply_context_parallelism(model, _MeshStub(2), plan)
