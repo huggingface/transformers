@@ -526,12 +526,19 @@ def _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *in
             raise ValueError(f"not a tokenizer backend ({', '.join(TOKENIZER_BACKEND_CLASSES)})")
 
         backend_kwargs = dict(kwargs)
+        
         if backend == "sentencepiece" and kwargs.get("vocab_file") is None:
             from ...tokenization_utils_sentencepiece import find_sentencepiece_model_file
 
             backend_kwargs["vocab_file"] = find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs)
             if backend_kwargs["vocab_file"] is None:
                 raise OSError(f"{pretrained_model_name_or_path} has no SentencePiece model file")
+
+        if backend == "mistral_common":
+            from ...tokenization_mistral_common import find_mistral_common_tokenizer_file
+
+            if find_mistral_common_tokenizer_file(pretrained_model_name_or_path, **kwargs) is None:
+                raise OSError(f"{pretrained_model_name_or_path} has no mistral-common tokenizer file")
 
         backend_class = tokenizer_class_from_name(TOKENIZER_BACKEND_CLASSES[backend])
         return backend_class.from_pretrained(pretrained_model_name_or_path, *inputs, **backend_kwargs)
