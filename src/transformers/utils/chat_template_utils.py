@@ -65,9 +65,9 @@ args_re = re.compile(r"\n\s*Args:\n(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL
 args_split_re = re.compile(
     r"""
 (?:^|\n)  # Match the start of the args block, or a newline
-([ \t]*)(\w+):\s*  # Capture the indentation and the argument name
+([ \t]*)(\w+)(?:[ \t]*\([^()\n]*\))?:\s*  # Capture the indentation and the argument name, skip a "(type)"
 (.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
-(?=\n(?!\1[ \t])[ \t]*\w+:|\Z)  # Stop at the next "name:" that is not indented deeper, or the end of the block
+(?=\n(?!\1[ \t])[ \t]*\w+(?:[ \t]*\([^()\n]*\))?:|\Z)  # Stop at the next "name:" not indented deeper, or the end
 """,
     re.DOTALL | re.VERBOSE,
 )
