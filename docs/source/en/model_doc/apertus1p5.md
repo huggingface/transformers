@@ -39,9 +39,9 @@ Use the processor's chat template to prepare a conversation with images and audi
 media, resamples audio, and constructs the model inputs automatically.
 
 ```python
-from transformers import Apertus1p5ForConditionalGeneration, AutoProcessor
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model = Apertus1p5ForConditionalGeneration.from_pretrained(
+model = AutoModelForMultimodalLM.from_pretrained(
     "swiss-ai/Apertus-v1.5-8B", device_map="auto"
 )
 processor = AutoProcessor.from_pretrained("swiss-ai/Apertus-v1.5-8B")

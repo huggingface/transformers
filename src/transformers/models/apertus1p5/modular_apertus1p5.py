@@ -147,7 +147,7 @@ class Apertus1p5ImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={
                 "pixel_values": processed_images,
-                "image_sizes": torch.tensor(image_sizes, dtype=torch.long),
+                "image_sizes": image_sizes,
             },
             tensor_type=return_tensors,
         )
@@ -287,16 +287,6 @@ class Apertus1p5TextConfig(ApertusConfig):
 @strict
 class Apertus1p5Config(PreTrainedConfig):
     r"""
-    text_config (`Union[dict, Apertus1p5TextConfig]`, *optional*):
-        Configuration of the Apertus 1.5 language backbone. The extended vocabulary (text + visual + audio tokens)
-        lives in `text_config.vocab_size`, which sizes the input embedding table. The LM head uses
-        `text_config.output_vocab_size` physical rows when set, otherwise it uses the full
-        `text_config.vocab_size`. Returned logits always use the LM-head width, with or without `labels`;
-        input-only ids beyond the physical LM head have no output scores and cannot be generated.
-    vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
-        Configuration of the bundled EMU3.5-derived vision tokenizer.
-    audio_config (`Union[dict, WavTokenizerEncoderConfig]`, *optional*):
-        Configuration of the WavTokenizer encoder that produces the audio codes.
     image_token_offset (`int`, *optional*, defaults to 131272):
         Offset mapping a visual codebook index `i` to the vocabulary id of `<|visual token i|>`.
     audio_token_offset (`int`, *optional*, defaults to 262344):
@@ -517,6 +507,7 @@ class Apertus1p5VisionTokenizerVectorQuantizer(nn.Module):
 class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
     config: Apertus1p5VisionTokenizerConfig
     base_model_prefix = "vision_tokenizer"
+    main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
 
@@ -539,8 +530,6 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
     """
 )
 class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
-    main_input_name = "pixel_values"
-
     def __init__(self, config: Apertus1p5VisionTokenizerConfig):
         super().__init__(config)
         self.encoder = Apertus1p5VisionTokenizerEncoder(config)
@@ -582,23 +571,21 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
         "Apertus1p5VisionTokenizerResnetBlock",
         "Apertus1p5VisionTokenizerAttnBlock",
     ]
+    # code assignment is an argmax over codebook logits: half precision flips ~10% of image codes (bf16, 131k
+    # codebook), so both tokenizers are kept in fp32 even when the model is loaded in fp16/bf16
+    _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
 
 
 class Apertus1p5TextPreTrainedModel(ApertusPreTrainedModel):
     config: Apertus1p5TextConfig
+    _keys_to_ignore_on_load_unexpected = [r"^model\.vision_tokenizer\.", r"^model\.audio_tokenizer\."]
 
 
 class Apertus1p5TextModel(ApertusModel):
-    config: Apertus1p5TextConfig
+    pass
 
 
 class Apertus1p5TextForCausalLM(ApertusForCausalLM):
-    config: Apertus1p5TextConfig
-    input_modalities = ("text",)
-    _can_compile_fullgraph = True
-    _no_split_modules = ["Apertus1p5TextDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"^model\.vision_tokenizer\.", r"^model\.audio_tokenizer\."]
-
     def __init__(self, config: Apertus1p5TextConfig):
         super().__init__(config)
         # the LM head may be pruned to the text-only prefix of the vocabulary; input embeddings keep the
@@ -660,10 +647,6 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
 
 @auto_docstring
 class Apertus1p5Model(Apertus1p5PreTrainedModel):
-    # code assignment is an argmax over codebook logits: half precision flips ~10% of image codes (bf16, 131k
-    # codebook), so both tokenizers are kept in fp32 even when the model is loaded in fp16/bf16
-    _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
-
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
@@ -703,12 +686,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
-            The tensors corresponding to the input images, padded to a common size.
-        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
-            The true size of each image, being (height, width).
-        """
         image_tokens = self._encode_images(pixel_values, image_sizes)
         vocab_ids = torch.cat([codes.flatten() for codes in image_tokens]) + self.config.image_token_offset
         image_embeddings = self.get_input_embeddings()(vocab_ids)
@@ -832,23 +809,11 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
-            Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
-            rows must follow expanded image-placeholder order.
-        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            True `(height, width)` per image, required with `pixel_values` to remove batch padding.
         input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`, *optional*):
             Processor-produced mono 24 kHz waveforms, peak-normalized and padded. Requires
             `feature_attention_mask`; rows must follow expanded audio-placeholder order.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
             Right-padded mask with 1 for valid samples and 0 for padding, required with `input_features`.
-        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Input embeddings instead of `input_ids`. With modality inputs, placeholder positions must contain
-            their exact token embeddings so the model can detect them.
-        mm_encoder_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-            Precomputed image features under the `"image"` key. Its `pooler_output` contains one
-            `(num_image_tokens, hidden_size)` tensor per image, in placeholder order. Replaces `pixel_values`
-            and `image_sizes`; audio still uses `input_features` and `feature_attention_mask`.
         """
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
@@ -885,7 +850,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             if audio_features is not None:
                 inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
-        return self.language_model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
@@ -893,11 +858,11 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
+        return outputs
 
 
 @auto_docstring
 class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
-    output_modalities = ("text",)
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -919,12 +884,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
-            The tensors corresponding to the input images, padded to a common size.
-        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
-            The true size of each image, being (height, width).
-        """
         return self.model.get_image_features(pixel_values, image_sizes, **kwargs)
 
     @auto_docstring
@@ -963,23 +922,13 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
-            Padded RGB images in `[-1, 1]`, in image-placeholder order. Requires `image_sizes`.
-        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            Unpadded `(height, width)` per image, required with `pixel_values`.
         input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`, *optional*):
             Padded, peak-normalized mono 24 kHz waveforms in audio-placeholder order. Requires `feature_attention_mask`.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
             Audio sample mask: 1 for valid samples, 0 for right padding. Required with `input_features`.
-        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Embeddings instead of `input_ids`. With media inputs, placeholders must retain their exact token embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Next-token labels in `[0, output_vocab_size)` (or `[0, text_config.vocab_size)` when unset).
             Use `-100` for input-only multimodal tokens and other ignored positions.
-        mm_encoder_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
-            Precomputed image features under the `"image"` key. Its `pooler_output` contains one
-            `(num_image_tokens, hidden_size)` tensor per image, in placeholder order. Replaces `pixel_values`
-            and `image_sizes`; audio still uses `input_features` and `feature_attention_mask`.
 
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.Tensor)`:

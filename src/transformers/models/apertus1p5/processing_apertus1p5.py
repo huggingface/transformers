@@ -20,11 +20,9 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessorMixin
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-from ...utils.import_utils import requires
 
 
 @auto_docstring(custom_intro="Constructs an Apertus 1.5 processor for text, images, and audio.")
-@requires(backends=("vision", "torch", "torchvision"))
 class Apertus1p5Processor(ProcessorMixin):
     def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token

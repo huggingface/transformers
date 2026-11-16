@@ -243,50 +243,53 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
 class Apertus1p5IntegrationTest(unittest.TestCase):
     checkpoint = "swiss-ai/Apertus-v1.5-8B"
     revision = "refs/pr/5"  # TODO: drop once https://huggingface.co/swiss-ai/Apertus-v1.5-8B/discussions/5 is merged
-    IMAGE_URL = url_to_local_path(
-        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-    )
-    AUDIO_URL = url_to_local_path(
-        "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
-    )
-    TEXT_CONVERSATION = [
-        {
-            "role": "user",
-            "content": [{"type": "text", "text": "What is the capital of Switzerland? Answer in one word."}],
-        }
-    ]
-    IMAGE_CONVERSATION = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "url": IMAGE_URL},
-                {"type": "text", "text": "Describe this image in one sentence."},
-            ],
-        }
-    ]
-    AUDIO_CONVERSATION = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "audio", "url": AUDIO_URL},
-                {"type": "text", "text": "Transcribe this audio."},
-            ],
-        }
-    ]
-    IMAGE_AUDIO_CONVERSATION = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "url": IMAGE_URL},
-                {"type": "audio", "url": AUDIO_URL},
-                {"type": "text", "text": "What do you see and what do you hear?"},
-            ],
-        }
-    ]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint, revision=cls.revision)
+        image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
+        audio_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+        )
+        cls.text_conversation = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the capital of Switzerland? Answer in one word."}],
+            }
+        ]
+        cls.image_conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image_url},
+                    {"type": "text", "text": "Describe this image in one sentence."},
+                ],
+            }
+        ]
+        cls.audio_conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "url": audio_url},
+                    {"type": "text", "text": "Transcribe this audio."},
+                ],
+            }
+        ]
+        cls.image_audio_conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image_url},
+                    {"type": "audio", "url": audio_url},
+                    {"type": "text", "text": "What do you see and what do you hear?"},
+                ],
+            }
+        ]
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -310,7 +313,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
 
     def test_text_generation(self):
         model = self._load_model()
-        output_text = self._generate(model, [self.TEXT_CONVERSATION])
+        output_text = self._generate(model, [self.text_conversation])
 
         EXPECTED_TEXTS = Expectations({(None, None): ["Bern"]})
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -319,7 +322,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
     def test_image_generation(self):
         model = self._load_model()
         # Greedy decoding reaches a bf16 near-tie a few tokens later, which flips between CUDA runs
-        output_text = self._generate(model, [self.IMAGE_CONVERSATION], max_new_tokens=12)
+        output_text = self._generate(model, [self.image_conversation], max_new_tokens=12)
 
         EXPECTED_TEXTS = Expectations(
             {
@@ -331,7 +334,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
 
     def test_audio_generation(self):
         model = self._load_model()
-        output_text = self._generate(model, [self.AUDIO_CONVERSATION])
+        output_text = self._generate(model, [self.audio_conversation])
 
         EXPECTED_TEXTS = Expectations(
             {
@@ -344,10 +347,10 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
     def test_batch_generation(self):
         model = self._load_model()
         conversations = [
-            self.IMAGE_CONVERSATION,
-            self.AUDIO_CONVERSATION,
-            self.TEXT_CONVERSATION,
-            self.IMAGE_AUDIO_CONVERSATION,
+            self.image_conversation,
+            self.audio_conversation,
+            self.text_conversation,
+            self.image_audio_conversation,
         ]
         # The image rows reach bf16 near-ties right after these tokens, which flip between CUDA runs
         output_text = self._generate(model, conversations, max_new_tokens=10)

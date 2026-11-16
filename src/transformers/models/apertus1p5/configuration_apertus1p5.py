@@ -182,16 +182,6 @@ class Apertus1p5TextConfig(PreTrainedConfig):
 @strict
 class Apertus1p5Config(PreTrainedConfig):
     r"""
-    text_config (`Union[dict, Apertus1p5TextConfig]`, *optional*):
-        Configuration of the Apertus 1.5 language backbone. The extended vocabulary (text + visual + audio tokens)
-        lives in `text_config.vocab_size`, which sizes the input embedding table. The LM head uses
-        `text_config.output_vocab_size` physical rows when set, otherwise it uses the full
-        `text_config.vocab_size`. Returned logits always use the LM-head width, with or without `labels`;
-        input-only ids beyond the physical LM head have no output scores and cannot be generated.
-    vision_config (`Union[dict, Apertus1p5VisionTokenizerConfig]`, *optional*):
-        Configuration of the bundled EMU3.5-derived vision tokenizer.
-    audio_config (`Union[dict, WavTokenizerEncoderConfig]`, *optional*):
-        Configuration of the WavTokenizer encoder that produces the audio codes.
     image_token_offset (`int`, *optional*, defaults to 131272):
         Offset mapping a visual codebook index `i` to the vocabulary id of `<|visual token i|>`.
     audio_token_offset (`int`, *optional*, defaults to 262344):

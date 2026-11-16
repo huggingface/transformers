@@ -153,7 +153,7 @@ class Apertus1p5ImageProcessor(TorchvisionBackend):
         return BatchFeature(
             data={
                 "pixel_values": processed_images,
-                "image_sizes": torch.tensor(image_sizes, dtype=torch.long),
+                "image_sizes": image_sizes,
             },
             tensor_type=return_tensors,
         )

@@ -170,12 +170,6 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
 
     checkpoint = "swiss-ai/Apertus-v1.5-8B"
     revision = "refs/pr/5"  # TODO: drop once https://huggingface.co/swiss-ai/Apertus-v1.5-8B/discussions/5 is merged
-    IMAGE_URL = url_to_local_path(
-        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
-    )
-    AUDIO_URL = url_to_local_path(
-        "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
-    )
     # the 640x480 image fits the default pixel budget: a 30x40 grid of 16-pixel patches, one code each
     image_expansion = (
         "<|img_start|>30*40<|img_token_start|>" + "<|img_end_of_row|>".join(["<|image|>" * 40] * 30) + "<|img_end|>"
@@ -186,6 +180,12 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint, revision=cls.revision)
+        cls.image_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        )
+        cls.audio_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+        )
 
     def _assert_expanded(self, content, expansions):
         messages = [{"role": "user", "content": content}]
@@ -202,8 +202,8 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
     @require_librosa
     def test_apply_chat_template_image_audio(self):
         content = [
-            {"type": "image", "url": self.IMAGE_URL},
-            {"type": "audio", "url": self.AUDIO_URL},
+            {"type": "image", "url": self.image_url},
+            {"type": "audio", "url": self.audio_url},
             {"type": "text", "text": "What do you see and what do you hear?"},
         ]
         self._assert_expanded(content, [("<|image|>", self.image_expansion), ("<|audio|>", self.audio_expansion)])
