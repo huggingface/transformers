@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -24,14 +25,15 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...decision import DecisionConfig, DecisionMixin, Question, process_scores
 from ...loss.loss_clef import check_clef_label_shapes, clef_label_errors, raise_label_error
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig, AutoModel
 from ..auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
-from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
+from ..molmo2.modeling_molmo2 import Molmo2VisionAttention, eager_attention_forward
 
 
 # The prompt of clef (`joint_schema_model.encode_record`), for its checkpoints: one sequence per request
@@ -290,8 +292,54 @@ def padding_mask(is_valid: torch.BoolTensor, dtype: torch.dtype) -> torch.Tensor
 
 
 class ClefAttention(Molmo2VisionAttention):
+    """
+    The attention of the head, which runs sdpa or eager whatever the model's `attn_implementation`: that selects the
+    attention of the backbone over the prompt (a Flash Attention kernel, for example), and the head masks its padding
+    with additive masks, which only these two take.
+    """
+
     def __init__(self, config: ClefConfig, hidden_size: int | None = None):
         super().__init__(config, hidden_size)
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        encoder_hidden_states = hidden_states if encoder_hidden_states is None else encoder_hidden_states
+
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        key_value_shape = (*encoder_hidden_states.shape[:-1], -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(encoder_hidden_states).view(key_value_shape).transpose(1, 2)
+        value_states = self.v_proj(encoder_hidden_states).view(key_value_shape).transpose(1, 2)
+
+        implementation = self.config._attn_implementation
+        if implementation not in ("eager", "sdpa"):  # the backbone's
+            implementation = "sdpa"
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(implementation, eager_attention_forward)
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
 
 
 class ClefMLP(CLIPMLP):
@@ -527,7 +575,9 @@ class ClefScorer(nn.Module):
 class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
     base_model_prefix = "model"
-    _supports_sdpa = True
+    # The backbone runs attention over the prompt: any implementation it supports (it checks it), while the attention of
+    # the head runs sdpa or eager (see `ClefAttention`)
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
     supports_gradient_checkpointing = True  # when its backbone does, see `ClefForDecision`
 
     def _init_weights(self, module):

@@ -79,6 +79,12 @@ def eager_attention_forward(
 
 # Modular automatically inherits RoPE, hence no inheritance for now
 class ClefAttention(nn.Module):
+    """
+    The attention of the head, which runs sdpa or eager whatever the model's `attn_implementation`: that selects the
+    attention of the backbone over the prompt (a Flash Attention kernel, for example), and the head masks its padding
+    with additive masks, which only these two take.
+    """
+
     def __init__(self, config: ClefConfig, hidden_size: int | None = None):
         super().__init__()
         self.config = config
@@ -118,9 +124,10 @@ class ClefAttention(nn.Module):
         key_states = self.k_proj(encoder_hidden_states).view(key_value_shape).transpose(1, 2)
         value_states = self.v_proj(encoder_hidden_states).view(key_value_shape).transpose(1, 2)
 
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
+        implementation = self.config._attn_implementation
+        if implementation not in ("eager", "sdpa"):  # the backbone's
+            implementation = "sdpa"
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(implementation, eager_attention_forward)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -501,7 +508,9 @@ class ClefScorer(nn.Module):
 class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
     base_model_prefix = "model"
-    _supports_sdpa = True
+    # The backbone runs attention over the prompt: any implementation it supports (it checks it), while the attention of
+    # the head runs sdpa or eager (see `ClefAttention`)
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
     supports_gradient_checkpointing = True  # when its backbone does, see `ClefForDecision`
 
     def _init_weights(self, module):

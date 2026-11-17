@@ -523,6 +523,58 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                     self.assertLessEqual(difference, tolerance)
                     self.assertGreater(expected.abs().max().item(), 0.1)
 
+    def test_attention_implementation_reaches_the_backbone(self):
+        # The backbone runs attention over the prompt: the usual string `attn_implementation` (a Flash Attention kernel
+        # included) selects its implementation, while the attention layers of the head keep sdpa or eager
+        from unittest import mock
+
+        for flag in ("_supports_sdpa", "_supports_flash_attn", "_supports_flex_attn"):
+            self.assertTrue(getattr(ClefForDecision, flag), flag)
+        config = copy.deepcopy(self.config)
+        config._attn_implementation = "eager"
+        torch.manual_seed(0)
+        model = ClefForDecision(config).eval()
+        self.assertEqual((model.config._attn_implementation, model.model.config._attn_implementation), ("eager",) * 2)
+        inputs = self.collate(self.ragged_prompts())
+        with torch.no_grad():
+            reference = model(**inputs).logits
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            loaded = ClefForDecision.from_pretrained(directory, attn_implementation="sdpa")
+            self.assertEqual(
+                (loaded.config._attn_implementation, loaded.model.config._attn_implementation), ("sdpa",) * 2
+            )
+            loaded = ClefForDecision.from_pretrained(directory, attn_implementation="eager")
+            self.assertEqual(
+                (loaded.config._attn_implementation, loaded.model.config._attn_implementation), ("eager",) * 2
+            )
+            # The form that selects the backbone's alone keeps working
+            loaded = ClefForDecision.from_pretrained(directory, attn_implementation={"text_config": "eager"})
+            self.assertEqual(
+                (loaded.config._attn_implementation, loaded.model.config._attn_implementation), ("sdpa", "eager")
+            )
+            # A Flash Attention kernel of the Hub, without downloading it: accepted by Clef, given to the backbone
+            kernel = "kernels-community/flash-attn2@0123456789abcdef0123456789abcdef01234567"
+            with mock.patch("transformers.modeling_utils.lazy_import_flash_attention"):
+                loaded = ClefForDecision.from_pretrained(directory, attn_implementation=kernel).eval()
+        self.assertEqual((loaded.config._attn_implementation, loaded.model.config._attn_implementation), (kernel,) * 2)
+        # The head does not run the kernel (registered here as a function that fails): with the backbone on eager (no
+        # kernel on this device), the model scores as before
+        from transformers.modeling_utils import AttentionInterface
+
+        def kernel_attention(*args, **kwargs):
+            raise AssertionError("the head ran the kernel of the backbone")
+
+        loaded.model.config._attn_implementation = "eager"
+        with mock.patch.dict(AttentionInterface._global_mapping, {kernel: kernel_attention}), torch.no_grad():
+            torch.testing.assert_close(loaded(**inputs).logits, reference, atol=1e-6, rtol=0)
+        # A backbone without Flash Attention still raises its own error
+        mpnet = self.encoder_model("mpnet").config
+        mpnet._attn_implementation = kernel
+        with mock.patch("transformers.modeling_utils.lazy_import_flash_attention"):
+            with self.assertRaisesRegex(ValueError, "MPNetModel does not support Flash Attention"):
+                ClefForDecision(mpnet)
+
     def test_decide_and_pipeline_unchanged(self):
         torch.manual_seed(0)
         model = ClefForDecision(self.config).eval()
