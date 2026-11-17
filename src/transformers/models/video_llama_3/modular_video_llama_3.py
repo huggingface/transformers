@@ -695,6 +695,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_hidden_states=outputs.video_hidden_states,
         )
 
+
 class VideoLlama3Processor(Qwen3VLProcessor):
     text_kwargs = AttributeError()
     videos_kwargs = {"return_metadata": True}

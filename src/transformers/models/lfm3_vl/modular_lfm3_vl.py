@@ -585,6 +585,7 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_pooler_output=outputs.video_pooler_output,
         )
 
+
 @auto_docstring
 class Lfm3VlProcessor(Qwen3VLProcessor):
     return_mm_token_type_ids = False

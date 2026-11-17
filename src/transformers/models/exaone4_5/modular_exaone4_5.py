@@ -309,6 +309,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
             attentions=outputs.attentions,
         )
 
+
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
     """
     Main EXAONE 4.5 conditional generation class.
@@ -401,6 +402,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
         return model_inputs
+
 
 class Exaone4_5_Processor(Qwen2VLProcessor):
     videos_kwargs = {"return_metadata": True}
