@@ -526,7 +526,7 @@ def _load_tokenizer(tokenizer_class, backend, pretrained_model_name_or_path, *in
             raise ValueError(f"not a tokenizer backend ({', '.join(TOKENIZER_BACKEND_CLASSES)})")
 
         backend_kwargs = dict(kwargs)
-        
+
         if backend == "sentencepiece" and kwargs.get("vocab_file") is None:
             from ...tokenization_utils_sentencepiece import find_sentencepiece_model_file
 
