@@ -233,3 +233,13 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_lengths = list(expected_num_tokens)
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
+
+    def test_feature_extractor_accepts_single_waveform(self):
+        feature_extractor = self.get_component("feature_extractor")
+        audio = np.random.default_rng(0).standard_normal(16_000).astype(np.float32)
+
+        single = feature_extractor(audio, return_tensors="np")
+        batched = feature_extractor([audio], return_tensors="np")
+
+        for key in ("input_features", "input_features_mask"):
+            np.testing.assert_array_equal(single[key], batched[key])
