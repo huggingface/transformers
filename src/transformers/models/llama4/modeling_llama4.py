@@ -212,7 +212,6 @@ class Llama4TextRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     # Ignore copy
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -455,7 +454,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = (
@@ -539,11 +537,14 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "cache": cache,
                 "position_ids": position_ids,
             }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "chunked_attention": create_chunked_causal_mask(**mask_kwargs),
+            # Create the masks, only for the layer types that are present
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "chunked_attention": lambda: create_chunked_causal_mask(**mask_kwargs),
             }
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
 
         hidden_states = inputs_embeds
 

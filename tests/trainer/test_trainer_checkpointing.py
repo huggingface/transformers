@@ -275,6 +275,8 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             kwargs = {
                 "output_dir": tmpdir,
                 "fp16": True,
+                # The resumed and uninterrupted runs must produce identical logs.
+                "full_determinism": True,
                 "max_steps": training_steps,
                 "per_device_train_batch_size": 1,
                 "learning_rate": 1e-5,

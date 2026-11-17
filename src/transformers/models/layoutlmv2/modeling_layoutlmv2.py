@@ -423,7 +423,6 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "layoutlmv2"
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

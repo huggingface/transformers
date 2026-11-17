@@ -209,7 +209,6 @@ class ChineseCLIPPreTrainedModel(CLIPPreTrainedModel):
         "attentions": ChineseCLIPVisionAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

@@ -187,7 +187,8 @@ class Llama4TextConfig(PreTrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
+                "chunked_attention" if no_rope and self.attention_chunk_size is not None else "full_attention"
+                for no_rope in self.no_rope_layers
             ]
 
         super().__post_init__(**kwargs)
