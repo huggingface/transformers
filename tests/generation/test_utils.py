@@ -101,6 +101,7 @@ if is_torch_available():
         GenerateDecoderOnlyOutput,
         GenerateEncoderDecoderOutput,
         GenerationConfig,
+        LogitsProcessor,
         LogitsProcessorList,
         MaxLengthCriteria,
         MinLengthLogitsProcessor,
@@ -3946,6 +3947,46 @@ class GenerationIntegrationTests(unittest.TestCase):
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         self.assertListEqual(outputs, ["Wie alt bist du?"])
+
+    def test_beam_search_pad_token_zero(self):
+        """Regression test for #50857 (beam search padding with pad_token_id=0)."""
+        config = LlamaConfig(
+            num_hidden_layers=1,
+            hidden_size=32,
+            intermediate_size=32,
+            vocab_size=50,
+            pad_token_id=0,
+            eos_token_id=1,
+            bos_token_id=2,
+        )
+        model = LlamaForCausalLM(config).eval().to(torch_device)
+
+        class BatchEOS(LogitsProcessor):
+            def __call__(self, input_ids, scores):
+                cur_len = input_ids.shape[-1]
+                if cur_len >= 5:
+                    scores[:2, :] = -float("inf")
+                    scores[:2, 1] = 0.0
+                if cur_len >= 8:
+                    scores[2:, :] = -float("inf")
+                    scores[2:, 1] = 0.0
+                return scores
+
+        input_ids = torch.tensor([[2, 5, 6], [2, 7, 8]], device=torch_device)
+        out = model.generate(
+            input_ids,
+            num_beams=2,
+            num_return_sequences=1,
+            max_new_tokens=10,
+            logits_processor=LogitsProcessorList([BatchEOS()]),
+        )
+        # Sequence 0 finishes earlier than sequence 1; its trailing positions must be padded with
+        # pad_token_id (0), not eos_token_id (1).
+        seq_0 = out[0].tolist()
+        eos_idx = seq_0.index(1)
+        padding_tokens = seq_0[eos_idx + 1 :]
+        self.assertTrue(len(padding_tokens) > 0)
+        self.assertTrue(all(tok == 0 for tok in padding_tokens))
 
     @slow
     def test_cfg_mixin(self):
