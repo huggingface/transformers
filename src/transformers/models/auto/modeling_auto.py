@@ -242,6 +242,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
         ("gpt_oss", "GptOssModel"),
         ("gptj", "GPTJModel"),
+        ("gr00t", "Gr00tModel"),
         ("gradium_phonon_tts", "GradiumPhononTTSModel"),
         ("granite", "GraniteModel"),
         ("granite4_vision", "Granite4VisionModel"),
