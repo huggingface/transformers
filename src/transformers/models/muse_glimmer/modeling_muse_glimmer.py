@@ -694,8 +694,7 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        target_dtype = self.patch_embedding.weight.dtype
-        embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
 
         # Patch (h, w) reads the position table at (w, h): ref code passes
         # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
@@ -710,9 +709,7 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         )
         # helper returns `(total_thw, n_taps)`, so sum over the taps axis
         pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
-
-        return embeddings
+        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseGlimmerVisionRotaryEmbedding(nn.Module):
