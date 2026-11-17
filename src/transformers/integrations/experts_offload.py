@@ -267,6 +267,8 @@ class ExpertStore:
         self.total_experts = 0
         self.compute = "grouped_mm"
         self.expert_compute = None  # see `experts_offload_forward`
+        self.uses = {}  # (prefix, expert) -> lookups, see `routing_profile`
+        self.preload_profile = None  # see `preload_from_profile`
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload-io") if io_threads else None
         self.pending = {}
         self.window = 2 * io_threads
@@ -371,11 +373,40 @@ class ExpertStore:
             self.materialize()
 
     def materialize(self):
-        """Take the pools' device memory (once)."""
+        """Take the pools' device memory (once), then fill it from ``preload_profile`` when set."""
         if not self.materialized:
             for pool in self.pools:
                 pool.materialize(self.device)
             self.materialized = True
+            if self.preload_profile is not None:
+                self.preload_from_profile(self.preload_profile)
+
+    def routing_profile(self):
+        """Lookups per expert since loading, ``{prefix: {expert: count}}``: what ``preload_profile`` takes."""
+        profile = {}
+        for (prefix, expert), count in self.uses.items():
+            profile.setdefault(prefix, {})[expert] = count
+        return profile
+
+    def preload_from_profile(self, profile):
+        """Fill every layer's share of its pool with its most used experts in ``profile`` (``{prefix: {expert:
+        count}}``, or a path to it as JSON), least used first so the most used end up hottest. Reads in parallel."""
+        if not isinstance(profile, dict):
+            profile = json.loads(Path(profile).read_text(encoding="utf-8"))
+        layers = {}
+        for prefix in self.layouts:
+            layers.setdefault(id(self.pool_of[prefix]), []).append(prefix)
+        cold, self.cold = self.cold, False  # the first call may be a cold prefill: the preload is not part of it
+        for prefix in self.layouts:
+            pool = self.pool_of[prefix]
+            counts = {int(expert): count for expert, count in profile.get(prefix, {}).items()}
+            share = pool.num_slots // len(layers[id(pool)])
+            ranked = sorted(counts, key=counts.get, reverse=True)[:share]
+            self.prefetch(prefix, ranked)
+            for expert in reversed(ranked):
+                self._install((prefix, expert))
+            self.synchronize()  # releases this layer's host buffers before the next layer's reads
+        self.cold = cold
 
     # Single-pool views, kept for callers that predate size classes.
     @property
@@ -727,6 +758,7 @@ class ExpertStore:
             self.materialize()
         key = (prefix, expert)
         self._count(key)
+        self.uses[key] = self.uses.get(key, 0) + 1
         cache = self.pool_of[prefix].cache
         if key in cache:
             self.hits += 1
@@ -1125,6 +1157,7 @@ _OPTIONS = {
     "cold_prefill_routes",
     "expert_source",
     "expert_compute",
+    "preload_profile",
 }
 
 
@@ -1159,6 +1192,9 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         expert_source (*optional*): read experts from an external store instead of the checkpoint (see
             :class:`ExpertStore`); needs `expert_compute`. Layers may differ in layout: each layout gets its own pool and
             every layer the same number of slots.
+        preload_profile (`dict` or `str`, *optional*): a routing profile (``{prefix: {expert: count}}``, or a JSON file of
+            one, as returned by `model.experts_offload_store.routing_profile()`); the first forward fills each layer's
+            slots with its most used experts, so decoding starts from a warm cache.
         expert_compute (`Callable`, *optional*): computes the experts output over the pools (see
             :func:`experts_offload_forward`); required with `expert_source`, where the experts' format is the source's.
     """
@@ -1190,6 +1226,7 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
     )
     store.compute = options.get("experts_implementation", "grouped_mm")
     store.expert_compute = options.get("expert_compute")
+    store.preload_profile = options.get("preload_profile")
     experts = [
         (name, module)
         for name, module in model.named_modules()

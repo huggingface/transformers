@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import math
 import tempfile
 import unittest
@@ -387,6 +388,29 @@ class ExpertsOffloadTest(unittest.TestCase):
             ):
                 with self.subTest(device_map=device_map), self.assertRaises(ValueError):
                     Qwen3MoeForCausalLM.from_pretrained(directory, device_map=device_map, experts_offload=options)
+
+    def test_routing_profile_preload(self):
+        reference = tiny_qwen3_moe(11)
+        expected = greedy(reference, IDS)
+        with tempfile.TemporaryDirectory() as directory:
+            reference.save_pretrained(directory)
+            model = self.load(directory, cache_bytes=4 * EXPERT_BYTES, io_threads=0)
+            greedy(model, IDS)
+            profile = model.experts_offload_store.routing_profile()
+            self.assertEqual(
+                sum(map(sum, (p.values() for p in profile.values()))), model.experts_offload_store.lookups
+            )
+            path = Path(directory) / "profile.json"
+            path.write_text(json.dumps(profile))
+            for preload in (profile, str(path)):
+                model = self.load(directory, cache_bytes=4 * EXPERT_BYTES, io_threads=2, preload_profile=preload)
+                store = model.experts_offload_store
+                self.assertIsNone(store.pools[0].banks)  # nothing read before the first forward
+                torch.testing.assert_close(greedy(model, IDS), expected)
+                for prefix, counts in profile.items():
+                    top = sorted(counts, key=counts.get, reverse=True)[:2]  # 4 slots, 2 layers
+                    self.assertTrue(all((prefix, expert) in store.cache for expert in top[:1]))
+                self.assertLess(store.misses, model.experts_offload_store.lookups)
 
     def test_expert_source_with_mixed_layouts(self):
         reference = tiny_qwen3_moe(8)
