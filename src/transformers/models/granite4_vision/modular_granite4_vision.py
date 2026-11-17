@@ -471,6 +471,24 @@ class Granite4VisionModel(LlavaNextModel):
         # Replace the inherited LLM backbone with our deepstack-aware subclass
         self.language_model = Granite4VisionTextModel(config.text_config)
 
+    def get_image_num_patches(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_pack_index(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_pack_index_per_image(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_patch_index(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_image_embeddings(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
@@ -752,6 +770,12 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             attentions=outputs.attentions,
             deepstack_features=outputs.deepstack_features,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
 
     def _expand_multimodal_outputs(
         self,

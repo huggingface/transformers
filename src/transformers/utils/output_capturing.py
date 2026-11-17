@@ -289,15 +289,23 @@ def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list
     """
 
     def wrapped_fn(func):
-        signature = inspect.signature(func)
+        if isinstance(selection, str):
+            # Where the selection is passed, found once: `Signature.bind` on every call can't be traced by
+            # `torch.compile`
+            parameters = inspect.signature(func).parameters
+            position = list(parameters).index(selection) - 1  # `self` is not in `args`
+            default = parameters[selection].default
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not kwargs.get("output_hidden_states"):
                 if isinstance(selection, str):
-                    arguments = signature.bind(self, *args, **kwargs)
-                    arguments.apply_defaults()
-                    kwargs["output_hidden_states"] = arguments.arguments[selection]
+                    if selection in kwargs:
+                        kwargs["output_hidden_states"] = kwargs[selection]
+                    elif position < len(args):
+                        kwargs["output_hidden_states"] = args[position]
+                    else:
+                        kwargs["output_hidden_states"] = default
                 else:
                     kwargs["output_hidden_states"] = selection(self)
             return func(self, *args, **kwargs)
