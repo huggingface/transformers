@@ -321,6 +321,22 @@ class ClefLossTest(unittest.TestCase):
         ClefForDecisionLoss(logits, targets, mask, is_score, rlcd_weight=0.25, **kwargs)
         self.assertFalse(torch.equal(torch.get_rng_state(), global_state))
 
+    def test_rlcd_invalid_settings_raise(self):
+        # A negative weight would push the logits away from the samples with a high reward
+        logits, targets, mask, is_score = random_case(questions=4, max_options=3, seed=5)
+        for kwargs in (
+            {"rlcd_weight": -0.25},
+            {"rlcd_weight": -1e-6},
+            {"rlcd_weight": 0.25, "rlcd_sigma": 0.0},
+            {"rlcd_weight": 0.25, "rlcd_sigma": -0.4},
+            {"rlcd_weight": 0.25, "rlcd_samples": 1},
+        ):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                ClefForDecisionLoss(logits, targets, mask, is_score, **kwargs)
+        # Out of training the weight is zero, and the other settings are not read
+        loss = ClefForDecisionLoss(logits, targets, mask, is_score, rlcd_weight=0.0, rlcd_sigma=0.0, rlcd_samples=1)
+        self.assertTrue(torch.isfinite(loss))
+
     def test_rlcd_single_option_and_one_level_score_are_finite(self):
         logits = torch.tensor([[1.0, 0, 0, 0], [0.5, 1.0, -1.0, 2.0], [2.0, 0, 0, 0]])
         mask = torch.tensor([[1, 0, 0, 0], [1, 1, 1, 1], [1, 0, 0, 0]], dtype=torch.bool)

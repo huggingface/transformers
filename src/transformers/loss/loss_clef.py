@@ -129,6 +129,9 @@ def ClefForDecisionLoss(
         scored = is_score & valid
         loss = loss + ordinal_weight * (expected * scored).sum() / scored.sum().clamp(min=1)
 
+    if rlcd_weight < 0:
+        # It would push the logits away from the samples with a high reward
+        raise ValueError(f"RLCD needs `rlcd_weight >= 0`, got {rlcd_weight}.")
     if rlcd_weight:
         if rlcd_sigma <= 0 or rlcd_samples < 2:
             raise ValueError(
