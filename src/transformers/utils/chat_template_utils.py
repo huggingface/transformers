@@ -19,6 +19,7 @@ import re
 import types
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from enum import Enum
 from functools import lru_cache, partial
@@ -578,8 +579,7 @@ def _cached_compile_jinja_template(chat_template):
             # The class is only initiated by jinja.
             super().__init__(environment)
             environment.extend(activate_tracker=self.activate_tracker)
-            self._rendered_blocks = None
-            self._generation_indices = None
+            self._tracking = ContextVar("assistant_tracker", default=None)
 
         def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
             lineno = next(parser.stream).lineno
@@ -589,28 +589,26 @@ def _cached_compile_jinja_template(chat_template):
         @jinja2.pass_eval_context
         def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
             rv = caller()
-            if self.is_active():
+            if (tracking := self._tracking.get()) is not None:
                 # Only track generation indices if the tracker is active
-                start_index = len("".join(self._rendered_blocks))
+                rendered_blocks, generation_indices = tracking
+                start_index = len("".join(rendered_blocks))
                 end_index = start_index + len(rv)
-                self._generation_indices.append((start_index, end_index))
+                generation_indices.append((start_index, end_index))
             return rv
 
         def is_active(self) -> bool:
-            return self._rendered_blocks is not None or self._generation_indices is not None
+            return self._tracking.get() is not None
 
         @contextmanager
         def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
+            if self.is_active():
+                raise ValueError("AssistantTracker should not be reused before closed")
+            token = self._tracking.set((rendered_blocks, generation_indices))
             try:
-                if self.is_active():
-                    raise ValueError("AssistantTracker should not be reused before closed")
-                self._rendered_blocks = rendered_blocks
-                self._generation_indices = generation_indices
-
                 yield
             finally:
-                self._rendered_blocks = None
-                self._generation_indices = None
+                self._tracking.reset(token)
 
     if version.parse(jinja2.__version__) < version.parse("3.1.6"):
         # Older versions have known sandbox escapes, and chat templates from the Hub are untrusted code

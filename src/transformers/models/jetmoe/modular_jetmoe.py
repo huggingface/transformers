@@ -433,7 +433,6 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
     _supports_sdpa = True
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         PreTrainedModel._init_weights(self, module)

@@ -978,7 +978,6 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     ]
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.get_text_config().initializer_range

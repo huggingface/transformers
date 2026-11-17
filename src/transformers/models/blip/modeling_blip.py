@@ -401,7 +401,6 @@ class BlipPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
     _skip_keys_device_placement = ["cache"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

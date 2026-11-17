@@ -48,6 +48,38 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
     @require_torch
+    def test_string_assistant_prefill_full_text(self):
+        import copy
+
+        pipe = pipeline(
+            "image-text-to-text",
+            model="hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration",
+        )
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "Hello!"}]},
+            {"role": "assistant", "content": "My answer is"},
+        ]
+        original = copy.deepcopy(messages)
+
+        new_text = pipe(
+            text=messages,
+            return_full_text=False,
+            continue_final_message=True,
+            generate_kwargs={"max_new_tokens": 2, "do_sample": False},
+        )[0]["generated_text"]
+
+        full_text = pipe(
+            text=messages,
+            return_full_text=True,
+            continue_final_message=True,
+            generate_kwargs={"max_new_tokens": 2, "do_sample": False},
+        )[0]["generated_text"]
+
+        self.assertEqual(full_text[-1]["role"], "assistant")
+        self.assertEqual(full_text[-1]["content"], "My answer is" + new_text)
+        self.assertEqual(messages, original)
+
+    @require_torch
     def test_multiple_candidates_tiny_model(self):
         pipe = pipeline(
             "image-text-to-text",

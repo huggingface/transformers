@@ -298,7 +298,6 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -425,7 +424,6 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):

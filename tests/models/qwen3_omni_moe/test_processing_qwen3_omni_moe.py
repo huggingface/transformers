@@ -78,6 +78,21 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 4320},
         ]
 
+    def test_audio_kwargs_are_forwarded(self):
+        processor = self.get_processor()
+        text = f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
+        audio = np.zeros(16000, dtype=np.float32)
+        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
+        audio_kwargs = {"padding": "max_length", "max_length": 32000}
+        for kwargs, expected_frames in (({"audio_kwargs": audio_kwargs}, 200), ({}, 100)):
+            with self.subTest(kwargs=kwargs):
+                inputs = processor(text=text, audio=audio, n_window=25, **kwargs)
+                self.assertEqual(inputs["input_features"].shape, (1, 128, expected_frames))
+                self.assertEqual(inputs["input_ids"][0].count(audio_token_id), 26)
+        self.assertEqual(audio_kwargs, {"padding": "max_length", "max_length": 32000})
+        token_counts = processor._get_num_multimodal_tokens(audio_lengths=[len(audio)], n_window=25)
+        self.assertEqual(token_counts["num_audio_tokens"], [26])
+
     def test_post_process_multimodal_output_batched_audio(self):
         # Batched generation returns one waveform per sample, each trimmed to its own length.
         processor = self.processor_class.__new__(self.processor_class)

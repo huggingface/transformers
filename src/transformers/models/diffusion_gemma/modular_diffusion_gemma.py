@@ -681,7 +681,6 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):

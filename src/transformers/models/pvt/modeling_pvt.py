@@ -414,7 +414,6 @@ class PvtPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)

@@ -272,7 +272,6 @@ class HrmTextPreTrainedModel(LlamaPreTrainedModel):
             self, attn_implementation, is_init_check, allow_all_kernels
         )
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, HrmTextModel):
