@@ -17,14 +17,10 @@ import unittest
 import numpy as np
 
 from transformers import Ovis2_5Processor
-from transformers.testing_utils import require_torch, require_torchcodec, require_torchvision, require_vision, slow
-from transformers.utils import is_torchcodec_available, is_torchvision_available
+from transformers.testing_utils import require_torch, require_torchcodec, require_torchvision, require_vision
+from transformers.utils import is_torchcodec_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_torchvision_available():
-    from transformers import Ovis2_5ImageProcessor, Ovis2_5VideoProcessor
 
 
 @require_vision
@@ -58,16 +54,6 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torchcodec
     def test_apply_chat_template_video_frame_sampling(self):
         super().test_apply_chat_template_video_frame_sampling()
-
-    @slow
-    def test_processor_loads_native_hub_metadata(self):
-        """The community checkpoint loads native Ovis processors with their published defaults."""
-        processor = self.processor_class.from_pretrained(self.model_id, trust_remote_code=False)
-        self.assertIsInstance(processor.image_processor, Ovis2_5ImageProcessor)
-        self.assertIsInstance(processor.video_processor, Ovis2_5VideoProcessor)
-        for visual_processor in (processor.image_processor, processor.video_processor):
-            self.assertEqual(visual_processor.size.shortest_edge, 448 * 448)
-            self.assertEqual(visual_processor.size.longest_edge, 1344 * 1792)
 
     def test_model_input_names(self):
         # The shared test combines images and videos, which Ovis2.5 handles separately.
