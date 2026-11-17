@@ -646,13 +646,19 @@ class ExpertStore:
         """Drop the reads started for ``prefix`` that its forward call did not use (wrong predictions)."""
         for key in [key for key in self.pending if key[0] == prefix]:
             future = self.pending.pop(key)
-            if not future.cancel() and self.host_pool is not None:
-                # Already read (or reading): its host-tier row was handed out and will not be copied.
+            if not future.cancel():
+                # Already read (or reading): its buffer (or host-tier row) will not be copied, hand it back.
                 future.add_done_callback(self._release_unused)
 
     def _release_unused(self, future):
-        if not future.cancelled() and future.exception() is None:
-            self._release_host_row(future.result()[0])
+        if future.cancelled() or future.exception() is not None:
+            return
+        tensors = future.result()
+        if self._release_host_row(tensors[0]):
+            return
+        buffer = tensors[0] if tensors[0]._base is None else tensors[0]._base
+        if (self.quantized is not None or self.source is not None) and buffer.numel() == self.host_buffer_bytes:
+            self.free_host_buffers.append(buffer)
 
     def _take_host(self, prefix, expert):
         """One expert in host memory: from a read already started by :meth:`prefetch`, else read now."""
@@ -1000,9 +1006,13 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
     predict = next_layer is not None and store.executor is not None
     predict = predict and top_k_index.numel() <= module.offload_predict_max_routes
     after_next = getattr(module, "offload_after_next", None) if predict else None
+    guess_limit = module.offload_guess_limit
     if predict:
         next_prefix, router = next_layer
-        guesses = [torch.nn.functional.linear(hidden_states, router.weight).topk(router.top_k, dim=-1).indices]
+        # With a guess limit, rank more candidates than top_k: the first non-resident ones are read.
+        candidates = min(module.num_experts, max(router.top_k, 4 * guess_limit)) if guess_limit else router.top_k
+        guess = torch.nn.functional.linear(hidden_states, router.weight).topk(candidates, dim=-1).indices
+        guesses = [guess.T if guess_limit else guess]  # rank-major: every token's best guess first
         if after_next is not None:
             guesses.append(
                 torch.nn.functional.linear(hidden_states, after_next[1].weight).topk(router.top_k, dim=-1).indices
@@ -1022,9 +1032,19 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
     if readahead_next:
         # A long prompt routes to nearly every expert of every layer: read the next layer's while this one computes.
         store.prefetch(module.offload_next_prefix, range(module.num_experts))
-    width = top_k_index.shape[0] * (next_layer[1].top_k if predict else 0)
-    guessed = torch.unique(routes[top_k_index.numel() : top_k_index.numel() + width]).tolist() if predict else []
-    if predict:
+    width = guesses[0].numel() if predict else 0
+    guessed = []
+    if predict and guess_limit:
+        # Read later (below), only the best few that are neither resident nor being read: the storage is busy with
+        # this layer's misses until they are installed, and idle while the device computes after that.
+        cache = store.pool_of[next_prefix].cache
+        for expert in dict.fromkeys(routes[top_k_index.numel() : top_k_index.numel() + width].tolist()):
+            if (next_prefix, expert) not in cache and (next_prefix, expert) not in store.pending:
+                guessed.append(expert)
+                if len(guessed) == guess_limit:
+                    break
+    elif predict:
+        guessed = torch.unique(routes[top_k_index.numel() : top_k_index.numel() + width]).tolist()
         store.prefetch(next_prefix, guessed)
     if after_next is not None:
         store.prefetch(after_next[0], torch.unique(routes[top_k_index.numel() + width :]).tolist())
@@ -1039,7 +1059,11 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
         store.demote(prefix)
     if store.commit:
         _commit_mps(store)
-    if guessed:
+    if guessed and guess_limit:
+        # This layer's reads are done and its compute is queued: the storage would idle until the next layer's
+        # routing copy. Guesses stay in host memory until that layer uses them (no eviction for a wrong guess).
+        store.prefetch(next_prefix, guessed)
+    elif guessed:
         store.install_ahead(next_prefix, guessed)
     if readahead_next and module.offload_prefill_install_ahead:
         # The next layer's reads started above: queue the finished ones' copies behind this layer's compute, so that
@@ -1158,6 +1182,7 @@ _OPTIONS = {
     "expert_source",
     "expert_compute",
     "preload_profile",
+    "guess_limit",
 }
 
 
@@ -1176,6 +1201,9 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         experts_implementation (`str`, defaults to `"grouped_mm"`): kernel for cached BF16 experts, or `"batched_mm"`.
         token_chunk_size (`int`, defaults to 256): row chunk for experts that run uncached.
         predict_max_routes (`int`, defaults to 64): prefetch only for calls with at most this many routes (decode).
+        guess_limit (`int`, defaults to 0): with `prefetch_depth` >= 1, read at most this many guessed experts of the
+            next layer (the best ranked that are not resident), after this layer's own reads are done, and install
+            them only when used; 0 reads every guess of the router's top-k right away and installs them ahead.
         prefill_readahead_routes (`int`, defaults to 4096): calls with at least this many routes (long prompts) also
             start reading every expert of the next MoE layer, which such a prompt nearly all uses, so storage keeps
             reading while the device computes. 0 disables.
@@ -1257,6 +1285,7 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         module.offload_readahead_routes = options.get("prefill_readahead_routes", 4096)
         module.offload_prefill_install_ahead = options.get("prefill_install_ahead", False)
         module.offload_cold_prefill_routes = options.get("cold_prefill_routes", 0)
+        module.offload_guess_limit = options.get("guess_limit", 0)
     store.allocate(materialize=False)
     depth = options.get("prefetch_depth", 2)
     routers = []

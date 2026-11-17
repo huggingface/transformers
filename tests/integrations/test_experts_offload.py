@@ -185,9 +185,9 @@ class ExpertsOffloadTest(unittest.TestCase):
         expected = greedy(reference, IDS, tokens=8)
         with tempfile.TemporaryDirectory() as directory:
             reference.save_pretrained(directory)
-            for io_threads, depth in ((0, 0), (1, 1), (4, 1), (4, 2)):
-                with self.subTest(io_threads=io_threads, depth=depth):
-                    model = self.load(directory, io_threads=io_threads, prefetch_depth=depth)
+            for io_threads, depth, limit in ((0, 0, 0), (1, 1, 0), (4, 1, 0), (4, 2, 0), (4, 1, 1), (1, 1, 2)):
+                with self.subTest(io_threads=io_threads, depth=depth, guess_limit=limit):
+                    model = self.load(directory, io_threads=io_threads, prefetch_depth=depth, guess_limit=limit)
                     layers = model.model.layers
                     if depth:
                         self.assertIs(layers[0].mlp.experts.offload_next[1], layers[1].mlp.gate)
