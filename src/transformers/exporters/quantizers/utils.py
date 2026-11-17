@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Calibration helpers of the quantizers: per-component calibration inputs for `export_for_generation`, and the feeds
-that map a forward-kwargs sample to the inputs of the model each quantizer calibrates."""
+"""Calibration helpers of the quantizers: per-component calibration inputs, and traced inputs for FX-graph quantizers."""
 
 from __future__ import annotations
 
@@ -20,9 +19,7 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
-from ..utils import decompose_for_generation, get_leaf_tensors
+from ..utils import decompose_for_generation
 
 
 if TYPE_CHECKING:
@@ -61,36 +58,3 @@ def traced_inputs(sample: dict[str, Any], traced_names: list[str]) -> dict[str, 
             "takes generate kwargs)."
         )
     return copy.deepcopy({name: sample[name] for name in traced_names})
-
-
-def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
-    """`sample`'s tensor leaves as the ONNX model's inputs, by input name (mutated inputs carry an `input.` prefix)."""
-    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    paths = {name: name.removeprefix("input.") for name in input_names}
-    return {name: leaves[path] for name, path in paths.items() if path in leaves}
-
-
-def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
-    """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
-    the identity `beam_idx`, and scalars as they are."""
-    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
-
-    def port_value(name: str) -> Any:
-        path = name.removeprefix("input.")
-        if path in leaves:
-            return leaves[path]
-        if name == "beam_idx":
-            return np.arange(batch, dtype=np.int32)
-        if name in sample:
-            return np.array(sample[name])
-        return None
-
-    feed = {}
-    for port in ov_model.inputs:
-        # A port can carry several names: feed it under the first one that has a value
-        for name in port.get_names():
-            if (value := port_value(name)) is not None:
-                feed[name] = value
-                break
-    return feed

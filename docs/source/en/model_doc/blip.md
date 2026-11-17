@@ -27,7 +27,7 @@ You can find all the original BLIP checkpoints under the [BLIP](https://huggingf
 >
 > Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
-The example below demonstrates how to do visual question answering with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to caption an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -37,12 +37,12 @@ from transformers import pipeline
 
 
 pipeline = pipeline(
-    task="visual-question-answering",
-    model="Salesforce/blip-vqa-base",
+    task="image-text-to-text",
+    model="Salesforce/blip-image-captioning-base",
     device=0
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-pipeline(question="What is the weather in this image?", image=url)
+pipeline(images=url, text="A photo of")
 ```
 
 </hfoption>
@@ -50,23 +50,21 @@ pipeline(question="What is the weather in this image?", image=url)
 
 ```python
 import requests
-import torch
 from PIL import Image
 
-from transformers import AutoModelForVisualQuestionAnswering, AutoProcessor
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
-processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
-model = AutoModelForVisualQuestionAnswering.from_pretrained(
-    "Salesforce/blip-vqa-base",
+processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+model = AutoModelForImageTextToText.from_pretrained(
+    "Salesforce/blip-image-captioning-base",
     device_map="auto"
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-question = "What is the weather in this image?"
-inputs = processor(images=image, text=question, return_tensors="pt").to(model.device, torch.float16)
+inputs = processor(images=image, text="A photo of", return_tensors="pt").to(model.device)
 
 output = model.generate(**inputs)
 processor.batch_decode(output, skip_special_tokens=True)[0]

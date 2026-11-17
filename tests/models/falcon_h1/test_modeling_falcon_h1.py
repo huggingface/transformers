@@ -209,7 +209,7 @@ class FalconH1ModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -227,7 +227,7 @@ class FalconH1ModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -261,14 +261,14 @@ class FalconH1ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -293,9 +293,7 @@ class FalconH1ModelTester:
             with torch.no_grad():
                 full_out = model(input_ids, use_cache=False).last_hidden_state
                 prefill = model(input_ids[:, :-1], use_cache=True)
-                step_out = model(
-                    input_ids[:, -1:], past_key_values=prefill.past_key_values, use_cache=True
-                ).last_hidden_state
+                step_out = model(input_ids[:, -1:], cache=prefill.cache, use_cache=True).last_hidden_state
 
             self.parent.assertEqual(step_out.shape, (input_ids.shape[0], 1, config.hidden_size))
             self.parent.assertTrue(

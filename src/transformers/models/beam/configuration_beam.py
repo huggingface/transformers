@@ -43,7 +43,7 @@ class BeamConfig(PreTrainedConfig):
     """
 
     model_type = "beam"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -62,10 +62,6 @@ class BeamConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    # Token dispatch by default, so `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`, 4 on
-    # Qwen3-30B): with `tp_size=1` the attention is left to FSDP2. For router masking with all-reduce, set
-    # `ep_size=tp_size` and pass `ep_plan={"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "moe_tp_experts"}`
-    # (prefixed with `model.` on the causal LM).
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
