@@ -41,19 +41,18 @@ if is_torch_available():
 class LaraMiniModelTester(CausalLMModelTester):
     base_model_class = LaraMiniModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.hidden_act = "silu"
-        self.layer_types = ["linear_attention", "sliding_attention", "full_attention"]
-        self.num_hidden_layers = len(self.layer_types)
-        # Grouped-query attention, with as many key/value heads as tensor-parallel test ranks
-        self.num_attention_heads = 4
-        self.num_key_value_heads = 2
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 2
-        self.linear_num_value_heads = 4
+    small_config_overrides = {
+        "hidden_act": "silu",
+        "layer_types": ["linear_attention", "sliding_attention", "full_attention"],
+        "num_hidden_layers": 3,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 2,
+        "linear_num_value_heads": 4,
+    }
 
 
 @require_torch
@@ -187,6 +186,7 @@ class LaraMiniModelTest(CausalLMModelTest, unittest.TestCase):
             )
 
 
+# Mostly recorded on an H200 (except one bigger logit mismatch measured on A10)
 @require_torch_accelerator
 @slow
 class LaraMiniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
@@ -201,7 +201,6 @@ class LaraMiniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.no_grad():
             logits = model(**inputs).logits.float()
 
-        # Recorded on an H200 with the PyTorch gated delta net path (no flash-linear-attention or causal-conv1d)
         expectations = Expectations(
             {(None, None): [-11.6003, -19.6072, -14.6934, -16.1877, -24.367, -15.3516, -18.2544]}
         )
@@ -212,6 +211,10 @@ class LaraMiniIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [
                     -6.9688, -8.4375, -11.3125, -12.4375, -14.125, -11.625, -10.0, -13.0,
                     -9.3125, -10.0625, -13.375, -0.8555, -7.8125, -5.375, -11.4375, -10.375,
+                ],
+                ("cuda", (8, 6)): [
+                    -6.9062, -8.3750, -11.1250, -12.5000, -14.0000, -11.6250, -10.0000, -13.0000,
+                    -9.2500, -10.0625, -13.3750,  -0.8398,  -7.7188,  -5.2812, -11.3750, -10.3750,
                 ]
             }
         )  # fmt: skip
