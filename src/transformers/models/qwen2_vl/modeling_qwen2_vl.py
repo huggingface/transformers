@@ -704,10 +704,8 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        position_ids = data_dependent_inputs["position_ids"]
-        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)

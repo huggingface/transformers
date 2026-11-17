@@ -709,14 +709,16 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        interp_indices, interp_weights = (
-            data_dependent_inputs["interp_indices"],
-            data_dependent_inputs["interp_weights"],
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=self.config.spatial_merge_size,
+            kwargs=kwargs,
         )
-        position_ids = data_dependent_inputs["position_ids"]
-        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)

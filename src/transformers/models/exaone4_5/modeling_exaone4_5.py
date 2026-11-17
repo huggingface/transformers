@@ -564,8 +564,6 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         input_tensor = input_tensor.reshape(seq_len, -1)
         return input_tensor
 
-    @merge_with_config_defaults
-    @capture_outputs
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
         r"""
         The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
@@ -599,6 +597,8 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
             "max_window_seqlen": max_window_seqlen,
         }
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
@@ -612,15 +612,18 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        position_ids = data_dependent_inputs["position_ids"]
-        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
-        window_index, cu_window_seqlens = (
-            data_dependent_inputs["window_index"],
-            data_dependent_inputs["cu_window_seqlens"],
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
         )
-        max_window_seqlen = data_dependent_inputs["max_window_seqlen"]
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        )
 
         hidden_states = self.patch_embed(hidden_states)
 

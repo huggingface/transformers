@@ -1058,26 +1058,23 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width patch-grid dimensions for each packed image or video.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        cu_seqlens = data_dependent_inputs["cu_seqlens"]
-        window_index, cu_window_seqlens = (
-            data_dependent_inputs["window_index"],
-            data_dependent_inputs["cu_window_seqlens"],
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        # assumes pos_emb_height==pos_emb_width, adapt to non-square if needed
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
         )
 
-        inputs_embeds = self.patch_embedder(
-            pixel_values,
-            grid_thw,
-            interp_indices=data_dependent_inputs["interp_indices"],
-            interp_weights=data_dependent_inputs["interp_weights"],
-            **kwargs,
-        )
+        inputs_embeds = self.patch_embedder(pixel_values, grid_thw, **kwargs)
         hidden_states = self.ln_pre(inputs_embeds)
         hidden_states = hidden_states[window_index, :]
 
         # Add `1` because ref implementation's position offset is `1`!
-        position_ids = data_dependent_inputs["position_ids"].flip(-1) + 1
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
+        position_ids = position_ids.flip(-1) + 1
         position_ids = position_ids[window_index, :]
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -1096,9 +1093,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         hidden_states = self.ln_post(hidden_states)
-        hidden_states = self.pixel_shuffle(
-            hidden_states, grid_thw, pixel_shuffle_index=data_dependent_inputs["pixel_shuffle_index"], **kwargs
-        )
+        hidden_states = self.pixel_shuffle(hidden_states, grid_thw, **kwargs)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 

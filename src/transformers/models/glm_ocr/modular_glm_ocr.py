@@ -22,6 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
@@ -256,10 +257,8 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        position_ids = data_dependent_inputs["position_ids"]
-        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)

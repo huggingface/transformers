@@ -488,17 +488,13 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             Whether to apply the ViT window-attention merger after the encoder.
         """
 
-        data_dependent_inputs = self.get_data_dependent_inputs(target_sizes, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        hidden_states = self.embeddings(
-            pixel_values, target_sizes=target_sizes, position_ids=data_dependent_inputs["position_ids"], **kwargs
-        )
+        hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes, **kwargs)
 
         cu_seqlens = F.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
             (1, 0),
         )
-        max_seqlens = data_dependent_inputs["max_seqlen"]
+        max_seqlens = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         attn_kwargs = {
             "attention_mask": None,
@@ -512,13 +508,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             for layer_index, encoder_layer in enumerate(self.encoder.layers):
                 hidden_states = encoder_layer(hidden_states, **attn_kwargs)
                 if layer_index == insert_layer_id:
-                    hidden_states = self.vit_merger(
-                        hidden_states,
-                        target_sizes,
-                        window_index=data_dependent_inputs["window_index"],
-                        cu_window_seqlens=data_dependent_inputs["cu_window_seqlens"],
-                        **kwargs,
-                    )
+                    hidden_states = self.vit_merger(hidden_states, target_sizes, **kwargs)
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
                     attn_kwargs, target_sizes, cu_seqlens = self.get_downsampled_inputs(

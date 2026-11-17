@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -26,7 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_pixtral import PixtralVisionConfig
 
@@ -391,28 +392,15 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
-    def get_data_dependent_inputs(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, **kwargs
-    ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `image_sizes` with data-dependent operations (host syncs, loops over
-        images): the image each unpadded patch belongs to (`patch_image_index`) and its 2D `position_ids` within that
-        image, plus the attention's `cu_seqlens` and `max_seqlen` with flash attention. Passed back to the forward,
-        they keep `torch.compile` and `torch.export` free of those operations. Returned as they are when already in
-        `kwargs`; only the config and the shape of `pixel_values` are read.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
-                The padded images, whose height and width bound each image's patch grid.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)` or `list`, *optional*):
-                The height and width of each image, before padding. All of the padded size when not given.
+    def get_patch_positions(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, kwargs: dict | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        names = ("patch_image_index", "position_ids")
-        if is_flash_attention_requested(self.config):
-            names += ("cu_seqlens", "max_seqlen")
-        if all(kwargs.get(name) is not None for name in names):
-            return {name: kwargs[name] for name in names}
-
+        The image each unpadded patch belongs to and its 2D position within that image, or `kwargs`'
+        `patch_image_index` and `position_ids` when precomputed.
+        """
+        if kwargs is not None and (patch_image_index := kwargs.pop("patch_image_index", None)) is not None:
+            return patch_image_index, kwargs.pop("position_ids")
         batch_size, _, height, width = pixel_values.shape
         if image_sizes is None:
             image_sizes = [(height, width)] * batch_size
@@ -428,13 +416,37 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             image_columns = columns[: size[0] // self.patch_size, : size[1] // self.patch_size].flatten()
             position_ids.append(torch.stack([image_rows, image_columns], dim=-1))
             patch_image_index.append(torch.full_like(image_rows, index))
-        inputs = {"patch_image_index": torch.cat(patch_image_index), "position_ids": torch.cat(position_ids)}
+        return torch.cat(patch_image_index), torch.cat(position_ids)
 
+    def get_attention_seqlens(
+        self, patch_image_index: torch.Tensor, kwargs: dict | None = None
+    ) -> tuple[torch.Tensor, int | None]:
+        """Each image's patch boundaries and the largest image's patch count, or `kwargs`' when precomputed."""
+        if kwargs is None or (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
+            sequence_lengths = torch.bincount(patch_image_index)
+            cu_seqlens = F.pad(sequence_lengths.cumsum(0, dtype=torch.int32), (1, 0))
+        return cu_seqlens, get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, **kwargs
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `image_sizes` with data-dependent operations (host syncs, loops over
+        images): the image each unpadded patch belongs to (`patch_image_index`) and its 2D `position_ids` within that
+        image, plus the attention's `cu_seqlens` and `max_seqlen` with flash attention. Passed back to the forward,
+        they keep `torch.compile` and `torch.export` free of those operations. Only the config and the shape of
+        `pixel_values` are read.
+
+        Args:
+            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
+                The padded images, whose height and width bound each image's patch grid.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)` or `list`, *optional*):
+                The height and width of each image, before padding. All of the padded size when not given.
+        """
+        patch_image_index, position_ids = self.get_patch_positions(pixel_values, image_sizes)
+        inputs = {"patch_image_index": patch_image_index, "position_ids": position_ids}
         if is_flash_attention_requested(self.config):
-            sequence_lengths = [image_position_ids.shape[0] for image_position_ids in position_ids]
-            cu_seqlens = torch.tensor([0, *sequence_lengths], device=pixel_values.device, dtype=torch.int32)
-            inputs["cu_seqlens"] = cu_seqlens.cumsum(dim=0, dtype=torch.int32)
-            inputs["max_seqlen"] = max(sequence_lengths)
+            inputs["cu_seqlens"], inputs["max_seqlen"] = self.get_attention_seqlens(patch_image_index)
         return inputs
 
     @merge_with_config_defaults
@@ -446,16 +458,13 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        data_dependent_inputs = self.get_data_dependent_inputs(pixel_values, image_sizes, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
+        patch_image_index, position_ids = self.get_patch_positions(pixel_values, image_sizes, kwargs=kwargs)
 
         # pass images through initial convolution independently
         target_dtype = self.patch_conv.weight.dtype
         patch_embeds = self.patch_conv(pixel_values.to(dtype=target_dtype))
 
         # gather each image's unpadded patches into a single sequence
-        patch_image_index = data_dependent_inputs["patch_image_index"]
-        position_ids = data_dependent_inputs["position_ids"]
         patch_embeds = patch_embeds.permute(0, 2, 3, 1)[patch_image_index, position_ids[:, 0], position_ids[:, 1]]
         patch_embeds = self.ln_pre(patch_embeds.unsqueeze(0))
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
@@ -463,8 +472,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         if is_flash_attention_requested(self.config):
             # Axial RoPE positions have two coordinates per patch, so they cannot
             # describe the packed image boundaries expected by Flash Attention.
-            cu_seqlens = data_dependent_inputs["cu_seqlens"]
-            max_seqlen = data_dependent_inputs["max_seqlen"]
+            cu_seqlens, max_seqlen = self.get_attention_seqlens(patch_image_index, kwargs=kwargs)
             kwargs.update(
                 cu_seq_lens_q=cu_seqlens, cu_seq_lens_k=cu_seqlens, max_length_q=max_seqlen, max_length_k=max_seqlen
             )

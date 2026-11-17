@@ -711,10 +711,8 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
         hidden_states = self.embeddings(pixel_values, grid_thw)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         for layer in self.layers:
             hidden_states = layer(

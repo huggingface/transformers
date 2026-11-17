@@ -945,6 +945,12 @@ class DeepseekOcr2Model(LlavaNextModel):
     def get_pack_index(self):
         raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
 
+    def get_pack_index_per_image(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
+    def get_patch_index(self):
+        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
+
     def get_data_dependent_inputs(self):
         raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
 

@@ -399,10 +399,8 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, merge_sizes, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        position_ids = data_dependent_inputs["position_ids"]
-        cu_seqlens, max_seqlen = data_dependent_inputs["cu_seqlens"], data_dependent_inputs["max_seqlen"]
+        position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)

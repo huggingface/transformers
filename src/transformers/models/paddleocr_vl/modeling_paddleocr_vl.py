@@ -937,22 +937,11 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        data_dependent_inputs = self.get_data_dependent_inputs(grid_thw, **kwargs)
-        kwargs = {key: value for key, value in kwargs.items() if key not in data_dependent_inputs}
-        hidden_states = self.embeddings(
-            pixel_values,
-            grid_thw=grid_thw,
-            interp_indices=data_dependent_inputs["interp_indices"],
-            interp_weights=data_dependent_inputs["interp_weights"],
-            **kwargs,
-        )
+        hidden_states = self.embeddings(pixel_values, grid_thw=grid_thw, **kwargs)
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             grid_thw=grid_thw,
             attention_mask=attention_mask,
-            position_ids=data_dependent_inputs["position_ids"],
-            cu_seqlens=data_dependent_inputs["cu_seqlens"],
-            max_seqlen=data_dependent_inputs["max_seqlen"],
             **kwargs,
         )
 

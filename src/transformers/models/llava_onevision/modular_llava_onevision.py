@@ -411,6 +411,12 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
     def get_pack_index(self):
         raise AttributeError("LlavaOnevision packs its image features differently")
 
+    def get_pack_index_per_image(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_patch_index(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
     def get_data_dependent_inputs(self):
         raise AttributeError("LlavaOnevision packs its image features differently")
 

@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any
-
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
@@ -220,7 +218,7 @@ class LightOnOcrModel(Mistral3Model):
 
     def get_data_dependent_inputs(
         self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
-    ) -> dict[str, Any]:
+    ) -> dict[str, torch.Tensor]:
         r"""
         The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
         encoder's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,

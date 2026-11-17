@@ -484,6 +484,12 @@ class Granite4VisionModel(LlavaNextModel):
     def get_pack_index(self):
         raise AttributeError("Granite4Vision packs its image features differently")
 
+    def get_pack_index_per_image(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
+    def get_patch_index(self):
+        raise AttributeError("Granite4Vision packs its image features differently")
+
     def get_data_dependent_inputs(self):
         raise AttributeError("Granite4Vision packs its image features differently")
 
