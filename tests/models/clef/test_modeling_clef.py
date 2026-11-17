@@ -793,6 +793,216 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertFalse(model.is_activation_checkpointing)
         model.activation_checkpointing_disable()  # nothing to disable, no error
 
+    @classmethod
+    def ultrabert_tokenizer(cls):
+        """
+        The tokenizer of the tests made like UltraBERT's: no `[CLS]`, one token for the beginning and end of sequence and
+        the padding, and a separator.
+        """
+        if "_ultrabert_tokenizer" not in cls.__dict__:
+            tokenizer = copy.deepcopy(cls.tokenizer)
+            end = "<|endoftext|>"
+            tokenizer.add_special_tokens(
+                {"bos_token": end, "eos_token": end, "pad_token": end, "sep_token": "<|sep|>"}
+            )
+            cls._ultrabert_tokenizer = tokenizer
+        return cls._ultrabert_tokenizer
+
+    def ultrabert_model(self, head_type="joint", sliding_window=16, **text_config_kwargs):
+        """
+        A tiny Clef on a tiny UltraBERT: rotary positions, two local layers of radius `sliding_window` (with their own
+        RoPE base) and one global layer, padding, beginning and end of sequence all id 0.
+        """
+        from transformers import UltrabertConfig
+
+        text_config = UltrabertConfig(
+            vocab_size=len(self.ultrabert_tokenizer()),
+            hidden_size=self.config.backbone_hidden_size,
+            intermediate_size=32,
+            num_hidden_layers=3,
+            num_attention_heads=2,
+            layer_types=["sliding_attention", "sliding_attention", "full_attention"],
+            sliding_window=sliding_window,
+            **text_config_kwargs,
+        )
+        self.assertEqual((text_config.pad_token_id, text_config.bos_token_id, text_config.eos_token_id), (0, 0, 0))
+        config = ClefConfig(
+            text_config=text_config,
+            head_type=head_type,
+            **{"cosine_width": 8, "global_pooling": "first", "prompt_style": "plain", **self.tiny_sizes},
+        )
+        config._attn_implementation, config.dtype = "eager", torch.float32
+        torch.manual_seed(0)
+        return ClefForDecision(config).eval()
+
+    def ultrabert_prompts(self, lengths=(70, 40, 55)):
+        """The ragged prompts, each starting with the beginning of sequence token, id 0 like the padding."""
+        options = ([2, 5, 1], [4], [3, 3])
+        prompts = [self.synthetic_prompt(n, o, seed=seed) for seed, (n, o) in enumerate(zip(lengths, options), 1)]
+        for prompt in prompts:
+            prompt["input_ids"][:, 0] = 0
+        return prompts
+
+    # The cosine head multiplies by its temperature (12 at first) the float32 rounding of the prefix sums that pool
+    # its spans: about 1e-6 of logits near 10, while the hidden states of the backbone are exactly the same
+    ultrabert_tolerance = {"atol": 1e-5, "rtol": 2e-6}
+
+    def assert_batch_equals_singles(self, model, prompts, padding_side="right"):
+        with torch.no_grad():
+            singles = [model(**prompt).logits for prompt in prompts]
+            output = model(**self.collate(prompts, padding_side=padding_side, pad_token_id=0))
+        row = 0
+        for single in singles:
+            for question in single:
+                width = int((question > torch.finfo(question.dtype).min).sum())
+                torch.testing.assert_close(output.logits[row, :width], question[:width], **self.ultrabert_tolerance)
+                self.assertEqual(output.option_mask[row].sum().item(), width)
+                row += 1
+        self.assertEqual(row, output.logits.shape[0])
+
+    def test_ultrabert_backbone_forward_backward(self):
+        from transformers import UltrabertModel
+
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                model = self.ultrabert_model(head_type).train()
+                self.assertIsInstance(model.model, UltrabertModel)
+                # No causal language modeling head class: the lexical prior reads the input embeddings
+                self.assertFalse(hasattr(model, "lm_head"))
+                self.assertFalse(any(key.startswith("lm_head") for key in model.state_dict()))
+                self.assertEqual(model._tied_weights_keys, {})
+                self.assertIs(model.lexical_embeddings(), model.model.get_input_embeddings().weight)
+                output = model(**self.collate(self.ultrabert_prompts()), labels=torch.tensor([1, 4, 0, 3, 2, 0]))
+                self.assertEqual(output.logits.shape, (6, 5))
+                self.assertTrue(torch.isfinite(output.loss))
+                output.loss.backward()
+                for name, parameter in model.named_parameters():
+                    self.assertTrue(parameter.requires_grad, name)
+                    self.assertIsNotNone(parameter.grad, name)
+                    self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+                # The backbone and the head learn (one bias of the scorer shifts every option alike: its gradient is 0)
+                for module in (model.model, model.cosine_head if head_type == "cosine" else model.scorer):
+                    self.assertGreater(max(p.grad.abs().max().item() for p in module.parameters()), 0)
+                for name, parameter in model.model.named_parameters():
+                    self.assertGreater(parameter.grad.abs().max().item(), 0, name)
+
+    def test_ultrabert_batch_equals_singles(self):
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                self.assert_batch_equals_singles(self.ultrabert_model(head_type), self.ultrabert_prompts())
+
+    def test_ultrabert_left_and_right_padding_agree(self):
+        prompts = self.ultrabert_prompts()
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                model = self.ultrabert_model(head_type)
+                batches = {
+                    side: self.collate(prompts, padding_side=side, pad_token_id=0) for side in ("right", "left")
+                }
+                with torch.no_grad():
+                    right = model(**batches["right"]).logits
+                    left = model(**batches["left"]).logits
+                    single = model(**prompts[1]).logits
+                    # The positions skip the padding: the backbone gives each real token the same hidden state
+                    hidden = {}
+                    for side, batch in batches.items():
+                        mask = batch["attention_mask"]
+                        positions = (mask.long().cumsum(-1) - 1).clamp(min=0)
+                        states = model.model(
+                            input_ids=batch["input_ids"], attention_mask=mask, position_ids=positions
+                        ).last_hidden_state
+                        hidden[side] = [states[b][mask[b].bool()] for b in range(len(prompts))]
+                for b in range(len(prompts)):
+                    torch.testing.assert_close(hidden["left"][b], hidden["right"][b], atol=1e-6, rtol=0)
+                torch.testing.assert_close(left, right, **self.ultrabert_tolerance)
+                torch.testing.assert_close(right[3:4, :4], single, **self.ultrabert_tolerance)
+                self.assert_batch_equals_singles(model, prompts, padding_side="left")
+
+    def test_ultrabert_prompt_longer_than_local_window(self):
+        # Prompts several times longer than the attention radius of the local layers
+        prompts = self.ultrabert_prompts(lengths=(90, 40, 64))
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                model = self.ultrabert_model(head_type, sliding_window=4)
+                self.assertGreater(min(prompt["input_ids"].shape[-1] for prompt in prompts), 4 * 8)
+                for padding_side in ("right", "left"):
+                    self.assert_batch_equals_singles(model, prompts, padding_side)
+                # The window is used: the same weights with a global radius score differently
+                wide = self.ultrabert_model(head_type, sliding_window=1024)
+                wide.load_state_dict(model.state_dict())
+                with torch.no_grad():
+                    difference = (model(**prompts[0]).logits - wide(**prompts[0]).logits).abs().max()
+                self.assertGreater(difference.item(), 1e-4)
+
+    def test_ultrabert_save_reload_exact(self):
+        from transformers import UltrabertModel
+
+        inputs = self.collate(self.ultrabert_prompts())
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                model = self.ultrabert_model(head_type, sliding_window=8)
+                with tempfile.TemporaryDirectory() as directory:
+                    model.save_pretrained(directory)
+                    reloaded = ClefForDecision.from_pretrained(directory, attn_implementation="eager").eval()
+                self.assertIsInstance(reloaded.model, UltrabertModel)
+                self.assertEqual(reloaded.config.head_type, head_type)
+                self.assertEqual((reloaded.config.global_pooling, reloaded.config.prompt_style), ("first", "plain"))
+                text_config = reloaded.config.text_config
+                self.assertEqual(text_config.layer_types, model.config.text_config.layer_types)
+                self.assertEqual(text_config.sliding_window, 8)
+                self.assertEqual(text_config.rope_parameters, model.config.text_config.rope_parameters)
+                self.assertEqual(reloaded.decision_config, model.decision_config)
+                self.assertFalse(hasattr(reloaded, "lm_head"))
+                with torch.no_grad():
+                    difference = (model(**inputs).logits - reloaded(**inputs).logits).abs().max()
+                self.assertEqual(difference.item(), 0)
+
+    def test_ultrabert_activation_checkpointing_parity(self):
+        inputs = self.collate(self.ultrabert_prompts())
+        labels = torch.tensor([1, 4, 0, 3, 2, 0])
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                model = self.ultrabert_model(head_type, sliding_window=8).train()
+                checkpointed = copy.deepcopy(model)
+                checkpointed.activation_checkpointing_enable()
+                self.assertTrue(checkpointed.is_activation_checkpointing)
+                backbone = [m for m in checkpointed.model.modules() if isinstance(m, GradientCheckpointingLayer)]
+                self.assertEqual(len(backbone), 3)
+                self.assertTrue(all(layer.gradient_checkpointing for layer in backbone))
+                outputs = []
+                for each in (model, checkpointed):
+                    output = each(**inputs, labels=labels)
+                    output.loss.backward()
+                    outputs.append(output)
+                torch.testing.assert_close(outputs[1].logits, outputs[0].logits, atol=1e-6, rtol=0)
+                torch.testing.assert_close(outputs[1].loss, outputs[0].loss, atol=1e-6, rtol=0)
+                parameters = dict(checkpointed.named_parameters())
+                for key, parameter in model.named_parameters():
+                    self.assertIsNotNone(parameter.grad, key)
+                    torch.testing.assert_close(parameters[key].grad, parameter.grad, atol=1e-6, rtol=0, msg=key)
+
+    def test_ultrabert_pipeline_with_tokenizer_without_cls(self):
+        tokenizer = self.ultrabert_tokenizer()
+        self.assertIsNone(tokenizer.cls_token)
+        self.assertEqual(tokenizer.bos_token_id, tokenizer.pad_token_id)
+        self.assertNotEqual(tokenizer.sep_token_id, tokenizer.bos_token_id)
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                model = self.ultrabert_model(head_type)
+                self.assertEqual(model.decision_config.chat_template, CLEF_PLAIN_TEMPLATE)
+                # The plain prompt starts with the beginning of sequence token and ends with the separator
+                (prompt,) = render(tokenizer, self.test["request"], model.decision_config)
+                self.assertEqual(prompt.input_ids[0], tokenizer.bos_token_id)
+                self.assertEqual(prompt.input_ids[-1], tokenizer.sep_token_id)
+                self.assertNotIn(tokenizer.sep_token_id, prompt.input_ids[:-1])
+                decide = pipeline("decision", model=model, tokenizer=tokenizer)
+                answers = decide(self.test["request"])
+                self.assertEqual(list(answers), list(self.test["request"]["questions"]))
+                for answer in answers.values():
+                    probabilities = answer.get("probabilities")
+                    if probabilities is not None:
+                        self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
+
     def cosine_model(self, **config_kwargs):
         config = copy.deepcopy(self.config)
         config.head_type = "cosine"
