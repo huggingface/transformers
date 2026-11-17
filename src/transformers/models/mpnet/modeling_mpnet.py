@@ -45,7 +45,6 @@ class MPNetPreTrainedModel(PreTrainedModel):
     config: MPNetConfig
     base_model_prefix = "mpnet"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -365,7 +364,7 @@ class MPNetPooler(nn.Module):
 
 @auto_docstring
 class MPNetModel(MPNetPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MPNetConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -390,9 +389,9 @@ class MPNetModel(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -444,7 +443,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.mpnet = MPNetModel(config, add_pooling_layer=False)
@@ -464,9 +463,9 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -534,7 +533,7 @@ class MPNetLMHead(nn.Module):
     """
 )
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -548,9 +547,9 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -607,7 +606,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
 
 @auto_docstring
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.mpnet = MPNetModel(config)
@@ -621,9 +620,9 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -643,7 +642,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -695,7 +694,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
 @auto_docstring
 class MPNetForTokenClassification(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -710,9 +709,9 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -774,7 +773,7 @@ class MPNetClassificationHead(nn.Module):
 
 @auto_docstring
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -788,9 +787,9 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,

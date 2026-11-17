@@ -48,10 +48,6 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_new_models_require_torchvision_backend(self):
         pass
 
-    @unittest.skip("Model doesn't support backends yet!")
-    def test_pil_can_load_without_torchvision(self):
-        pass
-
     def test_call_pil(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing

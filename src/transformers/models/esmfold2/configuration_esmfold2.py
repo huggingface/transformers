@@ -255,6 +255,9 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     outer_product_chunk_size (`int`, *optional*):
         Chunk size for the outer-product-mean einsum, off by default. Chunking this one is not always
         bit-exact in bf16, so it trades exactness for peak memory on long sequences.
+    enabled (`bool`, *optional*, defaults to `True`):
+        Whether the model has an MSA encoder. Checkpoints trained without one (e.g. `biohub/ESMFold2-Fast`) set this
+        to `False`; the module is then not built and MSA features passed to [`EsmFold2Model.fold`] are ignored.
     """
 
     hidden_size: int | None = 128
@@ -264,6 +267,7 @@ class EsmFold2MsaEncoderConfig(PreTrainedConfig):
     head_dim: int | None = 32
     intermediate_size: int | None = 512
     outer_product_chunk_size: int | None = None
+    enabled: bool | None = True
 
 
 @auto_docstring(custom_intro="Configuration for the language-model (ESMC) hidden-state encoder folded into the trunk.")

@@ -29,14 +29,12 @@ from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import TensorType
-from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class SLANeXtImageProcessor(TorchvisionBackend):
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

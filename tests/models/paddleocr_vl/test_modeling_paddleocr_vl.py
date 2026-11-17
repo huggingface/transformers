@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     PaddleOCRVLConfig,
     PaddleOCRVLForConditionalGeneration,
+    PaddleOCRVLModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -172,7 +173,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     Model tester for `PaddleOCRVLForConditionalGeneration`.
     """
 
-    all_model_classes = (PaddleOCRVLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (PaddleOCRVLForConditionalGeneration, PaddleOCRVLModel) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaddleOCRVLForConditionalGeneration}
     _is_composite = True
 
@@ -200,6 +201,9 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     )
     def test_disk_offload_safetensors(self):
         pass
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
+        super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
     def test_mismatching_num_image_tokens(self):
         """

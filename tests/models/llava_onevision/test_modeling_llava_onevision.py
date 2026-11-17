@@ -308,7 +308,7 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             ]
         )
         config = self.model_tester.get_config()
-        inputs_dict = {"pixel_values": pixel_values_videos}
+        inputs_dict = {"pixel_values_videos": pixel_values_videos}
         return config, inputs_dict
 
 

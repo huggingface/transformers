@@ -130,7 +130,7 @@ class TrOCRStandaloneDecoderModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past_key_values = outputs["past_key_values"]
+        cache = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((2, 1), config.vocab_size - 1) + 1
@@ -139,7 +139,7 @@ class TrOCRStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

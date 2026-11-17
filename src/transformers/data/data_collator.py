@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import multiprocessing as mp
+import os
 import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -132,13 +133,13 @@ def torch_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
-        dtype = torch.long if isinstance(label, int) else torch.float
+        dtype = torch.long if isinstance(label, (int, np.integer)) else torch.float
         batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], (int, np.integer)) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -166,13 +167,13 @@ def numpy_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], np.ndarray) else first["label"]
-        dtype = np.int64 if isinstance(label, int) else np.float32
+        dtype = np.int64 if isinstance(label, (int, np.integer)) else np.float32
         batch["labels"] = np.array([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], (int, np.integer)) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -459,16 +460,18 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
 
         # Take labels out of the examples beforehand, because they aren't nested.
         label_name = "label" if "label" in examples[0] else "labels"
-        labels = [example.pop(label_name) for example in examples]
+        labels = [example[label_name] for example in examples]
 
         batch_size = len(examples)
         num_choices = len(examples[0]["input_ids"])
 
         # Go from e.g. 2 examples of 2 choices [{input_ids: [[1], [2]]}, {input_ids: [[3], [4]]}]
         # to 4 examples [{input_ids: [1]}, {input_ids: [2]}] + [{input_ids: [3]}, {input_ids: [4]}]
-        flat_examples = sum(
-            ([{k: v[i] for k, v in example.items()} for i in range(num_choices)] for example in examples), start=[]
-        )
+        flat_examples = [
+            {k: v[i] for k, v in example.items() if k != label_name}
+            for example in examples
+            for i in range(num_choices)
+        ]
 
         # Pad all choices of all examples as if you're padding any other batch of examples.
         batch = self.tokenizer.pad(
@@ -732,19 +735,20 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         self.random_replace_prob = float(self.random_replace_prob)
 
         self.generator = None
+        self._generator_pid = None
 
-    def get_generator(self, seed):
-        if self.return_tensors == "pt":
+    def get_generator(self, seed, return_tensors=None):
+        if (return_tensors or self.return_tensors) == "pt":
             import torch
 
             return torch.Generator().manual_seed(seed)
         else:
             return np.random.default_rng(seed)
 
-    def create_rng(self):
+    def create_rng(self, return_tensors=None):
         if mp.current_process().name == "MainProcess":
             # If we are in the main process, we create a generator object with the seed
-            self.generator = self.get_generator(self.seed)
+            self.generator = self.get_generator(self.seed, return_tensors)
         else:
             # If we are in a worker process (i.e using multiprocessing), we need to set a unique seed for each
             # worker's generator, generated as the main seed + the worker's ID.
@@ -762,15 +766,17 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
                 )
                 raise ValueError(error_string)
 
-            self.generator = self.get_generator(self.seed + worker_info.id)
+            self.generator = self.get_generator(self.seed + worker_info.id, return_tensors)
+        self._generator_pid = os.getpid()
 
     def torch_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed is not None and self.generator is None:
-            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
-            # If no seed supplied, we will use the global RNG
-            self.create_rng()
+        if self.seed is not None:
+            import torch
+
+            if not isinstance(self.generator, torch.Generator) or self._generator_pid != os.getpid():
+                self.create_rng("pt")
 
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
@@ -861,10 +867,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed is not None and self.generator is None:
-            # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
-            # If no seed supplied, we will use the global RNG
-            self.create_rng()
+        if self.seed is not None and (
+            not isinstance(self.generator, np.random.Generator) or self._generator_pid != os.getpid()
+        ):
+            self.create_rng("np")
 
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(

@@ -272,9 +272,37 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_parallel_beam_search(self):
         pass
 
-    @unittest.skip(reason="CSM has special embeddings that can never be tied")
-    def test_tied_weights_keys(self):
-        pass
+    def test_tie_codebooks_embeddings_controls_tying(self):
+        """Test that weight tying is controlled by `tie_codebooks_embeddings` instead of the usual `tie_word_embeddings`."""
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        config_dict = config.to_dict()
+
+        for tie_codebooks_embeddings in (True, False):
+            for tie_word_embeddings in (True, False):
+                config = CsmConfig.from_dict(
+                    {
+                        **config_dict,
+                        "tie_codebooks_embeddings": tie_codebooks_embeddings,
+                        "tie_word_embeddings": tie_word_embeddings,
+                    }
+                )
+                model = CsmForConditionalGeneration(config).eval()
+
+                # Independently of `tie_word_embeddings`, tying should be decided by `tie_codebooks_embeddings` only
+                if tie_codebooks_embeddings:
+                    self.assertEqual(model.all_tied_weights_keys, model._tied_weights_keys)
+                    self.assertIs(
+                        model.backbone_model.embed_tokens.embed_audio_tokens.weight,
+                        model.depth_decoder.model.embed_tokens.weight,
+                    )
+                else:
+                    self.assertEqual(model.all_tied_weights_keys, {})
+                    self.assertIsNot(
+                        model.backbone_model.embed_tokens.embed_audio_tokens.weight,
+                        model.depth_decoder.model.embed_tokens.weight,
+                    )
+                # Should never be tied
+                self.assertIsNot(model.embed_text_tokens.weight, model.lm_head.weight)
 
     @unittest.skip(reason="CSM has no separate base model without a head.")
     def test_model_base_model_prefix(self):

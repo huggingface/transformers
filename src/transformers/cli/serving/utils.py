@@ -237,6 +237,7 @@ def build_response_parser(
     processor,
     model: "PreTrainedModel",
     input_ids,
+    tools=None,
 ) -> "ResponseParser | None":
     """Build a streaming :class:`ResponseParser` for the current generation.
 
@@ -253,7 +254,7 @@ def build_response_parser(
     if template is None:
         return None
     tokenizer = getattr(processor, "tokenizer", processor)
-    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids))
+    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools)
 
 
 def _normalize_tool_call(value: dict) -> ToolCall:
@@ -293,6 +294,7 @@ def parse_assistant_message(
     generated_ids,
     input_ids,
     cleaned_content: str = "",
+    tools=None,
 ) -> tuple[str, str | None, list[ToolCall] | None]:
     """Parse a full assistant message into ``(content, reasoning, tool_calls)``.
 
@@ -308,7 +310,9 @@ def parse_assistant_message(
     if template is None:
         return cleaned_content, None, None
     tokenizer = getattr(processor, "tokenizer", processor)
-    parsed = tokenizer.parse_response(generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids))
+    parsed = tokenizer.parse_response(
+        generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools
+    )
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
@@ -1216,7 +1220,7 @@ class BaseHandler:
             parsed = {"role": message["role"], "content": []}
 
             # Parse function.arguments back to a dict — chat templates iterate it as a mapping.
-            if "tool_calls" in message:
+            if message.get("tool_calls"):
                 tool_calls = []
                 for tc in message["tool_calls"]:
                     tc = copy.deepcopy(tc)
@@ -1230,7 +1234,7 @@ class BaseHandler:
 
             # When tool_calls are present, ignore content — it's either empty or contains
             # raw tool call markup that would confuse the chat template if rendered.
-            raw_content = [] if "tool_calls" in message else (message.get("content") or [])
+            raw_content = [] if message.get("tool_calls") else (message.get("content") or [])
             if isinstance(raw_content, str):
                 raw_content = [{"type": "text", "text": raw_content}]
 
