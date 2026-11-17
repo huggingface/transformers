@@ -987,7 +987,7 @@ class Trainer:
             dataset=test_dataset,
             description="test",
             batch_size=self.args.eval_batch_size,
-            sampler_fn=self._get_eval_sampler,
+            sampler_fn=self._get_test_sampler,
         )
 
     def num_examples(self, dataloader: DataLoader) -> int:
@@ -1173,6 +1173,19 @@ class Trainer:
 
         if self.args.world_size <= 1:
             return SequentialSampler(eval_dataset)
+        else:
+            return None
+
+    def _get_test_sampler(self, test_dataset: Dataset) -> torch.utils.data.Sampler | None:
+        """
+        Return the prediction sampler. Unlike [`~Trainer._get_eval_sampler`], it never groups by length, so that
+        `predict` returns outputs in the same order as `test_dataset`.
+        """
+        if test_dataset is None or not has_length(test_dataset):
+            return None
+
+        if self.args.world_size <= 1:
+            return SequentialSampler(test_dataset)
         else:
             return None
 
