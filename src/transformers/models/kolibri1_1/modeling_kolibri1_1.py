@@ -261,31 +261,28 @@ class Kolibri1_1Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.hidden_size = config.hidden_size
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
+        self.sliding_window = config.sliding_window
+
+        self.head_dim = config.head_dim
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.scaling = self.head_dim**-0.5
-        self.sliding_window = config.sliding_window
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.is_sliding = layer_type == "sliding_attention"
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
-
-        self.q_norm = Kolibri1_1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Kolibri1_1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.kv_source_layer = config.kv_source_layers[layer_idx]
         self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
-        self.store_kv = config.kv_sharing_modes[layer_idx] == "store"
+        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.q_norm = Kolibri1_1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         # Layers reading the K/V of another layer don't need any key/value weights
-        if self.is_kv_shared_layer:
-            del self.k_proj, self.v_proj, self.k_norm
+        if not self.is_kv_shared_layer:
+            self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+            self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+            self.k_norm = Kolibri1_1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
         self.indexer = None if self.is_sliding else Kolibri1_1Indexer(config, layer_idx)
 
     def forward(
@@ -314,7 +311,7 @@ class Kolibri1_1Attention(nn.Module):
 
         if past_key_values is not None and not self.is_kv_shared_layer:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        if self.store_kv:
+        if self.store_full_length_kv:
             shared_kv_states[str(self.layer_idx)] = key_states, value_states
 
         if self.indexer is not None:
