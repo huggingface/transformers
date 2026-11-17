@@ -67,6 +67,11 @@ def upload_reports(reports_dir, hub_repo, folder, token):
     return commit.oid
 
 
+def _escape(text):
+    """Escape text from the logs for Slack mrkdwn, so e.g. "<!channel>" or "<url|text>" in an error is shown as is."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _section(text):
     if len(text) > _MAX_SECTION_CHARS:
         text = text[:_MAX_SECTION_CHARS] + "\n…"
@@ -108,27 +113,29 @@ def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failur
     if no_summary:
         jobs_text = "1 job" if len(no_summary) == 1 else f"{len(no_summary)} jobs"
         lines = [f"⚠️ {jobs_text} ended without a pytest summary (killed, setup failure or log unavailable):"]
-        lines += [f"• <{job['job_link']}|{name}>: {job['error'][:150]}" for name, job in no_summary.items()]
+        lines += [
+            f"• <{job['job_link']}|{_escape(name)}>: {_escape(job['error'][:150])}" for name, job in no_summary.items()
+        ]
         blocks.append(_section("\n".join(lines)))
 
     failed_jobs = {name: job for name, job in jobs.items() if job.get("failed") or job.get("errors")}
     if failed_jobs:
         lines = ["*Failed jobs* (failed tests, new):"]
         lines += [
-            f"• <{job['job_link']}|{name}>: {job['failed'] + job['errors']} ({job['new_failures']} new)"
+            f"• <{job['job_link']}|{_escape(name)}>: {job['failed'] + job['errors']} ({job['new_failures']} new)"
             for name, job in failed_jobs.items()
         ]
         blocks.append(_section("\n".join(lines)))
 
     if num_new:
         new_tests = [test for job in new_failing["jobs"].values() for test in job["tests"]]
-        listed = "\n".join(new_tests[:_MAX_LISTED])
+        listed = _escape("\n".join(new_tests[:_MAX_LISTED]))
         more = f"\n… and {len(new_tests) - _MAX_LISTED} more" if len(new_tests) > _MAX_LISTED else ""
         blocks.append(_section(f"*New failing tests:*\n```\n{listed}\n```{more}"))
 
     if categories and categories["categories"]:
         top = sorted(categories["categories"].items(), key=lambda kv: -kv[1]["count"])[:5]
-        lines = ["*Top errors:*"] + [f"• ({cat['count']}) `{error[:200]}`" for error, cat in top]
+        lines = ["*Top errors:*"] + [f"• ({cat['count']}) `{_escape(error[:200])}`" for error, cat in top]
         blocks.append(_section("\n".join(lines)))
 
     buttons = [_button("New failures (Hub)", new_failures_url)] if num_new else []
