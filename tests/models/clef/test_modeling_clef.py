@@ -14,6 +14,7 @@
 
 import copy
 import json
+import math
 import sys
 import tempfile
 import unittest
@@ -21,7 +22,7 @@ from pathlib import Path
 
 from safetensors.torch import load_file, save_file
 
-from transformers import is_torch_available, pipeline
+from transformers import ClefConfig, is_torch_available, pipeline
 from transformers.decision import Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
@@ -358,6 +359,140 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             torch.testing.assert_close(loaded_scores, scores)
         self.assertIsInstance(decide.model, ClefForDecision)
         self.assertTrue(decide.decision_config.sort_choices)
+
+    def cosine_model(self, **config_kwargs):
+        config = copy.deepcopy(self.config)
+        config.head_type = "cosine"
+        config.cosine_width = 8
+        for key, value in config_kwargs.items():
+            setattr(config, key, value)
+        torch.manual_seed(0)
+        return ClefForDecision(config).eval()
+
+    def test_cosine_matches_naive(self):
+        model = self.cosine_model()
+        head = model.cosine_head
+        prompts = self.ragged_prompts()
+        inputs = self.collate(prompts)
+        with torch.no_grad():
+            output = model(**inputs)
+            hidden = model.model(
+                input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]
+            ).last_hidden_state
+            hidden = hidden.float()
+            scale = min(head.logit_scale.item(), math.log(100.0))
+            expected = []
+            for b, prompt in enumerate(prompts):
+                marks = prompt["marks"][0].tolist()
+                span = 0
+                for count in prompt["num_options"][0].tolist():
+                    start, end = marks[2 * span : 2 * span + 2]
+                    question = head.question_norm(head.question_projection(hidden[b, start:end].mean(0)))
+                    row = []
+                    for option in range(1, count + 1):
+                        start, end = marks[2 * (span + option) : 2 * (span + option) + 2]
+                        vector = head.option_norm(head.option_projection(hidden[b, start:end].mean(0)))
+                        cosine = (question * vector).sum() / (question.norm() * vector.norm())
+                        row.append(math.exp(scale) * cosine)
+                    expected.append(row)
+                    span += count + 1
+        self.assertEqual(output.logits.shape[0], len(expected))
+        for row, scores in zip(output.logits, expected):
+            torch.testing.assert_close(row[: len(scores)], torch.stack(scores), atol=1e-5, rtol=0)
+            self.assertTrue((row[len(scores) :] == torch.finfo(torch.float32).min).all())
+
+    def test_cosine_loads_tern_state_dict(self):
+        model = self.cosine_model()
+        width, size = 8, self.config.backbone_hidden_size
+        tern = {
+            "question_projection.weight": torch.randn(width, size),
+            "question_projection.bias": torch.randn(width),
+            "question_norm.weight": torch.randn(width),
+            "question_norm.bias": torch.randn(width),
+            "option_projection.weight": torch.randn(width, size),
+            "option_projection.bias": torch.randn(width),
+            "option_norm.weight": torch.randn(width),
+            "option_norm.bias": torch.randn(width),
+            "logit_scale": torch.tensor(1.5),
+        }
+        model.cosine_head.load_state_dict(tern, strict=True)
+        self.assertEqual(model.cosine_head.logit_scale.item(), 1.5)
+
+    def test_cosine_scale_clamped(self):
+        model = self.cosine_model()
+        with torch.no_grad():
+            model.cosine_head.logit_scale.fill_(math.log(1e6))
+            logits = model(**self.collate(self.ragged_prompts())).logits
+        real = logits[logits > torch.finfo(torch.float32).min]
+        self.assertLessEqual(real.abs().max().item(), 100 + 1e-4)
+
+    def test_cosine_batch_equals_singles(self):
+        model = self.cosine_model()
+        prompts = self.ragged_prompts()
+        with torch.no_grad():
+            singles = [model(**prompt).logits for prompt in prompts]
+            output = model(**self.collate(prompts))
+            left = model(**self.collate(prompts, padding_side="left"))
+        row = 0
+        for single in singles:
+            for question in single:
+                width = int((question > torch.finfo(question.dtype).min).sum())
+                torch.testing.assert_close(output.logits[row, :width], question[:width], atol=1e-5, rtol=0)
+                torch.testing.assert_close(left.logits[row, :width], question[:width], atol=1e-5, rtol=0)
+                row += 1
+        self.assertEqual(row, output.logits.shape[0])
+
+    def test_cosine_train_save_reload(self):
+        model = self.cosine_model()
+        inputs = self.collate(self.ragged_prompts())
+        labels = torch.tensor([1, 4, 0, 3, 2, 0])
+        model(**inputs, labels=labels).loss.backward()
+        for name, parameter in model.cosine_head.named_parameters():
+            self.assertIsNotNone(parameter.grad, name)
+            self.assertGreater(parameter.grad.abs().max().item(), 0, name)
+        self.assertEqual(len(list(model.cosine_head.parameters())), 9)
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            reloaded = ClefForDecision.from_pretrained(
+                directory, attn_implementation=model.config._attn_implementation
+            ).eval()
+        self.assertEqual(reloaded.config.head_type, "cosine")
+        with torch.no_grad():
+            difference = (model(**inputs).logits - reloaded(**inputs).logits).abs().max()
+        self.assertEqual(difference.item(), 0)
+
+    def test_cosine_has_no_joint_modules(self):
+        model = self.cosine_model()
+        for name in ("lm_head", "embeddings", "encoder", "scorer"):
+            self.assertFalse(hasattr(model, name), name)
+        backbone = sum(p.numel() for p in model.model.parameters())
+        head = sum(p.numel() for p in model.cosine_head.parameters())
+        self.assertEqual(sum(p.numel() for p in model.parameters()), backbone + head)
+        for parameter in model.cosine_head.parameters():
+            self.assertEqual(parameter.dtype, torch.float32)
+
+    def test_joint_default_unchanged(self):
+        self.assertEqual(ClefConfig().head_type, "joint")
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config)
+        keys = set(model.state_dict())
+        self.assertIn("lm_head.weight", keys)
+        self.assertFalse(any(key.startswith("cosine_head") for key in keys))
+        self.assertTrue(any(key.startswith("scorer.") for key in keys))
+
+    def test_invalid_head_type(self):
+        with self.assertRaises(ValueError):
+            ClefConfig(head_type="bilinear")
+
+    def test_pipeline_with_cosine(self):
+        model = self.cosine_model()
+        decide = pipeline("decision", model=model, tokenizer=self.tokenizer, decision_config=self.decision_config)
+        answers = decide(self.test["request"])
+        self.assertEqual(list(answers), list(self.test["request"]["questions"]))
+        for answer in answers.values():
+            probabilities = answer.get("probabilities")
+            if probabilities is not None:
+                self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
 
 
 @slow

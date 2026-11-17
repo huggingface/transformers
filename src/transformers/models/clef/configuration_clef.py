@@ -60,6 +60,13 @@ class ClefConfig(PreTrainedConfig):
         Weight of the Brier score in the loss.
     ordinal_weight (`float`, *optional*, defaults to 0.0):
         Weight of the ordinal term of the loss, the expected distance of the options to the right one on score questions.
+    head_type (`str`, *optional*, defaults to `"joint"`):
+        The decision head: `"joint"` for the joint head of the checkpoints of clef, or `"cosine"` for a much smaller head
+        that scores each option by the cosine of the projections of its span and of the span of its question.
+    cosine_width (`int`, *optional*, defaults to 512):
+        Width of the projections of the cosine head.
+    cosine_initial_scale (`float`, *optional*, defaults to 12.0):
+        Initial value of the temperature of the cosine of the cosine head, which is learned in log space.
 
     Example:
     ```python
@@ -87,6 +94,9 @@ class ClefConfig(PreTrainedConfig):
     label_smoothing: float = 0.0
     brier_weight: float = 0.0
     ordinal_weight: float = 0.0
+    head_type: str = "joint"
+    cosine_width: int = 512
+    cosine_initial_scale: float = 12.0
 
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
@@ -109,6 +119,10 @@ class ClefConfig(PreTrainedConfig):
             )
             self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
             self.intermediate_size = joint_head_config["feedforward"]
+        if self.head_type not in ("joint", "cosine"):
+            raise ValueError(f"`head_type` must be 'joint' or 'cosine', got {self.head_type!r}.")
+        if self.cosine_initial_scale <= 0:
+            raise ValueError(f"`cosine_initial_scale` must be positive, got {self.cosine_initial_scale}.")
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)

@@ -66,6 +66,13 @@ class ClefConfig(PreTrainedConfig):
         Weight of the Brier score in the loss.
     ordinal_weight (`float`, *optional*, defaults to 0.0):
         Weight of the ordinal term of the loss, the expected distance of the options to the right one on score questions.
+    head_type (`str`, *optional*, defaults to `"joint"`):
+        The decision head: `"joint"` for the joint head of the checkpoints of clef, or `"cosine"` for a much smaller head
+        that scores each option by the cosine of the projections of its span and of the span of its question.
+    cosine_width (`int`, *optional*, defaults to 512):
+        Width of the projections of the cosine head.
+    cosine_initial_scale (`float`, *optional*, defaults to 12.0):
+        Initial value of the temperature of the cosine of the cosine head, which is learned in log space.
 
     Example:
     ```python
@@ -93,6 +100,9 @@ class ClefConfig(PreTrainedConfig):
     label_smoothing: float = 0.0
     brier_weight: float = 0.0
     ordinal_weight: float = 0.0
+    head_type: str = "joint"
+    cosine_width: int = 512
+    cosine_initial_scale: float = 12.0
 
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
@@ -116,6 +126,10 @@ class ClefConfig(PreTrainedConfig):
             )
             self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
             self.intermediate_size = joint_head_config["feedforward"]
+        if self.head_type not in ("joint", "cosine"):
+            raise ValueError(f"`head_type` must be 'joint' or 'cosine', got {self.head_type!r}.")
+        if self.cosine_initial_scale <= 0:
+            raise ValueError(f"`cosine_initial_scale` must be positive, got {self.cosine_initial_scale}.")
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
@@ -133,6 +147,30 @@ def pool_spans(hidden_states: torch.Tensor, starts: torch.LongTensor, ends: torc
     batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
     lengths = (ends - starts).clamp(min=1)[..., None]
     return (prefix_sums[batch, ends] - prefix_sums[batch, starts]) / lengths
+
+
+def span_indices(
+    marks: torch.LongTensor,
+    num_options: torch.LongTensor,
+    option_question_ids: torch.LongTensor,
+    is_option: torch.BoolTensor,
+) -> tuple[torch.LongTensor, torch.LongTensor, torch.LongTensor, torch.LongTensor]:
+    """
+    The `starts` and `ends` of the marked spans of each prompt, and the index among them of the instruction of each
+    question and of each packed option (0 for padding questions and options). Each question marks the span of its
+    instruction, then of each of its options; padding marks are -1.
+    """
+    starts, ends = marks.clamp(min=0).unflatten(-1, (-1, 2)).unbind(-1)
+    spans_per_question = (num_options + 1) * (num_options > 0)
+    instructions = spans_per_question.cumsum(-1) - spans_per_question
+    first_options = num_options.cumsum(-1) - num_options
+    positions = torch.arange(is_option.shape[-1], device=marks.device)
+    option_spans = (
+        instructions.gather(-1, option_question_ids) + 1 + positions - first_options.gather(-1, option_question_ids)
+    )
+    instructions = instructions.masked_fill(num_options == 0, 0)
+    option_spans = option_spans.masked_fill(~is_option, 0)
+    return starts, ends, instructions, option_spans
 
 
 def padding_mask(is_valid: torch.BoolTensor, dtype: torch.dtype) -> torch.Tensor | None:
@@ -202,6 +240,41 @@ class ClefDecoderLayer(CohereAsrDecoderLayer):
         self.mlp = ClefMLP(config)
 
 
+class ClefCosineHead(nn.Module):
+    """
+    A small head: each option is scored by the cosine of the projection of its span and of the projection of the span
+    of its question, both averaged over the raw hidden states of the backbone, times a learned temperature. All in
+    float32.
+    """
+
+    def __init__(self, config: ClefConfig):
+        super().__init__()
+        backbone_hidden_size, width = config.backbone_hidden_size, config.cosine_width
+        self.question_projection = nn.Linear(backbone_hidden_size, width)
+        self.question_norm = nn.LayerNorm(width)
+        self.option_projection = nn.Linear(backbone_hidden_size, width)
+        self.option_norm = nn.LayerNorm(width)
+        self.logit_scale = nn.Parameter(torch.tensor(math.log(config.cosine_initial_scale)))
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
+        option_question_ids: torch.LongTensor,
+        is_option: torch.BoolTensor,
+    ) -> torch.Tensor:
+        batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
+        starts, ends, instructions, option_spans = span_indices(marks, num_options, option_question_ids, is_option)
+        span_states = pool_spans(hidden_states, starts, ends)
+        with torch.autocast(device_type=hidden_states.device.type, enabled=False):
+            questions = self.question_norm(self.question_projection(span_states[batch, instructions]))
+            options = self.option_norm(self.option_projection(span_states[batch, option_spans]))
+        questions = nn.functional.normalize(questions.float(), dim=-1)[batch, option_question_ids]
+        options = nn.functional.normalize(options.float(), dim=-1)
+        return (questions * options).sum(-1) * self.logit_scale.clamp(max=math.log(100.0)).exp()
+
+
 class ClefEmbeddings(nn.Module):
     """
     The memory of the prompt, the options, the fields of the questions with their embeddings, and the lexical prior of
@@ -236,21 +309,7 @@ class ClefEmbeddings(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         dtype = hidden_states.dtype
         batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
-        # Each question marks the span of its instruction, then of each of its options; padding marks are -1, and
-        # padding questions (no options) have no span
-        starts, ends = marks.clamp(min=0).unflatten(-1, (-1, 2)).unbind(-1)
-        spans_per_question = (num_options + 1) * (num_options > 0)
-        instructions = spans_per_question.cumsum(-1) - spans_per_question
-        first_options = num_options.cumsum(-1) - num_options
-        positions = torch.arange(is_option.shape[-1], device=marks.device)
-        option_spans = (
-            instructions.gather(-1, option_question_ids)
-            + 1
-            + positions
-            - first_options.gather(-1, option_question_ids)
-        )
-        instructions = instructions.masked_fill(num_options == 0, 0)
-        option_spans = option_spans.masked_fill(~is_option, 0)
+        starts, ends, instructions, option_spans = span_indices(marks, num_options, option_question_ids, is_option)
 
         hidden_states = self.hidden_norm(hidden_states)
         span_states = pool_spans(hidden_states, starts, ends)
@@ -361,6 +420,8 @@ class ClefPreTrainedModel(PreTrainedModel):
             init.zeros_(module.prior_logit_scale)
             init.zeros_(module.joint_logit_scale)
             init.zeros_(module.residual_gate)
+        elif isinstance(module, ClefCosineHead):
+            init.constant_(module.logit_scale, math.log(self.config.cosine_initial_scale))
 
 
 @dataclass
@@ -403,10 +464,14 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.model = AutoModel.from_config(config.text_config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.embeddings = ClefEmbeddings(config)
-        self.encoder = ClefEncoder(config)
-        self.scorer = ClefScorer(config)
+        if config.head_type == "cosine":  # no language modeling head, nothing to tie
+            self._tied_weights_keys = {}
+            self.cosine_head = ClefCosineHead(config)
+        else:
+            self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+            self.embeddings = ClefEmbeddings(config)
+            self.encoder = ClefEncoder(config)
+            self.scorer = ClefScorer(config)
         self.post_init()
 
     @can_return_tuple
@@ -453,31 +518,34 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         option_question_ids = torch.searchsorted(option_ends, positions, right=True).clamp(
             max=num_options.shape[-1] - 1
         )
-        # The output embeddings of the tokens of each option give its lexical prior
-        memory, options, fields, field_embeddings, priors = self.embeddings(
-            hidden_states,
-            input_ids,
-            marks,
-            num_options,
-            question_type_ids,
-            self.lm_head.weight,
-            option_question_ids,
-            is_option,
-            attention_mask,
-        )
-        options, fields = self.encoder(
-            memory,
-            options,
-            fields,
-            field_embeddings,
-            option_question_ids,
-            is_option,
-            is_question,
-            attention_mask,
-            **kwargs,
-        )
-        batch = torch.arange(len(fields), device=fields.device)[:, None]
-        scores = self.scorer(fields[batch, option_question_ids], options, priors)[is_option].float()
+        if self.config.head_type == "cosine":
+            scores = self.cosine_head(hidden_states, marks, num_options, option_question_ids, is_option)[is_option]
+        else:
+            # The output embeddings of the tokens of each option give its lexical prior
+            memory, options, fields, field_embeddings, priors = self.embeddings(
+                hidden_states,
+                input_ids,
+                marks,
+                num_options,
+                question_type_ids,
+                self.lm_head.weight,
+                option_question_ids,
+                is_option,
+                attention_mask,
+            )
+            options, fields = self.encoder(
+                memory,
+                options,
+                fields,
+                field_embeddings,
+                option_question_ids,
+                is_option,
+                is_question,
+                attention_mask,
+                **kwargs,
+            )
+            batch = torch.arange(len(fields), device=fields.device)[:, None]
+            scores = self.scorer(fields[batch, option_question_ids], options, priors)[is_option].float()
 
         # The scores of the options of each real question, prompt after prompt, padded to the widest question
         if option_mask is None:

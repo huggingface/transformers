@@ -19,6 +19,8 @@ rendered properly in your Markdown viewer.
 
 Clef is a decision head that scores all the options of all the questions of a request jointly. It was introduced by [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) and is also used by [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash). The template marks the span of each instruction and of each of its options. The options of all the questions are packed in one sequence: pooled from the hidden states and from the output embeddings of their tokens, they attend to the prompt and are summarized into the field of their question. The fields then attend to each other and to the prompt, and each option is scored against the field of its question. The original `joint_head.safetensors` loads as is.
 
+Set `head_type="cosine"` in [`ClefConfig`] for a much smaller head, without the language modeling head, the encoder or the scorer: the hidden states of the backbone are averaged over the span of each instruction and of each option, projected (`cosine_width`) and normalized, and each option is scored by the cosine with its question times a learned temperature (initially `cosine_initial_scale`, capped at 100), all in float32. The output is the same as the joint head's.
+
 Decision heads are applied by [`DecisionPipeline`] to the hidden states of the original checkpoint. The chat template,
 the settings and the head live in their own repo next to it.
 
