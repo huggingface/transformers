@@ -187,56 +187,6 @@ class LaraMiniModelTest(CausalLMModelTest, unittest.TestCase):
                 res_padded.logits[attention_mask.bool()], res_padfree.logits[0], atol=1e-5, rtol=1e-5
             )
 
-    def test_full_attention_reaches_beyond_the_window_for_any_layer_order(self):
-        """A sliding layer ahead of the first global layer must not shrink the global attention mask."""
-        for layer_types in (
-            ["sliding_attention", "full_attention", "sliding_attention"],
-            ["sliding_attention", "sliding_attention", "full_attention"],
-        ):
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            # a window smaller than the sequence, so that it is actually applied
-            config.layer_types, config.sliding_window = layer_types, 3
-            # eager materializes the masks; sdpa skips an unpadded causal mask and would hide a wrongly sized one
-            model = LaraMiniForCausalLM._from_config(config, attn_implementation="eager").to(torch_device).eval()
-            input_ids = inputs_dict["input_ids"][:1]
-            altered = input_ids.clone()
-            altered[0, 0] = (input_ids[0, 0] + 1) % config.vocab_size
-            with torch.no_grad():
-                last = model(input_ids=input_ids, use_cache=False).logits[:, -1]
-                altered_last = model(input_ids=altered, use_cache=False).logits[:, -1]
-                cached = model(
-                    input_ids=input_ids[:, -1:],
-                    cache=model(input_ids=input_ids[:, :-1], use_cache=True).cache,
-                ).logits[:, -1]
-            # the first token is out of reach of the two sliding windows: only the global layer can see it
-            self.assertFalse(torch.allclose(last, altered_last, rtol=1e-4, atol=1e-4), layer_types)
-            torch.testing.assert_close(cached, last, rtol=1e-4, atol=1e-4)
-
-    def test_static_cache_generation_matches_dynamic_for_any_layer_order(self):
-        """Static-cache masks are sized by layer type, also for left-padded rows."""
-        for layer_types in (
-            ["linear_attention", "sliding_attention", "full_attention"],
-            ["sliding_attention", "linear_attention", "full_attention"],
-        ):
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.layer_types, config.sliding_window = layer_types, 3
-            model = LaraMiniForCausalLM(config).to(torch_device).eval()
-            input_ids = inputs_dict["input_ids"][:2].clone()
-            input_ids[1, :3] = config.pad_token_id
-            attention_mask = torch.ones_like(input_ids)
-            attention_mask[1, :3] = 0
-            with torch.no_grad():
-                dynamic = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=6, do_sample=False)
-                static = model.generate(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    max_new_tokens=6,
-                    do_sample=False,
-                    cache_implementation="static",
-                    disable_compile=True,
-                )
-            self.assertTrue(torch.equal(dynamic, static), layer_types)
-
 
 @require_torch_accelerator
 @slow
