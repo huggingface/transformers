@@ -497,7 +497,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
 
         cu_seqlens_mapping = {
             "full_attention": (cu_seqlens, max_seqlen),
-            "sliding_attention": (cu_window_seqlens, max_window_seqlen),
+            "window_attention": (cu_window_seqlens, max_window_seqlen),
         }
         for layer_index, encoder_layer in enumerate(self.layers):
             layer_cu_seqlens, layer_max_seqlen = cu_seqlens_mapping[self.config.layer_types[layer_index]]
