@@ -980,6 +980,39 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
         return hidden_states
 
 
+def get_vision_temporal_slice_index(
+    grid_thw: torch.Tensor, spatial_merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Gather index pairing each video's even and odd frames (an image's frame with itself) after the spatial merge,
+    or pop `"temporal_slice_index"` from `kwargs` if precomputed.
+
+    Example:
+        Video frames `[1, -1, 2, -2, 3, -3]` pair as `[[1, -1], [2, -2], [3, -3]]`; an image `[1]` as `[[1, 1]]`.
+
+    Args:
+        grid_thw: `(num_images_or_videos, 3)` — temporal, height and width of each entry's patch grid.
+        spatial_merge_size: the spatial merge applied before the temporal one.
+        kwargs: optional caller kwargs — if it contains `"temporal_slice_index"` it is popped and returned.
+
+    Returns:
+        `(total_temporally_merged_tokens, 2)` long — the two merged tokens each output token concatenates.
+    """
+    if kwargs is not None and (index := kwargs.pop("temporal_slice_index", None)) is not None:
+        return index
+    pairs, offset = [], 0
+    for frames, height, width in grid_thw.tolist():
+        spatial_size = height * width // spatial_merge_size**2
+        tokens = torch.arange(spatial_size, device=grid_thw.device)
+        # A video's frames pair up, an odd last one is dropped; an image's frame pairs with itself
+        for even in range(0, 2 * (frames // 2), 2) if frames > 1 else [0]:
+            odd = even + 1 if frames > 1 else even
+            pairs.append(
+                torch.stack([offset + even * spatial_size + tokens, offset + odd * spatial_size + tokens], -1)
+            )
+        offset += frames * spatial_size
+    return torch.cat(pairs)
+
+
 class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__()
@@ -1001,77 +1034,22 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
         self.after_norm = Ernie4_5_VLMoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
 
-    def _temporal_slicing(self, hidden_states, grid_thw):
+    def _temporal_slicing(self, hidden_states, grid_thw, kwargs: dict | None = None):
         """
-        Slices along the temporal dimension in even/odd patterns (usually if we have a video input)
-        or duplicates along temporal dimension (usually if we have an image input).
-
-        Example:
-            Video input with temporal pattern of [1, -1, 2, -2, 3, -3]
-                > Even input [1, 2, 3], odd input [-1, -2, -3]
-                > Reorderd via slices to [1, 2, 3, -1, -2, -3]
-            Image input with temporal pattern [1]
-                > Duplicate input [1], [1]
-                > Reordered to [1, 1]
-
-        NOTE: This is hard-coded for `temporal_merge_size == 2` and won't work otherwise.
+        Pairs each video's even and odd frames (an image's frame with itself) along the hidden dimension, see
+        [`get_vision_temporal_slice_index`]. Hard-coded for `temporal_merge_size == 2`.
         """
-        # Calculating offsets on spatial dim (based on flattened tensors)
-        grid_t, grid_hw = grid_thw[:, 0], grid_thw[:, 1:]
-        grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_merge_size**2)
+        index = get_vision_temporal_slice_index(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        return hidden_states[index].flatten(1)
 
-        # Calculating offsets on batch dim (based on flattened tensors)
-        tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_merge_size**2)).flatten()
-        batch_offsets = torch.empty(tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype)
-        batch_offsets[0] = 0
-        batch_offsets[1:] = tokens_per_img_or_vid.cumsum(dim=0)[:-1]
-
-        first_slice_offsets = []
-        second_slice_offsets = []
-        for temporal_size, spatial_size, batch_offset in zip(grid_t, grid_hw_after_conv, batch_offsets):
-            # Depending on temporal, we may interleave:
-            #   - Images have temporal == 1 --> same offsets (duplicate "frame" image)
-            #   - Videos have temporal > 1 --> different offsets (even, odd)
-            first_offset_range = range(0, temporal_size, 2)
-            second_offset_range = range(1 if temporal_size > 1 else 0, temporal_size, 2)
-
-            for temporal_offset_even, temporal_offset_odd in zip(first_offset_range, second_offset_range):
-                first_slice_offsets.append(
-                    torch.arange(
-                        batch_offset + (temporal_offset_even) * spatial_size,
-                        batch_offset + (temporal_offset_even + 1) * spatial_size,
-                    )
-                )
-                second_slice_offsets.append(
-                    torch.arange(
-                        batch_offset + (temporal_offset_odd) * spatial_size,
-                        batch_offset + (temporal_offset_odd + 1) * spatial_size,
-                    )
-                )
-
-        # Input: [1, -1, 2, -2, 3, -3] or [1]
-        # Indices: [0, 2, 4] (even) or [0] (duplicate)
-        first_slice_offsets = torch.cat(first_slice_offsets, dim=-1).to(hidden_states.device)
-        # Indices: [1, 3, 5] (odd) or [0] (duplicate)
-        second_slice_offsets = torch.cat(second_slice_offsets, dim=-1).to(hidden_states.device)
-
-        # Output: [1, 2, 3, -1, -2, -3] or [1, 1]
-        return torch.concat(
-            [
-                torch.index_select(hidden_states, dim=0, index=first_slice_offsets),
-                torch.index_select(hidden_states, dim=0, index=second_slice_offsets),
-            ],
-            dim=-1,
-        )
-
-    def forward(self, hidden_states, grid_thw):
+    def forward(self, hidden_states, grid_thw, kwargs: dict | None = None):
         # image spatial
         # reshape imitates convolution via linear projection
         hidden_states = hidden_states.reshape([-1, hidden_states.shape[-1] * (self.spatial_merge_size**2)])
         hidden_states = self.spatial_linear(hidden_states)
 
         # video temporal
-        hidden_states = self._temporal_slicing(hidden_states, grid_thw)
+        hidden_states = self._temporal_slicing(hidden_states, grid_thw, kwargs=kwargs)
         hidden_states = self.temporal_linear(hidden_states)
 
         # final mlp
@@ -1269,8 +1247,9 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         r"""
         All videos' features as one tensor; `get_video_features` splits them per video.
         """
+        resampler_kwargs = {"temporal_slice_index": kwargs.pop("temporal_slice_index", None)}
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
-        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
+        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw, kwargs=resampler_kwargs)
         video_outputs.pooler_output = video_embeds
         return video_outputs
 
@@ -1304,8 +1283,9 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         r"""
         All images' features as one tensor; `get_image_features` splits them per image.
         """
+        resampler_kwargs = {"temporal_slice_index": kwargs.pop("temporal_slice_index", None)}
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
-        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
+        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw, kwargs=resampler_kwargs)
         image_outputs.pooler_output = image_embeds
         return image_outputs
 
@@ -1366,56 +1346,29 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
 
     def get_data_dependent_inputs(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the M-RoPE
-        `position_ids`, the vision tower's inputs (see
-        [`Qwen2VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
-        `get_image_embeddings` and `get_video_embeddings` take them. Passed back to the forward (or `generate`), they keep
-        `torch.compile` and `torch.export` free of those operations. Only the config is read, so a model on the meta
-        device computes them too.
+        The inputs the forward computes with data-dependent operations (see
+        [`Qwen2VLModel.get_data_dependent_inputs`]), and the resampler's `temporal_slice_index` (see
+        [`get_vision_temporal_slice_index`]), prefixed `image_` and `video_`.
 
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                The prompt's token ids, which the M-RoPE positions are laid out over.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                The padding mask.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Which tokens are text, image or video, as the processor returns them.
-            position_ids (`torch.LongTensor` of shape `(4, batch_size, sequence_length)`, *optional*):
-                Positions already laid out (by `generate`), which are then not computed again.
         """
-        inputs = {}
+        inputs = super().get_data_dependent_inputs(
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
         for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
             if grid_thw is not None:
-                tower_inputs = self.get_encoder(modality="image").get_data_dependent_inputs(grid_thw)
-                inputs.update({prefix + name: value for name, value in tower_inputs.items()})
-        has_vision = image_grid_thw is not None or video_grid_thw is not None
-        if position_ids is None and input_ids is not None and mm_token_type_ids is not None and has_vision:
-            vision_position_ids, _ = self.get_rope_index(
-                input_ids,
-                image_grid_thw=image_grid_thw,
-                video_grid_thw=video_grid_thw,
-                attention_mask=attention_mask,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-            if attention_mask is not None:
-                text_position_ids = (attention_mask.long().cumsum(-1) - 1).masked_fill(attention_mask == 0, 0)
-            else:
-                text_position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).expand_as(input_ids)
-            # The text positions first: the text model builds the attention mask from them
-            inputs["position_ids"] = torch.cat([text_position_ids[None], vision_position_ids], dim=0)
+                inputs[f"{prefix}temporal_slice_index"] = get_vision_temporal_slice_index(
+                    grid_thw, self.resampler_model.spatial_merge_size
+                )
         return inputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
