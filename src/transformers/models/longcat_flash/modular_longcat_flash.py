@@ -19,7 +19,6 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -40,7 +39,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     eager_attention_forward,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
-from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
@@ -85,75 +84,45 @@ class LongcatFlashTopkRouter(MixtralTopKRouter):
         return router_logits, topk_weights.to(router_logits.dtype), topk_indices
 
 
-class LongcatFlashExperts(nn.Module):
+class LongcatFlashExperts(MixtralExperts):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_experts = config.n_routed_experts
+        self.intermediate_dim = config.expert_ffn_hidden_size
+
+
+class LongcatFlashMoE(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.hidden_size = config.hidden_size
+        # Used for 0 routing
         self.num_routed_experts = config.n_routed_experts
         self.zero_expert_num = config.zero_expert_num or 0
-        self.total_experts = self.num_routed_experts + self.zero_expert_num
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.identity_expert = nn.Identity()
 
-        if self.num_routed_experts > 0:
-            self.gate_up_proj = nn.Parameter(
-                torch.empty(self.total_experts, 2 * self.intermediate_size, self.hidden_size)
-            )
-            self.down_proj = nn.Parameter(
-                torch.empty(self.num_routed_experts, self.hidden_size, self.intermediate_size)
-            )
-        else:
-            self.register_parameter("gate_up_proj", None)
-            self.register_parameter("down_proj", None)
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        final_hidden_states = torch.zeros_like(hidden_states)
-        if top_k_index.numel() == 0:
-            return final_hidden_states
-
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.total_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False)
-        for expert_idx_tensor in expert_hit:
-            expert_idx = int(expert_idx_tensor.item())
-            selection_idx, token_idx = torch.where(expert_mask[expert_idx].squeeze(0))
-            if token_idx.numel() == 0:
-                continue
-            current_state = hidden_states[token_idx]
-
-            if expert_idx >= self.num_routed_experts or self.gate_up_proj is None:
-                current_hidden_states = self.identity_expert(current_state)
-            else:
-                gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-                current_hidden_states = self.act_fn(gate) * up
-                current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
-
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, selection_idx, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
-
-
-# remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(nn.Module):
-    """
-    A mixed expert module containing zero compute (identity) experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.config = config
         self.experts = LongcatFlashExperts(config)
-
         self.router = LongcatFlashTopkRouter(config)
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
+
         _, topk_weights, topk_indices = self.router(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        return hidden_states
+
+        # Special case for longcat not routing any weights
+        if self.zero_expert_num:
+            identity_mask = topk_indices >= self.num_routed_experts
+            identity_weights = topk_weights.masked_fill(~identity_mask, 0.0).sum(dim=-1, keepdim=True)
+            identity_output = hidden_states * identity_weights
+
+            # May incurr unnecessary tokens in all-to-all EP, but does not affect the output (due to 0 weights)
+            topk_indices = topk_indices.masked_fill(identity_mask, 0)
+            topk_weights = topk_weights.masked_fill(identity_mask, 0.0)
+
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+
+        if self.zero_expert_num:
+            hidden_states = hidden_states + identity_output.to(hidden_states.dtype)
+
+        return hidden_states.reshape(*orig_shape)
 
 
 class LongcatFlashMLA(DeepseekV32Attention):
