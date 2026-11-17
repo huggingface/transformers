@@ -23,8 +23,6 @@ from transformers import (
     HYV4VLConfig,
     HYV4VLForConditionalGeneration,
     HYV4VLModel,
-    HYV4VLTextConfig,
-    HYV4VLVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
@@ -41,8 +39,6 @@ if is_torch_available():
 
 class HYV4VLVisionText2TextModelTester(VLMModelTester):
     config_class = HYV4VLConfig
-    text_config_class = HYV4VLTextConfig
-    vision_config_class = HYV4VLVisionConfig
     base_model_class = HYV4VLModel
     conditional_generation_class = HYV4VLForConditionalGeneration
 
@@ -73,6 +69,14 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("image_size", 16)
         kwargs.setdefault("spatial_merge_size", 2)
         kwargs.setdefault("num_image_tokens", 6)
+        kwargs.setdefault("vision_hidden_size", 32)
+        kwargs.setdefault("vision_intermediate_size", 64)
+        kwargs.setdefault("vision_num_attention_heads", 2)
+        kwargs.setdefault("vision_num_key_value_heads", None)
+        kwargs.setdefault("vision_num_hidden_layers", 2)
+        kwargs.setdefault("vision_hidden_act", "gelu")
+        kwargs.setdefault("vision_max_image_size", 64)
+        kwargs.setdefault("vision_out_hidden_size", kwargs["hidden_size"])
         super().__init__(parent, **kwargs)
         self.grid_hw = self.image_size // self.patch_size
         self.num_image_patches = self.grid_hw**2
@@ -80,18 +84,6 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id}
-
-    def get_vision_config(self):
-        return HYV4VLVisionConfig(
-            hidden_size=32,
-            intermediate_size=64,
-            num_attention_heads=2,
-            num_hidden_layers=2,
-            patch_size=self.patch_size,
-            spatial_merge_size=self.spatial_merge_size,
-            max_image_size=64,
-            out_hidden_size=self.hidden_size,
-        )
 
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids)

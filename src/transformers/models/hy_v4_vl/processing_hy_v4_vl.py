@@ -17,21 +17,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class HYV4VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "return_mm_token_type_ids": True,
-        },
-    }
 
 
 @auto_docstring
 class HYV4VLProcessor(ProcessorMixin):
-    valid_processor_kwargs = HYV4VLProcessorKwargs
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token

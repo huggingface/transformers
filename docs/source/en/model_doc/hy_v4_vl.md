@@ -185,9 +185,9 @@ if torch.distributed.get_rank() == 0:
 [[autodoc]] HYV4VLVideoProcessor
     - preprocess
 
-## HYV4VLVisionTransformer
+## HYV4VLVisionModel
 
-[[autodoc]] HYV4VLVisionTransformer
+[[autodoc]] HYV4VLVisionModel
     - forward
 
 ## HYV4VLTextModel
