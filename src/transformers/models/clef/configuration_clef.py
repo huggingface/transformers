@@ -126,18 +126,18 @@ class ClefConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     text_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
-    label_smoothing: float = 0.0
-    brier_weight: float = 0.0
-    ordinal_weight: float = 0.0
-    rlcd_weight: float = 0.0
-    rlcd_sigma: float = 0.4
+    label_smoothing: float | int = 0.0
+    brier_weight: float | int = 0.0
+    ordinal_weight: float | int = 0.0
+    rlcd_weight: float | int = 0.0
+    rlcd_sigma: float | int = 0.4
     rlcd_samples: int = 32
-    rlcd_spherical_weight: float = 0.75
-    rlcd_rps_weight: float = 1.0
+    rlcd_spherical_weight: float | int = 0.75
+    rlcd_rps_weight: float | int = 1.0
     rlcd_normalize_advantage: bool = False
     head_type: str = "joint"
     cosine_width: int = 512
-    cosine_initial_scale: float = 12.0
+    cosine_initial_scale: float | int = 12.0
     global_pooling: str = "last"
     prompt_style: str = "chatml"
 
@@ -192,6 +192,23 @@ class ClefConfig(PreTrainedConfig):
             )
             self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
             self.intermediate_size = joint_head_config["feedforward"]
+        # Floats, given as integers or not
+        for name in (
+            "label_smoothing",
+            "brier_weight",
+            "ordinal_weight",
+            "rlcd_weight",
+            "rlcd_sigma",
+            "rlcd_spherical_weight",
+            "rlcd_rps_weight",
+            "cosine_initial_scale",
+        ):
+            setattr(self, name, float(getattr(self, name)))
+        if not 0 <= self.label_smoothing < 1:
+            raise ValueError(f"`label_smoothing` must be in [0, 1), got {self.label_smoothing}.")
+        for name in ("brier_weight", "ordinal_weight"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"`{name}` must be non-negative, got {getattr(self, name)}.")
         if self.global_pooling not in ("last", "first"):
             raise ValueError(f"`global_pooling` must be 'last' or 'first', got {self.global_pooling!r}.")
         if self.prompt_style not in ("chatml", "plain"):

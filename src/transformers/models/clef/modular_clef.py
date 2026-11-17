@@ -22,7 +22,7 @@ from torch.utils.checkpoint import checkpoint
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...decision import DecisionConfig, DecisionMixin, Question, process_scores
+from ...decision import DecisionConfig, DecisionMixin, Question
 from ...loss.loss_clef import check_clef_label_shapes, clef_label_errors, raise_label_error
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -137,18 +137,18 @@ class ClefConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     text_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
-    label_smoothing: float = 0.0
-    brier_weight: float = 0.0
-    ordinal_weight: float = 0.0
-    rlcd_weight: float = 0.0
-    rlcd_sigma: float = 0.4
+    label_smoothing: float | int = 0.0
+    brier_weight: float | int = 0.0
+    ordinal_weight: float | int = 0.0
+    rlcd_weight: float | int = 0.0
+    rlcd_sigma: float | int = 0.4
     rlcd_samples: int = 32
-    rlcd_spherical_weight: float = 0.75
-    rlcd_rps_weight: float = 1.0
+    rlcd_spherical_weight: float | int = 0.75
+    rlcd_rps_weight: float | int = 1.0
     rlcd_normalize_advantage: bool = False
     head_type: str = "joint"
     cosine_width: int = 512
-    cosine_initial_scale: float = 12.0
+    cosine_initial_scale: float | int = 12.0
     global_pooling: str = "last"
     prompt_style: str = "chatml"
 
@@ -203,6 +203,23 @@ class ClefConfig(PreTrainedConfig):
             )
             self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
             self.intermediate_size = joint_head_config["feedforward"]
+        # Floats, given as integers or not
+        for name in (
+            "label_smoothing",
+            "brier_weight",
+            "ordinal_weight",
+            "rlcd_weight",
+            "rlcd_sigma",
+            "rlcd_spherical_weight",
+            "rlcd_rps_weight",
+            "cosine_initial_scale",
+        ):
+            setattr(self, name, float(getattr(self, name)))
+        if not 0 <= self.label_smoothing < 1:
+            raise ValueError(f"`label_smoothing` must be in [0, 1), got {self.label_smoothing}.")
+        for name in ("brier_weight", "ordinal_weight"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"`{name}` must be non-negative, got {getattr(self, name)}.")
         if self.global_pooling not in ("last", "first"):
             raise ValueError(f"`global_pooling` must be 'last' or 'first', got {self.global_pooling!r}.")
         if self.prompt_style not in ("chatml", "plain"):
@@ -612,6 +629,13 @@ class ClefDecisionOutput(ModelOutput):
     logits: torch.FloatTensor | None = None
     option_mask: torch.BoolTensor | None = None
 
+    def split(self, split_size_or_sections: list[int]) -> tuple[torch.Tensor, ...]:
+        """
+        The scores of the options of each question, packed then split like a tensor of them: what the `decide` of
+        [`DecisionMixin`] reads from the output of `forward`.
+        """
+        return self.logits[self.option_mask].split(split_size_or_sections)
+
 
 @auto_docstring(
     custom_intro="""
@@ -856,30 +880,5 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
             )
         return ClefDecisionOutput(loss=loss, logits=logits, option_mask=option_mask)
 
-    @torch.no_grad()
-    def decide(
-        self,
-        input_ids: torch.LongTensor,
-        marks: torch.LongTensor,
-        decision_questions: list[Question],
-        decision_config: DecisionConfig | None = None,
-        **kwargs,
-    ) -> list[torch.Tensor]:
-        """The `decide` of [`DecisionMixin`], from the padded logits of the output: the scores of each question."""
-        decision_config = decision_config or self.decision_config
-        num_options = torch.tensor([[len(question.options) for question in decision_questions]])
-        question_types = [Question.questions_types.index(question.type) for question in decision_questions]
-        inputs = {"input_ids": input_ids, **kwargs}
-        output = self(
-            marks=marks[None].to(self.device),
-            num_options=num_options.to(self.device),
-            question_type_ids=torch.tensor([question_types], device=self.device),
-            **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
-        )
-        scores = output.logits[output.option_mask]
-        return process_scores(
-            decision_config, input_ids, marks, decision_questions, scores.split(num_options[0].tolist())
-        )
 
-
-__all__ = ["ClefConfig", "ClefDecisionOutput", "ClefForDecision", "ClefPreTrainedModel"]
+__all__ = ["ClefConfig", "ClefForDecision", "ClefPreTrainedModel"]

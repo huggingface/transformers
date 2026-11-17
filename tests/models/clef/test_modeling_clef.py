@@ -644,6 +644,44 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             with self.subTest(**kwargs), self.assertRaises(ValueError):
                 ClefConfig(**kwargs)
 
+    def test_decide_is_the_mixins_and_helpers_stay_private(self):
+        # The output splits into the scores of each question like the tensor that `DecisionMixin.decide` reads
+        import transformers
+        import transformers.decision
+        from transformers.decision import DecisionMixin
+
+        self.assertIs(ClefForDecision.decide, DecisionMixin.decide)
+        self.assertFalse(hasattr(transformers, "ClefDecisionOutput"))
+        self.assertNotIn("process_scores", dir(transformers.decision))
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        prompt = self.prompts[0]
+        with torch.no_grad():
+            output = model(**self.model_inputs(prompt))
+            scores = model.decide(**prompt.inputs, decision_questions=prompt.questions)
+        widths = [len(question.options) for question in prompt.questions]
+        for split, row, width, score in zip(output.split(widths), output.logits, widths, scores):
+            torch.testing.assert_close(split, row[:width], atol=0, rtol=0)
+            self.assertEqual(score.shape, (width,))
+
+    def test_loss_config_validation(self):
+        # Integers where a float is expected are accepted (as floats); weights out of their range are refused
+        floats = ("label_smoothing", "brier_weight", "ordinal_weight", "rlcd_weight", "rlcd_sigma")
+        floats += ("rlcd_spherical_weight", "rlcd_rps_weight", "cosine_initial_scale")
+        config = ClefConfig(**{**dict.fromkeys(floats, 1), "label_smoothing": 0})
+        for name in floats:
+            self.assertIsInstance(getattr(config, name), float, name)
+        self.assertEqual((config.brier_weight, config.cosine_initial_scale, config.label_smoothing), (1.0, 1.0, 0.0))
+        for kwargs in (
+            {"label_smoothing": 1.5},
+            {"label_smoothing": 1.0},
+            {"label_smoothing": -0.1},
+            {"brier_weight": -1.0},
+            {"ordinal_weight": -0.5},
+        ):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                ClefConfig(**kwargs)
+
     def test_rlcd_backward_reaches_every_parameter(self):
         torch.manual_seed(0)
         config = copy.deepcopy(self.config)
