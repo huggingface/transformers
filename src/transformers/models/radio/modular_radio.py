@@ -264,7 +264,6 @@ class RadioPreTrainedModel(PreTrainedModel):
         "attentions": RadioAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # Use `transformers.initialization` (not in-place `.data` ops) so the
         # framework's `_is_hf_initialized` guard skips already-loaded params.

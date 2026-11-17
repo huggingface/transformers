@@ -43,9 +43,12 @@ from transformers.cli.serving.utils import (
     Modality,
     ToolCall,
     build_response_parser,
+    get_gen_models,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
+    split_model_id,
+    split_revision,
 )
 from transformers.testing_utils import (
     require_audio,
@@ -268,6 +271,16 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[2]["tool_call_id"], "call_1")
         self.assertNotIn("tool_call_id", result[0])
 
+    def test_llm_empty_tool_calls_keeps_content(self):
+        """An assistant message with a null or empty `tool_calls` is a plain text message."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        for tool_calls in (None, []):
+            messages = [{"role": "assistant", "content": "Hello!", "tool_calls": tool_calls}]
+            result = get_processor_inputs_from_messages(messages, Modality.LLM)
+            self.assertEqual(result, [{"role": "assistant", "content": "Hello!"}])
+
     def test_vlm_tool_use_fields_forwarded(self):
         """Tool-use fields should be forwarded for VLM modality as well."""
 
@@ -366,7 +379,7 @@ class TestGenerativeModelList(unittest.TestCase):
             hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
             hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)
 
-            result = ModelManager.get_gen_models(cache_dir)
+            result = get_gen_models(cache_dir)
             model_ids = {r["id"] for r in result}
 
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
@@ -385,10 +398,47 @@ class TestGenerativeModelList(unittest.TestCase):
             config = Path(hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)).resolve()
             config.write_text(json.dumps({**json.loads(config.read_text()), "architectures": None}))
 
-            model_ids = {r["id"] for r in ModelManager.get_gen_models(cache_dir)}
+            model_ids = {r["id"] for r in get_gen_models(cache_dir)}
 
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
+
+    def test_list_models_without_hub_cache(self):
+        # A fresh machine has no Hub cache yet: nothing to list, and no error.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.assertEqual(ModelManager().list_models(cache_dir=f"{tmp_dir}/missing"), [])
+
+    def test_list_models_shows_downloaded_and_loaded_models(self):
+        # What the Hub cache holds: two downloaded models.
+        downloaded = [{"owned_by": "org", "id": name, "object": "model", "created": 0} for name in ("org/a", "org/b")]
+        with (
+            tempfile.TemporaryDirectory() as local_path,
+            patch("transformers.cli.serving.model_manager.get_gen_models", return_value=downloaded),
+        ):
+            model_manager = ModelManager()
+            self.addCleanup(model_manager.shutdown)
+            # What loading `org/a` and a local checkpoint leaves in the manager.
+            for name in ("org/a@main", local_path):
+                model_manager.loaded_models[name] = TimedModel(MagicMock(), timeout_seconds=-1)
+
+            models = model_manager.list_models()
+            statuses = {model["id"]: model["status"]["value"] for model in models}
+
+        # `org/a` is both downloaded and loaded: it is listed once. The local path is not in the Hub cache.
+        self.assertEqual(len(models), 3)
+        self.assertEqual(statuses, {"org/a": "loaded", "org/b": "unloaded", local_path: "loaded"})
+
+    def test_list_models_of_a_pinned_server(self):
+        # A server pinned to one model lists that model alone, whatever the Hub cache holds.
+        with patch.object(ModelManager, "_load_processor"), patch.object(ModelManager, "_load_model"):
+            model_manager = ModelManager(force_model="org/model")
+        self.addCleanup(model_manager.shutdown)
+
+        models = model_manager.list_models()
+
+        self.assertEqual(len(models), 1)
+        self.assertEqual(models[0]["id"], "org/model")
+        self.assertEqual(models[0]["status"], {"value": "loaded"})
 
 
 @require_serve
@@ -602,6 +652,23 @@ class TestModelManager(unittest.TestCase):
     def test_process_model_name_preserves_revision(self):
         self.assertEqual(ModelManager.process_model_name("org/model@dev"), "org/model@dev")
 
+    def test_local_path_with_at_symbol(self):
+        # The `@` of an existing local path is part of the path, not a revision.
+        with tempfile.TemporaryDirectory(prefix="ckpt@1000_") as local_path:
+            self.assertEqual(ModelManager.process_model_name(local_path), local_path)
+            self.assertEqual(split_revision(local_path), (local_path, None))
+
+    def test_split_revision(self):
+        self.assertEqual(split_revision("org/model@main"), ("org/model", "main"))
+        self.assertEqual(split_revision("org/model@refs/pr/12"), ("org/model", "refs/pr/12"))
+
+    def test_split_model_id(self):
+        self.assertEqual(split_model_id("org/model"), ("org/model", None))
+        self.assertEqual(split_model_id("org/model:weights.gguf"), ("org/model", "weights.gguf"))
+        # The colon of a local path is part of the path, not a GGUF file.
+        self.assertEqual(split_model_id("/runs/run:1/ckpt"), ("/runs/run:1/ckpt", None))
+        self.assertEqual(split_model_id("/runs/run:1/ckpt:weights.gguf"), ("/runs/run:1/ckpt", "weights.gguf"))
+
     def test_quantization_config_4bit(self):
         mm = ModelManager(quantization="bnb-4bit")
         cfg = mm.get_quantization_config()
@@ -685,7 +752,7 @@ class TestAppRoutes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model_manager = MagicMock(spec=ModelManager)
-        cls.model_manager.get_gen_models.return_value = [
+        cls.model_manager.list_models.return_value = [
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)

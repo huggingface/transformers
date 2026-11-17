@@ -23,6 +23,7 @@ from ...generation.logits_process import LogitsProcessorList
 from ...generation.stopping_criteria import MaxLengthCriteria, StoppingCriteria, StoppingCriteriaList
 from ...generation.utils import ALL_CACHE_NAMES, GenerateNonBeamOutput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 if TYPE_CHECKING:
@@ -55,7 +56,7 @@ class PocketTTSGenerateOutput(GenerateDecoderOnlyOutput):
         hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated frame) of tuples (one element for each layer) of `torch.Tensor`
             of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
+        cache (`Cache`, *optional*, returned when `use_cache=True`):
             The key/value cache of the backbone at the end of generation.
         audio_latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`):
             The generated latents, in the audio tokenizer's latent space, right-padded with zeros past each sample's own
@@ -119,6 +120,8 @@ class PocketTTSEosThresholdCriteria(StoppingCriteria):
 
 
 class PocketTTSGenerationMixin(GenerationMixin):
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         inputs: torch.Tensor | None = None,
@@ -134,7 +137,7 @@ class PocketTTSGenerationMixin(GenerationMixin):
                 The `input_ids` prepared by [`PocketTTSProcessor`]. Can also be passed as `input_ids=`.
             kwargs (`dict[str, Any]`, *optional*):
                 `attention_mask`, the voice prompt (`audio_prompt_latents` and `audio_prompt_latents_mask`, or the
-                cache of a voice prefix as `past_key_values`, the shipped voices, with prompts of the text only),
+                cache of a voice prefix as `cache`, the shipped voices, with prompts of the text only),
                 `frames_after_eos` from the processor, the generation parameters (`do_sample`,
                 `temperature`, `max_new_tokens`, ...), and the Pocket TTS-specific `num_flow_steps`, `eos_threshold` and
                 `min_frames_before_eos`, which default to the generation config.
@@ -162,10 +165,10 @@ class PocketTTSGenerationMixin(GenerationMixin):
                 "The prompts hold a voice placeholder but no voice: pass the voice to the processor, as an `audio` item of "
                 "the conversation or as `audio_prompt_latents`."
             )
-        past_key_values = kwargs.get("past_key_values")
+        cache = kwargs.get("cache")
         attention_mask = kwargs.get("attention_mask")
         if (
-            past_key_values is not None
+            cache is not None
             and input_ids is not None
             and attention_mask is not None
             and attention_mask.shape[1] == input_ids.shape[1]
@@ -173,7 +176,7 @@ class PocketTTSGenerationMixin(GenerationMixin):
         ):
             # The voice is the cache of its prefix (a shipped voice) and the prompts hold the text only: the mask covers
             # the cached positions too, so `generate` takes `input_ids` as the new tokens and derives their positions.
-            cached = attention_mask.new_ones(attention_mask.shape[0], past_key_values.get_seq_length())
+            cached = attention_mask.new_ones(attention_mask.shape[0], cache.get_seq_length())
             kwargs["attention_mask"] = torch.cat([cached, attention_mask], dim=-1)
         generation_config = kwargs.get("generation_config")
         length_is_set = any(
@@ -417,7 +420,7 @@ class PocketTTSGenerationMixin(GenerationMixin):
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=cache,
+                cache=cache,
                 audio_latents=audio_latents,
                 audio_latents_mask=audio_latents_mask,
             )
