@@ -1288,9 +1288,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
 
-        model.generation_config.use_cuda_graph = (
-            any(continuous_batching_config.cuda_graph_booleans) and device_type in DEVICE_TYPE_TO_GRAPH_NAME
-        )
         model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
         # Create a static cache if compile_config is set, because regular generate requires a compileable cache
         cache = None
