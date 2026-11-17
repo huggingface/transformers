@@ -229,9 +229,8 @@ class MistralLarge4TextRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, config: MistralLarge4TextConfig) -> None:
         super().__init__(config)
-        self.alpha = nn.Buffer(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
+        self.alpha = nn.Parameter(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         scaled_inv_freq = (
@@ -612,7 +611,6 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, MistralLarge4TextTopkRouter):

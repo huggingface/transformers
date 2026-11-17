@@ -402,7 +402,6 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
     _can_record_outputs = None
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)

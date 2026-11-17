@@ -79,7 +79,6 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
         return inv_freq
 
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
@@ -487,7 +486,6 @@ class ParakeetPreTrainedModel(PreTrainedModel):
         "attentions": ParakeetEncoderAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)

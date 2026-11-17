@@ -54,6 +54,7 @@ class FalconH1Config(PreTrainedConfig):
     """
 
     model_type = "falcon_h1"
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["cache"]
 

@@ -199,6 +199,21 @@ class KimiK25IntegrationTest(unittest.TestCase):
         ]
         cls.message3 = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
 
+        cls.message_video = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -332,6 +347,50 @@ class KimiK25IntegrationTest(unittest.TestCase):
 
         inputs = self.processor.apply_chat_template(
             [self.message1, self.message2],
+            tokenize=True,
+            add_generation_prompt=True,
+            padding=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_video(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.0000e+00, -2.6417e-02,  1.7078e-02, -8.2328e-02,  1.2016e-01,
+                    -1.5290e-01, -8.2528e-02,  1.5658e-01, -4.1732e-02,  1.0555e-01],
+                    [ 0.0000e+00, -2.6399e-02,  1.7066e-02, -8.2299e-02,  1.2015e-01,
+                    -1.5290e-01, -8.2511e-02,  1.5659e-01, -4.1722e-02,  1.0556e-01],
+                    [ 0.0000e+00, -2.6396e-02,  1.7089e-02, -8.2330e-02,  1.2016e-01,
+                    -1.5291e-01, -8.2535e-02,  1.5659e-01, -4.1734e-02,  1.0555e-01],
+                    [ 0.0000e+00, -2.6388e-02,  1.7073e-02, -8.2334e-02,  1.2015e-01,
+                    -1.5293e-01, -8.2515e-02,  1.5659e-01, -4.1720e-02,  1.0556e-01],
+                    [ 0.0000e+00, -2.1670e-01,  1.6695e-01, -3.0506e-02,  1.4273e-01,
+                    -7.2325e-02, -2.1406e-01, -6.7767e-02, -4.7789e-02,  6.6907e-02],
+                    [ 0.0000e+00, -1.6136e-02,  4.4733e-02, -7.7766e-02,  1.3756e-01,
+                    -2.0453e-01, -1.0643e-01,  1.8437e-01, -7.5915e-02,  1.0252e-01],
+                    [ 0.0000e+00, -2.1125e-01,  1.7319e-01, -2.3906e-02,  1.4516e-01,
+                    -8.5956e-02, -2.1811e-01, -6.3858e-02, -5.6757e-02,  6.4419e-02],
+                    [ 0.0000e+00, -1.0793e-02,  5.9532e-02, -7.1375e-02,  1.4503e-01,
+                    -2.3454e-01, -1.1700e-01,  1.9887e-01, -9.4966e-02,  1.0046e-01],
+                    [ 0.0000e+00,  1.1804e-02, -9.0175e-02, -9.4707e-02,  1.3777e-01,
+                    -2.0531e-01, -1.1191e-01,  1.2696e-02, -7.1477e-02,  1.5818e-01],
+                    [ 0.0000e+00, -1.5441e-04,  5.1317e-02, -7.6136e-02,  1.2778e-01,
+                    -2.3561e-01, -1.0532e-01,  1.8567e-01, -8.6557e-02,  1.1266e-01]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.0129})
+
+        inputs = self.processor.apply_chat_template(
+            [self.message_video],
             tokenize=True,
             add_generation_prompt=True,
             padding=True,

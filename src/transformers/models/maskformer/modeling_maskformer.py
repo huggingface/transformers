@@ -430,7 +430,6 @@ class MaskFormerDetrPreTrainedModel(PreTrainedModel):
         r"mask_former_detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
@@ -1704,7 +1703,6 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         xavier_std = self.config.init_xavier_std

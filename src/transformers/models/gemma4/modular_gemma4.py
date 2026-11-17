@@ -278,7 +278,6 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
         inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
         self.inv_timescales = nn.Buffer(inv_timescales.unsqueeze(0).unsqueeze(0), persistent=False)
 
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         position_ids = torch.arange(self.context_size // 2, -1, -1, device=hidden_states.device)
         position_ids = position_ids[..., None]
@@ -1265,7 +1264,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):
@@ -1925,6 +1923,8 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     """
 )
 class Gemma4Model(Gemma3nModel):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
@@ -2287,6 +2287,8 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

@@ -149,7 +149,6 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
         "attentions": OutputRecorder(Data2VecAudioAttention, index=1, layer_name="encoder"),  # noqa: F821
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
