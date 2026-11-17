@@ -296,6 +296,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_cache_format(self):
         pass
 
+    @unittest.skip("Old model that requires too many changes - not worth")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

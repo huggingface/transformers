@@ -197,6 +197,10 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_image_features_attentions(self):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):

@@ -398,6 +398,10 @@ class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest
         pass
 
     # Why do we have two classes that run same tests across with same inputs? FIXME with proper multimodal tester
+    @unittest.skip("The tester has no image in input dict")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
     @parameterized.expand([True, False, None])
     @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")
     def test_get_image_features_output(self, return_dict: bool | None):

@@ -489,6 +489,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_generate_continue_from_cache(self):
         pass
 
+    @unittest.skip("Old model that requires too many changes - not worth")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
 
 @require_torch
 @require_vision

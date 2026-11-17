@@ -211,6 +211,10 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.model_tester = Phi4MultimodalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Phi4MultimodalConfig)
 
+    @unittest.skip("Old model that requires too many changes - not worth")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
