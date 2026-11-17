@@ -36,12 +36,12 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import eager_attention_forward
-from ..clip.modeling_clip import CLIPMLP
+from ..focalnet.modeling_focalnet import FocalNetMlp
 from .configuration_weathernext2 import WeatherNext2Config, WeatherNext2GraphConfig
 from .generation_weathernext2 import WeatherNext2GenerationConfig, WeatherNext2GenerationMixin
 
 
-class WeatherNext2MLP(CLIPMLP):
+class WeatherNext2MLP(FocalNetMlp):
     pass
 
 
@@ -68,9 +68,7 @@ class WeatherNext2ConditionedMlp(nn.Module):
     def __init__(self, config: WeatherNext2GraphConfig, in_features: int, hidden_size: int | None = None):
         super().__init__()
         hidden_size = hidden_size or config.hidden_size
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(in_features, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.mlp = WeatherNext2MLP(config, in_features, hidden_size, hidden_size)
         self.norm = WeatherNext2ConditionedNorm(config, hidden_size)
         self.chunk_size = config.chunk_size
 
@@ -86,9 +84,7 @@ class WeatherNext2ConditionedMlp(nn.Module):
             spatial_features = spatial_features.unsqueeze(0).expand(hidden_states.shape[0], -1, -1)
             hidden_states = torch.cat([spatial_features, hidden_states], dim=-1)
 
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         return self.norm(hidden_states, conditioning)
 
 
@@ -328,7 +324,7 @@ class WeatherNext2Layer(GradientCheckpointingLayer):
     def __init__(self, config: WeatherNext2Config, layer_idx: int):
         super().__init__()
         self.self_attn = WeatherNext2Attention(config, layer_idx)
-        self.mlp = WeatherNext2MLP(config)
+        self.mlp = WeatherNext2MLP(config, config.hidden_size, config.intermediate_size)
         self.input_layernorm = WeatherNext2ConditionedNorm(config, config.hidden_size)
         self.post_attention_layernorm = WeatherNext2ConditionedNorm(config, config.hidden_size)
 
@@ -616,9 +612,9 @@ class WeatherNext2ForecastHead(nn.Module):
     def __init__(self, config: WeatherNext2Config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.graph_config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.hidden_size)
-        self.fc2 = nn.Linear(config.hidden_size, config.num_output_channels)
+        self.mlp = WeatherNext2MLP(
+            config.graph_config, config.hidden_size, config.hidden_size, config.num_output_channels
+        )
         gate, shifts = self.get_output_activation_buffers()
         self.sigmoid_gate = nn.Buffer(gate, persistent=False)
         self.sigmoid_shift = nn.Buffer(shifts, persistent=False)
@@ -636,9 +632,7 @@ class WeatherNext2ForecastHead(nn.Module):
         return gate, shifts
 
     def forward(self, grid_states: torch.Tensor) -> torch.Tensor:
-        grid_states = self.fc1(grid_states)
-        grid_states = self.activation_fn(grid_states)
-        prediction = self.fc2(grid_states)
+        prediction = self.mlp(grid_states)
         shifted = torch.sigmoid(prediction - self.sigmoid_shift)
         prediction = torch.where(self.sigmoid_gate, shifted, prediction)
 

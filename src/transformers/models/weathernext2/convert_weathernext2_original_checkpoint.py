@@ -634,9 +634,9 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
 
     def convert_conditioned_mlp(target: str, module: str) -> None:
         """The `Linear -> act -> Linear -> LayerNorm -> FiLM` block, minus its first weight."""
-        put(f"{target}.fc1.bias", take(f"{module}/shared_dense/mlp/linear_0:b"))
-        put(f"{target}.fc2.weight", take(f"{module}/shared_dense/mlp/linear_1:w").T)
-        put(f"{target}.fc2.bias", take(f"{module}/shared_dense/mlp/linear_1:b"))
+        put(f"{target}.mlp.fc1.bias", take(f"{module}/shared_dense/mlp/linear_0:b"))
+        put(f"{target}.mlp.fc2.weight", take(f"{module}/shared_dense/mlp/linear_1:w").T)
+        put(f"{target}.mlp.fc2.bias", take(f"{module}/shared_dense/mlp/linear_1:b"))
         film = f"{module}/shared_dense/normalization/linear_norm_conditioning/linear"
         put(f"{target}.norm.linear.weight", take(f"{film}:w").T)
         put(f"{target}.norm.linear.bias", take(f"{film}:b"))
@@ -654,7 +654,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
         ("model.grid_encoder", "grid_encoder", config.input_channel_layout),
         ("model.mesh_encoder", "mesh_encoder", config.mesh_channel_layout),
     ):
-        put(f"{target}.fc1.weight", stacked_input_weight(params, config, module, layout, SPATIAL_NODE_FEATURES))
+        put(f"{target}.mlp.fc1.weight", stacked_input_weight(params, config, module, layout, SPATIAL_NODE_FEATURES))
         for variable, time_offset, _ in layout:
             prefix = "forcing_" if time_offset is not None and time_offset > 0 else "input_"
             consumed.add(f"{module}/split_input_matmul:{split_weight_name(config, variable, time_offset, prefix)}")
@@ -668,7 +668,7 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     ):
         edge_module = f"{module}/edge_encoder"
         put(
-            f"{target}.edge_encoder.fc1.weight",
+            f"{target}.edge_encoder.mlp.fc1.weight",
             take(f"{edge_module}/split_input_matmul:w_spatial_feature={SPATIAL_EDGE_FEATURES}").T,
         )
         convert_conditioned_mlp(f"{target}.edge_encoder", edge_module)
@@ -692,10 +692,10 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
 
         for node_target, node_set in (("mesh_node_update", "mesh_nodes"), ("grid_node_update", "point_nodes")):
             node_module = f"{gnn}/processor_nodes_0_{node_set}"
-            put(f"{target}.{node_target}.fc1.weight", take(f"{node_module}/mlp/linear_0:w").T)
-            put(f"{target}.{node_target}.fc1.bias", take(f"{node_module}/mlp/linear_0:b"))
-            put(f"{target}.{node_target}.fc2.weight", take(f"{node_module}/mlp/linear_1:w").T)
-            put(f"{target}.{node_target}.fc2.bias", take(f"{node_module}/mlp/linear_1:b"))
+            put(f"{target}.{node_target}.mlp.fc1.weight", take(f"{node_module}/mlp/linear_0:w").T)
+            put(f"{target}.{node_target}.mlp.fc1.bias", take(f"{node_module}/mlp/linear_0:b"))
+            put(f"{target}.{node_target}.mlp.fc2.weight", take(f"{node_module}/mlp/linear_1:w").T)
+            put(f"{target}.{node_target}.mlp.fc2.bias", take(f"{node_module}/mlp/linear_1:b"))
             film = f"{node_module}/normalization/linear_norm_conditioning/linear"
             put(f"{target}.{node_target}.norm.linear.weight", take(f"{film}:w").T)
             put(f"{target}.{node_target}.norm.linear.bias", take(f"{film}:b"))
@@ -723,11 +723,11 @@ def convert_state_dict(params: dict[str, np.ndarray], config: WeatherNext2Config
     put("model.mesh_transformer.norm.linear.bias", take(f"{film}:b"))
 
     # --- decoder
-    put("head.fc1.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
-    put("head.fc1.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
+    put("head.mlp.fc1.weight", take("grid_decoder/shared_dense/mlp/linear_0:w").T)
+    put("head.mlp.fc1.bias", take("grid_decoder/shared_dense/mlp/linear_0:b"))
     output_weight, output_bias = stacked_output_weight(params, config, "grid_decoder")
-    put("head.fc2.weight", output_weight)
-    put("head.fc2.bias", output_bias)
+    put("head.mlp.fc2.weight", output_weight)
+    put("head.mlp.fc2.bias", output_bias)
     for variable, time_offset, _ in config.target_channel_layout:
         name = split_weight_name(config, variable, time_offset, prefix="")
         consumed.add(f"grid_decoder/split_output_linear:{name}")
