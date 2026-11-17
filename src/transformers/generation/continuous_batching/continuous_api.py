@@ -694,8 +694,6 @@ class ContinuousBatchingManager:
 
         # Control flow attributes
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
-        # Inference mode is thread-local: the caller's, applied to warmup and the background generation loop alike
-        self._inference_mode = torch.is_inference_mode_enabled()
 
         # Model-related attributes
         self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
@@ -793,10 +791,9 @@ class ContinuousBatchingManager:
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
-        with torch.inference_mode(self._inference_mode):
-            if self.batch_processor is None:
-                self.batch_processor = self._create_batch_processor()
-            self.batch_processor.warmup(self.model)
+        if self.batch_processor is None:
+            self.batch_processor = self._create_batch_processor()
+        self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
     # --------------------------------------------- CONTROL FLOW METHODS --------------------------------------------- #
@@ -811,11 +808,7 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
-
-        def run_generation_loop() -> None:
-            with torch.inference_mode(self._inference_mode):
-                self._run_generation_loop()
-
+        # Inference mode is thread-local: run the generation loop in the caller's
         use_inference_mode = torch.is_inference_mode_enabled()
         self._generation_thread = threading.Thread(target=self._run_generation_loop, args=(use_inference_mode,))
         self._generation_thread.start()
@@ -1112,9 +1105,11 @@ class ContinuousBatchingManager:
             self._wake_up_loop.clear()
             return True
 
-    def _run_generation_loop(self) -> None:
-        """Main processing loop running in the background thread."""
+    def _run_generation_loop(self, use_inference_mode: bool) -> None:
+        """Main processing loop running in the background thread, in the caller's inference mode."""
         batch_processor = None
+        inference_mode = torch.inference_mode(use_inference_mode)
+        inference_mode.__enter__()
 
         # Everything is inside this try / except / finally block so we can handle critical errors gracefully
         try:
@@ -1154,6 +1149,7 @@ class ContinuousBatchingManager:
             self._handle_critical_error(e, batch_processor)
         finally:
             self.background_thread_status.mark_as_stopped()
+            inference_mode.__exit__(None, None, None)
             logger.info("Generation loop finished and background thread exited successfully.")
 
     def _generation_step(self) -> None:
