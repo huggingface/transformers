@@ -2,7 +2,7 @@
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
-# You may obtain a clone of the License at
+# You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
@@ -292,7 +292,7 @@ def _make_allocator(
     )
 
 
-# Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
+# Class for all continuous batching tests that do not require any accelerator. Usually those tests are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
@@ -2050,7 +2050,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         self.assertEqual(results[0].generated_tokens, results[1].generated_tokens)
 
     # ----------------------------------Additional features tests---------------------------------- #
-    #               Tests to check addtional features of CB do not change its results               #
+    #               Tests to check additional features of CB do not change its results              #
     # --------------------------------------------------------------------------------------------- #
     @parameterized.expand(
         [
@@ -2249,7 +2249,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             continuous_batching_config=continuous_batching_config,
         )
 
-        # Trick to have temperature, top-k, top-p ... without randomness: diable sampling after manager creation
+        # Trick to have temperature, top-k, top-p ... without randomness: disable sampling after manager creation
         manager.generation_config.do_sample = False
 
         manager.start()
