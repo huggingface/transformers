@@ -222,7 +222,7 @@ class TextNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class TextNetModel(TextNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__(config)
         self.stem = TextNetConvLayer(config)
         self.encoder = TextNetEncoder(config)
@@ -269,7 +269,7 @@ class TextNetModel(TextNetPreTrainedModel):
     """
 )
 class TextNetForImageClassification(TextNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
@@ -286,7 +286,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -341,7 +341,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
 class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__(config)
 
         self.textnet = TextNetModel(config)

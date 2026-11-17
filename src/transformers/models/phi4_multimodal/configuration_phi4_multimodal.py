@@ -179,7 +179,7 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     ```"""
 
     model_type = "phi4_multimodal"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv

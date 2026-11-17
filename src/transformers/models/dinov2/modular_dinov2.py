@@ -179,7 +179,6 @@ class Dinov2Layer(GradientCheckpointingLayer):
 class Dinov2PreTrainedModel(ViTPreTrainedModel):
     config: Dinov2Config
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -300,7 +299,7 @@ class Dinov2ForImageClassification(ViTForImageClassification):
     """
 )
 class Dinov2Backbone(BackboneMixin, Dinov2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Dinov2Config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Dinov2Embeddings(config)

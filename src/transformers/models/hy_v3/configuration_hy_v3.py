@@ -46,7 +46,7 @@ class HYV3Config(PreTrainedConfig):
 
     model_type = "hy_v3"
     default_theta = 11_158_840.0
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_local_experts": "num_experts",
     }

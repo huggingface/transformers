@@ -34,6 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from .configuration_neomme import NeoMMEConfig
@@ -139,7 +140,6 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(
         self, x: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
@@ -317,6 +317,7 @@ class NeoMMEAttention(nn.Module):
         self.exclusive_self_attention = NeoMMEExclusiveSelfAttention(config)
         self.output_projection = NeoMMESigmoidGatedProjection(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -420,7 +421,7 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["NeoMMEEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -441,7 +442,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         backbone = getattr(self, self.base_model_prefix, self)
         backbone.embed_tokens.word_embeddings = value
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         # `apply` visits children before parents, so the NeoMME-specific parent initialization below runs last.
         super()._init_weights(module)
@@ -670,18 +670,18 @@ class NeoMMEForMaskedLM(NeoMMEPreTrainedModel):
 @dataclass
 class NeoMMEForRetrievalOutput(BaseModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Retrieval loss. This value is always `None`.
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, embedding_dim)`, *optional*):
         Normalized token embeddings for late-interaction retrieval. Padding rows are zeroed. Score them with MeanMaxSim.
-    dense_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
+    dense_embeddings (`torch.Tensor` of shape `(batch_size, hidden_size)` or `(batch_size, dense_dim)`, *optional*):
         A normalized mean-pooled embedding for each input. When `dense_dim` is set, the last dimension is `dense_dim`.
         Score them with cosine similarity.
     """
 
-    loss: torch.FloatTensor | None = None
-    embeddings: torch.FloatTensor | None = None
-    dense_embeddings: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    embeddings: torch.Tensor | None = None
+    dense_embeddings: torch.Tensor | None = None
 
 
 class NeoMMEMultiVectorHead(nn.Module):

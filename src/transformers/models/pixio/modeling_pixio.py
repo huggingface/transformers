@@ -306,7 +306,6 @@ class PixioPreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "patch_embeddings"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

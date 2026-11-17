@@ -50,7 +50,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm4v_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `Glm4vMoeText`
     base_model_tp_plan = {
@@ -144,7 +144,7 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
     model_type = "glm4v_moe_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 24
     hidden_size: int = 1536
@@ -195,7 +195,7 @@ class Glm4vMoeConfig(PreTrainedConfig):
         "vision_config": Glm4vMoeVisionConfig,
         "text_config": Glm4vMoeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
