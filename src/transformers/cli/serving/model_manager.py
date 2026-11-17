@@ -22,7 +22,7 @@ import os
 import threading
 from collections.abc import Callable
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from huggingface_hub import scan_cache_dir
 from tqdm import tqdm
@@ -31,7 +31,7 @@ import transformers
 from transformers import BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .utils import Modality, make_progress_tqdm_class, reset_torch_cache, split_model_id
+from .utils import Modality, make_progress_tqdm_class, reset_torch_cache, split_model_id, split_revision
 
 
 if TYPE_CHECKING:
@@ -212,18 +212,19 @@ class ModelManager:
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
-        """Canonicalize Hub repo IDs to `'model_id@revision'` format (defaults to `@main`), leaving local paths as-is."""
-        if os.path.exists(model_id) or "@" in model_id:
-            return model_id
-        return f"{model_id}@main"
+        """Canonical name of a model, the one it is cached under.
 
-    @staticmethod
-    def _split_repo_and_revision(model_id_and_revision: str) -> tuple[str, str | None]:
-        """Split `'model_id@revision'` into `(model_id, revision)`, preserving existing local paths with `'@'`."""
-        if os.path.exists(model_id_and_revision) or "@" not in model_id_and_revision:
-            return model_id_and_revision, None
-        model_id, revision = model_id_and_revision.split("@", 1)
-        return model_id, revision
+        - A Hub repo is named `'model_id@revision'`: `"org/model"` -> `"org/model@main"`, `"org/model@dev"` is kept.
+        - An existing local path is kept as it is: it has no revision, and an `@` in it is part of the path.
+        """
+        if os.path.exists(model_id):
+            # A local path has no revision, and an `@` in it is part of the path.
+            return model_id
+        if "@" in model_id:
+            # A Hub repo that already names its revision, e.g. `"org/model@dev"`.
+            return model_id
+        # A Hub repo with no revision: default to `main`.
+        return f"{model_id}@main"
 
     def get_quantization_config(self) -> BitsAndBytesConfig | None:
         """Return a BitsAndBytesConfig based on the `quantization` setting, or None."""
@@ -243,18 +244,17 @@ class ModelManager:
         """Load a processor for the given model.
 
         Args:
-            model_id_and_revision: Local path or Hub model ID in ``'model_id@revision'`` format.
+            model_id_and_revision: Model ID in ``'model_id@revision'`` format.
         """
         from transformers import AutoProcessor, AutoTokenizer
 
-        model_id, revision = self._split_repo_and_revision(model_id_and_revision)
-        processor_kwargs: dict[str, Any] = {"trust_remote_code": self.trust_remote_code}
-        if revision is not None:
-            processor_kwargs["revision"] = revision
+        model_id, revision = split_revision(model_id_and_revision)
         if gguf_file is not None:
             # A GGUF repo ships no tokenizer files: the vocabulary is read out of the file's metadata.
-            return AutoTokenizer.from_pretrained(model_id, gguf_file=gguf_file, **processor_kwargs)
-        return AutoProcessor.from_pretrained(model_id, **processor_kwargs)
+            return AutoTokenizer.from_pretrained(
+                model_id, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
+            )
+        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
         self,
@@ -266,7 +266,7 @@ class ModelManager:
         """Load a model.
 
         Args:
-            model_id_and_revision (`str`): Local path or Hub model ID in ``'model_id@revision'`` format.
+            model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
             tqdm_class (*optional*): tqdm subclass for progress bars during ``from_pretrained``.
             progress_callback (`Callable`, *optional*): Called with progress dicts during loading.
 
@@ -275,17 +275,16 @@ class ModelManager:
         """
         from transformers import AutoConfig
 
-        model_id, revision = self._split_repo_and_revision(model_id_and_revision)
+        model_id, revision = split_revision(model_id_and_revision)
 
-        model_kwargs: dict[str, Any] = {
+        model_kwargs = {
+            "revision": revision,
             "attn_implementation": self.attn_implementation,
             "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
             "tqdm_class": tqdm_class,
         }
-        if revision is not None:
-            model_kwargs["revision"] = revision
         quantization_config = self.get_quantization_config()
         if quantization_config is not None:
             model_kwargs["quantization_config"] = quantization_config
