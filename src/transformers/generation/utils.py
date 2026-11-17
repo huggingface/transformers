@@ -1244,9 +1244,9 @@ class GenerationMixin(ContinuousMixin):
         new tokens of the total sequence.
         Note that this function never slices inputs, this is performed in `prepare_inputs_for_generation`.
         """
-        # update cache keeping its naming used in model code
+        # Add the cache as input if present in outputs
         if "cache" in outputs:
-            model_kwargs["cache"] = outputs.cache_params
+            model_kwargs["cache"] = outputs.cache
 
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
