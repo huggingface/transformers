@@ -1654,6 +1654,19 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(["☐", "Name"], boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100])
 
+        # A word cut by an overflow window boundary: "o" continues word 2 ("▁hell", "o") at the start of the second window
+        long_words = ["hello"] * 5 + ["internationalization"] + ["world"] * 5
+        encoding = tokenizer_r(
+            long_words,
+            boxes=[[1, 2, 3, 4]] * len(long_words),
+            word_labels=list(range(len(long_words))),
+            max_length=8,
+            truncation=True,
+            stride=1,
+            return_overflowing_tokens=True,
+        )
+        self.assertListEqual(encoding.labels[1], [-100, -100, 3, -100, 4, -100, 5, -100])
+
         tokenizer_r = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base", only_label_first_subword=False)
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 0, 1, 1, -100])
