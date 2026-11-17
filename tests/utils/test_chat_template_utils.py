@@ -15,14 +15,16 @@
 import copy
 import dataclasses
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from threading import Event
 from typing import Literal
 
 import numpy as np
 
 from transformers.testing_utils import require_jinja
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
-from transformers.utils.chat_template_utils import render_jinja_template
+from transformers.utils.chat_template_utils import _compile_jinja_template, render_jinja_template
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -559,6 +561,144 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
 
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_enum_class(self):
+        class TemperatureFormat(Enum):
+            CELSIUS = "celsius"
+            FAHRENHEIT = "fahrenheit"
+
+        class Priority(Enum):
+            LOW = 1
+            HIGH = 2
+            # An alias of LOW, which should not show up as a separate value
+            DEFAULT = 1
+
+        def fn(temperature_format: TemperatureFormat, priorities: list[Priority], fallback: Priority | None = None):
+            """
+            Test function
+
+            Args:
+                temperature_format: The temperature format to use
+                priorities: The priorities to use
+                fallback: The fallback priority
+            """
+            return -40.0
+
+        # Enum classes should become an enum of their member values, including when they're nested in other hints
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "temperature_format": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The temperature format to use",
+                    },
+                    "priorities": {
+                        "type": "array",
+                        "items": {"type": "integer", "enum": [1, 2]},
+                        "description": "The priorities to use",
+                    },
+                    "fallback": {
+                        "type": "integer",
+                        "enum": [1, 2],
+                        "nullable": True,
+                        "description": "The fallback priority",
+                    },
+                },
+                "required": ["temperature_format", "priorities"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_enum_class_with_non_json_values_fails(self):
+        class Point(Enum):
+            ORIGIN = (0, 0)
+
+        def fn(x: Point):
+            """
+            Test function
+
+            Args:
+                x: The input
+            """
+            return x
+
+        # The model can only generate JSON scalars, so there's no way for it to pick one of these members
+        with self.assertRaises(TypeHintParsingException):
+            get_json_schema(fn)
+
+    def test_custom_class_fails(self):
+        @dataclasses.dataclass
+        class Address:
+            city: str
+
+        def fn(x: Address):
+            """
+            Test function
+
+            Args:
+                x: The input
+            """
+            return x
+
+        def nested_fn(x: list[Address]):
+            """
+            Test function
+
+            Args:
+                x: The input
+            """
+            return x
+
+        # We don't know what JSON a custom class expects, so these should raise rather than guessing "object"
+        for tool in (fn, nested_fn):
+            with self.assertRaisesRegex(TypeHintParsingException, "Address"):
+                get_json_schema(tool)
+
+    def test_custom_class_return_is_omitted(self):
+        @dataclasses.dataclass
+        class Address:
+            city: str
+
+        def fn(x: int) -> Address:
+            """
+            Test function
+
+            Args:
+                x: The input
+
+            Returns:
+                The address
+            """
+            return x
+
+        def nested_fn(x: int) -> list[Address]:
+            """
+            Test function
+
+            Args:
+                x: The input
+            """
+            return x
+
+        # The model never generates the return value, so a return hint we can't convert should be left out
+        # of the schema instead of making the whole tool unusable
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"x": {"type": "integer", "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(get_json_schema(fn)["function"], expected_schema)
+        self.assertEqual(get_json_schema(nested_fn)["function"], {**expected_schema, "name": "nested_fn"})
+
     def test_multiline_docstring_with_types(self):
         def fn(x: int, y: int):
             """
@@ -589,6 +729,105 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     },
                 },
                 "required": ["x", "y"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_multiline_docstring_with_colons(self):
+        def fn(location: str, unit: str = "celsius", source: str = ""):
+            """
+            Test function
+
+            Args:
+                location: The location to get the temperature for.
+                    Example: "Paris, France"
+                unit: The unit to return the temperature in.
+                    Default: "celsius" (choices: ["celsius", "fahrenheit"])
+                source: The weather service to query, for example
+                    https://api.example.com/v1
+            """
+            pass
+
+        # Indented continuation lines belong to the description, even when they look like "name: description"
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": 'The location to get the temperature for. Example: "Paris, France"',
+                    },
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": 'The unit to return the temperature in. Default: "celsius"',
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "The weather service to query, for example https://api.example.com/v1",
+                    },
+                },
+                "required": ["location"],
+            },
+        }
+
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_docstring_with_section_after_args(self):
+        def fn(x: int):
+            """
+            Test function
+
+            Args:
+                x: The input
+
+            Example:
+                fn(1)
+            """
+            pass
+
+        # A "name:" line indented less than the arguments is not a continuation of the last description
+        schema = get_json_schema(fn)
+        self.assertEqual(schema["function"]["parameters"]["properties"]["x"]["description"], "The input")
+
+    def test_docstring_with_types_in_parentheses(self):
+        def fn(location: str, unit: str = "celsius", days: int | None = None):
+            """
+            Test function
+
+            Args:
+                location (str): The location to get the temperature for.
+                unit (`str`, *optional*): The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
+                days (int | None, optional): The number of days to forecast, for example
+                    days (int): 3
+            """
+            pass
+
+        # A "(type)" written after the argument name is skipped, the type itself comes from the type hints
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "The location to get the temperature for."},
+                    "unit": {
+                        "type": "string",
+                        "enum": ["celsius", "fahrenheit"],
+                        "description": "The unit to return the temperature in.",
+                    },
+                    "days": {
+                        "type": "integer",
+                        "nullable": True,
+                        "description": "The number of days to forecast, for example days (int): 3",
+                    },
+                },
+                "required": ["location"],
             },
         }
 
@@ -789,6 +1028,43 @@ class ReasoningFieldAliasTest(unittest.TestCase):
                     continue_final_message=message_field,
                 )
                 self.assertEqual(rendered[0], expected)
+
+
+@require_jinja
+class AssistantTrackerConcurrencyTest(unittest.TestCase):
+    def test_concurrent_rendering_keeps_assistant_spans(self):
+        template = "{% generation %}{{ pause() }}{{ messages[0].content }}{% endgeneration %}"
+        compiled = _compile_jinja_template(template)
+        started, release = Event(), Event()
+
+        def pause():
+            if not started.is_set():
+                started.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("First render was not released")
+            return ""
+
+        compiled.environment.globals["pause"] = pause
+
+        def render(content):
+            return render_jinja_template(
+                [[{"role": "assistant", "content": content}]],
+                chat_template=template,
+                return_assistant_tokens_mask=True,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(render, "FIRST")
+            try:
+                self.assertTrue(started.wait(timeout=10))
+                second = pool.submit(render, "SECOND")
+                second_result = second.result(timeout=10)
+            finally:
+                release.set()
+            first_result = first.result(timeout=10)
+
+        self.assertEqual(first_result, (["FIRST"], [[(0, 5)]]))
+        self.assertEqual(second_result, (["SECOND"], [[(0, 6)]]))
 
 
 @require_jinja

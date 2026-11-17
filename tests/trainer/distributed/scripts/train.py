@@ -147,7 +147,7 @@ def main():
     )
 
     if training_args.do_train:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
 
     if training_args.do_eval:
         eval_metrics = trainer.evaluate()
@@ -160,6 +160,9 @@ def main():
         losses = [log["loss"] for log in trainer.state.log_history if "loss" in log]
         with open(loss_output_file, "w", encoding="utf-8") as f:
             json.dump(losses, f)
+
+    # Destroy process groups before interpreter shutdown tears down CUDA.
+    trainer.accelerator.end_training()
 
 
 if __name__ == "__main__":

@@ -1843,6 +1843,33 @@ class ToolArgCoercionTest(unittest.TestCase):
         parser._coerce_tool_calls(call)
         self.assertEqual(call["function"]["arguments"], {"hour": [7, "x", 9]})
 
+    def test_merge_duplicates_preserves_array_values(self):
+        template = copy.deepcopy(qwen3_template)
+        template["fields"]["tool_calls"]["content_args"]["merge_duplicates"] = True
+        tools = _set_alarm_tools(groups={"type": "array"})
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=groups>\n[1, 2]\n</parameter>\n"
+            "<parameter=groups>\n[3, 4]\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, template, prefix="", tools=tools)),
+            {"groups": [[1, 2], [3, 4]]},
+        )
+
+    def test_merge_duplicates_preserves_single_array(self):
+        template = copy.deepcopy(qwen3_template)
+        template["fields"]["tool_calls"]["content_args"]["merge_duplicates"] = True
+        tools = _set_alarm_tools(groups={"type": "array"})
+        model_out = (
+            "<tool_call>\n<function=set_alarm>\n<parameter=groups>\n[1, 2]\n</parameter>\n</function>\n</tool_call>"
+        )
+        self.assertEqual(
+            _first_tool_args(parse_response(model_out, template, prefix="", tools=tools)),
+            {"groups": [1, 2]},
+        )
+
     def test_already_decoded_array_is_not_cast_element_wise(self):
         tools = _set_alarm_tools(groups={"type": "array", "items": {"type": "string"}})
         call = {

@@ -19,7 +19,6 @@ import unittest
 
 import pytest
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import (
     AutoModelForCausalLM,
@@ -33,12 +32,8 @@ from transformers.testing_utils import (
     cleanup,
     is_flash_attn_2_available,
     require_deterministic_for_xpu,
-    require_flash_attn,
-    require_flash_attn_3,
-    require_flash_attn_4,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -356,26 +351,11 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             for_causal_lm = AutoModelForCausalLM.from_pretrained(tmp_dir)
             self.assertIsInstance(for_causal_lm, Gemma3ForConditionalGeneration)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_from_config(self):
-        self.flash_attn_from_config(attn_implementation="flash_attention_2", test_fwd_in_train=False)
-
-    @require_flash_attn_3
-    @require_torch_gpu
-    @mark.flash_attn_3_test
-    @slow
-    def test_flash_attn_3_from_config(self):
-        self.flash_attn_from_config(attn_implementation="flash_attention_3", test_fwd_in_train=False)
-
-    @require_flash_attn_4
-    @require_torch_gpu
-    @mark.flash_attn_4_test
-    @slow
-    def test_flash_attn_4_from_config(self):
-        self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
+    def test_flash_attention_not_supported(self):
+        # Flash Attention would drop the bidirectional mask over image tokens
+        config = self.model_tester.get_config()
+        with self.assertRaisesRegex(ValueError, "does not support Flash Attention"):
+            Gemma3ForConditionalGeneration._from_config(config, attn_implementation="flash_attention_2")
 
     def test_attention_mask_composition(self):
         config = self.model_tester.get_config()
@@ -396,7 +376,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             config=config.text_config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
             block_sequence_ids=block_sequence_ids,
         )
@@ -437,7 +417,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
         model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
         batch_size, prompt_length = inputs_dict["input_ids"].shape
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=config.get_text_config(),
             max_batch_size=batch_size,
             max_cache_len=prompt_length + 8,  # longer than the sliding window
@@ -446,7 +426,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         )
 
         with torch.no_grad():
-            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+            model(**inputs_dict, cache=cache, use_cache=True)
 
 
 @slow
@@ -555,8 +535,8 @@ class Gemma3IntegrationTest(unittest.TestCase):
                         ],
                 ("cuda", (8,6)):
                     [
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
-                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown"
+                        "user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like",
+                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown",
                     ],
                 ("rocm", (9, 4)):
                     [
@@ -728,7 +708,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a city with"],
-                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Chinese Arch"],
+                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt appears to be a street scene in a city"],
                 ("cuda", (9, 0)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Location:**"],
                 ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"],
                 ("rocm", (9, 5)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],
@@ -755,40 +735,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
                 ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("rocm", 9): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning'],
                 ("tpu", None): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    # TODO: raushan FA2 generates gibberish for no reason, check later
-    @require_flash_attn
-    @require_torch_large_accelerator
-    @pytest.mark.flash_attn_test
-    def test_model_4b_flash_attn(self):
-        model_id = "google/gemma-3-4b-it"
-
-        model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-        ).to(torch_device)
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
-                ("cuda", 7): [],
-                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
-                ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. There are some clouds in the blue'],
-                ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with a turquoise ocean and a distant island in the background. It looks like a sunny'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -886,12 +832,12 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         forward_outputs = model(**model_inputs)
-        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(forward_outputs.cache))
 
         generate_outputs = model.generate(
             **model_inputs, max_new_tokens=2, do_sample=False, return_dict_in_generate=True
         )
-        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.cache))
 
         # Even if we manually specify cache_implementation="hybrid", it will still use the dynamic sliding window cache
         generate_outputs = model.generate(
@@ -901,4 +847,4 @@ class Gemma3IntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
             cache_implementation="hybrid",
         )
-        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.past_key_values))
+        self.assertIn("DynamicSlidingWindowLayer", str(generate_outputs.cache))

@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     Expectations,
     is_pipeline_test,
-    require_librosa,
+    require_audio,
     require_torch,
     require_vision,
     slow,
@@ -52,10 +52,47 @@ if is_torch_available():
 
 @is_pipeline_test
 @require_vision
-@require_librosa
+@require_audio
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+    def test_string_assistant_prefill_full_text(self):
+        import copy
+
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "My answer is"},
+        ]
+        original = copy.deepcopy(messages)
+
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_max_new_tokens": 2,
+        }
+
+        new_text = pipe(
+            text=messages,
+            return_full_text=False,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        full_text = pipe(
+            text=messages,
+            return_full_text=True,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        self.assertEqual(full_text[-1]["role"], "assistant")
+        self.assertEqual(full_text[-1]["content"], "My answer is" + new_text)
+        self.assertEqual(messages, original)
 
     def test_multiple_candidates_tiny_model(self):
         pipe = pipeline(

@@ -327,7 +327,6 @@ class GraniteSpeech5PreTrainedModel(PreTrainedModel):
 
     _keep_in_fp32_modules_strict = ["conv.norm"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteSpeech5Encoder):

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3VLMoe model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -26,9 +27,12 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -286,6 +290,44 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
 class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     maxDiff = None
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Assigned here rather than in the class body: `MemoryCleanupMixin` snapshots the class body and
+        # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
+        cls.model = None
+        cls.offload_dir = None
+        # device_map="auto" fills GPUs to ~100%, leaving no room for the transpose temporary
+        # buffer that fuses per-expert weight shards into a single gate_up_proj tensor during
+        # from_pretrained — causing CUDA OOM on multi-GPU runners. A 70% per-GPU max_memory cap
+        # reserves the headroom.
+        cls.max_memory = None
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            cls.max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            cls.max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+            cls.model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen3-VL-30B-A3B-Instruct",
+                dtype="auto",
+                device_map="auto",
+                max_memory=cls.max_memory,
+                offload_folder=cls.offload_dir.name,
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
+
     def setUp(self):
         super().setUp()
 
@@ -336,9 +378,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
 
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -379,9 +419,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -395,6 +433,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
                 ],
                 ("xpu", 5): [
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
@@ -413,9 +455,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct", max_image_size={"longest_edge": 50176}
         )
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype=torch.float16, device_map="auto"
-        )
+        model = self.get_model()
         questions = ["How long is the video? Describe the it in short."]
         video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
         messages = [
@@ -447,9 +487,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -475,19 +513,25 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand_with_video(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         inputs = self.processor.apply_chat_template(
             self.message3, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
-            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book."
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -496,9 +540,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -526,9 +568,7 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
             batched_messages,
@@ -548,6 +588,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane",
                     "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
                 ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the scene:\n-",
+                ],
                 ("xpu", 5): [
                     "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
                     "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
@@ -560,16 +604,24 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we keep the
+    # loaded model (without FA) in `cls.model`. If this test is not run first, there is already a loaded model in
+    # `cls.model` when loading the flash attention model here, and we will get GPU OOM.
+    @run_first
     @slow
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
+            max_memory=self.max_memory,
+            offload_folder=offload_dir.name,
         )
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
@@ -590,6 +642,10 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
                                "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
                               ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the animals in the",
+                ],
 
                 ("xpu", 5): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
                                 "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
@@ -605,16 +661,24 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we keep the
+    # loaded model (without FA) in `cls.model`. If this test is not run first, there is already a loaded model in
+    # `cls.model` when loading the flash attention model here, and we will get GPU OOM.
+    @run_first
     @slow
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
+            max_memory=self.max_memory,
+            offload_folder=offload_dir.name,
         )
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
@@ -632,10 +696,19 @@ class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
-            "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such"
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                    "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),

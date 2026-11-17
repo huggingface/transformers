@@ -19,7 +19,6 @@ import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
-import librosa
 import pytest
 import requests
 
@@ -35,9 +34,11 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_librosa_available,
     require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_librosa,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -53,6 +54,9 @@ from ...test_modeling_common import (
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
+if is_librosa_available():
+    import librosa
 
 if is_torch_available():
     import torch
@@ -604,6 +608,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
 
 
 @require_torch
+@require_librosa
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")

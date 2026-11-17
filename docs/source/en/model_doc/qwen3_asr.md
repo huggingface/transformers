@@ -218,7 +218,7 @@ for text in transcriptions:
 
 ### Training
 
-Pass the target transcripts to `apply_transcription_request` with `transcription` to get the `labels` used to compute the loss.
+Qwen3 ASR can be trained with the loss outputted by the model. Put the target transcript in the assistant turn — in the model's output format `language <NAME><asr_text>...` to preserve the pretrained behavior — and pass `output_labels=True`. Audio and padding positions are masked automatically.
 
 ```python
 from datasets import Audio, load_dataset
@@ -233,11 +233,25 @@ model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
-text_samples = ds["text"][:NUM_SAMPLES]
+conversation = [
+    [
+        {"role": "user", "content": [{"type": "audio", "audio": sample["audio"]["array"]}]},
+        # the transcript follows the model's output format to preserve the pretrained behavior
+        {"role": "assistant", "content": [{"type": "text", "text": f"language English<asr_text>{sample['text']}"}]},
+    ]
+    for sample in ds.select(range(NUM_SAMPLES))
+]
 
-inputs = processor.apply_transcription_request(speech_samples, language="en", transcription=text_samples)
-inputs.to(model.device, dtype=model.dtype)
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())

@@ -685,7 +685,6 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

@@ -1313,6 +1313,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # Bias variables that will be populated on the first call (for retrocompatibility purposes, the vocabulary size
         # is inferred in the first usage, which inhibits initializing here)
         self.length_1_bias = None
+        self.multi_token_biases = None
         self.prepared_bias_variables = False
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -1327,23 +1328,14 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # 3 - include the bias from length = 1
         bias += self.length_1_bias
 
-        # 4 - include the bias from length > 1, after determining which biased sequences may be completed.
-        for sequence_ids, sequence_bias in self.sequence_bias.items():
-            if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
-                continue
-            prefix_length = len(sequence_ids) - 1
+        # 4 - include the bias from length > 1, after determining which biased sequences may be completed. Sequences
+        # with the same prefix length are matched against the end of `input_ids` all at once.
+        for prefixes, last_tokens, sequence_biases in self.multi_token_biases:
+            prefix_length = prefixes.shape[1]
             if prefix_length > input_ids.shape[1]:  # the prefix is longer than the context, ignore
                 continue
-            last_token = sequence_ids[-1]
-            matching_rows = torch.eq(
-                input_ids[:, -prefix_length:],
-                torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
-            ).prod(dim=1)
-            bias[:, last_token] += torch.where(
-                matching_rows.bool(),
-                torch.tensor(sequence_bias, device=input_ids.device),
-                torch.tensor(0.0, device=input_ids.device),
-            )
+            matching_rows = (input_ids[:, None, -prefix_length:] == prefixes).all(dim=-1)
+            bias.index_add_(1, last_tokens, torch.where(matching_rows, sequence_biases, 0.0).to(bias.dtype))
 
         # 5 - apply the bias to the scores
         scores_processed = scores + bias
@@ -1377,6 +1369,20 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
         if single_token_ids:  # Only if we have any single-token sequences
             self.length_1_bias[single_token_ids] = torch.tensor(single_token_biases, device=scores.device)
+
+        # Longer sequences are grouped by prefix length, so that each group can be matched with a single comparison
+        sequences_by_prefix_length = {}
+        for sequence_ids, bias in self.sequence_bias.items():
+            if len(sequence_ids) > 1:
+                sequences_by_prefix_length.setdefault(len(sequence_ids) - 1, []).append((sequence_ids, bias))
+        self.multi_token_biases = [
+            (
+                torch.tensor([sequence_ids[:-1] for sequence_ids, _ in group], device=scores.device),
+                torch.tensor([sequence_ids[-1] for sequence_ids, _ in group], device=scores.device),
+                torch.tensor([bias for _, bias in group], dtype=torch.float, device=scores.device),
+            )
+            for group in sequences_by_prefix_length.values()
+        ]
         self.prepared_bias_variables = True
 
     def _validate_arguments(self):
@@ -2330,7 +2336,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             "input_ids": unconditional_ids,
             "attention_mask": unconditional_attention_mask,
             "use_cache": use_cache,
-            "past_key_values": None,
+            "cache": None,
             "first_pass": True,
         }
 
@@ -2364,9 +2370,9 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             input_ids,
             attention_mask=attention_mask,
             use_cache=self.unconditional_context["use_cache"],
-            past_key_values=self.unconditional_context["past_key_values"],
+            cache=self.unconditional_context["cache"],
         )
-        self.unconditional_context["past_key_values"] = out.get("past_key_values", None)
+        self.unconditional_context["cache"] = out.get("cache", None)
 
         return out.logits
 
