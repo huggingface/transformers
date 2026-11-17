@@ -1439,7 +1439,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_accelerator
     def test_hybrid_sliding_window_crossing_parity(self) -> None:
         """Tests that a hybrid full+sliding model matches generate() token-for-token on prompts that cross the
         sliding window, both during decode (prompt just under the window) and during prefill (prompt over the
@@ -1566,6 +1565,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             f"budget of {budget / 1024**2:.0f} MB (+{tolerance:.0%} tolerance)",
         )
 
+    @slow
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
@@ -2317,7 +2317,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     # ---------------------------------- CPU offloading tests ---------------------------------- #
 
-    @require_torch_accelerator
     def test_cpu_offloading_parity(self) -> None:
         """Test that CPU offloading produces the same results as the legacy soft-reset path, and that it is actually
         called at least once. Uses a very small cache (few blocks) to force offloading."""
@@ -2345,7 +2344,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             )
             self.assertTrue(mock_offload.called, "_offload_to_cpu was not called despite few blocks being available.")
 
-    @require_torch_accelerator
     def test_cpu_offloading_parity_async(self) -> None:
         """Same as test_cpu_offloading_parity but with async batching, where offloading can evict requests that are
         in flight in the previous batch, exercising the rollback-on-restore path."""
@@ -2382,7 +2380,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             self.assertTrue(mock.called, "_offload_to_cpu was not called despite few blocks being available.")
             self.assertTrue(in_flight_victim_seen, "No in-flight victim was offloaded: rollback path not exercised.")
 
-    @require_torch_accelerator
     def test_cpu_offloading_disabled_when_zero(self) -> None:
         """Test that cpu_offload_space=0 produces the same output as the legacy path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -2466,7 +2463,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     NUM_BLOCKS = 4
     MAX_BATCH_TOKENS = 64
 
-    # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
+    # Each tuple fully specifies a synthetic model config plus the CB knobs.
     # fmt: off
     # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async)
     CONFIGS = [
