@@ -38,6 +38,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderLayer,
     SinusoidsPositionEmbedding,
     get_audio_cu_seqlens,
+    get_valid_indices,
 )
 from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 
@@ -143,26 +144,6 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
         super().__init__(config)
 
 
-def get_audio_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
-    """
-    The flat indices of the chunks' non-padding frames after the encoder's three stride-2 convolutions, or pop
-    `"valid_indices"` from `kwargs` if precomputed.
-
-    Args:
-        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
-        n_window: half the chunk size (in raw frames).
-        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
-    """
-    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
-        return valid_indices
-    time_steps = Qwen3ASREncoder._post_cnn_length(torch.tensor(n_window * 2))
-    valid_mask = (
-        torch.arange(time_steps, device=chunk_lengths.device)
-        < Qwen3ASREncoder._post_cnn_length(chunk_lengths)[:, None]
-    )
-    return valid_mask.flatten().nonzero().squeeze(-1)
-
-
 @auto_docstring(
     custom_intro="""
     The audio model for Qwen3 ASR without any head or projection on top.
@@ -208,7 +189,9 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         return {
             "cu_seqlens": cu_seqlens,
             "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
-            "valid_indices": get_audio_valid_indices(chunk_lengths, self.n_window),
+            "valid_indices": get_valid_indices(
+                chunk_lengths, self.n_window, int(self._post_cnn_length(torch.tensor(self.n_window * 2)))
+            ),
         }
 
     @capture_outputs(tie_last_hidden_states=False)
@@ -261,7 +244,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
-        valid_indices = get_audio_valid_indices(chunk_lengths, self.n_window, kwargs=kwargs)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, time_steps, kwargs=kwargs)
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:

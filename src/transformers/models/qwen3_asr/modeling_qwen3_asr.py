@@ -38,7 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, get_max_seqlen, is_flash_attention_requested
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -280,6 +285,30 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
+def get_valid_indices(
+    chunk_lengths: torch.Tensor, n_window: int, max_len_after_cnn: int | None = None, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
+
+    Args:
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        n_window: half the chunk size (in raw frames).
+        max_len_after_cnn: length of each chunk after the CNN, for chunks padded to a fixed length; the longest
+            chunk's by default.
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
+
+    Returns:
+        `(total_valid,)` flat indices into the `(num_chunks * max_len_after_cnn)` grid.
+    """
+    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
+        return valid_indices
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
+    if max_len_after_cnn is None:
+        max_len_after_cnn = feature_lens_after_cnn.max().item()
+    mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
+    return mask.flatten().nonzero().squeeze(-1)
+
+
 def get_audio_cu_seqlens(
     chunk_lengths: torch.Tensor,
     feature_lens: torch.Tensor,
@@ -320,26 +349,6 @@ def get_audio_cu_seqlens(
             cu_chunk_lens += [remainder]
 
     return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
-
-
-def get_audio_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
-    """
-    The flat indices of the chunks' non-padding frames after the encoder's three stride-2 convolutions, or pop
-    `"valid_indices"` from `kwargs` if precomputed.
-
-    Args:
-        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
-        n_window: half the chunk size (in raw frames).
-        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
-    """
-    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
-        return valid_indices
-    time_steps = Qwen3ASREncoder._post_cnn_length(torch.tensor(n_window * 2))
-    valid_mask = (
-        torch.arange(time_steps, device=chunk_lengths.device)
-        < Qwen3ASREncoder._post_cnn_length(chunk_lengths)[:, None]
-    )
-    return valid_mask.flatten().nonzero().squeeze(-1)
 
 
 @auto_docstring(
@@ -391,6 +400,30 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
+    @merge_with_config_defaults
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `input_features_mask` with data-dependent operations (host syncs, loops
+        over the clips): the windowed attention's `cu_seqlens` and `max_seqlen`, and the non-padding frames'
+        `valid_indices`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
+        operations.
+
+        Args:
+            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+                1 for valid mel frames and 0 for padding.
+        """
+        chunk_lengths = input_features_mask.view(input_features_mask.shape[0], -1, self.n_window * 2).sum(-1)
+        chunk_lengths = chunk_lengths.reshape(-1).to(torch.long)
+        feature_lens = input_features_mask.sum(-1).to(torch.long)
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
+            "valid_indices": get_valid_indices(
+                chunk_lengths, self.n_window, int(self._post_cnn_length(torch.tensor(self.n_window * 2)))
+            ),
+        }
+
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -441,7 +474,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
-        valid_indices = get_audio_valid_indices(chunk_lengths, self.n_window, kwargs=kwargs)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, time_steps, kwargs=kwargs)
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
@@ -457,27 +490,6 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         for _ in range(3):
             lengths = torch.where(lengths > 0, (lengths - 1) // 2 + 1, torch.zeros_like(lengths))
         return lengths
-
-    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `input_features_mask` with data-dependent operations (host syncs, loops
-        over the clips): the windowed attention's `cu_seqlens` and `max_seqlen`, and the non-padding frames'
-        `valid_indices`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
-        operations.
-
-        Args:
-            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
-                1 for valid mel frames and 0 for padding.
-        """
-        chunk_lengths = input_features_mask.view(input_features_mask.shape[0], -1, self.n_window * 2).sum(-1)
-        chunk_lengths = chunk_lengths.reshape(-1).to(torch.long)
-        feature_lens = input_features_mask.sum(-1).to(torch.long)
-        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
-        return {
-            "cu_seqlens": cu_seqlens,
-            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
-            "valid_indices": get_audio_valid_indices(chunk_lengths, self.n_window),
-        }
 
 
 class Qwen3ASRMultiModalProjector(nn.Module):
