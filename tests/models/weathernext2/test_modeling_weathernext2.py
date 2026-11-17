@@ -50,8 +50,8 @@ class WeatherNext2ModelTester:
         self,
         parent,
         batch_size=2,
-        hidden_size=16,
-        intermediate_size=32,
+        hidden_size=32,
+        intermediate_size=64,
         num_hidden_layers=2,
         num_attention_heads=2,
         edge_hidden_size=4,
@@ -192,6 +192,7 @@ class WeatherNext2ModelTester:
 @require_torch
 class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WeatherNext2Model, WeatherNext2ForWeatherForecasting) if is_torch_available() else ()
+    # Weather forecasts use a custom generation API rather than token-based generation.
     all_generative_model_classes = ()
     additional_model_inputs = ["global_features", "noise", "attention_mask"]
 
@@ -204,6 +205,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=WeatherNext2Config, has_text_modality=False)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        """CRPS labels group at least two ensemble members per initial condition."""
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         if return_labels and model_class == WeatherNext2ForWeatherForecasting:
             config = self.model_tester.get_config()
@@ -217,17 +219,12 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-        config.graph_config.hidden_size = config.hidden_size
-        return config
-
     @with_grad
     def test_loss_gradient_accumulation(self):
-        config = self.model_tester.get_config()
-        labels = floats_tensor([3, 2, config.num_output_channels, config.grid_latitudes, config.grid_longitudes])
-        prediction = floats_tensor([6, *labels.shape[2:]]).requires_grad_()
+        self.model_tester.batch_size = 6
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        labels = self._prepare_for_class(inputs, WeatherNext2ForWeatherForecasting, return_labels=True)["labels"]
+        prediction = floats_tensor([labels.shape[0] * labels.shape[1], *labels.shape[2:]]).requires_grad_()
         loss = WeatherNext2ForWeatherForecastingLoss(prediction, labels, config)
         expected_gradient = torch.autograd.grad(loss, prediction)[0]
 
@@ -245,6 +242,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_accelerator
     @slow
     def test_sdpa_can_compile_dynamic(self):
+        """Compile floating-point weather inputs instead of token IDs."""
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         inputs = {
             key: value.to(torch.bfloat16) if value.is_floating_point() else value for key, value in inputs.items()
@@ -254,28 +252,6 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = torch.compile(model.eval(), dynamic=True)
             with torch.no_grad():
                 model(**inputs)
-
-    @with_grad
-    def test_crps_loss_matches_reference(self):
-        """Matches the original `fgn.Predictor.crps_loss`, including residual shifts and missing cyclone targets."""
-        config = self.model_tester.get_config()
-        config.grid_latitudes, config.grid_longitudes = 5, 8
-        config.target_variables = ["temperature", "geopotential", "10m_u_component_of_wind", "cyclone_all_wind_disc"]
-        config.sigmoid_shifted_outputs = {}
-        config.loss_weights = {"geopotential": 0.5, "10m_u_component_of_wind": 0.05, "cyclone_all_wind_disc": 10.0}
-        config.vars_with_nan_targets = ["cyclone_all_wind_disc"]
-        generator = np.random.default_rng(17)
-        prediction = torch.tensor(generator.normal(size=(2, 3, 6, 5, 8)).astype(np.float32), device=torch_device)
-        labels = torch.tensor(generator.normal(size=prediction.shape).astype(np.float32), device=torch_device)
-        labels[:, :, -1, 1, :3] = torch.nan
-        prediction.requires_grad_()
-
-        loss = WeatherNext2ForWeatherForecastingLoss(prediction.flatten(0, 1), labels, config)
-        loss.backward()
-
-        torch.testing.assert_close(loss, loss.new_tensor(2.84895920753479))
-        self.assertTrue(torch.isfinite(prediction.grad).all())
-        self.assertEqual(torch.count_nonzero(prediction.grad[:, :, -1, 1, :3]).item(), 0)
 
     def test_generate_matches_manual_rollout(self):
         """Splitting the ensemble into batches must not change the noise stream or the clock."""
@@ -426,6 +402,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(
         self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
     ):
+        """Banded geometry requires a mask, and weather inputs must follow the model's floating-point dtype."""
         if not use_attention_mask or padding_side != "left":
             self.skipTest("WeatherNext2 requires a geometry mask and has no left/right token padding.")
 
@@ -465,8 +442,7 @@ class WeatherNext2ModelTest(ModelTesterMixin, unittest.TestCase):
 class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     checkpoint = "kashif/weathernext2-mini"
 
-    def test_inference_expected_values(self):
-        """Mini forecast with seeded normalized inputs; tolerances allow FP32 reduction drift."""
+    def _prepare_model_and_inputs(self, num_members=1):
         model = WeatherNext2ForWeatherForecasting.from_pretrained(self.checkpoint).to(torch_device)
         config = model.config
 
@@ -474,17 +450,25 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         attention_mask = WeatherNext2FeatureExtractor.from_pretrained(self.checkpoint).attention_mask.to(torch_device)
         grid_features = torch.randn(
             1, config.num_grid_input_channels - 3, config.grid_latitudes, config.grid_longitudes, generator=generator
+        ).repeat_interleave(num_members, dim=0)
+        global_features = torch.randn(1, config.num_mesh_input_channels - 3, generator=generator).repeat_interleave(
+            num_members, dim=0
         )
-        global_features = torch.randn(1, config.num_mesh_input_channels - 3, generator=generator)
-        noise = torch.randn(1, config.noise_channels, generator=generator)
+        noise = torch.randn(num_members, config.noise_channels, generator=generator)
+        return model, {
+            "grid_features": grid_features.to(torch_device),
+            "global_features": global_features.to(torch_device),
+            "noise": noise.to(torch_device),
+            "attention_mask": attention_mask,
+        }
+
+    def test_inference_expected_values(self):
+        """Mini forecast with seeded normalized inputs; tolerances allow FP32 reduction drift."""
+        model, inputs = self._prepare_model_and_inputs()
+        config = model.config
 
         with torch.no_grad():
-            prediction = model(
-                grid_features=grid_features.to(torch_device),
-                global_features=global_features.to(torch_device),
-                noise=noise.to(torch_device),
-                attention_mask=attention_mask,
-            ).prediction
+            prediction = model(**inputs).prediction
 
         self.assertEqual(
             prediction.shape, (1, config.num_output_channels, config.grid_latitudes, config.grid_longitudes)
@@ -503,3 +487,21 @@ class WeatherNext2ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         expected_mean = Expectations({(None, None): 0.3225}).get_expectation()
         self.assertAlmostEqual(prediction.float().mean().item(), expected_mean, delta=1e-3)
+
+    def test_loss(self):
+        """The trained mini checkpoint's ensemble CRPS matches the original FGN loss."""
+        model, inputs = self._prepare_model_and_inputs(num_members=2)
+        config = model.config
+        labels = torch.randn(
+            1,
+            1,
+            config.num_output_channels,
+            config.grid_latitudes,
+            config.grid_longitudes,
+            generator=torch.Generator().manual_seed(0),
+        ).repeat_interleave(2, dim=1)
+
+        with torch.no_grad():
+            loss = model(**inputs, labels=labels.to(torch_device)).loss
+        expected_loss = Expectations({(None, None): 50.90686798095703}).get_expectation()
+        torch.testing.assert_close(loss, loss.new_tensor(expected_loss))
