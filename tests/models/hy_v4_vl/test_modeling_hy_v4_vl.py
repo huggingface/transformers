@@ -101,12 +101,10 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
             "mm_token_type_ids": (input_ids == self.image_token_id).long(),
         }
 
-    def prepare_config_and_inputs(self):
-        return self.prepare_config_and_inputs_for_common()
-
     def prepare_multimodal_inputs(self, image_grid=None, video_grid=None):
         """Text, then optionally one image and one video, each followed by a text token."""
         input_ids, token_types = [10, 11, 12], [0, 0, 0]
+
         inputs = {}
         for grid, token_id, modality, pixel_key, grid_key in (
             (image_grid, self.image_token_id, 1, "pixel_values", "image_grid_thw"),
@@ -123,6 +121,7 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
                 torch_device
             )
             inputs[grid_key] = torch.tensor([grid], device=torch_device)
+
         inputs["input_ids"] = torch.tensor([input_ids], device=torch_device)
         inputs["mm_token_type_ids"] = torch.tensor([token_types], device=torch_device)
         inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
@@ -137,6 +136,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
     # Packed vision features have a leading singleton dimension and one newline token per merged row
     skip_test_image_features_output_shape = True
     skip_test_video_features_output_shape = True
+    model_split_percents = [0.5, 0.9]
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -166,18 +166,6 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
             for state in hidden_states[:-1]:
                 self.assertEqual(state.shape, (batch_size, seq_len, text_config.hc_mult, text_config.hidden_size))
             self.assertEqual(hidden_states[-1].shape, (batch_size, seq_len, text_config.hidden_size))
-
-    @unittest.skip("The model accesses `.weight` directly in code")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip("The model accesses `.weight` directly in code")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip("The model accesses `.weight` directly in code")
-    def test_disk_offload_safetensors(self):
-        pass
 
     @unittest.skip("The text attention (sinks + DSA) is eager-only, so the top-level model cannot switch to SDPA")
     def test_can_set_attention_dynamically_composite_model(self):

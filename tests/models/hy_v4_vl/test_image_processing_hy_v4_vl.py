@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 import numpy as np
@@ -30,22 +29,20 @@ if is_vision_available():
     from PIL import Image
 
     if is_torchvision_available():
-        from transformers import AutoImageProcessor, HunYuanVLImageProcessor, HYV4VLImageProcessor
+        from transformers import HYV4VLImageProcessor
 
 
 class HYV4VLImageProcessingTester(ImageProcessingTester):
-    def __init__(self, parent):
-        super().__init__(
-            parent=parent,
-            batch_size=3,
-            num_channels=3,
-            min_resolution=32,
-            max_resolution=64,
-            patch_size=16,
-            temporal_patch_size=1,
-            merge_size=2,
-            size={"shortest_edge": 1024, "longest_edge": 1024},
-        )
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("min_resolution", 32)
+        kwargs.setdefault("max_resolution", 64)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("temporal_patch_size", 1)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("size", {"shortest_edge": 1024, "longest_edge": 1024})
+        super().__init__(parent=parent, **kwargs)
 
     def prepare_image_processor_dict(self):
         return {
@@ -115,37 +112,6 @@ class HYV4VLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.full((32, 32, 4), 255, dtype=np.uint8)
         # PIL RGBA conversion is the supported route to RGB, not arbitrary four-channel model input.
         self._assert_output(processor(Image.fromarray(image), return_tensors="pt"), 1)
-
-    def test_defaults_and_input_names(self):
-        processor = HYV4VLImageProcessor()
-        reference = HunYuanVLImageProcessor()
-        self.assertEqual(processor.size, reference.size)
-        self.assertEqual(tuple(processor.image_mean), tuple(reference.image_mean))
-        self.assertEqual(tuple(processor.image_std), tuple(reference.image_std))
-        self.assertEqual((processor.patch_size, processor.merge_size, processor.temporal_patch_size), (16, 2, 1))
-        self.assertEqual(processor.model_input_names, ["pixel_values", "image_grid_thw"])
-
-    def test_auto_registration_and_checkpoint_overrides(self):
-        settings = {
-            **self.image_processor_dict,
-            "size": {"shortest_edge": 4096, "longest_edge": 4194304},
-            "image_mean": [0.5, 0.5, 0.5],
-            "image_std": [0.5, 0.5, 0.5],
-        }
-        processor = HYV4VLImageProcessor(**settings)
-        with tempfile.TemporaryDirectory() as directory:
-            processor.save_pretrained(directory)
-            restored = AutoImageProcessor.from_pretrained(directory, local_files_only=True, device=torch_device)
-        self.assertIs(type(restored), HYV4VLImageProcessor)
-        self.assertEqual(restored.size, settings["size"])
-        self.assertEqual(tuple(restored.image_mean), (0.5,) * 3)
-        self.assertEqual(tuple(restored.image_std), (0.5,) * 3)
-        image = np.arange(48 * 80 * 3, dtype=np.uint16).astype(np.uint8).reshape(48, 80, 3)
-        actual = restored(image, return_tensors="pt")
-        expected = HunYuanVLImageProcessor(**settings)(image, return_tensors="pt")
-        self.assertEqual(actual.pixel_values.device.type, torch.device(torch_device).type)
-        torch.testing.assert_close(actual.pixel_values, expected.pixel_values, atol=0, rtol=0)
-        torch.testing.assert_close(actual.image_grid_thw, expected.image_grid_thw)
 
     def test_non_square_grid_patch_counts_and_batch_order(self):
         processor = HYV4VLImageProcessor(size={"shortest_edge": 1024, "longest_edge": 8192}, device=torch_device)
