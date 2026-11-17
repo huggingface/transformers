@@ -202,7 +202,8 @@ class Kolibri1_1Indexer(nn.Module):
     `index_num_sink_tokens` and the last `index_num_local_tokens` tokens. Queries that see no more keys than this
     budget attend to all of them. Ties are broken towards earlier keys, as the radix selection of the reference kernels.
 
-    The visible keys of a query must be contiguous (masks with gaps are not supported).
+    The sink and local tokens of a query are counted from its first and up to its last visible key. Masked keys in
+    between keep their position, but are never selected and count as zeros in the average of their block.
     """
 
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
@@ -240,10 +241,12 @@ class Kolibri1_1Indexer(nn.Module):
         return above | (tied & (tie_rank <= free_slots))
 
     def query_groups(self, visible: torch.Tensor):
-        """Yield the batch index, first visible key, query rows and number of visible keys of each group of queries
-        sharing their first visible key, split in chunks of at most `max_scores` scores."""
-        lengths = visible.sum(-1)
+        """Yield the batch index, first visible key, query rows and number of keys from the first to the last visible
+        one of each group of queries sharing their first visible key, split in chunks of at most `max_scores` scores."""
         starts = visible.int().argmax(-1)
+        # Not the number of visible keys: masked keys in between count, so that later keys keep their position
+        ends = visible.shape[-1] - visible.flip(-1).int().argmax(-1)
+        lengths = (ends - starts) * visible.any(-1)
         for batch_idx in range(visible.shape[0]):
             for start in starts[batch_idx].unique().tolist():
                 rows = (starts[batch_idx] == start).nonzero().squeeze(-1)
@@ -253,12 +256,14 @@ class Kolibri1_1Indexer(nn.Module):
     def select_pool(self, queries: torch.Tensor, keys: torch.Tensor, visible: torch.Tensor) -> torch.Tensor:
         pool = visible.clone()
         compression = self.compression
+        # Keys that no query sees, e.g. masked tokens, must not leak into the average of their block
+        unseen = ~visible.any(1)
         for batch_idx, start, rows, lengths in self.query_groups(visible):
             long_rows = lengths.squeeze(-1) > self.pool_size
             if not long_rows.any():
                 continue
             rows, lengths = rows[long_rows], lengths[long_rows]
-            document_keys = keys[batch_idx, 0, start:]
+            document_keys = keys[batch_idx, 0, start:].masked_fill(unseen[batch_idx, start:, None], 0.0)
             num_blocks = document_keys.shape[0] // compression
             blocks = document_keys[: num_blocks * compression].float().unflatten(0, (num_blocks, compression))
             summaries = nvfp4_fake_quantize(blocks.sum(1) / compression)
@@ -294,7 +299,7 @@ class Kolibri1_1Indexer(nn.Module):
             # Sinks and local tokens are always selected, so we only need to choose among the remaining candidates
             candidates = pool[batch_idx, rows, start:] & ~sinks & (positions < lengths - self.num_local_tokens)
             chosen = self.top_k_mask(scores.masked_fill(~candidates, float("-inf")), self.topk)
-            selected[batch_idx, rows, start:] = chosen | sinks | local
+            selected[batch_idx, rows, start:] = (chosen | sinks | local) & visible[batch_idx, rows, start:]
         return selected
 
     @torch.no_grad()

@@ -241,3 +241,33 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
                 _, loading_info = model_class.from_pretrained(tmp_dir, output_loading_info=True)
                 self.assertEqual(loading_info["unexpected_keys"], set())
                 self.assertEqual(loading_info["missing_keys"], set())
+
+    def test_masked_tokens_stay_out_of_sparse_layers(self):
+        # Masked tokens inside the prompt leave gaps in the keys a query sees, unlike padding at either end
+        config = self.model_tester.get_config()
+        # Dense MLPs only, so that the logits can be compared exactly: experts run on the tokens routed to them, and
+        # a masked token that changes experts changes the size of these batches, which moves results by an ulp
+        config.mlp_only_layers = list(range(config.num_hidden_layers))
+        model = Kolibri1_1ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.randint(3, config.vocab_size, (1, 20), device=torch_device)
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[0, [5, 6, 13]] = 0
+        visible = attention_mask[0].bool()
+        other_ids = torch.where(visible, input_ids, (input_ids - 2) % (config.vocab_size - 3) + 3)
+        self.assertTrue((other_ids != input_ids)[0, ~visible].all())
+
+        # The content of a masked token reaches no other token, with float (eager) and boolean (sdpa) attention masks
+        for attn_implementation in ("eager", "sdpa"):
+            with self.subTest(attn_implementation=attn_implementation), torch.no_grad():
+                model.set_attn_implementation(attn_implementation)
+                logits = model(input_ids, attention_mask=attention_mask).logits
+                other_logits = model(other_ids, attention_mask=attention_mask).logits
+                torch.testing.assert_close(other_logits[0, visible], logits[0, visible], rtol=0, atol=0)
+
+        # Every query still attends to itself: masked tokens don't shift its most recent tokens
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            attentions = model(input_ids, attention_mask=attention_mask, output_attentions=True).attentions
+        for layer_idx, weights in enumerate(attentions):
+            own_weights = weights[0, :, visible][:, :, visible].diagonal(dim1=-2, dim2=-1)
+            self.assertTrue((own_weights > 0).all(), msg=f"layer {layer_idx}")
