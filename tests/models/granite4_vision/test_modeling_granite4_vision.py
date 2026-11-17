@@ -117,6 +117,10 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
     has_attentions = False
     test_all_params_have_gradient = False
 
+    @unittest.skip(reason="The image features are packed per image and per group from `image_sizes`")
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
