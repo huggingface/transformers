@@ -1278,7 +1278,9 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             return_dict=True,
             **kwargs,
         )
-        router_logits = outputs.image_outputs.router_logits
+        router_logits = None
+        if outputs.image_outputs is not None:
+            router_logits = outputs.image_outputs.router_logits
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
@@ -1304,7 +1306,7 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
-            router_logits=outputs.image_outputs.router_logits,  # for BC
+            router_logits=router_logits,  # for BC
         )
 
 

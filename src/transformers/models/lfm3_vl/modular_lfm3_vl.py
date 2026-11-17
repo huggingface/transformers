@@ -353,7 +353,7 @@ class Lfm3VlModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`image_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_outputs.pooler_output
+        return torch.cat(self.image_outputs.pooler_output, dim=0)
 
     @property
     def video_pooler_output(self):
@@ -361,19 +361,19 @@ class Lfm3VlModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`video_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_outputs.pooler_output
+        return torch.cat(self.video_outputs.pooler_output, dim=0)
 
 
 @auto_docstring
 @dataclass
 class Lfm3VlCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     @property
-    def image_hidden_states(self):
+    def image_pooler_output(self):
         logger.warning_once(
-            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "`image_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return self.image_outputs.pooler_output
+        return torch.cat(self.image_outputs.pooler_output, dim=0)
 
     @property
     def video_pooler_output(self):
@@ -381,7 +381,7 @@ class Lfm3VlCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`video_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return self.video_outputs.pooler_output
+        return torch.cat(self.video_outputs.pooler_output, dim=0)
 
 
 class Lfm3VlModel(Qwen2VLModel):
