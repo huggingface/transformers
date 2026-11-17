@@ -462,8 +462,10 @@ class ClefEncoder(nn.Module):
         routing_logits = fields @ options.transpose(-1, -2) / math.sqrt(fields.shape[-1])
         questions = torch.arange(fields.shape[1], device=fields.device)
         is_own_option = (option_question_ids[:, None] == questions[:, None]) & is_option[:, None]
-        routing_logits = routing_logits.masked_fill(~is_own_option, torch.finfo(routing_logits.dtype).min)
-        summaries = routing_logits.softmax(-1, dtype=torch.float32) @ options.float()
+        # Masked in float32, where the softmax runs: the minimum of float64 would be -inf there, and a padding question
+        # (none of whose options it owns) would get NaN weights instead of uniform ones
+        routing_logits = routing_logits.float().masked_fill(~is_own_option, torch.finfo(torch.float32).min)
+        summaries = routing_logits.softmax(-1) @ options.float()
         fields = fields + self.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings
         field_mask = padding_mask(is_question, fields.dtype)
         for layer in self.layers:

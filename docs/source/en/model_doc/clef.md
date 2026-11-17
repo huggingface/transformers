@@ -66,7 +66,7 @@ model.model.load_state_dict(AutoModel.from_pretrained("answerdotai/ModernBERT-ba
 decide = pipeline("decision", model=model, tokenizer=AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base"))
 ```
 
-UltraBERT ([`UltrabertModel`], for example `dmis-lab/UltraBERT-150M`) works the same way, with `global_pooling="first"` and `prompt_style="plain"`. Its rotary positions and its alternating local and global attention layers keep the scores of a prompt the same alone, in a batch, and with left or right padding, including prompts longer than its local attention window. Its tokenizer has no `[CLS]` token, and its padding, beginning and end of sequence tokens are the same `<|endoftext|>`: the plain prompt starts with that token and ends with its `<|sep|>` separator. It has no causal language modeling head class, so the model has no `lm_head`. A checkpoint that wraps an UltraBERT in remote code (`model_type: "ultrabert"` with another architecture and an `auto_map`, such as a reranker whose weights are stored as `backbone.<name>`) loads with `AutoModel` into a native [`UltrabertModel`] whose weights are all newly initialized, with only a warning: load such weights with `output_loading_info=True` and check that nothing is missing.
+UltraBERT ([`UltrabertModel`], for example `dmis-lab/UltraBERT-150M`) works the same way, with `global_pooling="first"` and `prompt_style="plain"`. Its rotary positions and its alternating local and global attention layers keep the scores of a prompt the same alone, in a batch, and with left or right padding, including prompts longer than its local attention window. Its tokenizer has no `[CLS]` token, and its padding, beginning and end of sequence tokens are the same `<|endoftext|>`: the plain prompt starts with that token and ends with its `<|sep|>` separator. It has no causal language modeling head class, so the model has no `lm_head`. A checkpoint that wraps an UltraBERT in remote code (`model_type: "ultrabert"` with another architecture and an `auto_map`, such as a reranker whose weights are stored as `backbone.<name>`) does not load its weights into a native [`UltrabertModel`] with `AutoModel` (they would all be newly initialized, with only a warning): convert it with `convert_clef_weights_to_hf.py` (see [Converting checkpoints](#converting-checkpoints)), which strips the prefix, loads the backbone strictly and adds a new decision head.
 
 ## Training
 
@@ -90,10 +90,10 @@ Cloudflare has not published Clef's training objective; these terms and their de
 
 ## Converting checkpoints
 
-`convert_clef_weights_to_hf.py` converts a folder (or repo of the Hub) that ships a backbone with a head in its own format to a native Clef checkpoint: a `config.json` of `model_type: clef`, the weights with the head in float32 and the backbone in its own precision, the tokenizer, `decision.json` and its template. Its decision config takes any number of options of every question type.
+`convert_clef_weights_to_hf.py` converts a folder (or repo of the Hub) that ships a backbone with a head in its own format to a native Clef checkpoint: a `config.json` of `model_type: clef`, the weights with the head stored in float32 and the backbone (with its language modeling head) stored in its own precision, the tokenizer, `decision.json` and its template. Its decision config takes any number of options of every question type.
 
 - A clef checkpoint, or a folder trained from one, with `joint_head.safetensors` and `joint_head_config.json` next to the weights of its backbone: the joint head, or the cosine head when its `head_type` is `cosine_span_v1`, with their sizes. The temperatures (noul, choice, score) of an `unsloth_decision_config.json`, times its `head_temperature`, become those of the decision config, and its `max_len` the `model_max_length` of the tokenizer. A folder with only one of the two head files is refused.
-- A remote-code package around a native model, such as a reranker, whose weights are those of that model under a single prefix next to a task head: the prefix is stripped, the task head dropped (and named in the log), and a new head of `head_type` (`"joint"` by default, sizes from the arguments) initialized. The conversion is refused when no prefix, or more than one, holds exactly the weights of the native model.
+- A remote-code package around a native model, such as a reranker, whose weights are those of that model under a single prefix next to a task head: the prefix is stripped, the task head dropped (and named in the log), and a new head of `head_type` (`"joint"` by default, sizes from the arguments) initialized. The conversion is refused when no prefix, or more than one, holds exactly the weights of the native model. The backbone keeps the values and the precision of the source: one in mixed precision is refused.
 
 The backbone is the bare model of the `model_type` of the `config.json` of the folder, loaded strictly, whatever classes the folder registers; no code of the folder is imported. A bidirectional backbone gets `global_pooling="first"` and `prompt_style="plain"`, a causal one `"last"` and `"chatml"`.
 
@@ -109,6 +109,23 @@ from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_che
 
 convert_clef_checkpoint("path/to/checkpoint", "path/to/clef")
 model = AutoModelForDecision.from_pretrained("path/to/clef")
+```
+
+The `dtype` of the `config.json` of the converted checkpoint is the precision of its backbone. For a backbone in bfloat16:
+
+- the file stores the backbone in bfloat16, exactly as the source, and the head in float32;
+- a default `from_pretrained`, as above, loads the backbone in bfloat16 and casts the joint head to bfloat16 too: the float32 precision of the stored joint head is not used. The cosine head is always loaded and run in float32;
+- to keep the stored float32 joint head over the bfloat16 backbone, load in float32, cast the backbone (and its language modeling head, when the model has one) back to bfloat16, which gives back its stored values exactly, and run the model under autocast, since the joint head does not cast the bfloat16 hidden states of the backbone itself. Loading holds the backbone in float32 (twice its bfloat16 memory) until it is cast back; then the model takes the bfloat16 backbone plus the float32 head. Under autocast, the matrix products of the head run in bfloat16 on its float32 weights. To compute the head in float32 too, keep the whole model in float32, at twice the memory of the backbone.
+
+```py
+import torch
+
+model = AutoModelForDecision.from_pretrained("path/to/clef", dtype=torch.float32)
+model.model.to(torch.bfloat16)
+if hasattr(model, "lm_head"):
+    model.lm_head.to(torch.bfloat16)
+with torch.autocast("cuda", dtype=torch.bfloat16):
+    output = model(**inputs)
 ```
 
 ## ClefConfig

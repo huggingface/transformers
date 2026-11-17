@@ -45,7 +45,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ClefForDecision
+    from transformers import AutoModelForDecision, ClefForDecision
     from transformers.modeling_layers import GradientCheckpointingLayer
     from transformers.models.clef.modeling_clef import ClefDecisionOutput
 
@@ -478,8 +478,6 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
 
     def test_from_pretrained_with_loading_info(self):
         # `output_loading_info` gives the model, with its decision config, and the weights it initialized anew
-        from transformers import AutoModelForDecision
-
         torch.manual_seed(0)
         model = ClefForDecision(self.config).eval()
         with tempfile.TemporaryDirectory() as directory:
@@ -1313,7 +1311,6 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
 
     def convert(self, source, cli=False, **kwargs):
         """Converts `source` to a new folder, removed after the test, and loads it with `AutoModelForDecision`."""
-        from transformers import AutoModelForDecision
         from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint, main
 
         output = tempfile.mkdtemp()
@@ -1642,6 +1639,166 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             probabilities = answer.get("probabilities")
             if probabilities is not None:
                 self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
+
+    def test_convert_bfloat16_backbone(self):
+        # A backbone in bfloat16: stored as is, the head in float32. A default reload casts the joint head to the
+        # backbone's dtype (the cosine head stays in float32); the documented recipe keeps the stored float32 head
+        inputs = self.collate(self.ragged_prompts())
+        for head_type in ("joint", "cosine"):
+            with self.subTest(head_type=head_type):
+                torch.manual_seed(0)
+                # Copies of the configs of the class, which casting the models would change
+                config = copy.deepcopy(self.config)
+                model = ClefForDecision(config).eval() if head_type == "joint" else self.cosine_model()
+                head, state = self.head_state(model)
+                backbone = self.backbone_class(copy.deepcopy(config.text_config))
+                backbone.load_state_dict({k: v for k, v in state.items() if k not in head}, strict=False)
+                backbone = backbone.to(torch.bfloat16)
+                source_backbone = dict(backbone.state_dict())
+                if head_type == "cosine":
+                    head = {key.removeprefix("cosine_head."): value for key, value in head.items()}
+                    head_config = {"head_type": "cosine_span_v1", "hidden_size": 24, "width": 8, "initial_scale": 12.0}
+                    source_backbone.pop("lm_head.weight")  # the cosine head does not read it: dropped
+                else:
+                    head_config = self.joint_head_config(self.config)
+                self.assertIn("lm_head.weight", backbone.state_dict())  # untied: the cast of `lm_head` is covered
+                with tempfile.TemporaryDirectory() as source:
+                    self.write_source(source, backbone, self.tokenizer, head, head_config)
+                    output, _ = self.convert(source)
+                # The stored weights: the backbone in bfloat16 as the source, the head in float32 as the source
+                saved = load_file(f"{output}/model.safetensors")
+                saved_backbone = {k: v for k, v in saved.items() if k.startswith(("model.", "lm_head."))}
+                self.assertEqual(set(saved_backbone), set(source_backbone))
+                for key, value in source_backbone.items():
+                    self.assertEqual(saved[key].dtype, torch.bfloat16, key)
+                    self.assertTrue(torch.equal(saved[key], value), key)
+                prefix = "cosine_head." if head_type == "cosine" else ""
+                for key, value in head.items():
+                    self.assertEqual(saved[prefix + key].dtype, torch.float32, key)
+                    self.assertTrue(torch.equal(saved[prefix + key], value), key)
+                config = json.loads(Path(output, "config.json").read_text(encoding="utf-8"))
+                self.assertEqual((config["dtype"], config["text_config"]["dtype"]), ("bfloat16", "bfloat16"))
+                source_head = {
+                    name: parameter
+                    for name, parameter in model.named_parameters()
+                    if not name.startswith(("model.", "lm_head."))
+                }
+
+                def head_parameters(loaded):
+                    return {n: p for n, p in loaded.named_parameters() if not n.startswith(("model.", "lm_head."))}
+
+                # A default reload: the backbone in bfloat16, the joint head cast to it, the cosine head in float32
+                loaded = AutoModelForDecision.from_pretrained(output, attn_implementation="eager").eval()
+                self.assertEqual(loaded.model.dtype, torch.bfloat16)
+                head_dtype = torch.float32 if head_type == "cosine" else torch.bfloat16
+                for name, parameter in head_parameters(loaded).items():
+                    self.assertEqual(parameter.dtype, head_dtype, name)
+                    if head_type == "cosine":
+                        self.assertTrue(torch.equal(parameter, source_head[name]), name)
+                with torch.no_grad():
+                    logits = loaded(**inputs).logits
+                self.assertEqual(logits.dtype, torch.float32)
+                self.assertTrue(torch.isfinite(logits[logits > torch.finfo(logits.dtype).min]).all())
+                # The recipe of the documentation: float32, the backbone cast back to bfloat16, under autocast
+                loaded = AutoModelForDecision.from_pretrained(
+                    output, dtype=torch.float32, attn_implementation="eager"
+                ).eval()
+                loaded.model.to(torch.bfloat16)
+                if hasattr(loaded, "lm_head"):
+                    loaded.lm_head.to(torch.bfloat16)
+                loaded_backbone = {
+                    k: v for k, v in loaded.state_dict().items() if k.startswith(("model.", "lm_head."))
+                }
+                self.assertEqual(set(loaded_backbone), set(source_backbone))
+                for key, value in source_backbone.items():
+                    self.assertEqual(loaded_backbone[key].dtype, torch.bfloat16, key)
+                    self.assertTrue(torch.equal(loaded_backbone[key], value), key)
+                loaded_head = head_parameters(loaded)
+                self.assertEqual(set(loaded_head), set(source_head))
+                for name, parameter in loaded_head.items():
+                    self.assertEqual(parameter.dtype, torch.float32, name)
+                    self.assertTrue(torch.equal(parameter, source_head[name]), name)
+                with torch.no_grad(), torch.autocast("cpu", dtype=torch.bfloat16):
+                    logits = loaded(**inputs).logits
+                self.assertEqual(logits.dtype, torch.float32)
+                self.assertTrue(torch.isfinite(logits[logits > torch.finfo(logits.dtype).min]).all())
+
+    def test_convert_refuses_mixed_precision_backbones_malformed_heads_and_its_source_as_output(self):
+        from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint
+
+        model = self.cosine_model()
+        head, state = self.head_state(model)
+        head = {key.removeprefix("cosine_head."): value for key, value in head.items()}
+        backbone = self.backbone_class(self.config.text_config)
+        backbone.load_state_dict({k: v for k, v in state.items() if k.startswith("model.")}, strict=False)
+        head_config = {"head_type": "cosine_span_v1", "hidden_size": 24, "width": 8, "initial_scale": 12.0}
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(source, backbone, self.tokenizer, head, head_config)
+            # The output is the folder of the source: nothing is written
+            before = sorted(path.name for path in Path(source).iterdir())
+            with self.assertRaisesRegex(ValueError, "is the folder of the source"):
+                convert_clef_checkpoint(source, source)
+            with self.assertRaisesRegex(ValueError, "is the folder of the source"):
+                convert_clef_checkpoint(source, f"{source}/./")
+            self.assertEqual(sorted(path.name for path in Path(source).iterdir()), before)
+            # A head config without a key its head needs
+            for key in ("width", "initial_scale"):
+                with self.subTest(missing=key), tempfile.TemporaryDirectory() as output:
+                    malformed = {name: value for name, value in head_config.items() if name != key}
+                    Path(source, "joint_head_config.json").write_text(json.dumps(malformed), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, re.escape(f"joint_head_config.json lacks ['{key}']")):
+                        convert_clef_checkpoint(source, output)
+            joint = {k: v for k, v in self.joint_head_config(self.config).items() if k != "heads"}
+            Path(source, "joint_head_config.json").write_text(json.dumps(joint), encoding="utf-8")
+            with (
+                tempfile.TemporaryDirectory() as output,
+                self.assertRaisesRegex(ValueError, re.escape("lacks ['heads']")),
+            ):
+                convert_clef_checkpoint(source, output)
+            Path(source, "joint_head_config.json").write_text(json.dumps(head_config), encoding="utf-8")
+            # A backbone in mixed precision would not keep its weights: refused
+            weights = load_file(f"{source}/model.safetensors")
+            first = next(key for key in weights if key.startswith("model."))
+            weights[first] = weights[first].bfloat16()
+            save_file(weights, f"{source}/model.safetensors", metadata={"format": "pt"})
+            with tempfile.TemporaryDirectory() as output, self.assertRaisesRegex(ValueError, "BF16.*F32"):
+                convert_clef_checkpoint(source, output)
+
+    def test_double_precision_batch_and_padding_side_exact(self):
+        # In float64 the rounding of the backbone no longer depends on the batch: a prompt gets exactly the same
+        # logits alone, in a batch and padded on either side. The float32 allowance (`batch_tolerance`) is the
+        # rounding of the backbone. The causal backbone runs with sdpa: eager attention gives NaN for left-padded rows
+        # in float64 (Qwen2 and Llama alike, a matter of the backbone, not of the head)
+        for backbone in ("qwen2", "bert"):
+            for head_type in ("joint", "cosine"):
+                with self.subTest(backbone=backbone, head_type=head_type):
+                    if backbone == "qwen2":
+                        config = copy.deepcopy(self.config)
+                        config.head_type, config.cosine_width = head_type, 8
+                        config.text_config._attn_implementation = "sdpa"
+                        torch.manual_seed(0)
+                        model = ClefForDecision(config).eval()
+                    else:
+                        model = self.encoder_model(backbone, head_type)
+                    model.double()
+                    prompts = self.ragged_prompts()
+                    with torch.no_grad():
+                        singles = [model(**prompt).logits for prompt in prompts]
+                        right = model(**self.collate(prompts, padding_side="right", pad_token_id=0)).logits
+                        left = model(**self.collate(prompts, padding_side="left", pad_token_id=7)).logits
+                    self.assertEqual((left - right).abs().max().item(), 0)
+                    row, difference = 0, 0.0
+                    for single in singles:
+                        for question in single:
+                            width = int((question > torch.finfo(question.dtype).min).sum())
+                            difference = max(difference, (right[row, :width] - question[:width]).abs().max().item())
+                            row += 1
+                    if head_type == "joint":
+                        self.assertEqual(difference, 0)
+                    else:
+                        # The cosine head computes in float32 whatever the model's dtype, and a float32 matrix product
+                        # rounds differently with the number of rows: up to a few ulps of its logits (about 10)
+                        self.assertLess(difference, 1e-6)
 
 
 @slow

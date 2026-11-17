@@ -60,6 +60,11 @@ TASK_CONFIG_KEYS = ("auto_map", "architectures", "id2label", "label2id", "num_la
 SAFETENSORS_DTYPES = {"F64": torch.float64, "F32": torch.float32, "BF16": torch.bfloat16, "F16": torch.float16}
 JOINT_SIZES = ("hidden_size", "intermediate_size", "num_hidden_layers", "num_evidence_layers", "num_attention_heads")
 COSINE_SIZES = ("cosine_width", "cosine_initial_scale")
+# The keys of the `joint_head_config.json` of each head
+HEAD_CONFIG_KEYS = {
+    "cosine": ("hidden_size", "width", "initial_scale"),
+    "joint": ("hidden_size", "width", "routing_layers", "layers", "heads", "feedforward"),
+}
 
 
 def source_folder(source: str | Path) -> Path:
@@ -174,6 +179,9 @@ def clef_config(
         source_type = "cosine" if declared == COSINE_HEAD_TYPE else "joint"
         if head_type not in (None, source_type):
             raise ValueError(f"{folder} ships a {source_type} head, not a {head_type} one.")
+        missing = [key for key in HEAD_CONFIG_KEYS[source_type] if key not in head_config]
+        if missing:
+            raise ValueError(f"{folder / HEAD_CONFIG} lacks {missing}, which its {source_type} head needs.")
         if head_config["hidden_size"] != text_config["hidden_size"]:
             raise ValueError(
                 f"The head of {folder} reads states of size {head_config['hidden_size']}, its backbone gives "
@@ -227,6 +235,8 @@ def convert_clef_checkpoint(
         raise TypeError(f"Unknown sizes of the head: {sorted(unknown)}.")
     sizes = {key: value for key, value in head_sizes.items() if value is not None}
     folder, output = source_folder(source), Path(output)
+    if output.resolve() == folder.resolve():
+        raise ValueError(f"The output folder {output} is the folder of the source: convert to another one.")
     head_config = read_head_config(folder)
 
     text_config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
@@ -242,9 +252,15 @@ def convert_clef_checkpoint(
         expected = set(backbone.state_dict())
         prefix = backbone_prefix(set(weights), expected, type(backbone).__name__)
         backbone_keys = [key for key in weights if key.startswith(prefix) and key[len(prefix) :] in expected]
-        backbone_dtype = SAFETENSORS_DTYPES.get(
-            weights[backbone_keys[0]].get_slice(backbone_keys[0]).get_dtype(), torch.float32
-        )
+        # The precision of the backbone, which it keeps: one floating-point dtype for all its weights
+        dtypes = {weights[key].get_slice(key).get_dtype() for key in backbone_keys}
+        floating = {dtype for dtype in dtypes if dtype.startswith(("F", "BF"))}
+        if len(floating) != 1 or not floating <= set(SAFETENSORS_DTYPES):
+            raise ValueError(
+                f"The weights of the backbone of {folder} have the floating-point dtypes {sorted(floating)}: only a "
+                f"backbone in one of {sorted(SAFETENSORS_DTYPES)} is converted, without changing its weights."
+            )
+        backbone_dtype = SAFETENSORS_DTYPES[floating.pop()]
         state = {f"model.{key[len(prefix) :]}": (weights[key], key) for key in backbone_keys}
         others = sorted(set(weights) - set(backbone_keys))
 
@@ -253,6 +269,8 @@ def convert_clef_checkpoint(
         if reads_lm_head and not config.tie_word_embeddings:
             if "lm_head.weight" not in weights:
                 raise ValueError(f"The joint head reads the language modeling head, which {folder} does not have.")
+            if weights["lm_head.weight"].get_slice("lm_head.weight").get_dtype() not in dtypes:
+                raise ValueError(f"The language modeling head of {folder} is not in the dtype of its backbone.")
             state["lm_head.weight"] = (weights["lm_head.weight"], "lm_head.weight")
             others.remove("lm_head.weight")
         if others:
