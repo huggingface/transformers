@@ -15,6 +15,12 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2022-04-18 and contributed to Hugging Face Transformers on 2022-05-24.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # LayoutLMv3
 
 ## Overview
@@ -41,7 +47,6 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
   - text is tokenized using byte-pair encoding (BPE), as opposed to WordPiece.
   Due to these differences in data preprocessing, one can use [`LayoutLMv3Processor`] which internally combines a [`LayoutLMv3ImageProcessor`] (for the image modality) and a [`LayoutLMv3Tokenizer`]/[`LayoutLMv3TokenizerFast`] (for the text modality) to prepare all data for the model.
 - Regarding usage of [`LayoutLMv3Processor`], we refer to the [usage guide](layoutlmv2#usage-layoutlmv2processor) of its predecessor.
-- LayoutLMv3 uses [SDPA](../attention_interface) by default. The 1D and 2D relative position biases are passed to it as a float attention mask, so FlashAttention isn't supported. Load the model with `attn_implementation="eager"` to return attention weights with `output_attentions=True`.
 
 ## Resources
 

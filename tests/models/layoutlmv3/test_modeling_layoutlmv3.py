@@ -18,7 +18,13 @@ import unittest
 from functools import cached_property
 
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_flex_attention,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -383,8 +389,32 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         torch.testing.assert_close(encoder._cal_1d_pos_emb(position_ids), rel_pos, rtol=0, atol=0)
         torch.testing.assert_close(encoder._cal_2d_pos_emb(bbox), rel_pos_x + rel_pos_y, rtol=0, atol=0)
 
+    @require_flex_attention
+    @require_torch_accelerator
+    def test_flex_attention_with_grads(self):
+        # The common test only resizes `hidden_size` to get a head dim of 16, but the spatial embeddings of LayoutLMv3
+        # also need `4 * coordinate_size + 2 * shape_size == hidden_size`, and the position biases need `bbox`
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_attention_heads = 3
+        config.hidden_size = 48
+        config.coordinate_size = config.shape_size = 8
+        config.attention_probs_dropout_prob = config.hidden_dropout_prob = 0.0
+        inputs_dict = {k: v.to(torch_device) for k, v in inputs_dict.items()}
+
+        outputs, grads = {}, {}
+        for attn_implementation in ("eager", "flex_attention"):
+            torch.manual_seed(0)
+            model = LayoutLMv3Model._from_config(config, attn_implementation=attn_implementation).to(torch_device)
+            self.assertEqual(model.config._attn_implementation, attn_implementation)
+            outputs[attn_implementation] = model(**inputs_dict).last_hidden_state
+            outputs[attn_implementation].sum().backward()
+            grads[attn_implementation] = model.encoder.layer[0].attention.self.query.weight.grad
+
+        torch.testing.assert_close(outputs["flex_attention"], outputs["eager"], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(grads["flex_attention"], grads["eager"], rtol=1e-4, atol=1e-4)
+
     @unittest.skip(
-        reason="LayoutLMv3 adds its relative position biases as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+        reason="LayoutLMv3 passes its relative position biases to SDPA as a float mask, so SDPA can't dispatch to the flash-attention backend."
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass

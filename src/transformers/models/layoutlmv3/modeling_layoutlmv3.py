@@ -200,26 +200,30 @@ class LayoutLMv3TextEmbeddings(nn.Module):
         return embeddings
 
 
-def cogview_eager_attention_forward(
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    scaling: float,
+    scaling: float | None = None,
     dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
-    # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
-    attn_weights = torch.matmul(query * scaling, key.transpose(2, 3))
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
-    # The mask also holds the relative position biases, see `LayoutLMv3Encoder._add_position_bias_to_mask`
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    # Use the trick of the CogView paper to stabilize training
-    attn_weights = module.cogview_attention(attn_weights)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
@@ -250,22 +254,11 @@ class LayoutLMv3SelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def cogview_attention(self, attention_scores, alpha=32):
-        """
-        https://huggingface.co/papers/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
-        (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores). Seems the new attention_probs
-        will result in a slower speed and a little bias. Can use torch.allclose(standard_attention_probs,
-        cogview_attention_probs, atol=1e-08) for comparison. The smaller atol (e.g., 1e-08), the better.
-        """
-        scaled_attention_scores = attention_scores / alpha
-        max_value = scaled_attention_scores.amax(dim=(-1)).unsqueeze(-1)
-        new_attention_scores = (scaled_attention_scores - max_value) * alpha
-        return nn.Softmax(dim=-1)(new_attention_scores)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_bias: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -276,7 +269,7 @@ class LayoutLMv3SelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, cogview_eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
@@ -287,6 +280,7 @@ class LayoutLMv3SelfAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.dropout.p,
             scaling=self.scaling,
+            position_bias=position_bias,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -318,12 +312,14 @@ class LayoutLMv3Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_bias: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         attention_output, _ = self.self(
             hidden_states,
             attention_mask,
+            position_bias=position_bias,
             **kwargs,
         )
         attention_output = self.output(attention_output, residual)
@@ -343,11 +339,13 @@ class LayoutLMv3Layer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_bias: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
+            position_bias=position_bias,
             **kwargs,
         )
 
@@ -457,32 +455,6 @@ class LayoutLMv3Encoder(nn.Module):
             position_bias = self._cal_1d_pos_emb(position_ids)
         return position_bias.div_(math.sqrt(int(self.config.hidden_size / self.config.num_attention_heads)))
 
-    def _add_position_bias_to_mask(self, attention_mask, position_ids, bbox, hidden_states):
-        """
-        The relative position biases are the same in every layer, so they are added to the attention mask once, giving
-        a single float mask shared by all the layers (which SDPA can also take).
-        """
-        position_bias = self._compute_position_bias(position_ids, bbox)
-        if position_bias is None:
-            return attention_mask
-
-        # The mask is cast once to the dtype of the attention, instead of in every layer under autocast
-        device_type = hidden_states.device.type
-        dtype = (
-            torch.get_autocast_dtype(device_type) if torch.is_autocast_enabled(device_type) else hidden_states.dtype
-        )
-        # The last dim is padded to a multiple of 8 (then sliced) so that SDPA doesn't re-align the mask in every layer
-        seq_len = position_bias.shape[-1]
-        padded_seq_len = (seq_len + 7) // 8 * 8
-        merged_mask = position_bias.new_empty((*position_bias.shape[:-1], padded_seq_len), dtype=dtype)
-        merged_mask = merged_mask[..., :seq_len].copy_(position_bias)
-        if attention_mask is None:
-            return merged_mask
-        if attention_mask.dtype == torch.bool:
-            return merged_mask.masked_fill_(~attention_mask, torch.finfo(dtype).min)
-        # Clamped so that a float mask in a wider dtype can't overflow to -inf (NaN in fully masked rows)
-        return merged_mask.add_(attention_mask).clamp_(min=torch.finfo(dtype).min)
-
     def forward(
         self,
         hidden_states,
@@ -493,10 +465,11 @@ class LayoutLMv3Encoder(nn.Module):
         patch_width=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        attention_mask = self._add_position_bias_to_mask(attention_mask, position_ids, bbox, hidden_states)
+        # The relative position biases are the same in every layer, so they are computed once and passed to the attention
+        position_bias = self._compute_position_bias(position_ids, bbox)
 
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
+            hidden_states = layer_module(hidden_states, attention_mask, position_bias=position_bias, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -538,6 +511,7 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "layoutlmv3"
     input_modalities = ("image", "text")
     _supports_sdpa = True
+    _supports_flex_attn = True
     _can_record_outputs = {"hidden_states": LayoutLMv3Layer, "attentions": LayoutLMv3SelfAttention}
 
     def _init_weights(self, module):
