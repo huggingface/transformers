@@ -243,6 +243,7 @@ if TYPE_CHECKING:
     from .imagegpt import *
     from .informer import *
     from .inkling import *
+    from .inkling2 import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internlm3 import *
@@ -367,6 +368,8 @@ if TYPE_CHECKING:
     from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
+    from .omniasr import *
+    from .omniasr_ctc import *
     from .oneformer import *
     from .openai import *
     from .openai_privacy_filter import *
