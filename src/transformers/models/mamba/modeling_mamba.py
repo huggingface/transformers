@@ -238,7 +238,14 @@ def mamba_selective_scan(
 
 
 @use_kernelized_func(
-    [mamba_inner_fn, mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update]
+    [
+        mamba_inner_fn,
+        mamba_selective_scan,
+        mamba_selective_state_update,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class MambaMixer(nn.Module):
     """

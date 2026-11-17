@@ -128,7 +128,7 @@ class Lfm2Attention(LlamaAttention):
         return output, attn_weights
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Lfm2ShortConv(nn.Module):
     def __init__(
         self,

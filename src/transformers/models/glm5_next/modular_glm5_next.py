@@ -593,7 +593,13 @@ def chunk_kimi_delta_attention(
 
 
 @use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+    [
+        chunk_kimi_delta_attention,
+        recurrent_kimi_delta_attention,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Glm5NextTextLinearAttention(nn.Module):
     """Kimi-style KDA (Kimi Linear Attention) for GLM-5.3-Flash."""

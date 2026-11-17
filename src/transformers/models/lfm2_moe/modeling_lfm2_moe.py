@@ -338,6 +338,9 @@ class Lfm2MoeAttention(nn.Module):
         return output, attn_weights
 
 
+# Helper methods for segment sum computation
+
+
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -350,7 +353,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Lfm2MoeShortConv(nn.Module):
     def __init__(
         self,

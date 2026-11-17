@@ -264,7 +264,13 @@ class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class OlmoHybridGatedDeltaNet(nn.Module):
     """

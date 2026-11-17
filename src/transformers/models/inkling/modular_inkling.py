@@ -597,7 +597,7 @@ class InklingMoE(nn.Module):
         return hidden_states
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class InklingShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()

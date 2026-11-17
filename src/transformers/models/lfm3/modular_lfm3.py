@@ -40,7 +40,6 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2Model,
     Lfm2PreTrainedModel,
     Lfm2RMSNorm,
-    Lfm2ShortConv,
 )
 from ..lfm2_moe.modeling_lfm2_moe import Lfm2MoeMLP
 from ..llama.modeling_llama import eager_attention_forward
@@ -205,11 +204,6 @@ class Lfm3Attention(Qwen3Attention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-@no_inherit_decorator
-class Lfm3ShortConv(Lfm2ShortConv):
-    pass
 
 
 class Lfm3DecoderLayer(Lfm2DecoderLayer):

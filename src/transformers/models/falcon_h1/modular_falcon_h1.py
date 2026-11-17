@@ -30,7 +30,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_linear_attn_utils import causal_conv1d_forward
+from ...modeling_linear_attn_utils import causal_conv1d_forward, ssd_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -50,8 +50,6 @@ from ..llama.modeling_llama import (
 )
 from ..mamba2.modeling_mamba2 import (
     apply_mask_to_padding_states,
-    mamba2_chunk_scan,
-    mamba2_selective_state_update,
     mamba2_split_conv1d_scan_combined,
 )
 from .configuration_falcon_h1 import FalconH1Config
@@ -250,68 +248,12 @@ class FalconH1Mixer(BambaMixer):
             dim=-1,
         )
 
-        # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
-            dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
-            A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
-            B = B.view(batch_size, self.n_groups, B.shape[2] // self.n_groups)
-            C = C.view(batch_size, self.n_groups, C.shape[2] // self.n_groups)
-            D = self.D[:, None, ...].expand(-1, self.head_dim)
-            dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
-
-            scan_output = mamba2_selective_state_update(
-                recurrent_state,
-                hidden_states,
-                dt,
-                A,
-                B,
-                C,
-                D,
-                # Key difference 2: Potential z gate into kernel
-                z=gate.view(batch_size, self.num_heads, self.head_dim) if not self.mamba_rms_norm else None,
-                dt_bias=dt_bias,
-                dt_softplus=True,
-            )
-            scan_output = scan_output.view(batch_size, 1, self.num_heads * self.head_dim)
-
-            # Key difference 3: Norm based handling as optional between z and norm
-            if self.mamba_rms_norm:
-                scan_output = self.norm(scan_output, gate)
-
-        # Chunk form
+        scan_output = ssd_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        # Key difference 3: Norm based handling as optional between z and norm
+        if self.mamba_rms_norm:
+            scan_output = self.norm(scan_output, gate)
         else:
-            output_final_state = cache is not None
-            scan_result = mamba2_chunk_scan(
-                hidden_states.view(batch_size, seq_len, -1, self.head_dim),
-                dt,
-                A,
-                B.view(batch_size, seq_len, self.n_groups, -1),
-                C.view(batch_size, seq_len, self.n_groups, -1),
-                chunk_size=self.chunk_size,
-                D=self.D,
-                z=None,
-                return_final_states=output_final_state,
-                dt_bias=self.dt_bias,
-                dt_softplus=True,
-                initial_states=recurrent_state,
-                dt_limit=self.time_step_limit,
-                **kwargs,
-            )
-
-            if output_final_state:
-                scan_output, ssm_state = scan_result
-                cache.update_recurrent_state(ssm_state, self.layer_idx)
-            else:
-                scan_output = scan_result
-
-            scan_output = scan_output.view(batch_size, seq_len, -1)
-
-            # Key difference 3: Norm based handling as optional between z and norm
-            if self.mamba_rms_norm:
-                scan_output = self.norm(scan_output, gate)
-            else:
-                scan_output = scan_output * torch.nn.functional.silu(gate)
+            scan_output = scan_output * torch.nn.functional.silu(gate)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))

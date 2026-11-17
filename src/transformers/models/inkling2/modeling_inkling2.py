@@ -185,6 +185,9 @@ class Inkling2RelativeLogits(nn.Module):
         return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
 
 
+# Helper methods for segment sum computation
+
+
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -197,7 +200,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Inkling2ShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()

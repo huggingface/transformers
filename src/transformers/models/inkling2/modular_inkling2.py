@@ -298,7 +298,7 @@ class Inkling2RelativeLogits(InklingRelativeLogits):
     pass
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Inkling2ShortConvolution(InklingShortConvolution):
     @force_accelerate_hooks("conv1d")
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

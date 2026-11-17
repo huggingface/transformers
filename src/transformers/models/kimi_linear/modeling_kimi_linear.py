@@ -345,6 +345,9 @@ class KimiLinearForgetGate(nn.Module):
         return -decay_rate * g_softplus
 
 
+# Helper methods for segment sum computation
+
+
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -524,7 +527,13 @@ def chunk_kimi_delta_attention(
 
 
 @use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+    [
+        chunk_kimi_delta_attention,
+        recurrent_kimi_delta_attention,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class KimiLinearDeltaAttention(nn.Module):
     """Kimi Linear Attention: this is essentialy the same a gated delta net (GDN) but decay is per-channel instead of

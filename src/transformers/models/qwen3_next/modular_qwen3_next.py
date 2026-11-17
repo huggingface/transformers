@@ -380,7 +380,13 @@ def torch_recurrent_gated_delta_rule(
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen3NextGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):

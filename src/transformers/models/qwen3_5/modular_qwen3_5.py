@@ -206,7 +206,13 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):

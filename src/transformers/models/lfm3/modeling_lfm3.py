@@ -26,11 +26,11 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_linear_attn_utils import causal_conv1d_forward
+from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -285,6 +285,9 @@ class Lfm3Attention(nn.Module):
         return attn_output, attn_weights
 
 
+# Helper methods for segment sum computation
+
+
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -297,6 +300,7 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Lfm3ShortConv(nn.Module):
     def __init__(
         self,

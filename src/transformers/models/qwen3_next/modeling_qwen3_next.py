@@ -305,6 +305,9 @@ class Qwen3NextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Helper methods for segment sum computation
+
+
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -536,7 +539,13 @@ def torch_recurrent_gated_delta_rule(
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen3NextGatedDeltaNet(nn.Module):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):

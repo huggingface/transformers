@@ -426,6 +426,9 @@ class BailingHybridForgetGate(nn.Module):
         return gate.to(hidden_states.dtype)
 
 
+# Helper methods for segment sum computation
+
+
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
@@ -605,7 +608,13 @@ def chunk_kimi_delta_attention(
 
 
 @use_kernelized_func(
-    [chunk_kimi_delta_attention, recurrent_kimi_delta_attention, causal_conv1d_fn, causal_conv1d_update]
+    [
+        chunk_kimi_delta_attention,
+        recurrent_kimi_delta_attention,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class BailingHybridDeltaAttention(nn.Module):
     """Linear attention module."""
