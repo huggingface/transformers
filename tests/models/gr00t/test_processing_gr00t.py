@@ -111,6 +111,7 @@ class Gr00tProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
             "embodiment_id_mapping": {EMBODIMENT: 3},
             "max_state_dim": 16,
+            "max_action_dim": 16,
             "max_action_horizon": HORIZON,
         }
 
@@ -226,3 +227,95 @@ class Gr00tProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         outputs = processor.post_process_actions(torch.zeros(1, HORIZON, 16), EMBODIMENT, state=state)
         self.assertEqual(tuple(outputs["eef"].shape), (1, HORIZON, 0))
         self.assertEqual(tuple(outputs["arm"].shape), (1, HORIZON, 3))
+
+    @staticmethod
+    def small_rotation_rows(angle, axis):
+        # First two rows of a rotation by `angle` radians around `axis`
+        axis = np.asarray(axis, dtype=float) / np.linalg.norm(axis)
+        cross = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
+        rotation = np.eye(3) + math.sin(angle) * cross + (1 - math.cos(angle)) * cross @ cross
+        return rotation[:2].reshape(-1)
+
+    def test_normalize_actions_inverts_post_process_actions(self):
+        processor = self.get_gr00t_processor()
+        rng = np.random.default_rng(0)
+        batch_size = 2
+        reference_rows = np.stack([self.small_rotation_rows(1.0, [0, 0, 1]), self.small_rotation_rows(0.5, [1, 1, 0])])
+        state = {
+            "eef": np.concatenate([[[1.0, 2.0, 3.0], [-1.0, 0.0, 0.5]], reference_rows], axis=-1),
+            "arm": np.array([[0.5, 0.5, 5.0], [1.0, -1.0, 5.0]]),
+            "gripper": np.array([[0.2], [0.8]]),
+        }
+        # Valid poses close to the reference pose, so that the relative actions stay within their statistics
+        relative_eef = np.concatenate(
+            [
+                rng.uniform(-0.09, 0.09, (batch_size, HORIZON, 3)),
+                np.stack(
+                    [
+                        [
+                            self.small_rotation_rows(angle, axis)
+                            for angle, axis in zip(rng.uniform(0, 0.08, HORIZON), rng.normal(size=(HORIZON, 3)))
+                        ]
+                        for _ in range(batch_size)
+                    ]
+                ),
+            ],
+            axis=-1,
+        )
+        eef_config = processor._action_configs(EMBODIMENT)["eef"]
+        reference = torch.from_numpy(state["eef"])
+        absolute_eef = processor._relative_to_absolute(torch.from_numpy(relative_eef), reference, eef_config)
+        actions = {
+            "eef": absolute_eef.numpy(),
+            "arm": state["arm"][:, None] + rng.uniform(-0.9, 0.9, (batch_size, HORIZON, 3)),
+            "gripper": rng.uniform(0.5, 9.5, (batch_size, HORIZON, 1)),
+        }
+
+        normalized, action_mask = processor.normalize_actions(actions, EMBODIMENT, state=state)
+        decoded = processor.post_process_actions(normalized, EMBODIMENT, state=state)
+
+        for key, value in actions.items():
+            torch.testing.assert_close(decoded[key], torch.from_numpy(value), atol=1e-5, rtol=1e-5)
+        # The relative end-effector actions are expressed in the frame of the reference pose, not subtracted from it
+        torch.testing.assert_close(
+            processor._absolute_to_relative(absolute_eef, reference, eef_config),
+            torch.from_numpy(relative_eef),
+            atol=1e-10,
+            rtol=0,
+        )
+
+    def test_normalize_actions_padding_and_mask(self):
+        processor = self.get_gr00t_processor()
+        state = {"eef": self.identity_eef(1), "arm": np.zeros((1, 3)), "gripper": np.zeros((1, 1))}
+        actions = {
+            "eef": np.tile(self.identity_eef(1)[:, None], (1, HORIZON, 1)),
+            "arm": np.zeros((1, HORIZON, 3)),
+            "gripper": np.full((1, HORIZON, 1), 5.0),
+        }
+        inputs = processor(
+            images=[[self.prepare_images_inputs()]],
+            text="a",
+            state=state,
+            actions=actions,
+            embodiment_tag=EMBODIMENT,
+            return_tensors="pt",
+        )
+        self.assertEqual(tuple(inputs["actions"].shape), (1, HORIZON, 16))
+        self.assertTrue(inputs["action_mask"][0, :, :13].eq(1).all())
+        self.assertTrue(inputs["action_mask"][0, :, 13:].eq(0).all())
+        self.assertTrue(inputs["actions"][0, :, 13:].eq(0).all())
+        # The absolute gripper action at the middle of its range is normalized to 0
+        torch.testing.assert_close(inputs["actions"][0, :, 12], torch.zeros(HORIZON))
+
+        with self.assertRaisesRegex(ValueError, "of shape"):
+            processor.normalize_actions({**actions, "arm": np.zeros((1, HORIZON - 1, 3))}, EMBODIMENT, state)
+
+    def test_cameras_with_different_resolutions(self):
+        processor = self.get_gr00t_processor()
+        cameras = [
+            np.random.randint(0, 256, (720, 1280, 3), dtype=np.uint8),
+            np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8),
+        ]
+        inputs = processor(images=[cameras], text="pick", return_tensors="pt")
+        # Every camera is cropped and resized to the same resolution on its own, before the views are batched
+        self.assertEqual(inputs["image_grid_thw"].tolist(), [inputs["image_grid_thw"][0].tolist()] * 2)

@@ -1040,6 +1040,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
         statistics: dict | None = None,
         embodiment_id_mapping: dict[str, int] | None = None,
         max_state_dim: int = 132,
+        max_action_dim: int = 132,
         max_action_horizon: int = 40,
         formalize_language: bool = True,
         use_percentiles: bool = True,
@@ -1057,14 +1058,16 @@ class Gr00tProcessor(Qwen3VLProcessor):
             Index of the embodiment-specific projections of the model for each embodiment tag.
         max_state_dim (`int`, *optional*, defaults to 132):
             Size the normalized state is zero-padded to.
+        max_action_dim (`int`, *optional*, defaults to 132):
+            Size the normalized actions are zero-padded to.
         max_action_horizon (`int`, *optional*, defaults to 40):
-            Number of action steps predicted by the model.
+            Number of action steps predicted by the model. Shorter action chunks are zero-padded to it.
         formalize_language (`bool`, *optional*, defaults to `True`):
             Whether to lowercase the instruction and remove its punctuation.
         use_percentiles (`bool`, *optional*, defaults to `True`):
             Whether the state and absolute actions are scaled with their 1st/99th percentiles instead of min/max.
         clip_outliers (`bool`, *optional*, defaults to `True`):
-            Whether to clip the normalized state to `[-1, 1]`.
+            Whether to clip the normalized state and actions to `[-1, 1]`.
         use_relative_action (`bool`, *optional*, defaults to `True`):
             Whether the action groups declared as relative are predicted relative to the current state.
         """
@@ -1072,6 +1075,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
         self.statistics = statistics or {}
         self.embodiment_id_mapping = embodiment_id_mapping or {}
         self.max_state_dim = max_state_dim
+        self.max_action_dim = max_action_dim
         self.max_action_horizon = max_action_horizon
         self.formalize_language = formalize_language
         self.use_percentiles = use_percentiles
@@ -1121,6 +1125,21 @@ class Gr00tProcessor(Qwen3VLProcessor):
         config = self._action_configs(embodiment_tag).get(key)
         return self.use_relative_action and config is not None and config["rep"] == "RELATIVE"
 
+    def _normalize(self, values: torch.Tensor, embodiment_tag: str, modality: str, key: str) -> torch.Tensor:
+        """Normalizes the raw `values` of a state or action joint group, as the original GR00T processor does."""
+        stats = self.statistics[embodiment_tag][modality][key]
+        if self._uses_mean_std(embodiment_tag, modality, key):
+            mean = torch.tensor(stats["mean"], dtype=torch.float64)
+            std = torch.tensor(stats["std"], dtype=torch.float64)
+            return (values - mean) / torch.where(std > 0, std, torch.ones_like(std))
+        low, high = self._normalization_params(embodiment_tag, modality, key)
+        # Joints with a constant value in the dataset are mapped to 0
+        varying = ~torch.isclose(high, low).expand_as(values)
+        low, high = low.expand_as(values), high.expand_as(values)
+        scaled = torch.zeros_like(values)
+        scaled[varying] = 2 * (values[varying] - low[varying]) / (high[varying] - low[varying]) - 1
+        return scaled.clamp(-1.0, 1.0) if self.clip_outliers else scaled
+
     def normalize_state(self, state: dict, embodiment_tag: str) -> torch.Tensor:
         """
         Normalizes each joint group of the raw `state` with the statistics of `embodiment_tag`, concatenates them in
@@ -1139,25 +1158,70 @@ class Gr00tProcessor(Qwen3VLProcessor):
         normalized = []
         for key in self.modality_configs[embodiment_tag]["state"]["modality_keys"]:
             values = torch.as_tensor(np.asarray(state[key]), dtype=torch.float64)
-            values = values.reshape(values.shape[0], -1)
-            stats = self.statistics[embodiment_tag]["state"][key]
-            if self._uses_mean_std(embodiment_tag, "state", key):
-                mean, std = (
-                    torch.tensor(stats["mean"], dtype=torch.float64),
-                    torch.tensor(stats["std"], dtype=torch.float64),
-                )
-                values = (values - mean) / torch.where(std > 0, std, torch.ones_like(std))
-            else:
-                low, high = self._normalization_params(embodiment_tag, "state", key)
-                varying = ~torch.isclose(high, low)
-                scaled = torch.zeros_like(values)
-                scaled[..., varying] = 2 * (values[..., varying] - low[varying]) / (high[varying] - low[varying]) - 1
-                values = scaled.clamp(-1.0, 1.0) if self.clip_outliers else scaled
-            normalized.append(values)
+            normalized.append(self._normalize(values.reshape(values.shape[0], -1), embodiment_tag, "state", key))
         normalized = torch.cat(normalized, dim=-1)
         if normalized.shape[-1] > self.max_state_dim:
             raise ValueError(f"State dimension {normalized.shape[-1]} exceeds `max_state_dim` ({self.max_state_dim}).")
         return F.pad(normalized, (0, self.max_state_dim - normalized.shape[-1])).float()
+
+    def _reference_state(self, state: dict | None, key: str, config: dict) -> torch.Tensor:
+        """The last raw state of the joint group a relative action group is expressed in, of shape `(batch_size, dim)`."""
+        if state is None:
+            raise ValueError(f"`state` is required to convert the relative action group {key!r}.")
+        reference = torch.as_tensor(np.asarray(state[config.get("state_key") or key]), dtype=torch.float64)
+        return reference.reshape(reference.shape[0], -1, reference.shape[-1])[:, -1]
+
+    def normalize_actions(
+        self, actions: dict, embodiment_tag: str, state: dict | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Prepares raw action chunks as training targets: converts the relative action groups to the current state's
+        frame, normalizes each group with the statistics of `embodiment_tag`, concatenates them and zero-pads the result
+        to `max_action_horizon` steps and `max_action_dim` dimensions.
+
+        Args:
+            actions (`dict[str, np.ndarray | torch.Tensor]`):
+                Raw absolute actions of each joint group, of shape `(batch_size, horizon, dim)`, where `horizon` is the
+                action horizon of the embodiment.
+            embodiment_tag (`str`):
+                The embodiment the actions come from.
+            state (`dict[str, np.ndarray | torch.Tensor]`, *optional*):
+                The raw state of each joint group. Required when the embodiment has relative action groups.
+
+        Returns:
+            `tuple(torch.Tensor, torch.Tensor)`: The normalized actions and the mask of their valid entries, both of shape
+            `(batch_size, max_action_horizon, max_action_dim)`.
+        """
+        self._check_embodiment(embodiment_tag)
+        action_config = self.modality_configs[embodiment_tag]["action"]
+        horizon = len(action_config["delta_indices"])
+        configs = self._action_configs(embodiment_tag)
+        normalized = []
+        for key in action_config["modality_keys"]:
+            values = torch.as_tensor(np.asarray(actions[key]), dtype=torch.float64)
+            if values.ndim != 3 or values.shape[1] != horizon:
+                raise ValueError(
+                    f"Expected the action group {key!r} of shape (batch_size, {horizon}, dim), got {tuple(values.shape)}."
+                )
+            if values.shape[-1] == 0:
+                normalized.append(values)
+                continue
+            if self._is_relative(embodiment_tag, key):
+                reference = self._reference_state(state, key, configs[key])
+                values = self._absolute_to_relative(values, reference, configs[key])
+            normalized.append(self._normalize(values, embodiment_tag, "action", key))
+        normalized = torch.cat(normalized, dim=-1)
+        batch_size, _, action_dim = normalized.shape
+        if action_dim > self.max_action_dim or horizon > self.max_action_horizon:
+            raise ValueError(
+                f"Actions of {horizon} steps and {action_dim} dimensions exceed `max_action_horizon` "
+                f"({self.max_action_horizon}) or `max_action_dim` ({self.max_action_dim})."
+            )
+        padded = normalized.new_zeros(batch_size, self.max_action_horizon, self.max_action_dim)
+        padded[:, :horizon, :action_dim] = normalized
+        action_mask = torch.zeros_like(padded)
+        action_mask[:, :horizon, :action_dim] = 1
+        return padded.float(), action_mask.float()
 
     @auto_docstring
     def __call__(
@@ -1166,6 +1230,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
         text: TextInput | list[TextInput] | None = None,
         state: dict | None = None,
         embodiment_tag: str | None = None,
+        actions: dict | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
@@ -1179,11 +1244,15 @@ class Gr00tProcessor(Qwen3VLProcessor):
             Raw state of each joint group of the embodiment, of shape `(batch_size, dim)`. It is normalized and padded
             with [`~Gr00tProcessor.normalize_state`].
         embodiment_tag (`str`, *optional*):
-            The embodiment of the batch. Required to process `state` and to return `embodiment_id`.
+            The embodiment of the batch. Required to process `state` and `actions` and to return `embodiment_id`.
+        actions (`dict[str, np.ndarray | torch.Tensor]`, *optional*):
+            Raw absolute action chunks of each joint group, of shape `(batch_size, horizon, dim)`, used as training
+            targets. They are prepared with [`~Gr00tProcessor.normalize_actions`].
 
         Returns:
             [`BatchFeature`]: The Qwen3-VL inputs (`input_ids`, `attention_mask`, `pixel_values`, `image_grid_thw` and
-            `mm_token_type_ids`), plus `state` and `embodiment_id` when `state` and `embodiment_tag` are given.
+            `mm_token_type_ids`), plus `state` and `embodiment_id` when `state` and `embodiment_tag` are given, and
+            `actions` and `action_mask` when `actions` are given.
         """
         if isinstance(text, str):
             text = [text]
@@ -1208,6 +1277,10 @@ class Gr00tProcessor(Qwen3VLProcessor):
             if embodiment_tag is None:
                 raise ValueError("`embodiment_tag` is required to normalize `state`.")
             inputs["state"] = self.normalize_state(state, embodiment_tag)
+        if actions is not None:
+            if embodiment_tag is None:
+                raise ValueError("`embodiment_tag` is required to normalize `actions`.")
+            inputs["actions"], inputs["action_mask"] = self.normalize_actions(actions, embodiment_tag, state)
         return BatchFeature(data=dict(inputs), tensor_type=return_tensors)
 
     def post_process_actions(
@@ -1257,14 +1330,23 @@ class Gr00tProcessor(Qwen3VLProcessor):
                 values = (values.clamp(-1.0, 1.0) + 1.0) / 2.0 * (high - low) + low
 
             if self._is_relative(embodiment_tag, key):
-                config = configs[key]
-                if state is None:
-                    raise ValueError(f"`state` is required to convert the relative action group {key!r} to absolute.")
-                reference = torch.as_tensor(np.asarray(state[config.get("state_key") or key]), dtype=torch.float64)
-                reference = reference.reshape(reference.shape[0], -1, reference.shape[-1])[:, -1]
-                values = self._relative_to_absolute(values, reference, config)
+                reference = self._reference_state(state, key, configs[key])
+                values = self._relative_to_absolute(values, reference, configs[key])
             outputs[key] = values
         return outputs
+
+    @staticmethod
+    def _absolute_to_relative(actions: torch.Tensor, reference: torch.Tensor, config: dict) -> torch.Tensor:
+        """Expresses absolute actions in the frame of the `reference` state: the inverse of `_relative_to_absolute`."""
+        if config["type"] == "NON_EEF":
+            return actions - reference[:, None]
+        if config["type"] == "EEF" and config["format"] == "XYZ_ROT6D":
+            # Poses compose in SE(3): the relative pose is inv(T_reference) @ T_action
+            inverse_rotation = _rot6d_to_matrix(reference[:, 3:9]).transpose(-1, -2)
+            rotation = inverse_rotation[:, None] @ _rot6d_to_matrix(actions[..., 3:9])
+            translation = (inverse_rotation[:, None] @ (actions[..., :3] - reference[:, None, :3])[..., None])[..., 0]
+            return torch.cat([translation, rotation[..., 0, :], rotation[..., 1, :]], dim=-1)
+        raise NotImplementedError(f"Relative actions of type {config['type']} and format {config['format']}.")
 
     @staticmethod
     def _relative_to_absolute(actions: torch.Tensor, reference: torch.Tensor, config: dict) -> torch.Tensor:

@@ -113,6 +113,7 @@ def convert_processor(original_dir: str, model_name: str) -> Gr00tProcessor:
         if os.path.exists(embodiment_id_path)
         else {},
         max_state_dim=kwargs["max_state_dim"],
+        max_action_dim=kwargs["max_action_dim"],
         max_action_horizon=kwargs["max_action_horizon"],
         formalize_language=kwargs.get("formalize_language", True),
         use_percentiles=kwargs.get("use_percentiles", False),
