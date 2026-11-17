@@ -179,6 +179,9 @@ class Kolibri1_1Config(PreTrainedConfig):
                 raise ValueError(f"Layer {layer_idx} must read the K/V of an earlier layer that produces its own.")
             if self.layer_types[source] != self.layer_types[layer_idx]:
                 raise ValueError(f"Layer {layer_idx} must read the K/V of a layer with the same attention type.")
+        for name in ("index_topk", "index_pool_size", "index_compression"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"`{name}` must be positive, got {getattr(self, name)}.")
         if self.index_pool_size % self.index_compression:
             raise ValueError("`index_pool_size` must be a multiple of `index_compression`.")
         if self.head_dim % 16:
