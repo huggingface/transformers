@@ -309,7 +309,6 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     # the flow head runs as one unit per step: split across devices, its blocks would mix devices mid-computation
     _no_split_modules = ["GradiumPhononTTSDecoderLayer", "GradiumPhononTTSFlowHead"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

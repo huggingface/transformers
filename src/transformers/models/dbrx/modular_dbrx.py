@@ -322,7 +322,6 @@ class DbrxPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DbrxBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flex_attn = True
     _supports_attention_backend = True
     _supports_flash_attn = True
