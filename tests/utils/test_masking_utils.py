@@ -85,7 +85,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
         )
 
@@ -106,7 +106,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
         )
 
@@ -128,7 +128,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
         )
 
@@ -160,7 +160,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
         )
         # packed sequence should be skipped
@@ -172,7 +172,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
             inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
         )
         # cannot be skipped under compile, should result into a triu mask
@@ -203,7 +203,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
                 config=config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=None,
+                cache=None,
             )
             bidirectional_mask = create_bidirectional_mask(
                 config=config,
@@ -240,15 +240,15 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         sequence_length, max_cache_len = 4, 16
         inputs_embeds = torch.empty((1, sequence_length, 8), dtype=torch.float16, device=torch_device)
-        past_key_values = StaticCache(config=config, max_cache_len=max_cache_len)
-        past_key_values.early_initialization(1, 2, 8, torch.float16, torch_device)
+        cache = StaticCache(config=config, max_cache_len=max_cache_len)
+        cache.early_initialization(1, 2, 8, torch.float16, torch_device)
 
         def create_mask(allow_is_causal_skip=True):
             return create_causal_mask(
                 config=config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=None,
-                past_key_values=past_key_values,
+                cache=cache,
                 allow_is_causal_skip=allow_is_causal_skip,
             )
 
@@ -281,7 +281,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             config=config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
         )
 
@@ -340,7 +340,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             config=config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=cache,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -358,6 +358,43 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             # Here, for the unpadded sequence, the chunks start at index 0. Since we have 9 tokens in total, the last
             # token (index 8) will only see itself (we have 2 full chunks before)
             [[[False, False, False,  True]]]],
+            dtype=torch.bool)
+        # fmt: on
+
+        self.assertTrue((chunked_attention_mask == EXPECTED_CHUNKED_MASK).all())
+
+    def test_chunked_mask_with_packed_sequences(self):
+        # Make sure we have an attention_chunk_size in the config
+        config = LlamaConfig(attn_implementation="sdpa", attention_chunk_size=3)
+
+        batch_size = 1
+        sequence_length = 11
+        # This corresponds to 3 packed sequences, with the 1st and 3rd being of length 4 which is larger than the chunk_size.
+        # It also makes sure that without correct re-mapping of indices, the offsets of the chunks would be wrong
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3]])
+        inputs_embeds = torch.empty((batch_size, sequence_length))
+
+        chunked_attention_mask = create_chunked_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+            cache=None,
+            position_ids=position_ids,
+        )
+
+        # fmt: off
+        EXPECTED_CHUNKED_MASK = torch.tensor(
+             [[[[ True, False, False, False, False, False, False, False, False, False, False],
+                [ True,  True, False, False, False, False, False, False, False, False, False],
+                [ True,  True,  True, False, False, False, False, False, False, False, False],
+                [False, False, False,  True, False, False, False, False, False, False, False],
+                [False, False, False, False,  True, False, False, False, False, False, False],
+                [False, False, False, False,  True,  True, False, False, False, False, False],
+                [False, False, False, False,  True,  True,  True, False, False, False, False],
+                [False, False, False, False, False, False, False,  True, False, False, False],
+                [False, False, False, False, False, False, False,  True,  True, False, False],
+                [False, False, False, False, False, False, False,  True,  True,  True, False],
+                [False, False, False, False, False, False, False, False, False, False, True]]]],
             dtype=torch.bool)
         # fmt: on
 
@@ -478,7 +515,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertTrue(cache.has_previous_state(0))
 
         mask = create_recurrent_attention_mask(
-            config=config, inputs_embeds=inputs_embeds, attention_mask=attention_mask, past_key_values=cache
+            config=config, inputs_embeds=inputs_embeds, attention_mask=attention_mask, cache=cache
         )
         self.assertIsNotNone(mask)
         torch.testing.assert_close(mask, attention_mask[:, -4:])
@@ -486,7 +523,7 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # single-token decode keeps skipping the mask (a generated token is never padding)
         decode_embeds = torch.zeros(2, 1, config.hidden_size, device=torch_device)
         decode_mask = create_recurrent_attention_mask(
-            config=config, inputs_embeds=decode_embeds, attention_mask=attention_mask, past_key_values=cache
+            config=config, inputs_embeds=decode_embeds, attention_mask=attention_mask, cache=cache
         )
         self.assertIsNone(decode_mask)
 
@@ -502,12 +539,66 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         attention_mask = torch.ones((1, 5), dtype=torch.long, device=torch_device)
 
         # Must not raise (previously `KeyError: 'moe'`), and defers the raw mask to the model.
-        out = create_masks_for_generate(
-            config, inputs_embeds=None, attention_mask=attention_mask, past_key_values=None
-        )
+        out = create_masks_for_generate(config, inputs_embeds=None, attention_mask=attention_mask, cache=None)
         self.assertIs(out, attention_mask)
 
         # `None` (no padding) is deferred too.
-        self.assertIsNone(
-            create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
+        self.assertIsNone(create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None))
+
+    def test_causal_mask_default_layer_skips_linear_layers(self):
+        """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
+        config = LlamaConfig(
+            num_hidden_layers=4,
+            hidden_size=32,
+            sliding_window=4,
+            attn_implementation="sdpa",
+            layer_types=["sliding_attention", "conv", "conv", "full_attention"],
         )
+        cache = DynamicCache(config=config)
+        self.assertEqual(cache.is_sliding, [True, False, False, False])
+        self.assertEqual(cache.is_linear, [False, True, True, False])
+
+        # 10 cached tokens on both attention layers, then decode a single token at position 10
+        prefill_size = 10
+        inputs_embeds = torch.zeros(1, prefill_size, config.hidden_size)
+        attention_mask = torch.ones(1, prefill_size, dtype=torch.long)
+        position_ids = torch.arange(prefill_size)[None, :]
+
+        # This must not raise saying that the methods get_seq_length/get_mask_sizes do not exist because they were called on index 1
+        # (first non-sliding layer), which is a linear layer that does not have them -> instead it must go to index 3 (full_attention)
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+            allow_is_causal_skip=False,
+        )
+        # This must be correct
+        self.assertEqual(causal_mask.shape, (1, 1, prefill_size, prefill_size))
+        self.assertTrue((causal_mask == torch.tril(torch.ones(prefill_size, prefill_size))[None, None, :, :]).all())
+
+        # During prefill beyond sliding_window, both sliding and full layers were expected to have the full mask, so now check that after
+        # 1 forward, we are still using the full_attention, i.e. the size must not be the sliding_window (i.e. 4)
+        fake_kv = torch.rand(1, 2, prefill_size, 8)
+        fake_conv_state = torch.rand(1, 8, prefill_size)
+        cache.update(fake_kv, fake_kv, layer_idx=0)
+        cache.update_conv_state(conv_states=fake_conv_state, layer_idx=1)
+        cache.update_conv_state(conv_states=fake_conv_state, layer_idx=2)
+        cache.update(fake_kv, fake_kv, layer_idx=3)
+
+        # Mimic decoding 1 token after prefill
+        inputs_embeds = torch.zeros(1, 1, config.hidden_size)
+        attention_mask = torch.ones(1, prefill_size + 1, dtype=torch.long)
+        position_ids = torch.tensor([[prefill_size]])
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+            allow_is_causal_skip=False,
+        )
+        # This must be correct
+        self.assertEqual(causal_mask.shape, (1, 1, 1, prefill_size + 1))
+        self.assertTrue(causal_mask.all())

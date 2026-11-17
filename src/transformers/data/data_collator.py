@@ -132,13 +132,13 @@ def torch_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
-        dtype = torch.long if isinstance(label, int) else torch.float
+        dtype = torch.long if isinstance(label, (int, np.integer)) else torch.float
         batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], (int, np.integer)) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -166,13 +166,13 @@ def numpy_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], np.ndarray) else first["label"]
-        dtype = np.int64 if isinstance(label, int) else np.float32
+        dtype = np.int64 if isinstance(label, (int, np.integer)) else np.float32
         batch["labels"] = np.array([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], (int, np.integer)) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -459,16 +459,18 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
 
         # Take labels out of the examples beforehand, because they aren't nested.
         label_name = "label" if "label" in examples[0] else "labels"
-        labels = [example.pop(label_name) for example in examples]
+        labels = [example[label_name] for example in examples]
 
         batch_size = len(examples)
         num_choices = len(examples[0]["input_ids"])
 
         # Go from e.g. 2 examples of 2 choices [{input_ids: [[1], [2]]}, {input_ids: [[3], [4]]}]
         # to 4 examples [{input_ids: [1]}, {input_ids: [2]}] + [{input_ids: [3]}, {input_ids: [4]}]
-        flat_examples = sum(
-            ([{k: v[i] for k, v in example.items()} for i in range(num_choices)] for example in examples), start=[]
-        )
+        flat_examples = [
+            {k: v[i] for k, v in example.items() if k != label_name}
+            for example in examples
+            for i in range(num_choices)
+        ]
 
         # Pad all choices of all examples as if you're padding any other batch of examples.
         batch = self.tokenizer.pad(

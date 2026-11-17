@@ -62,6 +62,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "rope_theta": entropy_model_params.get("rope_theta", 10000.0),
         "attn_impl": entropy_model_params.get("attn_impl", "sdpa"),
         "attn_bias_type": entropy_model_params.get("attn_bias_type", "causal"),
+        "sliding_window": entropy_model_params.get("sliding_window"),
         "intermediate_size": patcher_intermediate_size,
     }
 
@@ -154,6 +155,7 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str
         "patching_threshold": patcher_args.get("threshold", 0.5),
         "patching_threshold_add": patcher_args.get("threshold_add", 0.0),
         "max_patch_length": patcher_args.get("max_patch_length"),
+        "local_attention_window_len": unified_config.get("local_attention_window_len"),
         "patching_batch_size": patcher_args.get("patching_batch_size", 1),
         "patching_device": patcher_args.get("patching_device", "cuda"),
         "monotonicity": patcher_args.get("monotonicity", False),

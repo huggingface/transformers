@@ -131,6 +131,7 @@ if TYPE_CHECKING:
     from .doge import *
     from .donut import *
     from .dots1 import *
+    from .dots3_note import *
     from .dpr import *
     from .dpt import *
     from .edgetam import *
@@ -164,6 +165,7 @@ if TYPE_CHECKING:
     from .flaubert import *
     from .flava import *
     from .flex_olmo import *
+    from .flint import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -206,6 +208,7 @@ if TYPE_CHECKING:
     from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
+    from .granite_docling import *
     from .granite_speech import *
     from .granite_speech5 import *
     from .granite_speech_plus import *
@@ -240,13 +243,17 @@ if TYPE_CHECKING:
     from .imagegpt import *
     from .informer import *
     from .inkling import *
+    from .inkling2 import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internlm3 import *
     from .internvl import *
+    from .iquestcoder import *
     from .jais2 import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jev import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *
@@ -265,6 +272,8 @@ if TYPE_CHECKING:
     from .lfm2 import *
     from .lfm2_moe import *
     from .lfm2_vl import *
+    from .lfm3 import *
+    from .lfm3_vl import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
@@ -296,6 +305,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .mimo_v2_flash import *
     from .minicpm3 import *
+    from .minicpm_ocr import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *
@@ -306,6 +316,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mistral4 import *
+    from .mistral_large4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
@@ -339,6 +350,7 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
+    from .nemotron3_5_transcribe import *
     from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
@@ -356,6 +368,8 @@ if TYPE_CHECKING:
     from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
+    from .omniasr import *
+    from .omniasr_ctc import *
     from .oneformer import *
     from .openai import *
     from .openai_privacy_filter import *
@@ -500,6 +514,7 @@ if TYPE_CHECKING:
     from .tvp import *
     from .udop import *
     from .ultrabert import *
+    from .ultravbert import *
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *

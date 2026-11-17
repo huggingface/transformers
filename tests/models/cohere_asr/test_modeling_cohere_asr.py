@@ -182,10 +182,10 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         config = self.model_tester.get_config()
         config.pad_token_id = self.model_tester.pad_token_id
+        torch.manual_seed(0)
         model = CohereAsrForConditionalGeneration(config).to(torch_device).eval()
         vocab_size = config.vocab_size
 
-        torch.manual_seed(0)
         bsz, enc_len, dec_len = 2, 10, 6
         enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
         encoder_outputs = ParakeetEncoderModelOutput(

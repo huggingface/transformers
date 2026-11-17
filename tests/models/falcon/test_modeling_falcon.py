@@ -48,6 +48,8 @@ class FalconModelTester(CausalLMModelTester):
     def __init__(self, parent, new_decoder_architecture=True):
         super().__init__(parent)
         self.new_decoder_architecture = new_decoder_architecture
+        self.hidden_size = 64
+        self.num_attention_heads = 4
 
 
 @require_torch
@@ -66,6 +68,12 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        # `head_dim` is a read-only property in falcon, we assume the initial values to be correct
+        assert config.head_dim >= requested_dim
+        return config
 
     @unittest.skip(reason="To support alibi, we are forced to create a mask in all cases")
     def test_sdpa_can_dispatch_on_flash(self):

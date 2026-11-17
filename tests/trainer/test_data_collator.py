@@ -31,6 +31,7 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     DataCollatorForLanguageModeling,
+    DataCollatorForMultipleChoice,
     DataCollatorForPermutationLanguageModeling,
     DataCollatorForSeq2Seq,
     DataCollatorForTokenClassification,
@@ -169,6 +170,33 @@ class TestDefaultDataCollator(DataCollatorTestMixin, unittest.TestCase):
         features = [{"input_ids": [0, 1, 2], "label": float(i)} for i in range(4)]
         batch = default_data_collator(features, return_tensors="np")
         self.assertEqual(batch["labels"].dtype, np.float32)
+
+    def test_numpy_integer_scalar_labels(self):
+        """NumPy integer scalars should retain integer label dtypes."""
+        for return_tensors in ("pt", "np"):
+            for scalar_type in (np.int32, np.int64):
+                for label_key in ("label", "label_ids"):
+                    with self.subTest(
+                        return_tensors=return_tensors,
+                        scalar_type=scalar_type,
+                        label_key=label_key,
+                    ):
+                        features = []
+                        for value in (0, 1):
+                            label = scalar_type(value)
+                            if label_key == "label_ids":
+                                label = [label, label]
+                            features.append(
+                                {
+                                    "input_ids": [1, 2, 3],
+                                    label_key: label,
+                                }
+                            )
+
+                        batch = default_data_collator(features, return_tensors=return_tensors)
+
+                        expected_dtype = torch.long if return_tensors == "pt" else np.int64
+                        self.assertEqual(batch["labels"].dtype, expected_dtype)
 
     def test_immutability(self):
         """Test that collation does not mutate input data."""
@@ -546,6 +574,31 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
         for return_tensors in ["pt", "np"]:
             collator = DataCollatorForTokenClassification(tokenizer, return_tensors=return_tensors)
             self._check_immutability(collator, self._get_features())
+
+
+# =============================================================================
+# DataCollatorForMultipleChoice tests
+# =============================================================================
+
+
+@require_torch
+class TestDataCollatorForMultipleChoice(DataCollatorTestMixin, unittest.TestCase):
+    def test_reusing_examples_preserves_labels(self):
+        collator = DataCollatorForMultipleChoice(BertTokenizer(self.vocab_file))
+        for label_name in ("label", "labels"):
+            with self.subTest(label_name=label_name):
+                features = [
+                    {"input_ids": [[1, 2], [1, 4, 2]], label_name: 1},
+                    {"input_ids": [[1, 4, 2], [1, 2]], label_name: 0},
+                ]
+                original = copy.deepcopy(features)
+
+                for _ in range(2):
+                    batch = collator(features)
+                    self.assertEqual(batch["labels"].tolist(), [1, 0])
+                    self.assertEqual(batch["input_ids"].shape, (2, 2, 3))
+
+                self.assertEqual(features, original)
 
 
 # =============================================================================

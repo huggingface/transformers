@@ -21,30 +21,21 @@
 import re
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class QianfanOCRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class QianfanOCRProcessor(ProcessorMixin):
-    valid_processor_kwargs = QianfanOCRProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
 
     def __init__(
         self,
@@ -83,7 +74,7 @@ class QianfanOCRProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -104,14 +95,37 @@ class QianfanOCRProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos=None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
 
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
+
+        if images is None and text is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        # Check that number of placeholders in text is same as number of mm-data for models
+        # that have a special multimodal placeholder token defined
+        if text is not None:
+            if not (
+                isinstance(text, str) or (isinstance(text, list) and all(isinstance(sample, str) for sample in text))
+            ):
+                raise ValueError("`text` must be a string or list of strings.")
+
+            n_images_in_text = [sample.count(self.image_placeholder_token) for sample in text]
+            if images is not None:
+                images = make_flat_list_of_images(images)
+                if sum(n_images_in_text) != len(images):
+                    raise ValueError(
+                        f"The total number of {self.image_placeholder_token} tokens in the prompts should be the same as the number of images passed."
+                        f" Found total {sum(n_images_in_text)} {self.image_placeholder_token} tokens and {len(images)} images."
+                    )
+            elif any(n_images_in_text):
+                raise ValueError(
+                    f"Found {sum(n_images_in_text)} {self.image_placeholder_token} tokens in the text but no images were passed."
+                )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_num_patches = image_inputs["num_patches"]
@@ -132,8 +146,7 @@ class QianfanOCRProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = QianfanOCRProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -248,5 +261,7 @@ class QianfanOCRProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_patches"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"QianfanOCRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["QianfanOCRProcessor"]

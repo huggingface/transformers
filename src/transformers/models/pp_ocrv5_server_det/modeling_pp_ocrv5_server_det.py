@@ -384,7 +384,7 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV5ServerDetConfig
-    base_model_prefix = "pp_ocrv5_server_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
@@ -402,9 +402,9 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
@@ -433,9 +433,9 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.last_hidden_state)
 

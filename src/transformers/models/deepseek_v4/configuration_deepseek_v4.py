@@ -97,7 +97,7 @@ class DeepseekV4Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_v4"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # `num_local_experts` is the standard MoE attr name (read by FP8 / TP integrations);
     # `intermediate_size` is what :class:`LlamaMLP` reads for the shared expert width
     # — V4 only ships `moe_intermediate_size` so we route the read through.
@@ -243,6 +243,16 @@ class DeepseekV4Config(PreTrainedConfig):
         legacy_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
         n = self.num_hidden_layers
+
+        # V4.1 ships `expert_dtype` in the quantization config, so V4's moves there too
+        quantization_config = getattr(self, "quantization_config", None)
+        expert_dtype = getattr(self, "expert_dtype", None)
+        if (
+            isinstance(quantization_config, dict)
+            and expert_dtype is not None
+            and "expert_dtype" not in quantization_config
+        ):
+            self.quantization_config = {**quantization_config, "expert_dtype": expert_dtype}
 
         # `compress_rates`: dict, default per attention type. Legacy scalar overrides fold in.
         if self.compress_rates is None:

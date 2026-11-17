@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 class MusicgenDecoderConfig(PreTrainedConfig):
     model_type = "musicgen_decoder"
     base_config_key = "decoder_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 2048
     max_position_embeddings: int = 2048
@@ -132,7 +132,7 @@ class MusicgenConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "text_encoder": SubConfigSpec(config_class=AutoConfig, model_type="t5"),
         "audio_encoder": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
-        "decoder": SubConfigSpec(config_class=MusicgenDecoderConfig),
+        "decoder": MusicgenDecoderConfig,
     }
 
     text_encoder: dict | PreTrainedConfig | None = None

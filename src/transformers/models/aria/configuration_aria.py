@@ -39,7 +39,7 @@ class AriaTextConfig(PreTrainedConfig):
     """
 
     model_type = "aria_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -119,7 +119,7 @@ class AriaConfig(PreTrainedConfig):
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
-        "text_config": SubConfigSpec(config_class=AriaTextConfig),
+        "text_config": AriaTextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

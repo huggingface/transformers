@@ -147,8 +147,8 @@ class Blip2Config(PreTrainedConfig):
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="opt"),
-        "vision_config": SubConfigSpec(config_class=Blip2VisionConfig),
-        "qformer_config": SubConfigSpec(config_class=Blip2QFormerConfig),
+        "vision_config": Blip2VisionConfig,
+        "qformer_config": Blip2QFormerConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

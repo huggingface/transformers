@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -143,8 +143,8 @@ class BlipConfig(PreTrainedConfig):
 
     model_type = "blip"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=BlipTextConfig),
-        "vision_config": SubConfigSpec(config_class=BlipVisionConfig),
+        "text_config": BlipTextConfig,
+        "vision_config": BlipVisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

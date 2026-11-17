@@ -113,7 +113,7 @@ class PocketTTSConfig(PreTrainedConfig):
     """
 
     model_type = "pocket_tts"
-    sub_configs = {"flow_head_config": PocketTTSFlowHeadConfig}
+    sub_configs_defaults = {"flow_head_config": PocketTTSFlowHeadConfig}
 
     flow_head_config: dict | PreTrainedConfig | None = None
     vocab_size: int = positive_int_field(default=4004)
@@ -150,11 +150,6 @@ class PocketTTSConfig(PreTrainedConfig):
     latent_stats_ema_decay: float = interval(min=0.0, max=1.0)(default=0.999)
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.flow_head_config, dict):
-            self.flow_head_config = PocketTTSFlowHeadConfig(**self.flow_head_config)
-        elif self.flow_head_config is None:
-            self.flow_head_config = PocketTTSFlowHeadConfig()
-
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads

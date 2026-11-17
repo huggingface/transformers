@@ -33,6 +33,7 @@ class PI0ImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    image_seq_length = 256
     pad_size = {"height": 224, "width": 224}
     do_pad = True
 
