@@ -180,7 +180,10 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.use_cache = False
             config.return_dict = True
 
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_activation_checkpointing
+            ):
                 continue
             model = model_class(config)
             model.to(torch_device)

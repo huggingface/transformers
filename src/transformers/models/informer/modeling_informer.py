@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -249,7 +249,7 @@ class InformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     input_modalities = ("time",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
@@ -607,7 +607,7 @@ class InformerProbSparseAttention(nn.Module):
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class InformerConvLayer(GradientCheckpointingLayer):
+class InformerConvLayer(ActivationCheckpointingLayer):
     def __init__(self, c_in):
         super().__init__()
         self.downConv = nn.Conv1d(
@@ -630,7 +630,7 @@ class InformerConvLayer(GradientCheckpointingLayer):
         return x
 
 
-class InformerEncoderLayer(GradientCheckpointingLayer):
+class InformerEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: InformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -688,7 +688,7 @@ class InformerEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class InformerDecoderLayer(GradientCheckpointingLayer):
+class InformerDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: InformerConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model

@@ -27,7 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import CompileConfig, GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -217,7 +217,7 @@ class GraniteSpeech5EncoderFeedForward(nn.Module):
         return hidden_states
 
 
-class GraniteSpeech5EncoderBlock(GradientCheckpointingLayer):
+class GraniteSpeech5EncoderBlock(ActivationCheckpointingLayer):
     def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int | None = None):
         super().__init__()
         self.gradient_checkpointing = False
@@ -309,7 +309,7 @@ class GraniteSpeech5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GraniteSpeech5EncoderBlock", "GraniteSpeech5EncoderSubsamplingBlock"]
     _supports_flat_attention_mask = True
     _supports_sdpa = True

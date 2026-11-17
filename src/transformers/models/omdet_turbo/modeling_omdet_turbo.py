@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -871,7 +871,7 @@ class OmDetTurboTaskEncoder(nn.Module):
         return x
 
 
-class OmDetTurboDeformableTransformerDecoderLayer(GradientCheckpointingLayer):
+class OmDetTurboDeformableTransformerDecoderLayer(ActivationCheckpointingLayer):
     """
     A single layer of the Deformable Transformer Decoder.
     """

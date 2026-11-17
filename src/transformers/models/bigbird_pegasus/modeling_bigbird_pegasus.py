@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1249,7 +1249,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class BigBirdPegasusEncoderLayer(GradientCheckpointingLayer):
+class BigBirdPegasusEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BigBirdPegasusConfig, seed=None):
         super().__init__()
         self.attention_type = config.attention_type
@@ -1317,7 +1317,7 @@ class BigBirdPegasusEncoderLayer(GradientCheckpointingLayer):
         self.self_attn.set_attention_type(value)
 
 
-class BigBirdPegasusDecoderLayer(GradientCheckpointingLayer):
+class BigBirdPegasusDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BigBirdPegasusConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1441,7 +1441,7 @@ class BigBirdPegasusClassificationHead(nn.Module):
 class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     config: BigBirdPegasusConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _can_compile_fullgraph = True

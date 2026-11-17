@@ -30,7 +30,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
@@ -859,7 +859,7 @@ class EomtDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class EomtLayer(GradientCheckpointingLayer):
+class EomtLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: EomtConfig) -> None:
@@ -970,7 +970,7 @@ class EomtPreTrainedModel(PreTrainedModel):
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
     _can_record_outputs = {

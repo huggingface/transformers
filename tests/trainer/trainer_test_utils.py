@@ -349,7 +349,7 @@ if is_torch_available():
     class RegressionPreTrainedModelWithGradientCheckpointing(PreTrainedModel):
         config_class = RegressionModelConfig
         base_model_prefix = "regression"
-        supports_gradient_checkpointing = True
+        supports_activation_checkpointing = True
 
         def __init__(self, config):
             super().__init__(config)

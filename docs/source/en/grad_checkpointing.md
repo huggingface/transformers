@@ -72,7 +72,7 @@ model.gradient_checkpointing_enable(every_n_layers=2)
 
 The default, `every_n_layers=1`, checkpoints every layer. Larger values checkpoint the first layer and then every `n`
 layers after it, leaving the other layers' activations in memory. For example, `every_n_layers=2` checkpoints
-layers 1, 3, 5, and so on. Only modules that inherit from [`GradientCheckpointingLayer`] are counted. Other modules
+layers 1, 3, 5, and so on. Only modules that inherit from [`ActivationCheckpointingLayer`] are counted. Other modules
 that support gradient checkpointing remain enabled.
 
 To use partial gradient checkpointing with [`Trainer`], set `every_n_layers` in `gradient_checkpointing_kwargs`.

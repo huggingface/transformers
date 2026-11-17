@@ -30,7 +30,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -338,7 +338,7 @@ class CLIPSegMLP(nn.Module):
         return hidden_states
 
 
-class CLIPSegEncoderLayer(GradientCheckpointingLayer):
+class CLIPSegEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: CLIPSegVisionConfig | CLIPSegTextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -371,7 +371,7 @@ class CLIPSegEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CLIPSegDecoderLayer(GradientCheckpointingLayer):
+class CLIPSegDecoderLayer(ActivationCheckpointingLayer):
     """
     CLIPSeg decoder layer, which is identical to `CLIPSegEncoderLayer`, except that normalization is applied after
     self-attention/MLP, rather than before.
@@ -417,7 +417,7 @@ class CLIPSegPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer", "CLIPSegVisionEmbeddings"]
 
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

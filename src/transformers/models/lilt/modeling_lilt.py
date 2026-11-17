@@ -22,7 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -360,7 +360,7 @@ class LiltOutput(nn.Module):
         return hidden_states
 
 
-class LiltLayer(GradientCheckpointingLayer):
+class LiltLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -493,7 +493,7 @@ class LiltPooler(nn.Module):
 class LiltPreTrainedModel(PreTrainedModel):
     config: LiltConfig
     base_model_prefix = "lilt"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = []
 
     def _init_weights(self, module):

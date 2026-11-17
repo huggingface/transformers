@@ -32,7 +32,7 @@ from ...image_utils import ChannelDimension, ImageInput, ImageType, SizeDict, ge
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
@@ -721,7 +721,7 @@ class Inkling2BlockAttentionResidual(nn.Module):
         return attn_output.unbind(-2)
 
 
-class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
+class Inkling2SlidingDecoderLayer(ActivationCheckpointingLayer):
     attention_type = "sliding_attention"
 
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
@@ -776,7 +776,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         return (residual + hidden_states).to(dtype)
 
 
-class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
+class Inkling2FullDecoderLayer(ActivationCheckpointingLayer):
     attention_type = "full_attention"
 
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):

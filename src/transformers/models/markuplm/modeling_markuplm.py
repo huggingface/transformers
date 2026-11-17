@@ -21,7 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -415,7 +415,7 @@ class MarkupLMAttention(nn.Module):
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with AlignText->MarkupLM
-class MarkupLMLayer(GradientCheckpointingLayer):
+class MarkupLMLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
