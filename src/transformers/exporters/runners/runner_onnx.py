@@ -144,7 +144,9 @@ class OnnxModelRunner(ModelRunner):
         self.bool_outputs = [spec.type == "tensor(bool)" for spec in session.get_outputs()]
 
         # The CUDA graph's binding, its input buffers grouped by dtype, and its outputs, made on the first call.
-        self.cuda_graph: tuple[ort.IOBinding, dict[torch.dtype, dict[str, torch.Tensor]], list[torch.Tensor]] | None = None
+        self.cuda_graph: (
+            tuple[ort.IOBinding, dict[torch.dtype, dict[str, torch.Tensor]], list[torch.Tensor]] | None
+        ) = None
         # Read once: the session builds its specs and provider options anew on every ask.
         self.input_names = [spec.name for spec in session.get_inputs()]
         provider = session.get_providers()[0]
