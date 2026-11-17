@@ -188,7 +188,7 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "image", "image": image},
-                    {"type": "text", "text": "What animals are visible? Answer in one short sentence."},
+                    {"type": "text", "text": "What do you see in this image?"},
                 ],
             }
         ]
@@ -202,13 +202,22 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ).to(torch_device, dtype=self.model.dtype)
 
         self.assertEqual(inputs.image_grid_thw.tolist(), [[1, 30, 40]])
-        output = self.model.generate(**inputs, max_new_tokens=16, do_sample=False)
+        output = self.model.generate(**inputs, max_new_tokens=64, do_sample=False)
         generated_text = self.processor.decode(
             output[0, inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         ).strip()
-        expected_text = Expectations({(None, None): "cats"}).get_expectation()
+        expected_text = Expectations(
+            {
+                (None, None): (
+                    "I see two cats lying on a pink surface, possibly a couch or blanket. "
+                    "One cat is positioned on the left side of the image, while the other is on the right. "
+                    "Both cats appear to be relaxed and are near two remote controls. "
+                    "The cat on the left has a green collar around its neck, and both"
+                )
+            }
+        ).get_expectation()
         self.assertEqual(generated_text, expected_text)
 
     def test_video_generation(self):
