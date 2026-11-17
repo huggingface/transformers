@@ -71,22 +71,24 @@ class LaraMiniRMSNorm(nn.Module):
 # NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
 @use_kernel_forward_from_hub("RMSNormGated")
 class LaraMiniRMSNormGated(nn.Module):
-    """Gated RMSNorm that applies its weight in float32 and rounds to the input dtype before the gate, as in training."""
-
-    def __init__(self, hidden_size: int, eps: float = 1e-6, **kwargs) -> None:
+    def __init__(self, hidden_size, eps=1e-6, **kwargs) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
         self.activation = "silu"
 
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states, gate=None) -> torch.Tensor:
         input_dtype = hidden_states.dtype
+
+        # Strict FP32 norm (do not downcast on the weights)
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # Unlike Qwen3.5, the weight is applied in float32, and the result is cast to the input dtype before the gate
-        hidden_states = (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
-        hidden_states = hidden_states.to(torch.float32) * ACT2FN[self.activation](gate.to(torch.float32))
+        hidden_states = self.weight.to(torch.float32) * hidden_states
+
+        # Apply gating
+        hidden_states = hidden_states * ACT2FN[self.activation](gate.to(torch.float32))
+
         return hidden_states.to(input_dtype)
 
 
@@ -126,7 +128,6 @@ class LaraMiniRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -818,30 +819,31 @@ class LaraMiniSparseMoeBlock(nn.Module):
 class LaraMiniDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: LaraMiniConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention":
+        self.block_type = config.layer_types[layer_idx]
+        if self.block_type == "linear_attention":
             self.linear_attn = LaraMiniGatedDeltaNet(config, layer_idx)
         else:
             self.self_attn = LaraMiniAttention(config, layer_idx)
-        self.mlp = LaraMiniSparseMoeBlock(config)
+        self.mlp = LaraMiniSparseMoeBlock(config, config.intermediate_size)
         self.input_layernorm = LaraMiniRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LaraMiniRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Token mixer
-        if self.layer_type == "linear_attention":
+        # Token Mixer
+        if self.block_type == "linear_attention":
             hidden_states = self.linear_attn(
                 hidden_states=hidden_states,
                 cache=cache,
@@ -849,6 +851,7 @@ class LaraMiniDecoderLayer(GradientCheckpointingLayer):
                 **kwargs,
             )
         else:
+            # Self Attention
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -860,7 +863,7 @@ class LaraMiniDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = residual + hidden_states
 
-        # Mixture of experts
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)

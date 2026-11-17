@@ -20,23 +20,22 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..flint.modeling_flint import FlintSparseMoeBlock
+from ..glm5_next.modeling_glm5_next import Glm5NextTextRMSNormGated
 from ..helium.modeling_helium import HeliumRMSNorm
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3RotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..qwen3_5.modeling_qwen3_5 import (
+    Qwen3_5DecoderLayer,
     Qwen3_5GatedDeltaNet,
-    Qwen3_5RMSNormGated,
     causal_conv1d_fn,
     causal_conv1d_update,
     torch_chunk_gated_delta_rule,
@@ -144,18 +143,10 @@ class LaraMiniRMSNorm(HeliumRMSNorm):
     """RMSNorm that applies its weight in float32 and only then casts back to the input dtype."""
 
 
-class LaraMiniRMSNormGated(Qwen3_5RMSNormGated):
-    """Gated RMSNorm that applies its weight in float32 and rounds to the input dtype before the gate, as in training."""
-
-    def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # Unlike Qwen3.5, the weight is applied in float32, and the result is cast to the input dtype before the gate
-        hidden_states = (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
-        hidden_states = hidden_states.to(torch.float32) * ACT2FN[self.activation](gate.to(torch.float32))
-        return hidden_states.to(input_dtype)
+class LaraMiniRMSNormGated(Glm5NextTextRMSNormGated):
+    def __init__(self, hidden_size, eps=1e-6, **kwargs) -> None:
+        super().__init__(hidden_size, eps, **kwargs)
+        self.activation = "silu"
 
 
 class LaraMiniRotaryEmbedding(Qwen3RotaryEmbedding):
@@ -238,58 +229,11 @@ class LaraMiniSparseMoeBlock(FlintSparseMoeBlock):
     pass
 
 
-class LaraMiniDecoderLayer(GradientCheckpointingLayer):
+class LaraMiniDecoderLayer(Qwen3_5DecoderLayer):
     def __init__(self, config: LaraMiniConfig, layer_idx: int):
-        super().__init__()
-        self.layer_type = config.layer_types[layer_idx]
-        if self.layer_type == "linear_attention":
-            self.linear_attn = LaraMiniGatedDeltaNet(config, layer_idx)
-        else:
-            self.self_attn = LaraMiniAttention(config, layer_idx)
-        self.mlp = LaraMiniSparseMoeBlock(config)
-        self.input_layernorm = LaraMiniRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LaraMiniRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        cache: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Token mixer
-        if self.layer_type == "linear_attention":
-            hidden_states = self.linear_attn(
-                hidden_states=hidden_states,
-                cache=cache,
-                attention_mask=attention_mask,
-                **kwargs,
-            )
-        else:
-            hidden_states, _ = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                cache=cache,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-        hidden_states = residual + hidden_states
-
-        # Mixture of experts
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
+        super().__init__(config, layer_idx)
+        del self.hidden_size
+        self.mlp = LaraMiniSparseMoeBlock(config, config.intermediate_size)
 
 
 @auto_docstring

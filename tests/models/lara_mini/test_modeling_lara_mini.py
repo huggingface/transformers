@@ -39,8 +39,7 @@ if is_torch_available():
 
 
 class LaraMiniModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = LaraMiniModel
+    base_model_class = LaraMiniModel
 
     def __init__(self, parent):
         super().__init__(parent=parent)
