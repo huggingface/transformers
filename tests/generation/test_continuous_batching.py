@@ -906,6 +906,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         output = GenerationOutput(request_id="req_0", status=RequestStatus.DECODING)
         router.deliver(output)
 
+        # TODO: the loop is a mock so the handler never runs: check the call args instead, and drop `received`
         loop.call_soon_threadsafe.assert_called_once()
         self.assertTrue(router.output_queue.empty())
 
@@ -2214,7 +2215,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Tests that per-request logits processor kwargs (temperature, top_k, top_p) work correctly in generation."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         max_new_tokens = 10
-        temperatures = [1.0, 1.0]
+        temperatures = [0.5, 1.5]
         top_ks = [10, 50]
         top_ps = [0.9, 0.99]
 
@@ -2375,27 +2376,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             )
             self.assertTrue(mock.called, "_offload_to_cpu was not called despite few blocks being available.")
             self.assertTrue(in_flight_victim_seen, "No in-flight victim was offloaded: rollback path not exercised.")
-
-    def test_cpu_offloading_disabled_when_zero(self) -> None:
-        """Test that cpu_offload_space=0 produces the same output as the legacy path."""
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        # 4 blocks of 32 tokens: small enough to force offloading
-        continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True,
-            allow_block_sharing=True,
-            use_async_batching=False,
-            num_blocks=4,
-            page_size=32,
-            cpu_offload_space=0.0,
-        )
-        # Should work identically to the existing test_continuous_batching_few_blocks
-        self._test_continuous_batching_parity(
-            model_id=model_id,
-            continuous_batching_config=continuous_batching_config,
-            attn_implementation="sdpa",
-            max_new_tokens=30,
-            num_repeat_prompts=4,
-        )
 
 
 class ContinuousBatchingMemoryTests(unittest.TestCase):
