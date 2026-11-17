@@ -10,7 +10,6 @@ on:
 
 env:
   SGLANG_USE_CPU_ENGINE: "1"
-  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
 permissions: {}
@@ -132,6 +131,7 @@ jobs:
               test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_basic_transcription
               test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_transcription_content_quality
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SGLANG_IS_IN_CI: "true"
       VIRTUAL_ENV: /opt/.venv
       CMAKE_BUILD_PARALLEL_LEVEL: "8"
