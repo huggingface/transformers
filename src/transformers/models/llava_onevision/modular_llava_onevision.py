@@ -405,6 +405,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         super().__init__(config)
         del self.vision_resampler
 
+    def get_data_dependent_inputs(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
     def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.

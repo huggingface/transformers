@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Any
 
 import torch
 from torch import nn
@@ -174,6 +175,22 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        model's (see [`Qwen2_5_VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_`
+        and `video_`, as `get_image_embeddings` and `get_video_embeddings` take them."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                vision_inputs = self.vision_model.get_data_dependent_inputs(grid_thw)
+                inputs.update({prefix + name: value for name, value in vision_inputs.items()})
+        return inputs
+
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -325,6 +342,10 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
             The tensors corresponding to the input images.
         """
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`HyperCLOVAXVisionV2_Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

@@ -15,6 +15,7 @@
 import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -927,6 +928,24 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
 
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's
+        `cu_seqlens` and `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch
+        merger's `pixel_shuffle_index` and `merger_layout_index`."""
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw, self.embeddings.position_edge, mode=self.config.interpolate_mode
+        )
+        merge_size = self.config.spatial_merge_size
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "pixel_shuffle_index": get_vision_pixel_shuffle_index(grid_thw, merge_size),
+            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size),
+        }
+
     @capture_outputs
     @auto_docstring
     def forward(
@@ -1378,6 +1397,10 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             Flat per-patch pixel features produced by the image processor.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`HunYuanVLModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

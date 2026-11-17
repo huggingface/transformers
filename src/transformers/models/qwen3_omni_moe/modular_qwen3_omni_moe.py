@@ -16,6 +16,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -989,6 +990,20 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
 
     def set_input_embeddings(self, value):
         self.conv2d1 = value
+
+    def get_data_dependent_inputs(self, feature_lens: torch.LongTensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `feature_lens` with data-dependent ops: the chunks' `chunk_lengths` and
+        `chunk_index`, the non-padding frames' `valid_indices`, and the windowed attention's `cu_seqlens` and
+        `max_seqlen`."""
+        chunk_lengths = get_audio_chunk_lengths(feature_lens, self.n_window)
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        return {
+            "chunk_lengths": chunk_lengths,
+            "chunk_index": get_audio_chunk_index(chunk_lengths),
+            "valid_indices": get_valid_indices(chunk_lengths, self.n_window),
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
+        }
 
     def forward(self, input_features=None, feature_lens=None, **kwargs: Unpack[TransformersKwargs]):
         r"""

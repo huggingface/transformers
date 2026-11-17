@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -476,6 +477,21 @@ class RadioModel(RadioPreTrainedModel):
         conditioner = self.input_conditioner
         self.input_conditioner = nn.Identity()
         return conditioner
+
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_grid_hw: torch.LongTensor | None = None, **kwargs
+    ) -> dict[str, Any]:
+        """What the forward derives from `image_grid_hw` with data-dependent ops: with flash attention
+        and several packed images, the longest image sequence's `max_seqlen`."""
+        if image_grid_hw is None:
+            return {}
+        indices, weights = get_vision_interpolation_indices_and_weights(
+            F.pad(image_grid_hw, (1, 0), value=1), self.embeddings.max_rows, resize_to_longest_side=True
+        )
+        inputs = {"interp_indices": indices, "interp_weights": weights}
+        if image_grid_hw.shape[0] > 1 and is_flash_attention_requested(self.config):
+            inputs["max_seqlen"] = int((image_grid_hw.prod(-1) + self.config.num_summary_tokens).max())
+        return inputs
 
     @can_return_tuple
     @auto_docstring

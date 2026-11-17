@@ -14,6 +14,7 @@
 """PyTorch Pixtral model."""
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -428,6 +429,18 @@ class PixtralVisionModel(PixtralPreTrainedModel):
 
     def get_input_embeddings(self):
         return self.patch_conv
+
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, **kwargs
+    ) -> dict[str, Any]:
+        """What the forward derives from `image_sizes` with data-dependent ops: the image each unpadded patch belongs
+        to (`patch_image_index`) and its 2D `position_ids` within that image, plus the attention's `cu_seqlens` and
+        `max_seqlen` with flash attention."""
+        patch_image_index, position_ids = get_patch_positions(pixel_values, image_sizes, self.patch_size)
+        inputs = {"patch_image_index": patch_image_index, "position_ids": position_ids}
+        if is_flash_attention_requested(self.config):
+            inputs["cu_seqlens"], inputs["max_seqlen"] = get_patch_attention_seqlens(patch_image_index, self.config)
+        return inputs
 
     @merge_with_config_defaults
     @capture_outputs

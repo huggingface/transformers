@@ -20,6 +20,7 @@
 
 import itertools
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -918,6 +919,13 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
 
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        and the attention's `cu_seqlens` and `max_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1304,6 +1312,25 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The inputs the forward computes with data-dependent operations (see
+        [`Qwen2VLModel.get_data_dependent_inputs`]), and the resampler's `temporal_slice_index` (see
+        [`get_vision_temporal_slice_index`]), prefixed `image_` and `video_`."""
+        inputs = super().get_data_dependent_inputs(
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                inputs[f"{prefix}temporal_slice_index"] = get_vision_temporal_slice_index(
+                    grid_thw, self.resampler_model.spatial_merge_size
+                )
+        return inputs
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
@@ -1578,6 +1605,10 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             The tensors corresponding to the input images.
         """
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Ernie4_5_VLMoeModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

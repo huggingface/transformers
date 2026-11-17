@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from itertools import accumulate
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -27,6 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import accepts_precomputed_kwargs
 from ...vision_utils import get_vision_pixel_shuffle_index
 from ..auto import AutoModel, AutoModelForCausalLM
 from ..internvl.modeling_internvl import InternVLMultiModalProjector
@@ -163,6 +165,21 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         vision_features = vision_features.reshape(vision_features.shape[0], -1, vision_features.shape[-1])
         return self.multi_modal_projector(vision_features)
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_grid_hw: torch.LongTensor | None = None, **kwargs
+    ) -> dict[str, Any]:
+        """The vision model's data-dependent inputs (see [`RadioModel.get_data_dependent_inputs`]) and the pixel
+        shuffle's `pixel_shuffle_index`, prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_grid_hw is None:
+            return {}
+        inputs = self.vision_model.get_data_dependent_inputs(image_grid_hw=image_grid_hw)
+        merge_size = int(1 / self.config.downsample_ratio)
+        inputs["pixel_shuffle_index"] = get_vision_pixel_shuffle_index(
+            F.pad(image_grid_hw, (1, 0), value=1), merge_size
+        )
+        return {f"image_{name}": value for name, value in inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(

@@ -15,6 +15,7 @@
 
 import itertools
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -886,6 +887,25 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             mrope_position_deltas.append(llm_positions.max() + 1 - len(current_input_ids))
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
+
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The inputs the forward computes with data-dependent operations (see
+        [`Qwen2VLModel.get_data_dependent_inputs`]), and the resampler's `temporal_slice_index` (see
+        [`get_vision_temporal_slice_index`]), prefixed `image_` and `video_`."""
+        inputs = super().get_data_dependent_inputs(
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
+        )
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                inputs[f"{prefix}temporal_slice_index"] = get_vision_temporal_slice_index(
+                    grid_thw, self.resampler_model.spatial_merge_size
+                )
+        return inputs
 
     def get_video_embeddings(
         self,

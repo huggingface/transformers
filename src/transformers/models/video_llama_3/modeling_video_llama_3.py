@@ -19,6 +19,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -473,6 +474,21 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         indices, weights = get_pixel_unshuffle_indices_and_weights(grid_thw, merge_sizes, kwargs=kwargs)
         return (hidden_states[indices].float() * weights[..., None]).sum(1).to(hidden_states.dtype)
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, merge_sizes: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` and `merge_sizes` with data-dependent ops: the
+        rotary `position_ids` of the patches, the attention's `cu_seqlens` and `max_seqlen`, and the pixel
+        unshuffle's `unshuffle_indices` and `unshuffle_weights`."""
+        position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        unshuffle_indices, unshuffle_weights = get_pixel_unshuffle_indices_and_weights(grid_thw, merge_sizes)
+        return {
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "unshuffle_indices": unshuffle_indices,
+            "unshuffle_weights": unshuffle_weights,
+        }
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -702,6 +718,25 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             )
         return special_image_mask, special_video_mask
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        model's (see [`VideoLlama3VisionModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
+        `get_image_embeddings` and `get_video_embeddings` take them."""
+        inputs = {}
+        modalities = (("image_", image_grid_thw, image_merge_sizes), ("video_", video_grid_thw, video_merge_sizes))
+        for prefix, grid_thw, merge_sizes in modalities:
+            if grid_thw is not None:
+                vision_inputs = self.vision_model.get_data_dependent_inputs(grid_thw, merge_sizes)
+                inputs.update({prefix + name: value for name, value in vision_inputs.items()})
+        return inputs
+
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -877,6 +912,10 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             The tensors corresponding to the input images.
         """
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`VideoLlama3Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

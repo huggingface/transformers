@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -627,6 +628,13 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.head_dim = head_dim
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` and the
+        attention's `cu_seqlens` and `max_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -1186,6 +1194,23 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         return special_image_mask
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`,
+        as `get_image_features` takes them."""
+        if image_grid_thw is None:
+            return {}
+        source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+        if source_grids.shape[0] == 0:
+            return {}
+        tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
@@ -1356,6 +1381,10 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             The temporal, height and width of each source image's patch grid.
         """
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`GlmImageModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

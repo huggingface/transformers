@@ -4486,6 +4486,68 @@ class ModelTesterMixin(ExportTesterMixin):
             for layer_attention in attentions_not_sliding:
                 self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
 
+    @require_flash_attn
+    @require_torch_accelerator
+    @mark.flash_attn_test
+    @pytest.mark.torch_compile_test
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches
+        eager, under flash attention, whose varlen kernel takes packed sequence lengths as tensors."""
+        tested = False
+        for model_class in self.all_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            try:
+                model = model_class._from_config(
+                    copy.deepcopy(config), attn_implementation="flash_attention_2", dtype=torch.bfloat16
+                )
+            except (ValueError, ImportError):
+                continue
+            model = model.to(torch_device).eval()
+            inputs = {
+                name: value.to(torch.bfloat16)
+                if isinstance(value, torch.Tensor) and value.is_floating_point()
+                else value
+                for name, value in self._prepare_for_class(inputs, model_class).items()
+            }
+            data_dependent_inputs = model.get_data_dependent_inputs(**inputs)
+            for modality in ("image", "video", "audio"):
+                encoder = getattr(model, f"get_{modality}_embeddings", None) or getattr(
+                    model, f"get_{modality}_features", None
+                )
+                if encoder is None:
+                    continue
+                # Its named arguments, and the modality's other inputs when it takes `**kwargs`
+                parameters = inspect.signature(encoder).parameters
+                takes_kwargs = any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
+                encoder_inputs = {
+                    name: value
+                    for name, value in inputs.items()
+                    if name in parameters or (takes_kwargs and name.startswith(f"{modality}_"))
+                }
+                required = [
+                    name
+                    for name, parameter in parameters.items()
+                    if parameter.default is parameter.empty and parameter.kind is parameter.POSITIONAL_OR_KEYWORD
+                ]
+                if not encoder_inputs or any(name not in encoder_inputs for name in required):
+                    continue
+                encoder_inputs.update(
+                    {name: value for name, value in data_dependent_inputs.items() if name.startswith(f"{modality}_")}
+                )
+                torch._dynamo.reset()
+                compiled = torch.compile(encoder, fullgraph=True, backend="eager")
+                with torch.no_grad():
+                    expected = encoder(**copy.deepcopy(encoder_inputs))
+                    actual = compiled(**copy.deepcopy(encoder_inputs))
+                tensors = [
+                    [leaf for leaf in torch.utils._pytree.tree_leaves(output) if isinstance(leaf, torch.Tensor)]
+                    for output in (actual, expected)
+                ]
+                torch.testing.assert_close(*tensors)
+                tested = True
+        if not tested:
+            self.skipTest(reason="The model has no modality encoder taking these inputs")
+
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test

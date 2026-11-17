@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
@@ -31,7 +32,7 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_lighton_ocr import LightOnOcrConfig
 
@@ -265,6 +266,21 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
+    ) -> dict[str, torch.Tensor]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        encoder's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        inputs = self.vision_encoder.get_data_dependent_inputs(pixel_values, image_sizes)
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
+        )
+        return {f"image_{name}": value for name, value in inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(
@@ -417,6 +433,10 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
         self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_embeddings(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`LightOnOcrModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 __all__ = ["LightOnOcrPreTrainedModel", "LightOnOcrForConditionalGeneration", "LightOnOcrModel"]
