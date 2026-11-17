@@ -824,7 +824,7 @@ class LaraMiniDecoderLayer(GradientCheckpointingLayer):
             self.linear_attn = LaraMiniGatedDeltaNet(config, layer_idx)
         else:
             self.self_attn = LaraMiniAttention(config, layer_idx)
-        self.mlp = LaraMiniSparseMoeBlock(config, config.intermediate_size)
+        self.mlp = LaraMiniSparseMoeBlock(config)
         self.input_layernorm = LaraMiniRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LaraMiniRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

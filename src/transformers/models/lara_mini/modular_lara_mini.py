@@ -233,7 +233,7 @@ class LaraMiniDecoderLayer(Qwen3_5DecoderLayer):
     def __init__(self, config: LaraMiniConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         del self.hidden_size
-        self.mlp = LaraMiniSparseMoeBlock(config, config.intermediate_size)
+        self.mlp = LaraMiniSparseMoeBlock(config)
 
 
 @auto_docstring
