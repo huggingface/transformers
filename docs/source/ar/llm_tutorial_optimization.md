@@ -462,17 +462,17 @@ shape of input_ids torch.Size([1, 25])
 في Transformers، يمكننا استرداد ذاكرة التخزين المؤقت للمفاتيح والقيم عن طريق تمرير علم `use_cache` إلى مكالمة `forward` ويمكننا بعد ذلك تمريره مع الرمز الحالي.
 
 ```python
-past_key_values = None # past_key_values is the key-value cache
+cache = None # cache is the key-value cache
 generated_tokens = []
 next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
 
 for _ in range(5):
-  next_logits, past_key_values = model(next_token_id, past_key_values=past_key_values, use_cache=True).to_tuple()
+  next_logits, cache = model(next_token_id, cache=cache, use_cache=True).to_tuple()
   next_logits = next_logits[:, -1:]
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", cache.get_seq_length())  # cache are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)
@@ -535,7 +535,7 @@ In this chat، يقوم LLM بتشغيل فك التشفير التلقائي م
   1. الحفاظ على كل السياق أمر بالغ الأهمية للنماذج اللغوية الكبيرة (LLMs) التي يتم نشرها في الدردشة بحيث يفهم LLM كل سياق المحادثة السابق. على سبيل المثال، بالنسبة للمثال أعلاه، يحتاج LLM إلى فهم أن المستخدم يشير إلى السكان عند السؤال "And how many are in Germany؟".
   2. ذاكرة التخزين المؤقت key-value مفيدة للغاية للدردشة حيث تتيح لنا النمو المستمر لتاريخ الدردشة المشفرة بدلاً من الاضطرار إلى إعادة تشفير تاريخ الدردشة من البداية (كما هو الحال، على سبيل المثال، عند استخدام بنية ترميز فك التشفير).
 
-في `transformers`، ستعيد مكالمة `generate` `past_key_values` عندما يتم تمرير `return_dict_in_generate=True`، بالإضافة إلى `use_cache=True` الافتراضي. لاحظ أنه غير متوفر بعد من خلال واجهة `pipeline`.
+في `transformers`، ستعيد مكالمة `generate` `cache` عندما يتم تمرير `return_dict_in_generate=True`، بالإضافة إلى `use_cache=True` الافتراضي. لاحظ أنه غير متوفر بعد من خلال واجهة `pipeline`.
 
 ```python
 # Generation as usual
@@ -544,12 +544,12 @@ model_inputs = tokenizer(prompt، return_tensors='pt')
 generation_output = model.generate(**model_inputs، max_new_tokens=60، return_dict_in_generate=True)
 decoded_output = tokenizer.batch_decode(generation_output.sequences)[0]
 
-# Piping the returned `past_key_values` to speed up the next conversation round
+# Piping the returned `cache` to speed up the next conversation round
 prompt = decoded_output + "\nQuestion: How can I modify the function above to return Mega bytes instead?\n\nAnswer: Here"
 model_inputs = tokenizer(prompt، return_tensors='pt')
 generation_output = model.generate(
   **model_inputs،
-  past_key_values=generation_output.past_key_values،
+  cache=generation_output.cache،
   max_new_tokens=60،
   return_dict_in_generate=True
 )

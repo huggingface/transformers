@@ -51,6 +51,22 @@ def _get_distributed_backend():
     return get_distributed_backend(_get_distributed_device_type()) or "gloo"
 
 
+def _start_rank_processes(fn, args, nprocs):
+    """
+    Run `fn(rank, *args)` on `nprocs` processes, like `torch.multiprocessing.spawn`.
+
+    On Linux CPU, the ranks are forked from a forkserver that preloads `fn.__module__`, so they share its imports
+    (~450 MB per rank otherwise). Not plain `fork`: the OpenMP pool of the pytest process deadlocks forked children.
+    """
+    if sys.platform == "linux" and _get_distributed_device_type() == "cpu":
+        start_method = "forkserver"
+        # only used when the forkserver starts, i.e. on the first call
+        mp.set_forkserver_preload([fn.__module__])
+    else:
+        start_method = "spawn"
+    mp.start_processes(fn, args=args, nprocs=nprocs, start_method=start_method)
+
+
 def _get_rank_device(rank):
     device_type = _get_distributed_device_type()
     if device_type == "cpu":

@@ -20,11 +20,12 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import SubConfigSpec
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
@@ -44,7 +45,7 @@ from ..internvl.modeling_internvl import (
     InternVLVisionModel,
     InternVLVisionPreTrainedModel,
 )
-from ..internvl.processing_internvl import InternVLProcessor, InternVLProcessorKwargs
+from ..internvl.processing_internvl import InternVLProcessor
 
 
 @auto_docstring(checkpoint="baidu/Qianfan-OCR")
@@ -251,6 +252,7 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(self, **super_kwargs) -> tuple | QianfanOCRCausalLMOutputWithPast:
         r"""
         Example:
@@ -278,11 +280,9 @@ class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
         return super().forward(**super_kwargs)
 
 
-class QianfanOCRProcessorKwargs(InternVLProcessorKwargs):
-    pass
-
-
 class QianfanOCRProcessor(InternVLProcessor):
+    videos_kwargs = AttributeError()
+
     def __init__(
         self,
         image_processor=None,
@@ -316,7 +316,7 @@ class QianfanOCRProcessor(InternVLProcessor):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         # remove video from signature as well because the modality isn't supported
         # some tests pass all modalities from signature, and stumble upon `ValueError`
@@ -419,14 +419,37 @@ class QianfanOCRProcessor(InternVLProcessor):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos=None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
 
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
+
+        if images is None and text is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        # Check that number of placeholders in text is same as number of mm-data for models
+        # that have a special multimodal placeholder token defined
+        if text is not None:
+            if not (
+                isinstance(text, str) or (isinstance(text, list) and all(isinstance(sample, str) for sample in text))
+            ):
+                raise ValueError("`text` must be a string or list of strings.")
+
+            n_images_in_text = [sample.count(self.image_placeholder_token) for sample in text]
+            if images is not None:
+                images = make_flat_list_of_images(images)
+                if sum(n_images_in_text) != len(images):
+                    raise ValueError(
+                        f"The total number of {self.image_placeholder_token} tokens in the prompts should be the same as the number of images passed."
+                        f" Found total {sum(n_images_in_text)} {self.image_placeholder_token} tokens and {len(images)} images."
+                    )
+            elif any(n_images_in_text):
+                raise ValueError(
+                    f"Found {sum(n_images_in_text)} {self.image_placeholder_token} tokens in the text but no images were passed."
+                )
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise NotImplementedError("QianfanOCR does not support video input")
@@ -435,6 +458,8 @@ class QianfanOCRProcessor(InternVLProcessor):
     def unused_input_names(self) -> list[str]:
         return ["num_patches"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"QianfanOCRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "QianfanOCRVisionConfig",

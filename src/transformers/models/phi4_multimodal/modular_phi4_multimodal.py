@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     TransformersKwargs,
     can_return_tuple,
@@ -93,6 +94,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     crop_size: int = 448
     image_token_id: int = 200010
     feature_layer: int = -2
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
@@ -337,7 +339,6 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
         "attentions": Phi4MultimodalVisionAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
@@ -547,7 +548,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
     def get_img_features(self, img_embeds: torch.Tensor, attention_mask=None) -> torch.Tensor:
         img_processor_output = self.img_processor(
-            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=True
+            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=self.layer_idx
         )
         img_feature = img_processor_output.hidden_states[self.layer_idx]
 
@@ -917,7 +918,6 @@ class Phi4MultimodalAudioPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Phi4MultimodalAudioGluPointWiseConv):
@@ -1243,7 +1243,6 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
 class Phi4MultimodalPreTrainedModel(Phi3PreTrainedModel):
     input_modalities = ("image", "audio", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalImageEmbedding):
@@ -1273,12 +1272,13 @@ class Phi4MultimodalModel(Phi3Model):
 
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         image_pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
@@ -1307,8 +1307,8 @@ class Phi4MultimodalModel(Phi3Model):
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -1324,7 +1324,7 @@ class Phi4MultimodalModel(Phi3Model):
             )
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1333,7 +1333,7 @@ class Phi4MultimodalModel(Phi3Model):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -1345,7 +1345,7 @@ class Phi4MultimodalModel(Phi3Model):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -1354,7 +1354,7 @@ class Phi4MultimodalModel(Phi3Model):
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
@@ -1372,12 +1372,13 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         image_pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
@@ -1424,7 +1425,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             image_pixel_values=image_pixel_values,
             image_sizes=image_sizes,
@@ -1447,15 +1448,16 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         inputs_embeds=None,
         image_pixel_values=None,
@@ -1475,17 +1477,17 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         # When the first time input length reached long and short factor switching point, enforce re-compute cache
         # It will cause downside of slower at this single token position, however, better than current failure.
         if (
-            past_key_values
+            cache
             and self.config.rope_parameters
             and input_ids.shape[1] >= self.config.original_max_position_embeddings + 1
         ):
-            past_length = past_key_values.get_seq_length()
+            past_length = cache.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
-                past_key_values = None
+                cache = None
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             image_pixel_values=image_pixel_values,

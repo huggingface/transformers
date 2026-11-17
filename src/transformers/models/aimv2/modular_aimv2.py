@@ -77,6 +77,7 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     is_native: bool = False
 
     layer_norm_eps = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
@@ -287,7 +288,6 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "logit_scale"):
@@ -429,7 +429,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
                 inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
-                past_key_values=None,
+                cache=None,
             )
 
         encoder_outputs = self.encoder(

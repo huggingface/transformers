@@ -54,7 +54,7 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     model_type = "qwen2_5_omni_vision_encoder"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -149,7 +149,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen25OmniText`

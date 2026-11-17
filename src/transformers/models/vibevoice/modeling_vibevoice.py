@@ -32,6 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_vibevoice import VibeVoiceConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -215,7 +216,7 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VibeVoiceDiffusionHead"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -287,12 +288,14 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
-        padding_mask = torch.arange(num_audio_tokens.max(), device=num_audio_tokens.device) < num_audio_tokens[:, None]
+        positions = torch.arange(acoustic_features.shape[1], device=num_audio_tokens.device)
+        # Keeps a mask already on the CPU from syncing with the accelerator
+        padding_mask = (positions < num_audio_tokens[:, None]).cpu()
 
         pooler_output = self.multi_modal_projector(acoustic_features)
         return BaseModelOutputWithPooling(
-            last_hidden_state=acoustic_features[padding_mask.to(acoustic_features.device)],
-            pooler_output=pooler_output[padding_mask.to(pooler_output.device)],
+            last_hidden_state=acoustic_features[padding_mask],
+            pooler_output=pooler_output[padding_mask],
         )
 
     def get_placeholder_mask(
@@ -321,6 +324,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -22,7 +22,7 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
@@ -135,7 +135,7 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     """
 
     model_type = "gradium_phonon_tts"
-    sub_configs_defaults = {"flow_head_config": SubConfigSpec(config_class=GradiumPhononTTSFlowHeadConfig)}
+    sub_configs_defaults = {"flow_head_config": GradiumPhononTTSFlowHeadConfig}
 
     flow_head_config: dict | PreTrainedConfig | None = None
 
