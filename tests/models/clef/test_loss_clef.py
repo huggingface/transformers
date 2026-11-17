@@ -158,6 +158,30 @@ class ClefLossTest(unittest.TestCase):
         b = ClefForDecisionLoss(logits[keep], soft[keep], mask[keep], is_score[keep], **kwargs)
         torch.testing.assert_close(a, b)
 
+    def test_inconsistent_labels_raise(self):
+        # Labels that do not match the questions used to broadcast into a loss, or to count a question that has no
+        # such option (or option 0 for a label of -1), without any error
+        logits = torch.randn(3, 4)
+        mask = torch.tensor([[1, 1, 0, 0], [1, 1, 1, 1], [1, 1, 1, 0]], dtype=torch.bool)
+        is_score = torch.zeros(3, dtype=torch.bool)
+        for labels, message in (
+            (torch.tensor([0, 1]), r"2 labels for 3 questions"),
+            (torch.tensor([[0, 1, 2]]), r"got shape \(1, 3\)"),
+            (torch.zeros(3, 3), r"\(3, 4\), got shape \(3, 3\)"),
+            (torch.tensor([0, 1, 3]), r"label 3 of question 2 is not one of its 3 options"),
+            (torch.tensor([2, 1, 0]), r"label 2 of question 0 is not one of its 2 options"),
+            (torch.tensor([0, -1, 0]), r"label -1 of question 1 is not one of its 4 options"),
+        ):
+            with self.subTest(labels=labels.tolist()), self.assertRaisesRegex(ValueError, message):
+                ClefForDecisionLoss(logits, labels, mask, is_score)
+        with self.assertRaisesRegex(ValueError, r"`option_mask` of shape \(2, 4\)"):
+            ClefForDecisionLoss(logits, torch.tensor([0, 1, 2]), mask[:2], is_score)
+        # The ignored questions and the real options of each question are accepted
+        self.assertTrue(torch.isfinite(ClefForDecisionLoss(logits, torch.tensor([1, -100, 2]), mask, is_score)))
+        # A caller that checked the labels already (`ClefForDecision.forward`, in its single synchronisation) skips it
+        loss = ClefForDecisionLoss(logits, torch.tensor([0, 1, 2]), mask, is_score, check_labels=False)
+        self.assertTrue(torch.isfinite(loss))
+
     def test_single_option_questions_are_finite(self):
         logits = torch.tensor([[1.0, 0, 0, 0], [0.5, 1.0, -1.0, 2.0], [2.0, 0, 0, 0]], requires_grad=True)
         mask = torch.tensor([[1, 0, 0, 0], [1, 1, 1, 1], [1, 0, 0, 0]], dtype=torch.bool)

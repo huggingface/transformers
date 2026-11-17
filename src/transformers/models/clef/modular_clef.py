@@ -22,6 +22,7 @@ from torch.utils.checkpoint import checkpoint
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...decision import DecisionConfig, DecisionMixin, Question, process_scores
+from ...loss.loss_clef import check_clef_label_shapes, clef_label_errors, raise_label_error
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -594,9 +595,16 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         else:
             if config.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
                 # The output embeddings of the causal language model, tied to its input embeddings when it ties them
+                input_embeddings = self.model.get_input_embeddings()
                 embeddings = next(
-                    name for name, module in self.model.named_modules() if module is self.model.get_input_embeddings()
+                    (name for name, module in self.model.named_modules() if module is input_embeddings), None
                 )
+                if embeddings is None:
+                    raise ValueError(
+                        f"The input embeddings of the backbone {type(self.model).__name__} are not one of its modules: "
+                        "the language modeling head of the joint head cannot be tied to them. Use a backbone whose "
+                        '`get_input_embeddings()` returns one of its modules, or `head_type="cosine"`.'
+                    )
                 self._tied_weights_keys = {"lm_head.weight": f"model.{embeddings}.weight"}
                 self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
             else:  # an encoder without a language modeling head: the lexical prior reads its input embeddings
@@ -640,6 +648,50 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         lm_head = getattr(self, "lm_head", None)
         return self.model.get_input_embeddings().weight if lm_head is None else lm_head.weight
 
+    @staticmethod
+    def _check_inputs(input_ids, marks, num_options, question_options, option_mask, given_option_mask, labels):
+        """
+        Raises a `ValueError` when the inputs disagree with each other, before anything indexes with them: the marks of a
+        prompt that do not give a span within it to each instruction and option of its questions, an `option_mask`
+        that disagrees with `num_options`, or labels that are not one per question or name an option their question
+        does not have. Every check of the values runs on the device and costs a single synchronisation.
+        """
+        num_questions, length = len(question_options), input_ids.shape[-1]
+        if option_mask.dim() != 2 or option_mask.shape[0] != num_questions:
+            raise ValueError(
+                f"`option_mask` has {option_mask.shape[0] if option_mask.dim() else 0} rows (shape "
+                f"{tuple(option_mask.shape)}), one per question, but `num_options` has {num_questions} questions."
+            )
+        if labels is not None:
+            check_clef_label_shapes(labels, option_mask)
+        # Two marks per instruction and per option of each prompt, each a position in [0, length]
+        needed = 2 * ((num_options + 1) * (num_options > 0)).sum(-1)
+        in_use = torch.arange(marks.shape[-1], device=marks.device) < needed[:, None]
+        valid_marks = (in_use & (marks >= 0) & (marks <= length)).sum(-1)
+        errors = [(valid_marks != needed).any()]
+        if given_option_mask:
+            errors.append((option_mask.sum(-1) != question_options).any())
+        if labels is not None:
+            label_errors = clef_label_errors(labels, option_mask)
+            errors.append(label_errors.any())
+        if not bool(torch.stack(errors).any()):  # the synchronisation
+            return
+        # What is wrong, for the message: the slow path of an error only
+        for row in (valid_marks != needed).nonzero()[:, 0].tolist():
+            raise ValueError(
+                f"The marks of prompt {row} do not fit its questions: prompt {row} has {int(valid_marks[row])} valid "
+                f"marks (positions in [0, {length}]) of the {int(needed[row])} that its questions need, two per "
+                f"instruction and per option, in {marks.shape[-1]} marks: {marks[row].tolist()}."
+            )
+        if given_option_mask:
+            counts = option_mask.sum(-1)
+            for index in (counts != question_options).nonzero()[:, 0].tolist():
+                raise ValueError(
+                    f"`option_mask` disagrees with `num_options`: question {index} has {int(counts[index])} options in "
+                    f"`option_mask` and {int(question_options[index])} in `num_options`."
+                )
+        raise_label_error(labels, option_mask, label_errors)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -673,13 +725,30 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         position_ids = kwargs.pop("position_ids", None)
         if position_ids is None and attention_mask is not None and not self._positions_from_input_ids:
             position_ids = (attention_mask.long().cumsum(-1) - 1).clamp(min=0)
-        hidden_states = self.model(
-            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=False, **kwargs
-        ).last_hidden_state
         # The options of each prompt packed in question order: the question of each, and whether it exists
         is_question = num_options > 0
         option_ends = num_options.cumsum(-1)
-        positions = torch.arange(int(option_ends[:, -1].max()), device=num_options.device)
+        max_options = int(option_ends[:, -1].max())
+        if max_options == 0:
+            raise ValueError(
+                "The batch has no questions: `num_options` is 0 for every question of every prompt. Give each prompt at "
+                "least one question with options."
+            )
+        # The options of each real question, prompt after prompt, padded to the widest question
+        # One boolean indexing (one synchronisation) for the options and the types of the real questions
+        question_options, question_types = torch.stack([num_options, question_type_ids], dim=-1)[is_question].unbind(
+            -1
+        )
+        given_option_mask = option_mask is not None
+        if option_mask is None:
+            option_mask = (
+                torch.arange(int(question_options.max()), device=num_options.device) < question_options[:, None]
+            )
+        self._check_inputs(input_ids, marks, num_options, question_options, option_mask, given_option_mask, labels)
+        hidden_states = self.model(
+            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=False, **kwargs
+        ).last_hidden_state
+        positions = torch.arange(max_options, device=num_options.device)
         is_option = positions < option_ends[:, -1:]
         positions = positions.expand(len(num_options), -1).contiguous()
         option_question_ids = torch.searchsorted(option_ends, positions, right=True).clamp(
@@ -714,11 +783,6 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
             batch = torch.arange(len(fields), device=fields.device)[:, None]
             scores = self.scorer(fields[batch, option_question_ids], options, priors)[is_option].float()
 
-        # The scores of the options of each real question, prompt after prompt, padded to the widest question
-        if option_mask is None:
-            option_mask = (
-                torch.arange(int(num_options.max()), device=num_options.device) < num_options[is_question][:, None]
-            )
         logits = scores.new_full(option_mask.shape, torch.finfo(scores.dtype).min).masked_scatter(option_mask, scores)
 
         loss = None
@@ -727,7 +791,7 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 logits,
                 labels,
                 option_mask,
-                is_score=question_type_ids[is_question] == Question.questions_types.index("score"),
+                is_score=question_types == Question.questions_types.index("score"),
                 label_smoothing=self.config.label_smoothing,
                 brier_weight=self.config.brier_weight,
                 ordinal_weight=self.config.ordinal_weight,
@@ -738,6 +802,7 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 rlcd_spherical_weight=self.config.rlcd_spherical_weight,
                 rlcd_rps_weight=self.config.rlcd_rps_weight,
                 rlcd_normalize_advantage=self.config.rlcd_normalize_advantage,
+                check_labels=False,  # in the single synchronisation of `_check_inputs`
             )
         return ClefDecisionOutput(loss=loss, logits=logits, option_mask=option_mask)
 

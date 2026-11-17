@@ -48,6 +48,51 @@ def clef_proper_reward(
     return log_score + spherical_weight * spherical - rps_weight * is_score.float() * ranked
 
 
+def check_clef_label_shapes(labels: torch.Tensor, option_mask: torch.Tensor) -> None:
+    """Raises when the shape of `labels` does not give one label per question of `option_mask` (`(Q, K)`)."""
+    if labels.is_floating_point():
+        if labels.shape != option_mask.shape:
+            raise ValueError(
+                f"Soft labels must have the shape of the logits {tuple(option_mask.shape)}, got shape "
+                f"{tuple(labels.shape)}: give one distribution over the options of each question."
+            )
+    elif labels.dim() != 1:
+        raise ValueError(
+            f"Hard labels must have the shape ({option_mask.shape[0]},), one index per question, got shape "
+            f"{tuple(labels.shape)}."
+        )
+    elif labels.shape[0] != option_mask.shape[0]:
+        raise ValueError(
+            f"Got {labels.shape[0]} labels for {option_mask.shape[0]} questions: give one label per question that has "
+            "options, prompt after prompt."
+        )
+
+
+def clef_label_errors(labels: torch.Tensor, option_mask: torch.Tensor, ignore_index: int = -100) -> torch.Tensor:
+    """
+    Whether each hard label (`(Q,)`) is wrong: neither `ignore_index` nor the index of an option of its question in
+    `option_mask` (`(Q, K)`). Computed on the device, without synchronising it; all `False` for soft labels.
+    """
+    if labels.is_floating_point():
+        return torch.zeros(labels.shape[0], dtype=torch.bool, device=labels.device)
+    labels = labels.to(option_mask.device)
+    in_range = (labels >= 0) & (labels < option_mask.shape[-1])
+    exists = option_mask.gather(-1, labels.clamp(0, option_mask.shape[-1] - 1)[:, None])[:, 0]
+    return (labels != ignore_index) & ~(in_range & exists)
+
+
+def raise_label_error(
+    labels: torch.Tensor, option_mask: torch.Tensor, errors: torch.Tensor, ignore_index: int = -100
+) -> None:
+    """Raises for the first wrong label of `errors` (see [`clef_label_errors`])."""
+    index = int(errors.nonzero()[0, 0])
+    count = int(option_mask[index].sum())
+    raise ValueError(
+        f"The label {int(labels[index])} of question {index} is not one of its {count} options: use an index in "
+        f"[0, {count}), or {ignore_index} to ignore the question."
+    )
+
+
 def ClefForDecisionLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
@@ -65,6 +110,7 @@ def ClefForDecisionLoss(
     rlcd_rps_weight: float = 1.0,
     rlcd_normalize_advantage: bool = False,
     generator: torch.Generator | None = None,
+    check_labels: bool = True,
     **kwargs,
 ) -> torch.Tensor:
     """
@@ -90,6 +136,12 @@ def ClefForDecisionLoss(
         rlcd_normalize_advantage: whether to divide the advantages by their standard deviation over the samples of the
             questions that are not ignored, as Laya's original objective does.
         generator: the generator of the noise of the RLCD term, the global one by default.
+        check_labels: whether to check that every hard label is `ignore_index` or an option of its question, which
+            synchronises the device once. The shapes are always checked, which costs nothing. `False` for a caller
+            that checked the labels already, as [`ClefForDecision`] does.
+
+    Raises a `ValueError` when `labels` or `option_mask` do not match the logits, or a hard label names an option its
+    question does not have.
 
     The RLCD term adapts `rlcd_loss` of Laya (https://github.com/NandhaKishorM/laya, commit
     3a38cbe83f6ef556f3125fb0065fdc5a55d05792, Apache-2.0). Zero mean Gaussian noise over the options of each question
@@ -98,6 +150,15 @@ def ClefForDecisionLoss(
     the sample, the only path of its gradient. Its defaults are a revised variant (more samples, advantages not divided
     by their standard deviation); `rlcd_normalize_advantage=True, rlcd_samples=4` gives Laya's original.
     """
+    if option_mask.shape != logits.shape:
+        raise ValueError(
+            f"`option_mask` of shape {tuple(option_mask.shape)} does not match the logits of shape {tuple(logits.shape)}."
+        )
+    check_clef_label_shapes(labels, option_mask)
+    if check_labels:
+        errors = clef_label_errors(labels, option_mask, ignore_index)
+        if errors.any():
+            raise_label_error(labels, option_mask, errors, ignore_index)
     logits = logits.float()
     questions, width = logits.shape
     if labels.is_floating_point():

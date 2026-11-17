@@ -365,6 +365,51 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         padded = output.logits[~output.option_mask]
         self.assertTrue((padded == torch.finfo(output.logits.dtype).min).all())
 
+    def test_inconsistent_inputs_raise_before_the_backbone(self):
+        # Inputs that disagree with each other used to scatter scores into the wrong cells, drop them, or index past
+        # the prompt (a device-side assert on CUDA): each raises a `ValueError` that names it, before the backbone runs
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        calls = []
+        model.model.register_forward_pre_hook(lambda *_: calls.append(1))
+        inputs = self.collate(self.ragged_prompts())  # 6 questions of [2, 5, 1], [4], [3, 3] options
+        length = inputs["input_ids"].shape[-1]
+        marks_past_the_end = inputs["marks"].clone()
+        marks_past_the_end[1, 3] = length + 1
+        too_few_marks = inputs["marks"].clone()
+        too_few_marks[2, 14:16] = -1  # the last option of the last question of the third prompt
+        swapped = torch.arange(5) < torch.tensor([3, 4, 1, 4, 3, 3])[:, None]  # [2, 5] given as [3, 4]
+        dropped = torch.arange(5) < torch.tensor([2, 5, 1, 4, 3, 2])[:, None]
+        for name, changes, message in (
+            ("marks past the end", {"marks": marks_past_the_end}, r"prompt 1 has 9 valid marks .* of the 10"),
+            ("too few marks", {"marks": too_few_marks}, r"prompt 2 has 14 valid marks .* of the 16"),
+            ("too narrow marks", {"marks": inputs["marks"][:, :20]}, r"prompt 0 has 20 valid marks .* of the 22"),
+            ("no questions", {"num_options": torch.zeros_like(inputs["num_options"])}, r"no questions"),
+            ("option mask rows", {"option_mask": swapped[:5]}, r"`option_mask` has 5 rows.*6 questions"),
+            ("swapped option mask", {"option_mask": swapped}, r"question 0 has 3 options in `option_mask` and 2"),
+            ("dropping option mask", {"option_mask": dropped}, r"question 5 has 2 options in `option_mask` and 3"),
+            ("too few labels", {"labels": torch.tensor([1, 4, 0, 3, 2])}, r"5 labels for 6 questions"),
+            ("absent option", {"labels": torch.tensor([1, 4, 1, 3, 2, 0])}, r"label 1 of question 2 is not one"),
+            ("negative label", {"labels": torch.tensor([1, 4, 0, -1, 2, 0])}, r"label -1 of question 3 is not one"),
+        ):
+            with self.subTest(name), self.assertRaisesRegex(ValueError, message):
+                model(**{**inputs, **changes})
+        self.assertEqual(calls, [])
+        # Consistent inputs, with an `option_mask` and ignored questions, still run
+        option_mask = torch.arange(5) < torch.tensor([2, 5, 1, 4, 3, 3])[:, None]
+        output = model(**inputs, option_mask=option_mask, labels=torch.tensor([1, -100, 0, 3, 2, 0]))
+        self.assertTrue(torch.isfinite(output.loss))
+
+    def test_untieable_input_embeddings_raise(self):
+        # A backbone whose input embeddings are not one of its modules: nothing to tie the language modeling head to
+        from unittest import mock
+
+        from transformers import Qwen2Model
+
+        with mock.patch.object(Qwen2Model, "get_input_embeddings", return_value=nn.Embedding(2, 2)):
+            with self.assertRaisesRegex(ValueError, r"input embeddings.*head_type=\"cosine\""):
+                ClefForDecision(self.config)
+
     def test_decide_and_pipeline_unchanged(self):
         torch.manual_seed(0)
         model = ClefForDecision(self.config).eval()
