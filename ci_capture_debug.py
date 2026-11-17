@@ -58,7 +58,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture_defer_unload")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
