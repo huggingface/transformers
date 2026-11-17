@@ -14,57 +14,109 @@ rendered properly in your Markdown viewer.
 
 -->
 
+
 # FP-Quant
 
-[FP-Quant](https://github.com/IST-DASLab/FP-Quant) is a family of quantization algorithms tailored for the Blackwell generation of Nvidia GPUs. The goal is to allow for efficient post-training quantization (PTQ) and quantization-aware training (QAT) of LLMs in the [MXFP4 and NVFP4 data-types](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
+[FP-Quant](https://github.com/IST-DASLab/FP-Quant) quantizes weights and activations to the [MXFP4](./mxfp4) or [NVFP4](./nvfp4) formats, applying a rotation (a Hadamard transform by default) before quantizing, and runs the matmuls with [QuTLASS](https://github.com/IST-DASLab/qutlass) kernels on NVIDIA Blackwell GPUs. Use it for FP4 inference on Blackwell GPUs, or emulate FP4 quantization on other GPUs to evaluate accuracy or run quantization-aware training (QAT).
 
-This integration accompanies the pre-print of the [**Bridging the Gap Between Promise and Performance for Microscaling FP4 Quantization**](https://arxiv.org/abs/2509.23202) pre-print.
+The table below summarizes what FP-Quant supports in Transformers.
 
-Currently, only QAT is only supported with `pseudoquantization=True`. Models can either be quantized on the fly with `quantization_config=FPQuantConfig()`:
+| | |
+|---|---|
+| Config | [`FPQuantConfig`] |
+| `quant_method` | `fp_quant` |
+| Workflow | Quantize while loading |
+| Bits | 4 |
+| Hardware | NVIDIA Blackwell GPUs; other CUDA GPUs and Intel XPU with `pseudoquantization=True` |
+| Save | ✅ |
+| Fine-tune | Only with `store_master_weights=True` |
+| Auto-compile | ❌ |
 
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer, FPQuantConfig
-import torch
+## Install FP-Quant
+
+Install fp_quant 0.3.2 or later. To run the real FP4 kernels on a Blackwell GPU, also build QuTLASS 0.2.0 or later from source.
+
+```bash
+pip install -U "fp_quant>=0.3.2"
+git clone https://github.com/IST-DASLab/qutlass.git
+cd qutlass && pip install --no-build-isolation .
+```
+
+## Quantize a model with FP-Quant
+
+Create a [`FPQuantConfig`] and pass it to [`~PreTrainedModel.from_pretrained`]. Set `device_map` to your GPUs. The default config quantizes every linear layer except `lm_head` to NVFP4.
+
+```py
+from transformers import AutoModelForCausalLM, FPQuantConfig
 
 model = AutoModelForCausalLM.from_pretrained(
-    "qwen/Qwen3-8B",
+    "Qwen/Qwen3-8B",
     quantization_config=FPQuantConfig(),
-    device_map="auto",
-    dtype=torch.bfloat16,
+    device_map="cuda",
 )
 ```
 
-or pre-processed with GPTQ for better quality (see [FP Format Quantization Harness](https://github.com/IST-DASLab/FP-Quant)).
+FP-Quant only supports bf16, so the model always loads in bf16. Any other `dtype` is replaced with a warning.
 
-You can choose between MXFP4 and NVFP4 with `FPQuantConfig(forward_dtype="mxfp4")`. NVFP4 provides better quality but uses a little more memory.
+Without a Blackwell GPU, set `pseudoquantization=True`. FP-Quant then emulates FP4 quantization with Triton kernels. It reproduces the accuracy of the quantized model but doesn't speed it up.
 
-A **Blackwell-generation GPU is required** to run the kernels. Runtime support for FP-Quant is implemented through the [QuTLASS](https://github.com/IST-DASLab/qutlass) library and a lightweight PyTorch interface lib [`fp_quant`](https://github.com/IST-DASLab/FP-Quant/tree/master/inference_lib). We recommend installing the former **from source** and the latter with  `pip install fp_quant`.
-
-Users **without a Blackwell-generation GPU** , can use the method with `quantization_config=FPQuantConfig(pseudoquantization=True)` without having to install [QuTLASS](https://github.com/IST-DASLab/qutlass). This would provide no speedups but would fully emulate the effect of quantization.
-
-> [!TIP]
-> Find models pre-quantized with FP-Quant in the [ISTA-DASLab](https://huggingface.co/ISTA-DASLab/models?search=FPQuant) organization.
-
-## torch.compile
-
-FP-Quant is fully compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html).
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, FPQuantConfig
-
+```py
 model = AutoModelForCausalLM.from_pretrained(
-    "qwen/Qwen3-8B",
-    quantization_config=FPQuantConfig(),
-    device_map="auto",
-    dtype=torch.bfloat16,
+    "Qwen/Qwen3-8B",
+    quantization_config=FPQuantConfig(forward_dtype="mxfp4", pseudoquantization=True),
+    device_map="cuda",
 )
-
-model.forward = torch.compile(model.forward, mode="max-autotune", fullgraph=True)
 ```
 
-## Speedups
+To load a model that was quantized ahead of time with GPTQ for better accuracy, pass its Hub repository to [`~PreTrainedModel.from_pretrained`] without a `quantization_config`. The [ISTA-DASLab](https://huggingface.co/ISTA-DASLab/models?search=FPQuant) organization hosts FP-Quant checkpoints, and the [FP-Quant](https://github.com/IST-DASLab/FP-Quant) repository has the code to create them.
 
-FP-Quant currently performs best for very large batch size processing.
+## Configure FP-Quant
 
-See [QuTLASS README](https://github.com/IST-DASLab/qutlass/blob/main/README.md) for speedups.
+These [`FPQuantConfig`] parameters change how the weights and activations are quantized.
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `forward_dtype` | `"nvfp4"` | FP4 format for the forward pass, either `"nvfp4"` or `"mxfp4"`. |
+| `hadamard_group_size` | `None` | Size of the Hadamard transform. With `None`, it's 16 for NVFP4 and 32 for MXFP4. NVFP4 accepts 16, 32, 64, and 128, and MXFP4 accepts 32, 64, and 128. |
+| `transform_init` | `"hadamard"` | How the transform matrix is initialized, either `"hadamard"`, `"identity"`, or `"gsr"`. |
+| `pseudoquantization` | `False` | Emulates FP4 with Triton kernels instead of running the QuTLASS kernels. Required on GPUs other than Blackwell. |
+
+See [`FPQuantConfig`] for the rest of the parameters.
+
+## Train with quantized weights
+
+FP-Quant supports QAT. Set `store_master_weights=True` to keep the high-precision weights so they can be updated, and set `forward_method="quest"`, which works better than `"abs_max"` for QAT. The `"quest"` method only works with MXFP4. With an MXFP4 forward pass, `backward_dtype` can also quantize the backward pass to `"mxfp8"` or `"mxfp4"` instead of `"bf16"`.
+
+```py
+from transformers import AutoModelForCausalLM, FPQuantConfig
+
+quantization_config = FPQuantConfig(
+    forward_dtype="mxfp4",
+    forward_method="quest",
+    store_master_weights=True,
+    pseudoquantization=True,
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B",
+    quantization_config=quantization_config,
+    device_map="cuda",
+)
+```
+
+The FP-Quant authors note that QAT currently only works with `pseudoquantization=True`.
+
+## Limitations
+
+- FP-Quant needs a CUDA GPU or Intel XPU. Loading without one raises a `NotImplementedError`.
+- Without QuTLASS installed, loading with `pseudoquantization=False` raises an `ImportError`.
+- NVFP4 pseudo-quantization needs a CUDA GPU with compute capability 9.0 or higher (Hopper or newer). On older GPUs, it raises a `ValueError`. Use `forward_dtype="mxfp4"` instead.
+- Without `pseudoquantization`, loading without a `device_map` raises a `ValueError`. A `device_map` that spreads the model across a GPU and the CPU raises a `ValueError` too.
+- A `device_map` that includes `"disk"` raises a `ValueError`.
+- Pseudo-quantization doesn't support multiple GPUs.
+- Training without `store_master_weights=True` isn't supported.
+
+## Resources
+
+- [Bridging the Gap Between Promise and Performance for Microscaling FP4 Quantization](https://arxiv.org/abs/2509.23202) paper
+- [FP-Quant](https://github.com/IST-DASLab/FP-Quant) repository
+- [QuTLASS](https://github.com/IST-DASLab/qutlass) repository, including speedup benchmarks
