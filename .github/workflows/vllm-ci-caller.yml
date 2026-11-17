@@ -667,3 +667,14 @@ jobs:
           name: vllm-ci-failure-reports
           path: vllm-ci-reports/
           if-no-files-found: warn
+
+      - name: Upload reports to the Hub and post to Slack
+        if: ${{ !cancelled() }}
+        env:
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+        run: |
+          python3 transformers/utils/ci_report_notify.py \
+            --reports-dir ./vllm-ci-reports \
+            --hub-repo hf-internal-testing/transformers_vllm_ci \
+            --slack-channel "#transformers-ci-vllm"
