@@ -657,7 +657,6 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     # SAM doesn't support flex attention
     _supports_flex_attn = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekOcr2SamVisionAttention):
@@ -939,22 +938,7 @@ class DeepseekOcr2Model(LlavaNextModel):
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
 
-    def get_image_num_patches(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
-
-    def get_pack_index(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
-
-    def get_pack_index_per_image(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
-
-    def get_patch_index(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
-
     def get_data_dependent_inputs(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
-
-    def get_image_embeddings(self):
         raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
 
     def pack_image_features(self):
@@ -1015,6 +999,19 @@ class DeepseekOcr2Model(LlavaNextModel):
             attentions=global_vision_outputs.attentions,
             **local_outputs,
         )
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="All images' features as one tensor; `get_image_features` gives them per image.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        """
+        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
+        image_outputs.pooler_output = torch.cat(image_outputs.pooler_output)
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -1081,12 +1078,6 @@ class DeepseekOcr2Model(LlavaNextModel):
 class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
-
-    def get_image_embeddings(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
-
-    def get_data_dependent_inputs(self):
-        raise AttributeError("DeepseekOcr2 does not pack its image features as LLaVA-NeXT does")
 
     @can_return_tuple
     @auto_docstring

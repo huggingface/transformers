@@ -299,7 +299,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
         "UnlimitedOcrTextDecoderLayer",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrSamVisionAttention):
@@ -1287,7 +1286,6 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrTextTopkRouter):
@@ -1668,7 +1666,6 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1837,6 +1834,19 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
         self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="All images' features as one tensor; `get_image_features` gives them per image.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        """
+        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
+        image_outputs.pooler_output = torch.cat(image_outputs.pooler_output)
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring

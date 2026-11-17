@@ -238,17 +238,9 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         return input_tensor
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the rotary `position_ids` of the patches, the full attention's `cu_seqlens` and `max_seqlen`, and the
-        window attention's `window_index`, `cu_window_seqlens` and `max_window_seqlen`. Passed back to the forward,
-        they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are returned
-        as they are; only the config is read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width dimensions of feature shape for each image.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        the full attention's `cu_seqlens` and `max_seqlen`, and the window attention's `window_index`,
+        `cu_window_seqlens` and `max_window_seqlen`."""
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(

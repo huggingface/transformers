@@ -89,7 +89,6 @@ class GlmImageTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, GlmImageText has different position ids for the grids
@@ -630,16 +629,8 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the rotary `position_ids` and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the
-        forward, they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are
-        returned as they are; only the config and the tower's constants are read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width patch-grid dimensions for each packed image or video.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` and the
+        attention's `cu_seqlens` and `max_seqlen`."""
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
@@ -1209,18 +1200,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
         images_per_sample: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
-        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`, as
-        `get_image_features` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export` free
-        of those operations. Only the config and the tower's constants are read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of each image's patch grid, the target grids included.
-            images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Number of images (including target grids) for each sample in the batch.
-        """
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`,
+        as `get_image_features` takes them."""
         if image_grid_thw is None:
             return {}
         source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)

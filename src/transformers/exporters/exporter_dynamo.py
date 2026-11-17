@@ -84,6 +84,8 @@ class DynamoExporter(HfExporter):
     export_format = ExportFormat.DYNAMO
     config_class = DynamoConfig
     program_suffix = ".pt2"
+    # `torch.export.load` unpickles the program
+    requires_trust_remote_code = True
 
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}

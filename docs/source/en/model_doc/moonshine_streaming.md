@@ -28,7 +28,7 @@ Moonshine Streaming is a streaming variant of the [Moonshine](https://huggingfac
 
 Moonshine Streaming is available in three sizes: tiny, small, and medium, offering a trade-off between speed and accuracy. It is particularly well-suited for on-device streaming transcription and voice command applications.
 
-You can find all the original Moonshine Streaming checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
+You can find all the original Moonshine Streaming checkpoints under the [Moonshine AI](https://huggingface.co/moonshine-ai) organization.
 
 > [!TIP]
 > Moonshine Streaming processes raw audio waveforms directly without requiring mel-spectrogram preprocessing, making it efficient for real-time applications.
@@ -44,7 +44,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="automatic-speech-recognition",
-    model="UsefulSensors/moonshine-streaming-tiny",
+    model="moonshine-ai/moonshine-streaming-tiny",
     device=0
 )
 pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -59,9 +59,9 @@ from datasets import load_dataset
 from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
 
 
-processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-streaming-tiny")
+processor = AutoProcessor.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
 model = MoonshineStreamingForConditionalGeneration.from_pretrained(
-    "UsefulSensors/moonshine-streaming-tiny",
+    "moonshine-ai/moonshine-streaming-tiny",
     device_map="auto",
     attn_implementation="sdpa"
 )

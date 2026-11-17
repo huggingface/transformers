@@ -160,6 +160,7 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "input_features",
     "input_features_mask",
     "input_values",
+    "padding_mask",
     "input_values_mask",
     "pixel_values_videos",
     "num_local_patches",
@@ -767,9 +768,7 @@ class GenerationMixin(ContinuousMixin):
             elif key not in model_inputs:
                 model_inputs[key] = value
 
-        # 6. What the forward derives from its inputs with data-dependent operations, computed here, outside it, on the
-        # steps that carry the prompt's inputs (as for the multimodal ones above). Those already laid out (the
-        # positions) are kept
+        # 6. The forward's data-dependent inputs, computed with the prompt's; those already laid out are kept
         if is_first_iteration or not kwargs.get("use_cache", True):
             data_dependent_inputs = self.get_data_dependent_inputs(**model_inputs)
             model_inputs.update(

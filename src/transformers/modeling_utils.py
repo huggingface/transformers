@@ -1390,16 +1390,8 @@ class PreTrainedModel(
                 self.model_tags.append(tag)
 
     def get_data_dependent_inputs(self, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the given ones with data-dependent operations (host syncs, loops over
-        images or audio chunks): passed back to the forward, they keep it traceable by `torch.compile(fullgraph=True)`
-        and `torch.export`. A model whose forward computes any overrides this; by default there are none. Only the
-        config and the model's own constants are read, never its weights, so a model on the meta device computes
-        them too.
-
-        They complete the inputs as they are laid out, never repack them: a vision processor's patches come packed,
-        missing only these tensors.
-        """
+        """The inputs the forward computes with data-dependent ops (host syncs, loops over images). Passed back to it,
+        they keep it traceable by `torch.compile(fullgraph=True)` and `torch.export`. None by default."""
         return {}
 
     @classmethod
@@ -2314,7 +2306,6 @@ class PreTrainedModel(
             else:
                 self.model = decoder
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex

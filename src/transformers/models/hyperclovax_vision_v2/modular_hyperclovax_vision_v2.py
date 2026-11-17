@@ -105,19 +105,9 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
-        model's (see [`Qwen2_5_VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_` and
-        `video_`, as `get_image_embeddings` and `get_video_embeddings` take them. Passed back to the forward, they keep
-        `torch.compile` and `torch.export` free of those operations. Only the config and the tower's constants are
-        read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video.
-        """
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        model's (see [`Qwen2_5_VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_`
+        and `video_`, as `get_image_embeddings` and `get_video_embeddings` take them."""
         inputs = {}
         for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
             if grid_thw is not None:

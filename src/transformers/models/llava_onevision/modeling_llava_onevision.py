@@ -20,6 +20,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -122,7 +123,6 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
         "attentions": "LlamaAttention",
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LlavaOnevisionModel):
@@ -343,6 +343,19 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             feature_lens.append(image_feature.size(0))
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="All images' features as one tensor; `get_image_features` gives them per image.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        """
+        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
+        image_outputs.pooler_output = torch.cat(image_outputs.pooler_output)
+        return image_outputs
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -648,6 +661,27 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
         )
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_embeddings(
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
+        )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`LlavaOnevisionModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple

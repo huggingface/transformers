@@ -627,9 +627,7 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         )
         return patch_pos_embed.permute(0, 2, 3, 1).reshape(1, -1, self.embed_dim).to(embeddings.dtype)
 
-    def forward(
-        self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, kwargs: dict | None = None
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
         num_patches, _ = pixel_values.shape
         pixel_values = pixel_values.reshape(1, num_patches, self.config.num_channels, self.patch_size, self.patch_size)
         batch_size, sequence_len, channel, height, width = pixel_values.shape
@@ -639,7 +637,6 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
         embeddings = embeddings.reshape(batch_size, sequence_len, -1).squeeze(0)
 
-        # `interpolate_pos_encoding` for every image at once, as a weighted gather from the learned grid
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw, self.position_edge, mode=self.config.interpolate_mode, kwargs=kwargs
         )
@@ -650,33 +647,21 @@ class HunYuanVLVisionPatchEmbed(nn.Module):
 
 
 def get_vision_merger_layout_index(
-    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
+    grid_thw: torch.Tensor, merge_size: int, begin_end: bool = True, kwargs: dict | None = None
 ) -> torch.Tensor:
-    """Gather index laying out the patch merger's output, or pop `"merger_layout_index"` from `kwargs` if precomputed.
-
-    Each image is its begin token, its rows of merged blocks each followed by a newline token, and its end token. The
-    index reads from the merged blocks of all images (`0 .. num_blocks - 1`), followed by the newline, begin and end
-    tokens (`num_blocks`, `num_blocks + 1`, `num_blocks + 2`).
-
-    Args:
-        grid_thw: `(num_images, 3)` — temporal, height and width of each image's patch grid.
-        merge_size: the merger's block size.
-        kwargs: optional caller kwargs — if it contains `"merger_layout_index"` it is popped and returned.
-
-    Returns:
-        `(total_output_tokens,)` long gather index.
-    """
+    """Lays out the merger's output from its blocks, then newline, begin and end tokens: each frame's rows of blocks
+    each followed by a newline, each image between begin and end tokens if `begin_end`. Pops `"merger_layout_index"`."""
     if kwargs is not None and (index := kwargs.pop("merger_layout_index", None)) is not None:
         return index
     num_blocks = int((grid_thw.prod(-1) // merge_size**2).sum())
     newline, begin, end = num_blocks, num_blocks + 1, num_blocks + 2
     layout, offset = [], 0
-    for _, height, width in grid_thw.tolist():
+    for frames, height, width in grid_thw.tolist():
         rows, columns = height // merge_size, width // merge_size
-        image = torch.arange(offset, offset + rows * columns).view(rows, columns)
-        image = torch.cat([image, torch.full((rows, 1), newline)], dim=1).flatten()
-        layout.append(torch.cat([torch.tensor([begin]), image, torch.tensor([end])]))
-        offset += rows * columns
+        image = torch.arange(offset, offset + frames * rows * columns).view(frames * rows, columns)
+        image = torch.cat([image, torch.full((frames * rows, 1), newline)], dim=1).flatten()
+        layout.append(torch.cat([torch.tensor([begin]), image, torch.tensor([end])]) if begin_end else image)
+        offset += frames * rows * columns
     return torch.cat(layout).to(grid_thw.device)
 
 
@@ -703,20 +688,17 @@ class HunYuanVLVisionPatchMerger(nn.Module):
         self.before_rms = HunYuanVLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.after_rms = HunYuanVLRMSNorm(config.text_hidden_size, eps=config.rms_norm_eps)
 
-    def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.LongTensor, kwargs: dict | None = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
         merge_size = self.spatial_merge_size
         torch_compilable_check((grid_thw[:, 1:] > 1).all(), "Spatial height and width must be greater than 1.")
         hidden_states = self.before_rms(hidden_states[0])
         dtype = hidden_states.dtype
 
-        # Each image's `merge_size x merge_size` blocks, as one batch through the strided convolution
         block_index = get_vision_pixel_shuffle_index(grid_thw, merge_size, kwargs=kwargs)
         blocks = hidden_states[block_index].view(-1, merge_size, merge_size, hidden_states.shape[-1])
         blocks = self.proj_out(self.proj_act(self.proj_conv(blocks.permute(0, 3, 1, 2)))).flatten(1)
 
-        # Each image laid out as its begin token, its rows of blocks each followed by a newline, and its end token
+        # Each image: begin, rows of blocks each followed by a newline, end
         tokens = self.mlp(torch.cat([blocks, self.image_newline[None].to(dtype)]))
         tokens = torch.cat(
             [tokens, self.image_begin[None].to(tokens.device, dtype), self.image_end[None].to(tokens.device, dtype)]
@@ -908,7 +890,6 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
         "attentions": HunYuanVLDenseV1Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
 
@@ -920,6 +901,7 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
             init.normal_(module.image_sep, mean=0.0, std=embed_std)
 
 
+@auto_docstring
 class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
     """
     HunYuanVL vision tower: patch embedding -> transformer blocks -> per-image patch merger.
@@ -947,16 +929,9 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations: the attention's
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's
         `cu_seqlens` and `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch
-        merger's `pixel_shuffle_index` and `merger_layout_index`. Passed back to the forward, they keep `torch.compile` and `torch.export` free
-        of those operations. Those already in `kwargs` are returned as they are; only the config is read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width dimensions for each image.
-        """
+        merger's `pixel_shuffle_index` and `merger_layout_index`."""
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw, self.embeddings.position_edge, mode=self.config.interpolate_mode
@@ -985,11 +960,8 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
-        hidden_states = self.embeddings(pixel_values, grid_thw, kwargs=kwargs)
+        hidden_states = self.embeddings(pixel_values, grid_thw, **kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
-        merger_kwargs = {
-            name: kwargs.pop(name) for name in ("pixel_shuffle_index", "merger_layout_index") if name in kwargs
-        }
 
         for layer in self.layers:
             hidden_states = layer(
@@ -1000,7 +972,7 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
                 **kwargs,
             )
 
-        image_features = self.patch_merger(hidden_states, grid_thw, kwargs=merger_kwargs)
+        image_features = self.patch_merger(hidden_states, grid_thw, **kwargs)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
@@ -1425,6 +1397,10 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
             Flat per-patch pixel features produced by the image processor.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`HunYuanVLModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring
