@@ -31,6 +31,7 @@ class HunYuanDenseV1Config(PreTrainedConfig):
     """
 
     model_type = "hunyuan_v1_dense"
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 290943

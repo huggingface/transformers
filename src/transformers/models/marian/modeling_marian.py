@@ -91,7 +91,6 @@ class MarianSinusoidalPositionalEmbedding(nn.Embedding):
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         return out
 
-    @torch.no_grad()
     def forward(
         self, input_ids_shape: torch.Size, cache_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
@@ -399,7 +398,6 @@ class MarianPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MarianSinusoidalPositionalEmbedding):

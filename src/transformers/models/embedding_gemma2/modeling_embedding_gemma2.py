@@ -126,7 +126,6 @@ class EmbeddingGemma2RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -455,7 +454,6 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):
@@ -636,6 +634,8 @@ class EmbeddingGemma2ModelOutput(BaseModelOutput):
 class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
     config: EmbeddingGemma2Config
     _keys_to_ignore_on_load_unexpected = [
         r"(^|\.)vision_tower\.",
