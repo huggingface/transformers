@@ -48,15 +48,15 @@ from ..kolibri1.modeling_kolibri1 import (
 class Kolibri1_1Config(Kolibri1Config):
     r"""
     index_layers (`list[int]`, *optional*):
-        Indices of the full-attention layers that select a new pool of candidate keys (indexers). Every other
-        full-attention layer rescores the pool of the closest preceding indexer (reindexer). Must contain the first
-        full-attention layer. Defaults to Kolibri 1.1's layout: the 1st, 3rd, 4th and 6th full-attention layers.
+        Indices of the indexed-attention layers that select a new pool of candidate keys (indexers). Every other
+        indexed-attention layer rescores the pool of the closest preceding indexer (reindexer). Must contain the first
+        indexed-attention layer. Defaults to Kolibri 1.1's layout: the 1st, 3rd, 4th and 6th indexed-attention layers.
     kv_source_layers (`list[int]`, *optional*):
-        For each layer, the index of the layer whose keys and values it attends to. A full-attention layer that reads
+        For each layer, the index of the layer whose keys and values it attends to. An indexed-attention layer that reads
         those of an earlier layer has no key/value projections of its own. Defaults to Kolibri 1.1's layout: of its 10
-        full-attention layers, the 2nd and 3rd read the keys and values of the 1st, the 7th to 9th those of the 6th
+        indexed-attention layers, the 2nd and 3rd read the keys and values of the 1st, the 7th to 9th those of the 6th
         and the 10th those of the 1st, while the 1st, 4th, 5th and 6th produce their own. Configs with more
-        full-attention layers must set it explicitly. The entries of sliding-attention layers must be their own index.
+        indexed-attention layers must set it explicitly. The entries of sliding-attention layers must be their own index.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of keys each query of a sparse layer selects from its pool, besides the sink and local tokens.
     index_pool_size (`int`, *optional*, defaults to 16384):
@@ -100,35 +100,37 @@ class Kolibri1_1Config(Kolibri1Config):
         # `layer_types` is needed before the parent's `__post_init__`, to derive the default sparse layout
         if self.layer_types is None:
             self.layer_types = [
-                "full_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
+                "indexed_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
+        # Checkpoints list the layers with an indexer as "full_attention", like the full-attention layers of Kolibri 1
+        self.layer_types = ["indexed_attention" if t == "full_attention" else t for t in self.layer_types]
         if self.mlp_only_layers is None:
             self.mlp_only_layers = []
-        full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
+        indexed_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "indexed_attention"]
         if self.index_layers is None:
-            self.index_layers = [full_layers[i] for i in (0, 2, 3, 5) if i < len(full_layers)]
+            self.index_layers = [indexed_layers[i] for i in (0, 2, 3, 5) if i < len(indexed_layers)]
         if self.kv_source_layers is None:
-            # For each full-attention layer, which full-attention layer it reads the K/V of
+            # For each indexed-attention layer, which indexed-attention layer it reads the K/V of
             default_sources = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
-            if len(full_layers) > len(default_sources):
+            if len(indexed_layers) > len(default_sources):
                 raise ValueError(
-                    f"The default `kv_source_layers` covers {len(default_sources)} full-attention layers, "
-                    f"got {len(full_layers)}: set `kv_source_layers` explicitly."
+                    f"The default `kv_source_layers` covers {len(default_sources)} indexed-attention layers, "
+                    f"got {len(indexed_layers)}: set `kv_source_layers` explicitly."
                 )
             self.kv_source_layers = list(range(len(self.layer_types)))
-            for layer_idx, source in zip(full_layers, default_sources):
-                self.kv_source_layers[layer_idx] = full_layers[source]
+            for layer_idx, source in zip(indexed_layers, default_sources):
+                self.kv_source_layers[layer_idx] = indexed_layers[source]
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
-        if set(self.layer_types) - {"full_attention", "sliding_attention"}:
+        if set(self.layer_types) - {"indexed_attention", "sliding_attention"}:
             raise ValueError(f"Unsupported layer types: {sorted(set(self.layer_types))}.")
-        full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
-        if sorted(set(self.index_layers)) != self.index_layers or not set(self.index_layers) <= set(full_layers):
-            raise ValueError(f"`index_layers` must be increasing full-attention layers, got {self.index_layers}.")
-        if full_layers and full_layers[0] not in self.index_layers:
-            raise ValueError("The first full-attention layer must be an indexer.")
+        indexed_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "indexed_attention"]
+        if sorted(set(self.index_layers)) != self.index_layers or not set(self.index_layers) <= set(indexed_layers):
+            raise ValueError(f"`index_layers` must be increasing indexed-attention layers, got {self.index_layers}.")
+        if indexed_layers and indexed_layers[0] not in self.index_layers:
+            raise ValueError("The first indexed-attention layer must be an indexer.")
         if len(self.kv_source_layers) != len(self.layer_types):
             raise ValueError("`kv_source_layers` needs one entry per layer.")
         for layer_idx, source in enumerate(self.kv_source_layers):
@@ -164,7 +166,7 @@ class Kolibri1_1Config(Kolibri1Config):
         sources, latest = [], None
         for layer_idx, layer_type in enumerate(self.layer_types):
             latest = layer_idx if layer_idx in self.index_layers else latest
-            sources.append(latest if layer_type == "full_attention" else None)
+            sources.append(latest if layer_type == "indexed_attention" else None)
         return sources
 
 
@@ -360,7 +362,7 @@ class Kolibri1_1Attention(Kolibri1Attention):
             key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2))
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Full-attention layers have no positional embeddings (NoPE): sparse layers sharing keys and pools need them
+        # Indexed-attention layers have no positional embeddings (NoPE)
         if self.is_sliding:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -497,23 +499,9 @@ class Kolibri1_1Model(Kolibri1Model):
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
-                # Sparse layers overlay their key selection on an explicit mask
-                "full_attention": create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
+                # Indexers overlay their key selection on an explicit mask
+                "indexed_attention": create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
-        elif causal_mask_mapping.get("full_attention") is None and "full_attention" in self.config.layer_types:
-            # Generic mask creation, e.g. in `generate` with a static cache, may skip the causal mask, which it only
-            # does without padding
-            causal_mask_mapping = {
-                **causal_mask_mapping,
-                "full_attention": create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=None,
-                    past_key_values=past_key_values,
-                    position_ids=position_ids,
-                    allow_is_causal_skip=False,
-                ),
             }
 
         hidden_states = inputs_embeds

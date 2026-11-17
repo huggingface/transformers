@@ -304,7 +304,7 @@ class Kolibri1_1Attention(nn.Module):
             key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2))
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Full-attention layers have no positional embeddings (NoPE): sparse layers sharing keys and pools need them
+        # Indexed-attention layers have no positional embeddings (NoPE)
         if self.is_sliding:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -678,23 +678,9 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
-                # Sparse layers overlay their key selection on an explicit mask
-                "full_attention": create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
+                # Indexers overlay their key selection on an explicit mask
+                "indexed_attention": create_causal_mask(**mask_kwargs, allow_is_causal_skip=False),
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-            }
-        elif causal_mask_mapping.get("full_attention") is None and "full_attention" in self.config.layer_types:
-            # Generic mask creation, e.g. in `generate` with a static cache, may skip the causal mask, which it only
-            # does without padding
-            causal_mask_mapping = {
-                **causal_mask_mapping,
-                "full_attention": create_causal_mask(
-                    config=self.config,
-                    inputs_embeds=inputs_embeds,
-                    attention_mask=None,
-                    past_key_values=past_key_values,
-                    position_ids=position_ids,
-                    allow_is_causal_skip=False,
-                ),
             }
 
         hidden_states = inputs_embeds

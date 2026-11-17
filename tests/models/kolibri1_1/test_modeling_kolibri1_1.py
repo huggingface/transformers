@@ -19,6 +19,7 @@ from collections import Counter
 from unittest import mock
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
+from parameterized import parameterized
 from safetensors.torch import load_file, save_file
 
 from transformers import is_torch_available
@@ -48,7 +49,7 @@ class Kolibri1_1ModelTester(CausalLMModelTester):
         super().__init__(parent=parent)
         # Covers all four sparse roles: an indexer and a reindexer, each producing its K/V or reading another layer's
         self.num_hidden_layers = 5
-        self.layer_types = ["sliding_attention"] + ["full_attention"] * 4
+        self.layer_types = ["sliding_attention"] + ["indexed_attention"] * 4
         self.index_layers = [1, 3]
         self.kv_source_layers = [0, 1, 1, 1, 4]
         # Small budgets, so that keys are selected within the tester's sequence length
@@ -129,7 +130,7 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
             cache = model(input_ids, use_cache=True).past_key_values
 
         for layer_idx, source in enumerate(config.kv_source_layers):
-            is_sparse = config.layer_types[layer_idx] == "full_attention"
+            is_sparse = config.layer_types[layer_idx] == "indexed_attention"
             for name, states in zip(("keys", "values"), attended[layer_idx]):
                 unrounded = getattr(cache.layers[source], name)
                 expected = unrounded
@@ -140,25 +141,38 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
                 # The straight-through estimator adds the rounding error back, which is exact up to an ulp
                 torch.testing.assert_close(states, expected, rtol=0, atol=1e-6, msg=f"{name} of layer {layer_idx}")
 
-    def test_skipped_causal_mask_is_rebuilt(self):
-        # Generic mask creation (e.g. `generate` with a static cache) may skip the causal mask without padding, but
-        # sparse layers need it to overlay their selection
+    @parameterized.expand([("dynamic",), ("static",)])
+    def test_cached_decode_matches_full_forward(self, cache_implementation):
+        # A decoding step selects keys for one query from the cache, the full forward for all queries at once
         config = self.model_tester.get_config()
-        model = Kolibri1_1Model(config).to(torch_device).eval()
-        input_ids = torch.randint(3, config.vocab_size, (1, 12), device=torch_device)
-        self.assertGreater(config.sliding_window, input_ids.shape[1])  # so that skipping the sliding mask is exact
+        model = Kolibri1_1ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.randint(3, config.vocab_size, (2, 12), device=torch_device)
+        outputs = model.generate(
+            input_ids,
+            attention_mask=torch.ones_like(input_ids),
+            min_new_tokens=6,
+            max_new_tokens=6,
+            do_sample=False,
+            cache_implementation=cache_implementation,
+            output_logits=True,
+            return_dict_in_generate=True,
+        )
         with torch.no_grad():
-            skipped = model(input_ids, attention_mask={"full_attention": None, "sliding_attention": None})
-            torch.testing.assert_close(skipped.last_hidden_state, model(input_ids).last_hidden_state)
+            full_logits = model(outputs.sequences).logits
+        # Not bit-identical: both score the same keys, but in matrix products of different shapes
+        decode_logits = torch.stack(outputs.logits, dim=1)
+        torch.testing.assert_close(decode_logits, full_logits[:, input_ids.shape[1] - 1 : -1], rtol=1e-5, atol=1e-5)
 
     def test_invalid_layouts(self):
+        # Checkpoints list the layers with an indexer as "full_attention"
         kwargs = {"num_hidden_layers": 4, "layer_types": ["sliding_attention", "full_attention"] * 2}
-        Kolibri1_1Config(**kwargs)  # valid without the overrides below
+        # Valid without the overrides below
+        self.assertEqual(Kolibri1_1Config(**kwargs).layer_types, ["sliding_attention", "indexed_attention"] * 2)
         invalid = [
             ({"layer_types": ["sliding_attention", "full_attention", "linear_attention", "full_attention"]}, "Unsupported layer types"),
-            ({"index_layers": [3]}, "first full-attention layer must be an indexer"),
-            ({"index_layers": [3, 1]}, "`index_layers` must be increasing full-attention layers"),
-            ({"index_layers": [1, 2]}, "`index_layers` must be increasing full-attention layers"),
+            ({"index_layers": [3]}, "first indexed-attention layer must be an indexer"),
+            ({"index_layers": [3, 1]}, "`index_layers` must be increasing indexed-attention layers"),
+            ({"index_layers": [1, 2]}, "`index_layers` must be increasing indexed-attention layers"),
             ({"kv_source_layers": [0, 1, 2]}, "`kv_source_layers` needs one entry per layer"),
             ({"kv_source_layers": [0, 1, 1, 1]}, "Sliding-attention layer 2 cannot read the K/V of another layer"),
             ({"kv_source_layers": [0, 3, 2, 3]}, "Layer 1 must read the K/V of an earlier layer"),
