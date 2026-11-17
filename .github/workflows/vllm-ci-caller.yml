@@ -15,7 +15,6 @@ env:
   # gpu_memory_utilization default in vLLM's source with sed, which silently stopped matching when vLLM
   # changed that code (vllm-project/vllm#56492), so vLLM fell back to reserving 92% of the NUMA node.
   VLLM_CPU_KVCACHE_SPACE: 32
-  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
 
@@ -33,6 +32,8 @@ jobs:
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
     steps:
       - name: Checkout Transformers
@@ -179,6 +180,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -313,6 +315,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -517,6 +520,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
