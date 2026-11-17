@@ -419,7 +419,6 @@ class Qwen3_5PreTrainedModel(Qwen3NextPreTrainedModel):
         "attentions": Qwen3_5Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Qwen3_5GatedDeltaNet):

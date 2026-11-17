@@ -726,7 +726,6 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaExperts):
@@ -744,7 +743,6 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):

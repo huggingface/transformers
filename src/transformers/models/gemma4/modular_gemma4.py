@@ -278,7 +278,6 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
         inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
         self.inv_timescales = nn.Buffer(inv_timescales.unsqueeze(0).unsqueeze(0), persistent=False)
 
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         position_ids = torch.arange(self.context_size // 2, -1, -1, device=hidden_states.device)
         position_ids = position_ids[..., None]
@@ -1265,7 +1264,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):

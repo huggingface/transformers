@@ -948,7 +948,6 @@ class Emu3VQVAE(PreTrainedModel):
         "attentions": Emu3VQVAEAttentionBlock,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
@@ -1164,7 +1163,6 @@ class Emu3RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1493,6 +1491,7 @@ class Emu3Model(Emu3PreTrainedModel):
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Emu3Config):
         super().__init__(config)

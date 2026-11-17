@@ -418,7 +418,6 @@ class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
     _skip_keys_device_placement = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):

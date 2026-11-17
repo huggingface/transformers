@@ -102,7 +102,6 @@ class JetMoeRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -560,7 +559,6 @@ class JetMoePreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
