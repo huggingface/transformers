@@ -39,6 +39,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
     GotOcr2ImageProcessorKwargs,
@@ -49,8 +50,6 @@ from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteModel, GranitePreTrainedModel
 from ..idefics3.configuration_idefics3 import Idefics3VisionConfig
 from ..idefics3.modeling_idefics3 import (
-    Idefics3BaseModelOutputWithPast,
-    Idefics3CausalLMOutputWithPast,
     Idefics3Connector,
     Idefics3ForConditionalGeneration,
     Idefics3Model,
@@ -689,40 +688,10 @@ class GraniteDoclingProcessor(Idefics3Processor):
         raise AttributeError("Not needed for GraniteDocling, `ProcessorMixin.create_mm_token_type_ids` is used")
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for GraniteDocling model outputs, with potential hidden states and attentions.
-    """
-)
-@dataclass
-class GraniteDoclingBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
-    r"""
-    router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-        Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
-        given.
-    """
-
-    router_logits: torch.FloatTensor | None = None
+class GraniteDoclingBaseModelOutputWithPast(AriaModelOutputWithPast): ...
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for GraniteDocling causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class GraniteDoclingCausalLMOutputWithPast(Idefics3CausalLMOutputWithPast):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-        Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
-        given.
-    """
-
-    router_logits: torch.FloatTensor | None = None
+class GraniteDoclingCausalLMOutputWithPast(AriaCausalLMOutputWithPast): ...
 
 
 @auto_docstring(
@@ -1224,7 +1193,6 @@ class GraniteDoclingModel(Idefics3Model):
         return GraniteDoclingBaseModelOutputWithPast(
             **outputs,
             image_outputs=mm_encoder_outputs.get("image"),
-            video_outputs=mm_encoder_outputs.get("video"),
         )
 
 
@@ -1310,7 +1278,7 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             return_dict=True,
             **kwargs,
         )
-        router_logits = outputs.router_logits
+        router_logits = outputs.image_outputs.router_logits
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
@@ -1336,8 +1304,7 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
-            video_outputs=outputs.video_outputs,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.image_outputs.router_logits,  # for BC
         )
 
 

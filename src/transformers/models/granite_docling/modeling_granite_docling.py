@@ -35,8 +35,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    MultimodalBaseModelOutputWithPast,
-    MultimodalCausalLMOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -52,21 +52,9 @@ from .configuration_granite_docling import GraniteDoclingConfig, GraniteDoclingT
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for GraniteDocling model outputs, with potential hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class GraniteDoclingBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    r"""
-    router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-        Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
-        given.
-    """
-
-    router_logits: torch.FloatTensor | None = None
-
+class GraniteDoclingBaseModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -76,25 +64,9 @@ class GraniteDoclingBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
         return self.image_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for GraniteDocling causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class GraniteDoclingCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-        Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
-        given.
-    """
-
-    router_logits: torch.FloatTensor | None = None
-
+class GraniteDoclingCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -1178,11 +1150,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
             **kwargs,
         )
 
-        return GraniteDoclingBaseModelOutputWithPast(
-            **outputs,
-            image_outputs=mm_encoder_outputs.get("image"),
-            video_outputs=mm_encoder_outputs.get("video"),
-        )
+        return GraniteDoclingBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1353,7 +1321,7 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
             return_dict=True,
             **kwargs,
         )
-        router_logits = outputs.router_logits
+        router_logits = outputs.image_outputs.router_logits
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
@@ -1379,8 +1347,7 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
-            video_outputs=outputs.video_outputs,
-            router_logits=outputs.router_logits,
+            router_logits=outputs.image_outputs.router_logits,  # for BC
         )
 
 
