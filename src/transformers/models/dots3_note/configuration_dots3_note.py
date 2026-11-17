@@ -53,11 +53,6 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
     default_rope_type = "axial"
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
-    base_model_tp_plan = {
-        "blocks.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "blocks.*.mlp.experts.down_proj": "rowwise",
-        "blocks.*.mlp.experts": "moe_tp_experts",
-    }
     base_model_ep_plan = {
         "blocks.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "blocks.*.mlp.experts.down_proj": "grouped_gemm",
@@ -213,9 +208,6 @@ class Dots3NoteTextConfig(PreTrainedConfig):
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.g_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",

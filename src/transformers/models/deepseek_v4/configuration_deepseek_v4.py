@@ -114,11 +114,7 @@ class DeepseekV4Config(PreTrainedConfig):
     # Main attention and the shared MLP stay replicated. Shared-KV MQA and the CSA / HCA compressor
     # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
     # head count; the shared MLP is too small to be worth sharding.
-    base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
+    base_model_tp_plan = {}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

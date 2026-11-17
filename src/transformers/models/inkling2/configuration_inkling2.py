@@ -64,12 +64,7 @@ class Inkling2TextConfig(PreTrainedConfig):
 
     model_type = "inkling2_text"
     base_config_key = "text_config"
-    base_model_tp_plan = {
-        "embed_tokens": "replicate",
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
+    base_model_tp_plan = {"embed_tokens": "replicate"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

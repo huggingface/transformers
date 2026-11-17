@@ -129,9 +129,6 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.experts.gate_up_proj": "packed_colwise",
-        "layers.*.experts.down_proj": "rowwise",
-        "layers.*.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
