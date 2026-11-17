@@ -20,7 +20,6 @@ import gc
 import json
 import os
 import threading
-import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -73,7 +72,6 @@ class TimedModel:
         self.processor = processor
         self.timeout_seconds = timeout_seconds
         self._on_unload = on_unload
-        self.created = int(time.time())
         self._timer = threading.Timer(self.timeout_seconds, self._timeout_reached)
         self._timer.start()
 
@@ -514,14 +512,14 @@ class ModelManager:
             # A pinned server only answers for its model, under the name it was given: list it alone.
             repo, gguf_file = split_model_id(self.force_model)
             name = self.process_model_name(repo)
-            timed_model = self.loaded_models.get(name if gguf_file is None else f"{name}:{gguf_file}")
+            is_loaded = (name if gguf_file is None else f"{name}:{gguf_file}") in self.loaded_models
             return [
                 {
                     "owned_by": model_owner(repo),
                     "id": self.force_model,
                     "object": "model",
-                    "created": timed_model.created if timed_model is not None else 0,
-                    "status": {"value": "loaded" if timed_model is not None else "unloaded"},
+                    "created": 0,
+                    "status": {"value": "loaded" if is_loaded else "unloaded"},
                 }
             ]
 
@@ -532,7 +530,7 @@ class ModelManager:
             models = []
 
         loaded_models = {}
-        for name, timed_model in list(self.loaded_models.items()):
+        for name in list(self.loaded_models):
             name, gguf_file = split_model_id(name)
             model_id, revision = split_revision(name)
             owned_by = model_owner(model_id)
@@ -541,12 +539,8 @@ class ModelManager:
                 model_id = f"{model_id}@{revision}"
             if gguf_file is not None:
                 model_id = f"{model_id}:{gguf_file}"
-            loaded_models[model_id] = {
-                "owned_by": owned_by,
-                "id": model_id,
-                "object": "model",
-                "created": timed_model.created,
-            }
+            # `created` is the date of a checkpoint, which is only known for the ones of the cache.
+            loaded_models[model_id] = {"owned_by": owned_by, "id": model_id, "object": "model", "created": 0}
 
         listed = {model["id"] for model in models}
         models += [model for model_id, model in loaded_models.items() if model_id not in listed]
