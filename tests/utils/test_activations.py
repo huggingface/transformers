@@ -72,3 +72,21 @@ class TestActivations(unittest.TestCase):
         self.assertEqual(act1.a, 1)
         with self.assertRaises(AttributeError):
             _ = act2.a
+
+    def test_activation_empty_and_multidim_tensors(self):
+        for act_name in ["gelu", "gelu_fast", "quick_gelu", "silu", "mish", "linear", "relu"]:
+            act = get_activation(act_name)
+            empty_tensor = torch.empty((0, 4), dtype=torch.float32)
+            out_empty = act(empty_tensor)
+            self.assertEqual(out_empty.shape, torch.Size([0, 4]))
+
+            multidim = torch.randn(2, 3, 4, dtype=torch.float32)
+            out_multi = act(multidim)
+            self.assertEqual(out_multi.shape, torch.Size([2, 3, 4]))
+            self.assertEqual(out_multi.dtype, torch.float32)
+
+    def test_get_activation_invalid_types(self):
+        with self.assertRaises(KeyError):
+            get_activation("invalid_act_name_12345")
+        with self.assertRaises(KeyError):
+            get_activation(12345)
