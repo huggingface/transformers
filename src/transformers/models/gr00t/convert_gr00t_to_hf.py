@@ -65,12 +65,15 @@ def convert_config(original: dict) -> Gr00tConfig:
         max_action_dim=original["max_action_dim"],
         max_num_embodiments=original["max_num_embodiments"],
         projector_hidden_size=original["hidden_size"],
-        dit_hidden_size=diffusion["num_attention_heads"] * diffusion["attention_head_dim"],
-        dit_num_hidden_layers=diffusion["num_layers"],
-        dit_num_attention_heads=diffusion["num_attention_heads"],
-        attend_text_every_n_blocks=original.get("attend_text_every_n_blocks", 2),
-        vl_refiner_num_hidden_layers=refiner["num_layers"],
-        vl_refiner_num_attention_heads=refiner["num_attention_heads"],
+        action_head_config={
+            "hidden_size": diffusion["num_attention_heads"] * diffusion["attention_head_dim"],
+            "num_hidden_layers": diffusion["num_layers"],
+            "num_attention_heads": diffusion["num_attention_heads"],
+            "attend_text_every_n_blocks": original.get("attend_text_every_n_blocks", 2),
+            "refiner_num_hidden_layers": refiner["num_layers"],
+            "refiner_num_attention_heads": refiner["num_attention_heads"],
+            "dropout": diffusion["dropout"],
+        },
         num_timestep_buckets=original["num_timestep_buckets"],
         max_position_embeddings=original["max_seq_len"],
         num_inference_steps=original["num_inference_timesteps"],
@@ -78,7 +81,6 @@ def convert_config(original: dict) -> Gr00tConfig:
         time_sampling_beta_beta=original["noise_beta_beta"],
         time_sampling_scale=original["noise_s"],
         state_dropout_prob=original["state_dropout_prob"],
-        dropout=diffusion["dropout"],
     )
 
 

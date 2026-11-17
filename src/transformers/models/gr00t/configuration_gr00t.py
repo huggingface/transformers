@@ -26,11 +26,72 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="nvidia/GR00T-N1.7-3B")
 @strict
+class Gr00tActionHeadConfig(PreTrainedConfig):
+    r"""
+    hidden_size (`int`, *optional*, defaults to 1536):
+        Hidden size of the DiT, and size of the state and action embeddings it denoises.
+    num_hidden_layers (`int`, *optional*, defaults to 32):
+        Number of DiT blocks. Even blocks cross-attend to the backbone features, odd blocks self-attend.
+    num_attention_heads (`int`, *optional*, defaults to 32):
+        Number of attention heads in each DiT block.
+    attend_text_every_n_blocks (`int`, *optional*, defaults to 2):
+        The cross-attention blocks alternate between the text and the image backbone tokens. Every
+        `attend_text_every_n_blocks`-th cross-attention block attends to the text tokens, the others to the image tokens.
+    refiner_num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of self-attention blocks refining the backbone features before the DiT.
+    refiner_num_attention_heads (`int`, *optional*, defaults to 32):
+        Number of attention heads in each refiner block.
+    backbone_hidden_size (`int`, *optional*, defaults to 2048):
+        Hidden size of the backbone features the refiner and the DiT cross-attention consume. Set from `vlm_config`
+        by [`Gr00tConfig`].
+    output_size (`int`, *optional*, defaults to 1024):
+        Size of the DiT outputs fed to the action decoder. Set from `projector_hidden_size` by [`Gr00tConfig`].
+    timestep_embedding_dim (`int`, *optional*, defaults to 256):
+        Number of sinusoidal channels used to embed the denoising timestep.
+    dropout (`float`, *optional*, defaults to 0.2):
+        Dropout probability used in the DiT and refiner blocks.
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        The standard deviation of the normal initializer for the weight matrices.
+    """
+
+    model_type = "gr00t_action_head"
+    base_config_key = "action_head_config"
+
+    hidden_size: int = 1536
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    attend_text_every_n_blocks: int = 2
+    refiner_num_hidden_layers: int = 4
+    refiner_num_attention_heads: int = 32
+    backbone_hidden_size: int = 2048
+    output_size: int = 1024
+    timestep_embedding_dim: int = 256
+    dropout: float = 0.2
+    initializer_range: float = 0.02
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"`hidden_size` ({self.hidden_size}) must be divisible by `num_attention_heads` "
+                f"({self.num_attention_heads})."
+            )
+        if self.backbone_hidden_size % self.refiner_num_attention_heads != 0:
+            raise ValueError(
+                f"`backbone_hidden_size` ({self.backbone_hidden_size}) must be divisible by "
+                f"`refiner_num_attention_heads` ({self.refiner_num_attention_heads})."
+            )
+
+
+@auto_docstring(checkpoint="nvidia/GR00T-N1.7-3B")
+@strict
 class Gr00tConfig(PreTrainedConfig):
     r"""
     vlm_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration of the Qwen3-VL vision-language backbone. Defaults to the Cosmos-Reason2-2B layout, with the
         language model truncated to the 16 decoder layers used by GR00T N1.7.
+    action_head_config (`dict` or [`Gr00tActionHeadConfig`], *optional*):
+        Configuration of the action head: the refiner of the backbone features and the DiT.
     action_horizon (`int`, *optional*, defaults to 40):
         Number of action steps predicted per chunk.
     max_state_dim (`int`, *optional*, defaults to 132):
@@ -41,21 +102,6 @@ class Gr00tConfig(PreTrainedConfig):
         Number of embodiment slots in the embodiment-specific state/action encoders and decoder.
     projector_hidden_size (`int`, *optional*, defaults to 1024):
         Hidden size of the embodiment-specific state encoder and action decoder, and output size of the DiT.
-    dit_hidden_size (`int`, *optional*, defaults to 1536):
-        Hidden size of the DiT action head (also the size of the state and action embeddings).
-    dit_num_hidden_layers (`int`, *optional*, defaults to 32):
-        Number of DiT blocks. Even blocks cross-attend to the backbone features, odd blocks self-attend.
-    dit_num_attention_heads (`int`, *optional*, defaults to 32):
-        Number of attention heads in each DiT block.
-    attend_text_every_n_blocks (`int`, *optional*, defaults to 2):
-        The cross-attention blocks alternate between the text and the image backbone tokens. Every
-        `attend_text_every_n_blocks`-th cross-attention block attends to the text tokens, the others to the image tokens.
-    vl_refiner_num_hidden_layers (`int`, *optional*, defaults to 4):
-        Number of self-attention blocks refining the backbone features before the DiT.
-    vl_refiner_num_attention_heads (`int`, *optional*, defaults to 32):
-        Number of attention heads in each refiner block.
-    timestep_embedding_dim (`int`, *optional*, defaults to 256):
-        Number of sinusoidal channels used to embed the denoising timestep of the DiT.
     num_timestep_buckets (`int`, *optional*, defaults to 1000):
         Number of buckets the continuous flow-matching time in `[0, 1]` is discretized into.
     max_position_embeddings (`int`, *optional*, defaults to 1024):
@@ -70,8 +116,6 @@ class Gr00tConfig(PreTrainedConfig):
         The training time is `(1 - Beta(alpha, beta)) * time_sampling_scale`.
     state_dropout_prob (`float`, *optional*, defaults to 0.2):
         Probability of zeroing the whole state embedding of a sample during training.
-    dropout (`float`, *optional*, defaults to 0.2):
-        Dropout probability used in the DiT and refiner blocks.
     initializer_range (`float`, *optional*, defaults to 0.02):
         The standard deviation of the normal initializer for the weight matrices.
     loss_reduction (`str`, *optional*, defaults to `"mean"`):
@@ -120,21 +164,16 @@ class Gr00tConfig(PreTrainedConfig):
                 },
             },
         ),
+        "action_head_config": Gr00tActionHeadConfig,
     }
 
     vlm_config: dict | PreTrainedConfig | None = None
+    action_head_config: dict | PreTrainedConfig | None = None
     action_horizon: int = 40
     max_state_dim: int = 132
     max_action_dim: int = 132
     max_num_embodiments: int = 32
     projector_hidden_size: int = 1024
-    dit_hidden_size: int = 1536
-    dit_num_hidden_layers: int = 32
-    dit_num_attention_heads: int = 32
-    attend_text_every_n_blocks: int = 2
-    vl_refiner_num_hidden_layers: int = 4
-    vl_refiner_num_attention_heads: int = 32
-    timestep_embedding_dim: int = 256
     num_timestep_buckets: int = 1000
     max_position_embeddings: int = 1024
     num_inference_steps: int = 4
@@ -142,7 +181,6 @@ class Gr00tConfig(PreTrainedConfig):
     time_sampling_beta_beta: float = 1.0
     time_sampling_scale: float = 0.999
     state_dropout_prob: float = 0.2
-    dropout: float = 0.2
     initializer_range: float = 0.02
     loss_reduction: str = "mean"
 
@@ -150,26 +188,14 @@ class Gr00tConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
         # The action head consumes the output of the last decoder layer *before* the final norm
         self.vlm_config.text_config.tie_last_hidden_states = False
-
-    @property
-    def backbone_hidden_size(self) -> int:
-        """Hidden size of the backbone features the action head consumes."""
-        return self.vlm_config.text_config.hidden_size
+        # The action head sizes that are set by the rest of the model
+        self.action_head_config.backbone_hidden_size = self.vlm_config.text_config.hidden_size
+        self.action_head_config.output_size = self.projector_hidden_size
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.dit_hidden_size % self.dit_num_attention_heads != 0:
-            raise ValueError(
-                f"`dit_hidden_size` ({self.dit_hidden_size}) must be divisible by `dit_num_attention_heads` "
-                f"({self.dit_num_attention_heads})."
-            )
-        if self.backbone_hidden_size % self.vl_refiner_num_attention_heads != 0:
-            raise ValueError(
-                f"The backbone hidden size ({self.backbone_hidden_size}) must be divisible by "
-                f"`vl_refiner_num_attention_heads` ({self.vl_refiner_num_attention_heads})."
-            )
         if self.loss_reduction not in ("mean", "none"):
             raise ValueError(f"`loss_reduction` must be 'mean' or 'none', got {self.loss_reduction}.")
 
 
-__all__ = ["Gr00tConfig"]
+__all__ = ["Gr00tConfig", "Gr00tActionHeadConfig"]

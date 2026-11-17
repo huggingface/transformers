@@ -81,6 +81,10 @@ print({key: value.shape for key, value in actions.items()})  # (1, 40, dim) for 
 
 [[autodoc]] Gr00tConfig
 
+## Gr00tActionHeadConfig
+
+[[autodoc]] Gr00tActionHeadConfig
+
 ## Gr00tImageProcessor
 
 [[autodoc]] Gr00tImageProcessor

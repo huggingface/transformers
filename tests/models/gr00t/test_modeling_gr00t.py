@@ -114,12 +114,14 @@ class Gr00tModelTester:
             max_action_dim=self.max_action_dim,
             max_num_embodiments=self.max_num_embodiments,
             projector_hidden_size=16,
-            dit_hidden_size=self.hidden_size,
-            dit_num_hidden_layers=self.num_hidden_layers,
-            dit_num_attention_heads=self.num_attention_heads,
-            vl_refiner_num_hidden_layers=2,
-            vl_refiner_num_attention_heads=4,
-            timestep_embedding_dim=8,
+            action_head_config={
+                "hidden_size": self.hidden_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+                "refiner_num_hidden_layers": 2,
+                "refiner_num_attention_heads": 4,
+                "timestep_embedding_dim": 8,
+            },
             max_position_embeddings=8,
         )
 
