@@ -19,6 +19,7 @@ import asyncio
 import copy
 import enum
 import json
+import os
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -58,16 +59,27 @@ X_REQUEST_ID = "x-request-id"
 
 
 def split_model_id(model_id: str) -> tuple[str, str | None]:
-    """`<repo>[@revision][:<file>.gguf]` -> the id without the file, and the file if one was named.
+    """Split the GGUF file off a model name: `"org/model:weights.gguf"` -> `("org/model", "weights.gguf")`.
 
-    `<repo>:<file>.gguf` is how GGUF clients name a file inside a repository: the repository says which
-    model, the file which weights, and both are answered for rather than one of them dropped. A colon
-    that is not a `.gguf` file is left alone -- it is part of the id.
+    Only a `.gguf` file after the last colon counts. Any other colon is part of the name, as in a local
     """
-    head, _, named = model_id.partition(":")
-    if named and not named.endswith(".gguf"):
+    name, colon, gguf_file = model_id.rpartition(":")
+    names_gguf_file = bool(colon) and gguf_file.endswith(".gguf")
+    if not names_gguf_file:
         return model_id, None
-    return head, named or None
+    return name, gguf_file
+
+
+def split_revision(model_id_and_revision: str) -> tuple[str, str | None]:
+    """Split the revision off a model name: `"org/model@dev"` -> `("org/model", "dev")`.
+
+    An existing local path has no revision, and an `@` in it is part of the path:
+    `"/tmp/ckpt@1000"` -> `("/tmp/ckpt@1000", None)`.
+    """
+    if os.path.exists(model_id_and_revision):
+        return model_id_and_revision, None
+    model_id, _, revision = model_id_and_revision.partition("@")
+    return model_id, revision or None
 
 
 class Modality(enum.Enum):

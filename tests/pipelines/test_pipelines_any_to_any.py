@@ -79,6 +79,18 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 self.assertEqual(len(result), 1)
                 self.assertIsNone(result[0]["input_text"])
                 self.assertIsInstance(result[0]["generated_text"], str)
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 2}
+
+        outputs = pipe(text=messages, return_tensors=True, generate_kwargs=kwargs)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
 
     def test_string_assistant_prefill_full_text(self):
         import copy
