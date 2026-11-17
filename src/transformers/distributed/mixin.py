@@ -90,8 +90,8 @@ class DistributedMixin:
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
             # Shard the input embeddings on the vocabulary unless the plan already names them.
-            if isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
-                self._tp_plan = {"embed_tokens": "embedding_rowwise", **(self._tp_plan or {})}
+            if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
+                self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):

@@ -45,6 +45,7 @@ class GraniteMoeConfig(PreTrainedConfig):
 
     model_type = "granitemoe"
     keys_to_ignore_at_inference = ["cache"]
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     base_model_ep_plan = {
         "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
         "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
