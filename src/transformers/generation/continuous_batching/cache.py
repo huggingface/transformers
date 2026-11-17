@@ -448,7 +448,7 @@ class PagedAttentionCache:
         # large enough for the cache: hand them back to the device first
         if hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
-        self.cache_tensor.untyped_storage().resize_(self._host_copy.numel())
+        self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
         self.cache_tensor.copy_(self._host_copy, non_blocking=True)
         # The generation loop reads the cache on its own stream
         torch.accelerator.synchronize()
