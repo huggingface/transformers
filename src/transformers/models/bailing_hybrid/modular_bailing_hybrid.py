@@ -422,7 +422,6 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "attentions": BailingHybridAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, BailingHybridForgetGate):

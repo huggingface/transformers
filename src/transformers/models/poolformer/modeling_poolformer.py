@@ -238,7 +238,6 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["PoolFormerLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

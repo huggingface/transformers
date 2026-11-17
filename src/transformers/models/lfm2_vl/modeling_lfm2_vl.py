@@ -181,27 +181,30 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state
+        num_images, num_patches, _ = last_hidden_state.shape
+        factor = self.config.downsample_factor
 
-        img_feature_lengths = pixel_attention_mask.sum(dim=1)
-        image_features = []
+        # Each image's tokens, padded to the most an image can have: its `factor x factor` block of patch rows
+        widths = spatial_shapes[:, 1, None]
+        blocks_per_row = widths // factor
+        num_tokens = (spatial_shapes[:, 0, None] // factor) * blocks_per_row
+        token = torch.arange(num_patches // factor**2, device=last_hidden_state.device)[None]
+        block_offset = torch.arange(factor, device=last_hidden_state.device)
+        rows = (token // blocks_per_row * factor)[..., None, None] + block_offset[:, None]
+        columns = (token % blocks_per_row * factor)[..., None, None] + block_offset
+        image_offset = torch.arange(num_images, device=last_hidden_state.device)[:, None, None, None] * num_patches
+        patch_index = image_offset + rows * widths[..., None, None] + columns
 
-        for img_idx in range(last_hidden_state.size(0)):
-            feature = last_hidden_state[img_idx]
-            # unpad the image representation
-            feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
-
-            # reshape to original height and width
-            feature_org_h, feature_org_w = spatial_shapes[img_idx]
-            feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
-
-            # project the image representation
-            img_embedding = self.multi_modal_projector(feature)
-
-            # flatten here to handle variable length in naflex
-            img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
-            image_features.append(img_embedding)
-
-        image_outputs.pooler_output = image_features
+        # Every image's token slots side by side in one patch grid, which the projector unshuffles as one image. Padding
+        # slots read the first patch and are dropped after, so the projector's shape doesn't depend on the image sizes
+        is_token = token < num_tokens
+        patch_index = patch_index.masked_fill(~is_token[..., None, None], 0)
+        patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
+        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
+        image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
+        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        split_sizes = (spatial_shapes // factor).prod(-1).tolist()
+        image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
         return image_outputs
 
     def get_placeholder_mask(
