@@ -283,6 +283,43 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
                 rtol=1e-5,
             )
 
+    def test_training_reduces_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.action_head_config.dropout = 0.0
+        config.state_dropout_prob = 0.0
+        torch.manual_seed(0)
+        model = Gr00tForConditionalGeneration(config).to(torch_device).train()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        # Fixed noise and timesteps, so that only the parameters change between steps
+        losses = []
+        for _ in range(150):
+            loss = model(**inputs_dict).loss
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            losses.append(loss.item())
+        # The model can fit the fixed batch: the loss drops well below the variance of the target velocity
+        self.assertLess(losses[-1], 0.5 * losses[0], losses)
+
+    def test_training_compiled_action_head_step(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gr00tForConditionalGeneration(config).to(torch_device).eval()
+        vlm_inputs = {
+            key: inputs_dict[key]
+            for key in ("input_ids", "attention_mask", "pixel_values", "image_grid_thw", "mm_token_type_ids")
+        }
+        with torch.no_grad():
+            step_inputs = {
+                key: value
+                for key, value in inputs_dict.items()
+                if key not in vlm_inputs or key in ("input_ids", "attention_mask")
+            }
+            step_inputs["vlm_features"] = model.model.get_vlm_features(**vlm_inputs)
+            expected = model(**step_inputs).logits
+            # One denoising step from precomputed backbone features compiles without graph breaks
+            actual = torch.compile(lambda **kwargs: model(**kwargs).logits, fullgraph=True)(**step_inputs)
+        torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+
     def test_training_gradients_reach_used_parameters(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Gr00tForConditionalGeneration(config).to(torch_device)

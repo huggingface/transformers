@@ -440,6 +440,7 @@ class Gr00tPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
