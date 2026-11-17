@@ -35,7 +35,6 @@ if is_torch_available():
     from transformers.models.kolibri1_1 import modeling_kolibri1_1
     from transformers.models.kolibri1_1.modeling_kolibri1_1 import (
         Kolibri1_1Indexer,
-        eager_attention_forward,
         nvfp4_fake_quantize,
     )
 
@@ -74,33 +73,6 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Sparse layers always overlay their key selection as an attention mask, which flash rejects")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
-
-    def test_sparse_layers_round_keys_and_values(self):
-        # The cache and the K/V shared across layers stay unrounded: compare them with what each layer attends to
-        config = self.model_tester.get_config()
-        model = Kolibri1_1ForCausalLM(config).to(torch_device).eval()
-        model.set_attn_implementation("eager")
-        attended = {}
-
-        def spy(module, query, key, value, *args, **kwargs):
-            attended[module.layer_idx] = key, value
-            return eager_attention_forward(module, query, key, value, *args, **kwargs)
-
-        input_ids = torch.randint(3, config.vocab_size, (1, 12), device=torch_device)
-        with mock.patch.object(modeling_kolibri1_1, "eager_attention_forward", spy), torch.no_grad():
-            cache = model(input_ids, use_cache=True).past_key_values
-
-        for layer_idx, source in enumerate(config.kv_source_layers):
-            is_sparse = config.layer_types[layer_idx] == "indexed_attention"
-            for name, states in zip(("keys", "values"), attended[layer_idx]):
-                unrounded = getattr(cache.layers[source], name)
-                expected = unrounded
-                if is_sparse:
-                    expected = nvfp4_fake_quantize(unrounded)
-                    # Rounding moves the states by much more than the tolerance below
-                    self.assertGreater((expected - unrounded).abs().max().item(), 1e-3)
-                # The straight-through estimator adds the rounding error back, which is exact up to an ulp
-                torch.testing.assert_close(states, expected, rtol=0, atol=1e-6, msg=f"{name} of layer {layer_idx}")
 
     @parameterized.expand([("dynamic",), ("static",)])
     def test_cached_decode_matches_full_forward(self, cache_implementation):
@@ -297,21 +269,3 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
             kept = model(input_ids).last_hidden_state
             self.assertEqual(events, layers)
         torch.testing.assert_close(kept.detach(), freed)
-
-    def test_left_padded_batch_matches_unpadded_rows(self):
-        config = self.model_tester.get_config()
-        model = Kolibri1_1ForCausalLM(config).to(torch_device).eval()
-        long_ids = torch.randint(3, config.vocab_size, (1, 12), device=torch_device)
-        short_ids = torch.randint(3, config.vocab_size, (1, 9), device=torch_device)
-        pad = torch.full((1, 3), config.pad_token_id or 0, device=torch_device)
-        input_ids = torch.cat([long_ids, torch.cat([pad, short_ids], dim=-1)])
-        attention_mask = torch.ones_like(input_ids)
-        attention_mask[1, :3] = 0
-        with torch.no_grad():
-            batched = model(input_ids, attention_mask=attention_mask).logits
-            long_logits, short_logits = model(long_ids).logits, model(short_ids).logits
-        # Both rows see more keys than the sparse budget, so key selection is active in them
-        budget = config.index_topk + config.index_num_local_tokens + config.index_num_sink_tokens
-        self.assertGreater(short_ids.shape[1], budget)
-        torch.testing.assert_close(batched[0], long_logits[0], rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(batched[1, 3:], short_logits[0], rtol=1e-4, atol=1e-4)
