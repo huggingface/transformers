@@ -123,6 +123,26 @@ class ClefConfig(PreTrainedConfig):
         self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
 
+def pool_spans(hidden_states: torch.Tensor, starts: torch.LongTensor, ends: torch.LongTensor) -> torch.Tensor:
+    """
+    The mean of `hidden_states` (`(batch_size, length, dim)`) over each span `[starts, ends)` (`(batch_size, num_spans)`),
+    in float32: the difference of two prefix sums divided by the length of the span, without any tensor of
+    `num_spans * length` elements. An empty span gives zeros.
+    """
+    prefix_sums = nn.functional.pad(hidden_states.float().cumsum(1), (0, 0, 1, 0))
+    batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
+    lengths = (ends - starts).clamp(min=1)[..., None]
+    return (prefix_sums[batch, ends] - prefix_sums[batch, starts]) / lengths
+
+
+def padding_mask(is_valid: torch.BoolTensor, dtype: torch.dtype) -> torch.Tensor | None:
+    """The additive attention mask of the keys `is_valid` (`(batch_size, num_keys)`), `None` when they all are."""
+    if bool(is_valid.all()):
+        return None
+    mask = torch.zeros(is_valid.shape, dtype=dtype, device=is_valid.device)
+    return mask.masked_fill(~is_valid, torch.finfo(dtype).min)[:, None, None]
+
+
 class ClefAttention(Molmo2VisionAttention):
     def __init__(self, config: ClefConfig, hidden_size: int | None = None):
         super().__init__(config, hidden_size)
@@ -156,11 +176,15 @@ class ClefEvidenceLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states, _ = self.cross_attn(
-            self.input_layernorm(hidden_states), self.memory_layernorm(encoder_hidden_states), **kwargs
+            self.input_layernorm(hidden_states),
+            self.memory_layernorm(encoder_hidden_states),
+            attention_mask=attention_mask,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -182,7 +206,8 @@ class ClefEmbeddings(nn.Module):
     """
     The memory of the prompt, the options, the fields of the questions with their embeddings, and the lexical prior of
     the options, from the hidden states of the backbone and the output embeddings of the tokens of the marked spans,
-    averaged over each span.
+    averaged over each span. The options of each prompt are packed in question order, `option_question_ids` gives the
+    question of each and `is_option` whether it exists.
     """
 
     def __init__(self, config: ClefConfig):
@@ -205,33 +230,46 @@ class ClefEmbeddings(nn.Module):
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
         output_embeddings: torch.Tensor,
+        option_question_ids: torch.LongTensor,
+        is_option: torch.BoolTensor,
+        attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         dtype = hidden_states.dtype
-        # Each question marks the span of its instruction, then of each of its options
-        spans_per_question = num_options + 1
-        instructions = spans_per_question.cumsum(0) - spans_per_question
-        is_option = torch.ones_like(marks[::2], dtype=torch.bool).index_fill(0, instructions, False)
-        # The marks cut the prompt into segments, every other one is a span
-        boundaries = torch.cat([marks.new_zeros(1), marks, marks.new_full((1,), input_ids.shape[-1])])
-        segment_sizes = boundaries.diff().tolist()
+        batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
+        # Each question marks the span of its instruction, then of each of its options; padding marks are -1, and
+        # padding questions (no options) have no span
+        starts, ends = marks.clamp(min=0).unflatten(-1, (-1, 2)).unbind(-1)
+        spans_per_question = (num_options + 1) * (num_options > 0)
+        instructions = spans_per_question.cumsum(-1) - spans_per_question
+        first_options = num_options.cumsum(-1) - num_options
+        positions = torch.arange(is_option.shape[-1], device=marks.device)
+        option_spans = (
+            instructions.gather(-1, option_question_ids)
+            + 1
+            + positions
+            - first_options.gather(-1, option_question_ids)
+        )
+        instructions = instructions.masked_fill(num_options == 0, 0)
+        option_spans = option_spans.masked_fill(~is_option, 0)
 
         hidden_states = self.hidden_norm(hidden_states)
-        span_states = [segment.float().mean(1) for segment in torch.split(hidden_states, segment_sizes, dim=1)[1::2]]
-        span_lexical = [
-            output_embeddings[segment].float().mean(1)
-            for segment in torch.split(input_ids, segment_sizes, dim=1)[1::2]
-        ]
-        span_states, span_lexical = torch.stack(span_states, dim=1), torch.stack(span_lexical, dim=1)
-        questions, contexts = span_states[:, instructions].to(dtype), span_states[:, is_option].to(dtype)
-        lexical = span_lexical[:, is_option].to(dtype)
-        global_state = hidden_states[:, -1:]
+        span_states = pool_spans(hidden_states, starts, ends)
+        span_lexical = pool_spans(output_embeddings[input_ids], starts, ends)
+        questions = span_states[batch, instructions].to(dtype)
+        contexts, lexical = span_states[batch, option_spans].to(dtype), span_lexical[batch, option_spans].to(dtype)
+        # The global state is the last token each prompt attends to
+        if attention_mask is None:
+            global_state = hidden_states[:, -1:]
+        else:
+            last = (attention_mask.long() * torch.arange(attention_mask.shape[-1], device=marks.device)).argmax(-1)
+            global_state = hidden_states[batch, last[:, None]]
         options = (
             self.option_context_projection(contexts)
             + self.option_lexical_projection(lexical)
-            + self.option_question_projection(questions).repeat_interleave(num_options, dim=1)
+            + self.option_question_projection(questions)[batch, option_question_ids]
         )
         # The cosine of the output embeddings of each option with its question and the end of the prompt
-        anchors = nn.functional.normalize(questions + global_state, dim=-1).repeat_interleave(num_options, dim=1)
+        anchors = nn.functional.normalize(questions + global_state, dim=-1)[batch, option_question_ids]
         priors = (nn.functional.normalize(lexical, dim=-1) * anchors).sum(-1)
         fields = self.question_projection(questions)
         field_embeddings = self.global_projection(global_state) + self.type_embedding(question_type_ids)
@@ -241,7 +279,8 @@ class ClefEmbeddings(nn.Module):
 class ClefEncoder(nn.Module):
     """
     The options attend to the prompt, each question summarizes its options into its field, then the fields attend to
-    each other and to the prompt.
+    each other and to the prompt. Padding tokens, options and questions are masked out of every attention and of the
+    routing of the options.
     """
 
     def __init__(self, config: ClefConfig):
@@ -258,19 +297,32 @@ class ClefEncoder(nn.Module):
         fields: torch.Tensor,
         field_embeddings: torch.Tensor,
         option_question_ids: torch.Tensor,
+        is_option: torch.BoolTensor,
+        is_question: torch.BoolTensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """`fields` are the projected questions, which route the options; `field_embeddings` are added to them after."""
+        memory_mask = None if attention_mask is None else padding_mask(attention_mask.bool(), memory.dtype)
         for layer in self.evidence_layers:
-            options = layer(options, memory, **kwargs)
+            options = layer(options, memory, attention_mask=memory_mask, **kwargs)
 
-        routing_logits = (fields[:, :, None] * options[:, None]).sum(-1) / math.sqrt(fields.shape[-1])
-        is_other_option = nn.functional.one_hot(option_question_ids, fields.shape[1]).T == 0
-        routing_logits[:, is_other_option] = torch.finfo(fields.dtype).min
+        # Each question routes its own options only
+        routing_logits = fields @ options.transpose(-1, -2) / math.sqrt(fields.shape[-1])
+        questions = torch.arange(fields.shape[1], device=fields.device)
+        is_own_option = (option_question_ids[:, None] == questions[:, None]) & is_option[:, None]
+        routing_logits = routing_logits.masked_fill(~is_own_option, torch.finfo(routing_logits.dtype).min)
         summaries = routing_logits.softmax(-1, dtype=torch.float32) @ options.float()
         fields = fields + self.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings
+        field_mask = padding_mask(is_question, fields.dtype)
         for layer in self.layers:
-            fields = layer(fields, encoder_hidden_states=memory, **kwargs)
+            fields = layer(
+                fields,
+                attention_mask=field_mask,
+                encoder_hidden_states=memory,
+                encoder_attention_mask=memory_mask,
+                **kwargs,
+            )
         return options, self.field_norm(fields)
 
 
@@ -314,7 +366,8 @@ class ClefPreTrainedModel(PreTrainedModel):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    The output of [`ClefForDecision`] for one prompt, with `num_questions` questions of at most `max_options` options.
+    The output of [`ClefForDecision`] for a batch of prompts, with `num_questions` questions in all (those of each
+    prompt in turn) of at most `max_options` options.
     """
 )
 class ClefDecisionOutput(ModelOutput):
@@ -322,8 +375,8 @@ class ClefDecisionOutput(ModelOutput):
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
         The loss of the questions, see [`ClefForDecision`].
     logits (`torch.FloatTensor` of shape `(num_questions, max_options)`):
-        The scores of the options of each question. The cells of the options a question does not have hold the minimum
-        of the dtype.
+        The scores of the options of each question, in float32. The cells of the options a question does not have hold
+        the minimum of the dtype.
     option_mask (`torch.BoolTensor` of shape `(num_questions, max_options)`):
         Whether each cell of `logits` is an option of its question.
     """
@@ -337,14 +390,14 @@ class ClefDecisionOutput(ModelOutput):
     custom_intro="""
     Clef (Cloudflare/clef): the model of its repo, its language modeling head and a decision head that scores all the
     options of all the questions jointly. The template marks the span of each instruction and then of each of its
-    options with a pair of `<|mark|>`. The options of all the questions are packed in one sequence: pooled from the
-    hidden states and from the output embeddings of their tokens, they attend to the prompt and are summarized into the
-    field of their question. The fields of the questions then attend to each other and to the prompt, and each option
-    is scored against the field of its question.
+    options with a pair of `<|mark|>`. The options of all the questions of a prompt are packed in one sequence: pooled
+    from the hidden states and from the output embeddings of their tokens, they attend to the prompt and are summarized
+    into the field of their question. The fields of the questions then attend to each other and to the prompt, and each
+    option is scored against the field of its question.
     """
 )
 class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
-    accepts_loss_kwargs = False  # the loss is a mean over the questions of the prompt, not over tokens
+    accepts_loss_kwargs = False  # the loss is a mean over the questions of the batch, not over tokens
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: ClefConfig):
@@ -364,30 +417,73 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         option_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ClefDecisionOutput:
         r"""
+        marks (`torch.LongTensor` of shape `(batch_size, num_marks)`):
+            The positions in `input_ids` of the marks of each prompt: per question, the start and end of the span of
+            its instruction then of each of its options. Padded with `-1`.
+        num_options (`torch.LongTensor` of shape `(batch_size, max_questions)`):
+            The number of options of each question of each prompt, padded with `0`: a question is real iff it has
+            options.
+        question_type_ids (`torch.LongTensor` of shape `(batch_size, max_questions)`):
+            The index of the type of each question in `Question.questions_types`, padded with `0`.
         labels (`torch.LongTensor` of shape `(num_questions,)` or `torch.FloatTensor` of shape `(num_questions, max_options)`, *optional*):
-            The index of the right option of each question, `-100` for a question to ignore, or the distribution of
-            the right answer over its options.
+            For the real questions of all the prompts, in order: the index of the right option of each question,
+            `-100` for a question to ignore, or the distribution of the right answer over its options.
         option_mask (`torch.BoolTensor` of shape `(num_questions, max_options)`, *optional*):
             The options each question has, from `num_options` by default.
         """
-        marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]  # a batch of one prompt
-        hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state
-        option_question_ids = torch.repeat_interleave(num_options)
+        # Positions that skip the padding, so that left and right padding give the same hidden states
+        position_ids = kwargs.pop("position_ids", None)
+        if position_ids is None and attention_mask is not None:
+            position_ids = (attention_mask.long().cumsum(-1) - 1).clamp(min=0)
+        hidden_states = self.model(
+            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=False, **kwargs
+        ).last_hidden_state
+        # The options of each prompt packed in question order: the question of each, and whether it exists
+        is_question = num_options > 0
+        option_ends = num_options.cumsum(-1)
+        positions = torch.arange(int(option_ends[:, -1].max()), device=num_options.device)
+        is_option = positions < option_ends[:, -1:]
+        positions = positions.expand(len(num_options), -1).contiguous()
+        option_question_ids = torch.searchsorted(option_ends, positions, right=True).clamp(
+            max=num_options.shape[-1] - 1
+        )
         # The output embeddings of the tokens of each option give its lexical prior
         memory, options, fields, field_embeddings, priors = self.embeddings(
-            hidden_states, input_ids, marks, num_options, question_type_ids, self.lm_head.weight
+            hidden_states,
+            input_ids,
+            marks,
+            num_options,
+            question_type_ids,
+            self.lm_head.weight,
+            option_question_ids,
+            is_option,
+            attention_mask,
         )
-        options, fields = self.encoder(memory, options, fields, field_embeddings, option_question_ids, **kwargs)
-        scores = self.scorer(fields[:, option_question_ids], options, priors)[0]
+        options, fields = self.encoder(
+            memory,
+            options,
+            fields,
+            field_embeddings,
+            option_question_ids,
+            is_option,
+            is_question,
+            attention_mask,
+            **kwargs,
+        )
+        batch = torch.arange(len(fields), device=fields.device)[:, None]
+        scores = self.scorer(fields[batch, option_question_ids], options, priors)[is_option].float()
 
-        # The scores of the options of each question, padded to the widest question
+        # The scores of the options of each real question, prompt after prompt, padded to the widest question
         if option_mask is None:
-            option_mask = torch.arange(int(num_options.max()), device=num_options.device) < num_options[:, None]
+            option_mask = (
+                torch.arange(int(num_options.max()), device=num_options.device) < num_options[is_question][:, None]
+            )
         logits = scores.new_full(option_mask.shape, torch.finfo(scores.dtype).min).masked_scatter(option_mask, scores)
 
         loss = None
@@ -396,7 +492,7 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 logits,
                 labels,
                 option_mask,
-                is_score=question_type_ids == Question.questions_types.index("score"),
+                is_score=question_type_ids[is_question] == Question.questions_types.index("score"),
                 label_smoothing=self.config.label_smoothing,
                 brier_weight=self.config.brier_weight,
                 ordinal_weight=self.config.ordinal_weight,

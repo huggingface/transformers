@@ -14,6 +14,7 @@
 
 import copy
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,6 +30,7 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import ClefForDecision
     from transformers.models.clef.modeling_clef import ClefDecisionOutput
@@ -62,6 +64,172 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     def labels(self, prompt):
         """The first option of every question as the right one."""
         return torch.zeros(len(prompt.questions), dtype=torch.long)
+
+    def synthetic_prompt(self, length, options, seed):
+        """
+        The inputs of a prompt of `length` random tokens with a batch of one prompt: per question, the span of its
+        instruction then of each of its options, of 1 to 3 tokens and one token apart.
+        """
+        generator = torch.Generator().manual_seed(seed)
+        input_ids = torch.randint(len(self.tokenizer), (1, length), generator=generator)
+        num_spans = sum(width + 1 for width in options)
+        sizes = 1 + torch.arange(num_spans) % 3
+        starts = 1 + torch.cat([torch.zeros(1, dtype=torch.long), (sizes + 1).cumsum(0)[:-1]])
+        marks = torch.stack([starts, starts + sizes], dim=-1).flatten()
+        self.assertLess(int(marks[-1]), length)
+        return {
+            "input_ids": input_ids,
+            "marks": marks[None],
+            "num_options": torch.tensor([options]),
+            "question_type_ids": torch.tensor([[index % 3 for index in range(len(options))]]),
+        }
+
+    @staticmethod
+    def collate(prompts, padding_side="right", pad_token_id=0):
+        """A batch of prompts: tokens padded on `padding_side`, marks with -1, `num_options` and types with 0."""
+        length = max(prompt["input_ids"].shape[-1] for prompt in prompts)
+        num_marks = max(prompt["marks"].shape[-1] for prompt in prompts)
+        num_questions = max(prompt["num_options"].shape[-1] for prompt in prompts)
+        batch = {"input_ids": [], "attention_mask": [], "marks": [], "num_options": [], "question_type_ids": []}
+        for prompt in prompts:
+            input_ids, marks = prompt["input_ids"][0], prompt["marks"][0]
+            padding = length - input_ids.shape[-1]
+            pad = torch.full((padding,), pad_token_id)
+            if padding_side == "left":
+                batch["input_ids"].append(torch.cat([pad, input_ids]))
+                batch["attention_mask"].append(torch.cat([torch.zeros(padding), torch.ones_like(input_ids)]))
+                marks = marks + padding
+            else:
+                batch["input_ids"].append(torch.cat([input_ids, pad]))
+                batch["attention_mask"].append(torch.cat([torch.ones_like(input_ids), torch.zeros(padding)]))
+            batch["marks"].append(nn.functional.pad(marks, (0, num_marks - marks.shape[-1]), value=-1))
+            for key in ("num_options", "question_type_ids"):
+                values = prompt[key][0]
+                batch[key].append(nn.functional.pad(values, (0, num_questions - values.shape[-1]), value=0))
+        return {key: torch.stack(values).long() for key, values in batch.items()}
+
+    def ragged_prompts(self):
+        """Three prompts of different lengths, numbers of questions and of options."""
+        return [
+            self.synthetic_prompt(70, [2, 5, 1], seed=1),
+            self.synthetic_prompt(40, [4], seed=2),
+            self.synthetic_prompt(55, [3, 3], seed=3),
+        ]
+
+    def test_batch_equals_singles(self):
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        prompts = self.ragged_prompts()
+        with torch.no_grad():
+            singles = [model(**prompt).logits for prompt in prompts]
+            output = model(**self.collate(prompts))
+        row = 0
+        for single in singles:
+            for question in single:
+                width = int((question > torch.finfo(question.dtype).min).sum())
+                torch.testing.assert_close(output.logits[row, :width], question[:width], atol=1e-5, rtol=0)
+                self.assertEqual(output.option_mask[row].sum().item(), width)
+                row += 1
+        self.assertEqual(row, output.logits.shape[0])
+        self.assertEqual(output.logits.shape[1], 5)
+
+    def test_left_and_right_padding_agree(self):
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        prompts = self.ragged_prompts()
+        with torch.no_grad():
+            right = model(**self.collate(prompts, padding_side="right", pad_token_id=0)).logits
+            left = model(**self.collate(prompts, padding_side="left", pad_token_id=7)).logits
+        torch.testing.assert_close(left, right, atol=1e-5, rtol=0)
+
+    def test_batched_loss_equals_mean_over_questions(self):
+        torch.manual_seed(0)
+        config = copy.deepcopy(self.config)
+        config.brier_weight, config.label_smoothing = 0.5, 0.1
+        model = ClefForDecision(config).eval()
+        prompts = self.ragged_prompts()
+        generator = torch.Generator().manual_seed(0)
+        labels = [
+            torch.cat([torch.randint(n, (1,), generator=generator) for n in p["num_options"][0]]) for p in prompts
+        ]
+        with torch.no_grad():
+            singles = torch.stack([model(**p, labels=label).loss for p, label in zip(prompts, labels)])
+            batched = model(**self.collate(prompts), labels=torch.cat(labels)).loss
+        counts = torch.tensor([float(label.numel()) for label in labels])
+        torch.testing.assert_close(batched, (singles * counts).sum() / counts.sum(), atol=1e-6, rtol=0)
+
+    def test_padded_question_slots_produce_no_rows(self):
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        prompt = self.synthetic_prompt(40, [3], seed=4)
+        padded = {**prompt, "num_options": torch.tensor([[3, 0, 0]]), "question_type_ids": torch.tensor([[0, 0, 0]])}
+        with torch.no_grad():
+            single, output = model(**prompt), model(**padded)
+        self.assertEqual(output.logits.shape, (1, 3))
+        self.assertEqual(output.option_mask.tolist(), [[True, True, True]])
+        torch.testing.assert_close(output.logits, single.logits)
+        # In a batch, the record of one question contributes one row whatever the number of question slots
+        with torch.no_grad():
+            batched = model(**self.collate([self.synthetic_prompt(70, [2, 5, 1], seed=1), prompt]))
+        self.assertEqual(batched.logits.shape, (4, 5))
+        torch.testing.assert_close(batched.logits[3, :3], single.logits[0], atol=1e-5, rtol=0)
+        self.assertEqual(batched.option_mask[3].tolist(), [True, True, True, False, False])
+
+    def test_batched_backward_and_bf16(self):
+        torch.manual_seed(0)
+        config = copy.deepcopy(self.config)
+        config.brier_weight, config.ordinal_weight = 0.5, 0.5
+        model = ClefForDecision(config)
+        inputs = self.collate(self.ragged_prompts())
+        labels = torch.tensor([1, 4, 0, 3, 2, 0])
+        model(**inputs, labels=labels).loss.backward()
+        for name, parameter in model.named_parameters():
+            self.assertIsNotNone(parameter.grad, name)
+            self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+        model.zero_grad()
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            output = model(**inputs, labels=labels)
+        self.assertEqual(output.logits.dtype, torch.float32)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        for name, parameter in model.named_parameters():
+            self.assertEqual(parameter.dtype, torch.float32, name)
+            self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+        head = [name for name, _ in model.named_parameters() if not name.startswith(("model.", "lm_head."))]
+        self.assertGreater(len(head), 0)
+
+    def test_span_pooling_memory_is_linear(self):
+        # The means of the spans are differences of prefix sums: no `[spans, length, dim]` tensor
+        from transformers.models.clef.modeling_clef import pool_spans
+
+        hidden_states = torch.randn(2, 30, 8)
+        starts, ends = torch.tensor([[0, 5, 0], [3, 29, 0]]), torch.tensor([[1, 12, 0], [9, 30, 0]])
+        pooled = pool_spans(hidden_states, starts, ends)
+        self.assertEqual(pooled.shape, (2, 3, 8))
+        self.assertEqual(pooled.dtype, torch.float32)
+        for b in range(2):
+            for s in range(2):
+                expected = hidden_states[b, starts[b, s] : ends[b, s]].mean(0)
+                torch.testing.assert_close(pooled[b, s], expected, atol=1e-5, rtol=0)
+            self.assertTrue((pooled[b, 2] == 0).all())  # an empty (padded) span pools to zero
+
+        try:
+            import resource
+        except ImportError:
+            self.skipTest("resource is not available on this platform")
+        length, dim, num_spans = 4096, 64, 5000
+        generator = torch.Generator().manual_seed(0)
+        hidden_states = torch.randn(1, length, dim, generator=generator)
+        starts = torch.randint(length - 1, (1, num_spans), generator=generator)
+        ends = starts + 1 + torch.randint(length, (1, num_spans), generator=generator) % (length - starts)
+        self.assertEqual(pool_spans(hidden_states, starts[:, :1], ends[:, :1]).shape, (1, 1, dim))
+        # `ru_maxrss` is in bytes on macOS and in kilobytes elsewhere; a `[spans, length, dim]` float tensor is ~5 GB
+        unit = 1 if sys.platform == "darwin" else 1024
+        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit
+        pooled = pool_spans(hidden_states, starts, ends)
+        growth = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit - before
+        self.assertEqual(pooled.shape, (1, num_spans, dim))
+        self.assertLess(growth, 512 * 1024**2)
 
     def test_forward_with_labels_returns_loss(self):
         torch.manual_seed(0)
@@ -112,18 +280,23 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         with torch.no_grad():
             # The scores of the head modules, as `forward` produced them before it returned an output
             hidden_states = model.model(input_ids=inputs["input_ids"], use_cache=False).last_hidden_state
-            num_options, question_type_ids = inputs["num_options"][0], inputs["question_type_ids"][0]
-            option_question_ids = torch.repeat_interleave(num_options)
+            num_options, question_type_ids = inputs["num_options"], inputs["question_type_ids"]
+            option_question_ids = torch.repeat_interleave(num_options[0])[None]
+            is_option, is_question = torch.ones_like(option_question_ids, dtype=torch.bool), num_options > 0
             memory, options, fields, field_embeddings, priors = model.embeddings(
                 hidden_states,
                 inputs["input_ids"],
-                inputs["marks"][0],
+                inputs["marks"],
                 num_options,
                 question_type_ids,
                 model.lm_head.weight,
+                option_question_ids,
+                is_option,
             )
-            options, fields = model.encoder(memory, options, fields, field_embeddings, option_question_ids)
-            expected = model.scorer(fields[:, option_question_ids], options, priors)[0]
+            options, fields = model.encoder(
+                memory, options, fields, field_embeddings, option_question_ids, is_option, is_question
+            )
+            expected = model.scorer(fields[:, option_question_ids[0]], options, priors)[0]
             output = model(**inputs)
         self.assertIsNone(output.loss)
         torch.testing.assert_close(output.logits[output.option_mask], expected)

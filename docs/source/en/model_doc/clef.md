@@ -39,11 +39,13 @@ decide(
 
 ## Training
 
-[`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms, whose weights are fields of [`ClefConfig`]:
+[`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose float32 `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms, whose weights are fields of [`ClefConfig`]:
 
 - the cross entropy of the softmax over the options of each question, averaged over the questions. `label_smoothing` (default 0.0) mixes the uniform distribution over the options into its target.
 - `brier_weight` (default 0.0) times the squared distance of the probabilities to the target, summed over the options and averaged over the questions.
 - `ordinal_weight` (default 0.0) times, on score questions only, the expected distance `|i - j|` between the options and the right one, divided by the number of options minus one and averaged over the score questions.
+
+`forward` takes a padded batch of prompts: `input_ids` and `attention_mask` of shape `(batch_size, length)` (left or right padding), `marks` of shape `(batch_size, num_marks)` padded with `-1`, and `num_options` and `question_type_ids` of shape `(batch_size, max_questions)` padded with `0`. A question is real when it has options; the rows of `logits` and of `labels` are the real questions of every prompt in turn, so the loss of a batch is the mean over all its questions. Padding is masked out of every attention of the head and of the routing of the options, and the spans are averaged from float32 prefix sums, in memory linear in the length of the prompt.
 
 Hard and soft labels give the same loss for the same target. Pass `num_items_in_batch` to the loss to divide the summed cross entropy and Brier terms by it instead of by the number of questions.
 
