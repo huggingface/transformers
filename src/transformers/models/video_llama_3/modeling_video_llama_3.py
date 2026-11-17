@@ -405,6 +405,43 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
+def get_pixel_unshuffle_indices_and_weights(
+    grid_thw: torch.Tensor, merge_sizes: torch.Tensor, kwargs: dict | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Bilinear downsampling by each merge size, read in merge-block order, as 4-tap gather indices and weights, or
+    pops `"unshuffle_indices"`/`"unshuffle_weights"`."""
+    if kwargs is not None:
+        indices = kwargs.pop("unshuffle_indices", None)
+        weights = kwargs.pop("unshuffle_weights", None)
+        if indices is not None and weights is not None:
+            return indices, weights
+
+    device = grid_thw.device
+
+    def taps(size_in, size_out):
+        source = ((torch.arange(size_out, device=device) + 0.5) * (size_in / size_out) - 0.5).clamp(min=0)
+        low = source.long()
+        return low, (low + 1).clamp(max=size_in - 1), source - low
+
+    all_indices, all_weights, offset = [], [], 0
+    for (frames, height, width), merge_size in zip(grid_thw.tolist(), merge_sizes.tolist()):
+        row_low, row_high, row_weight = taps(height, height // merge_size)
+        column_low, column_high, column_weight = taps(width, width // merge_size)
+        rows = torch.stack([row_low, row_low, row_high, row_high], dim=-1)[:, None]
+        columns = torch.stack([column_low, column_high, column_low, column_high], dim=-1)[None]
+        # Raster position to merge-block order
+        block_index = (rows // merge_size * (width // merge_size) + columns // merge_size) * merge_size**2
+        index = block_index + rows % merge_size * merge_size + columns % merge_size
+        row_weights = torch.stack([1 - row_weight, 1 - row_weight, row_weight, row_weight], dim=-1)[:, None]
+        column_weights = torch.stack([1 - column_weight, column_weight, 1 - column_weight, column_weight], dim=-1)
+        weight = row_weights * column_weights[None]
+        frame_offsets = torch.arange(frames, device=device)[:, None, None, None] * height * width
+        all_indices.append((offset + frame_offsets + index).reshape(-1, 4))
+        all_weights.append(weight.expand(frames, -1, -1, -1).reshape(-1, 4))
+        offset += frames * height * width
+    return torch.cat(all_indices), torch.cat(all_weights)
+
+
 class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
     config: VideoLlama3VisionConfig
     main_input_name = "pixel_values"
@@ -431,23 +468,10 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
+        **kwargs,
     ):
-        hidden_states_chunks = hidden_states.split(grid_thw.prod(dim=1).tolist(), dim=0)
-        outputs = []
-
-        for hidden_states, (t, h, w), merge_size in zip(hidden_states_chunks, grid_thw, merge_sizes):
-            c = hidden_states.shape[-1]
-            hidden_states = hidden_states.view(t, h // merge_size, w // merge_size, merge_size, merge_size, c).permute(
-                0, 1, 3, 2, 4, 5
-            )
-            hidden_states = hidden_states.reshape(t, h, w, c).permute(0, 3, 1, 2)
-            hidden_states = torch.nn.functional.interpolate(
-                hidden_states, size=(h // merge_size, w // merge_size), mode="bilinear"
-            )
-            hidden_states = hidden_states.permute(0, 2, 3, 1).view(-1, c)
-            outputs.append(hidden_states)
-
-        return torch.cat(outputs, dim=0)
+        indices, weights = get_pixel_unshuffle_indices_and_weights(grid_thw, merge_sizes, kwargs=kwargs)
+        return (hidden_states[indices].float() * weights[..., None]).sum(1).to(hidden_states.dtype)
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -481,7 +505,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
-        last_hidden_state = self.pixel_unshuffle(last_hidden_state, grid_thw, merge_sizes)
+        last_hidden_state = self.pixel_unshuffle(last_hidden_state, grid_thw, merge_sizes, **kwargs)
 
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 

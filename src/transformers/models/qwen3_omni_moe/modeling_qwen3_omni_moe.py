@@ -649,6 +649,27 @@ class Qwen3OmniMoeAudioEncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
+def get_audio_chunk_lengths(feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
+    """Length of each `n_window * 2`-frame chunk the audios are split into (the last one of each audio may be
+    shorter), or pop `"chunk_lengths"` from `kwargs` if precomputed."""
+    if kwargs is not None and (chunk_lengths := kwargs.pop("chunk_lengths", None)) is not None:
+        return chunk_lengths
+    chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
+    chunk_lengths = torch.full((int(chunk_num.sum()),), n_window * 2, dtype=torch.long, device=feature_lens.device)
+    tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
+    chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
+    return torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+
+
+def get_audio_chunk_index(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Gather index of each chunk's frames in the concatenated features, right-padded to the longest chunk, or pop
+    `"chunk_index"` from `kwargs` if precomputed."""
+    if kwargs is not None and (chunk_index := kwargs.pop("chunk_index", None)) is not None:
+        return chunk_index
+    chunk_starts = F.pad(chunk_lengths.cumsum(0)[:-1], (1, 0))
+    return chunk_starts[:, None] + torch.arange(int(chunk_lengths.max()), device=chunk_lengths.device)
+
+
 def chunk_and_pad_features(
     input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -661,35 +682,34 @@ def chunk_and_pad_features(
         input_features: `(feature_dim, total_frames)` concatenated audio features.
         feature_lens: `(batch_size,)` per-sample frame counts.
         n_window: half the target chunk size in frames.
-        kwargs: optional caller kwargs — if it contains both `"padded_feature"` and `"chunk_lengths"` they are popped and returned.
+        kwargs: optional caller kwargs — `"padded_feature"` and `"chunk_lengths"` are popped and returned when both are
+            there; otherwise `"chunk_lengths"` and `"chunk_index"` are popped when precomputed.
 
     Returns:
         `padded_feature`: `(num_chunks, feature_dim, max_chunk_len)` padded chunks.
         `chunk_lengths`: `(num_chunks,)` actual length of each chunk before padding.
     """
-    if kwargs is not None:
-        padded_feature = kwargs.pop("padded_feature", None)
-        chunk_lengths = kwargs.pop("chunk_lengths", None)
-        if padded_feature is not None and chunk_lengths is not None:
-            return padded_feature, chunk_lengths
+    padded_feature = kwargs.pop("padded_feature", None) if kwargs is not None else None
+    chunk_lengths = get_audio_chunk_lengths(feature_lens, n_window, kwargs=kwargs)
+    if padded_feature is not None:
+        return padded_feature, chunk_lengths
 
-    chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
-    chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
-    tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
-    chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
-    chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
-
-    chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
-    padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
-    return padded_feature, chunk_lengths
+    chunk_index = get_audio_chunk_index(chunk_lengths, kwargs=kwargs)
+    padding_mask = torch.arange(chunk_index.shape[1], device=chunk_index.device) < chunk_lengths[:, None]
+    padded_feature = input_features[:, chunk_index.clamp(max=input_features.shape[1] - 1)] * padding_mask
+    return padded_feature.transpose(0, 1), chunk_lengths
 
 
-def get_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
+def get_valid_indices(
+    chunk_lengths: torch.Tensor, n_window: int, max_len_after_cnn: int | None = None, kwargs: dict | None = None
+) -> torch.Tensor:
     """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
 
     Args:
         chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
         n_window: half the chunk size (in raw frames).
+        max_len_after_cnn: length of each chunk after the CNN, for chunks padded to a fixed length; the longest
+            chunk's by default.
         kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
 
     Returns:
@@ -698,7 +718,8 @@ def get_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict |
     if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
         return valid_indices
     feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
-    max_len_after_cnn = feature_lens_after_cnn.max().item()
+    if max_len_after_cnn is None:
+        max_len_after_cnn = feature_lens_after_cnn.max().item()
     mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
     return mask.flatten().nonzero().squeeze(-1)
 
@@ -802,7 +823,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, input_features=None, feature_lens=None, **kwargs: Unpack[TransformersKwargs]):
@@ -1744,6 +1764,13 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
         return hidden_states
 
 
+def get_audio_frame_indices(feature_attention_mask: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
+    """Flat indices of the real mel frames of a padded batch, or pop `"frame_indices"` from `kwargs` if precomputed."""
+    if kwargs is not None and (frame_indices := kwargs.pop("frame_indices", None)) is not None:
+        return frame_indices
+    return feature_attention_mask.flatten().nonzero().squeeze(-1)
+
+
 @auto_docstring(
     custom_intro="""
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
@@ -1857,7 +1884,8 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
         """
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
-            input_features = input_features.permute(0, 2, 1)[feature_attention_mask.bool()].permute(1, 0)
+            frame_indices = get_audio_frame_indices(feature_attention_mask, kwargs=kwargs)
+            input_features = input_features.permute(0, 2, 1).flatten(0, 1)[frame_indices].permute(1, 0)
         else:
             audio_feature_lengths = None
 

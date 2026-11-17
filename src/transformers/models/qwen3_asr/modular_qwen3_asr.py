@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -36,6 +37,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderLayer,
     SinusoidsPositionEmbedding,
     get_audio_cu_seqlens,
+    get_valid_indices,
 )
 from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
 
@@ -218,11 +220,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
-        chunk_post_cnn_lens = self._post_cnn_length(
-            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
-        )
-        valid_mask = torch.arange(time_steps, device=input_features.device) < chunk_post_cnn_lens.unsqueeze(1)
-        valid_indices = valid_mask.flatten().nonzero().squeeze(-1)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, time_steps, kwargs=kwargs)
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
