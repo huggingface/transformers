@@ -82,12 +82,14 @@ class Mistral3PatchMerger(nn.Module):
         """
         merge_size = self.spatial_merge_size
         grids = (torch.as_tensor(image_sizes) // self.patch_size).tolist()
+        block = torch.arange(merge_size, device=device)
         merge_index, offset = [], 0
         for height, width in grids:
-            token_index = torch.arange(height * width, device=device).view(height, width)
-            token_index = token_index[: height // merge_size * merge_size, : width // merge_size * merge_size]
-            token_index = token_index.view(height // merge_size, merge_size, width // merge_size, merge_size)
-            merge_index.append(token_index.permute(0, 2, 1, 3).reshape(-1, merge_size**2) + offset)
+            # Each block's top-left patch, plus the offsets of the patches within a block
+            rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
+            columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
+            within = (block[:, None] * width + block[None, :]).flatten()
+            merge_index.append((rows * width + columns).reshape(-1, 1) + within + offset)
             offset += height * width
         return torch.cat(merge_index)
 
