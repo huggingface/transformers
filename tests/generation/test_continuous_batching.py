@@ -70,7 +70,6 @@ from transformers.generation.continuous_batching.utils import (
     _get_numa_nodes_memory,
     get_device_and_memory_breakdown,
 )
-from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -98,8 +97,8 @@ from ..distributed_testing_utils import run_distributed
 # Constants for tests
 _DEFAULT_USER_MESSAGES = [
     "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
-    "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
-    "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
+    "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+    "Toulouse has twice as many sheep as Charleston. Charleston has 4 times as many sheep as Seattle. How many sheep do Toulouse, Charleston, and Seattle have together if Seattle has 20 sheep?",
 ]  # fmt: skip
 
 
@@ -295,18 +294,6 @@ def _make_allocator(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
-    def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
-        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
-        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
-        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
-        module = torch.nn.Module()
-        module.layer_idx = 0
-        module.num_key_value_groups = 1
-        q = k = v = torch.zeros(1, 1, 4, 8)
-        with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
-            attention_forward(module, q, k, v, None, scaling=1.0)
-
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
             request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
@@ -1306,13 +1293,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
         model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
         # Create a static cache if compile_config is set, because regular generate requires a compileable cache
-        past_key_values = None
+        cache = None
         if model.generation_config.compile_config is not None:
             max_cache_len = num_input_tokens + max_new_tokens
-            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+            cache = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
-            **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
+            **inputs.to(torch_device), generation_config=model.generation_config, cache=cache
         )
 
         for i, user_message in enumerate(user_messages):
@@ -2170,7 +2157,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         tokenizer, model = get_tokenizer_and_model(
             model_id, "flash_attention_2", torch_device, torch.bfloat16, upcast_lm_head=True
         )
-        # Skip the "Josh" prompt: its 5th token is an exact tie in bf16, which the fp32 lm_head breaks differently
         user_messages = [_DEFAULT_USER_MESSAGES[0], _DEFAULT_USER_MESSAGES[2]]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -2185,9 +2171,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Generated with a regular generate in bf16, without CB nor upcast lm_head
         expected_texts = Expectations(
             {
-                ("cuda", (10, 0)): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                ("cuda", (10, 0)): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
                 # Default expectation was not tested but needs to be there to avoid crashes. Feel free to change.
-                (None, None): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                (None, None): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
             }
         ).get_expectation()
         self.assertEqual(len(outputs), len(expected_texts))

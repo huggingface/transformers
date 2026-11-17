@@ -19,6 +19,7 @@ import asyncio
 import copy
 import enum
 import json
+import os
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -58,16 +59,27 @@ X_REQUEST_ID = "x-request-id"
 
 
 def split_model_id(model_id: str) -> tuple[str, str | None]:
-    """`<repo>[@revision][:<file>.gguf]` -> the id without the file, and the file if one was named.
+    """Split the GGUF file off a model name: `"org/model:weights.gguf"` -> `("org/model", "weights.gguf")`.
 
-    `<repo>:<file>.gguf` is how GGUF clients name a file inside a repository: the repository says which
-    model, the file which weights, and both are answered for rather than one of them dropped. A colon
-    that is not a `.gguf` file is left alone -- it is part of the id.
+    Only a `.gguf` file after the last colon counts. Any other colon is part of the name, as in a local
     """
-    head, _, named = model_id.partition(":")
-    if named and not named.endswith(".gguf"):
+    name, colon, gguf_file = model_id.rpartition(":")
+    names_gguf_file = bool(colon) and gguf_file.endswith(".gguf")
+    if not names_gguf_file:
         return model_id, None
-    return head, named or None
+    return name, gguf_file
+
+
+def split_revision(model_id_and_revision: str) -> tuple[str, str | None]:
+    """Split the revision off a model name: `"org/model@dev"` -> `("org/model", "dev")`.
+
+    An existing local path has no revision, and an `@` in it is part of the path:
+    `"/tmp/ckpt@1000"` -> `("/tmp/ckpt@1000", None)`.
+    """
+    if os.path.exists(model_id_and_revision):
+        return model_id_and_revision, None
+    model_id, _, revision = model_id_and_revision.partition("@")
+    return model_id, revision or None
 
 
 class Modality(enum.Enum):
@@ -237,6 +249,7 @@ def build_response_parser(
     processor,
     model: "PreTrainedModel",
     input_ids,
+    tools=None,
 ) -> "ResponseParser | None":
     """Build a streaming :class:`ResponseParser` for the current generation.
 
@@ -253,7 +266,7 @@ def build_response_parser(
     if template is None:
         return None
     tokenizer = getattr(processor, "tokenizer", processor)
-    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids))
+    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools)
 
 
 def _normalize_tool_call(value: dict) -> ToolCall:
@@ -293,6 +306,7 @@ def parse_assistant_message(
     generated_ids,
     input_ids,
     cleaned_content: str = "",
+    tools=None,
 ) -> tuple[str, str | None, list[ToolCall] | None]:
     """Parse a full assistant message into ``(content, reasoning, tool_calls)``.
 
@@ -308,7 +322,9 @@ def parse_assistant_message(
     if template is None:
         return cleaned_content, None, None
     tokenizer = getattr(processor, "tokenizer", processor)
-    parsed = tokenizer.parse_response(generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids))
+    parsed = tokenizer.parse_response(
+        generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools
+    )
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
@@ -1216,7 +1232,7 @@ class BaseHandler:
             parsed = {"role": message["role"], "content": []}
 
             # Parse function.arguments back to a dict — chat templates iterate it as a mapping.
-            if "tool_calls" in message:
+            if message.get("tool_calls"):
                 tool_calls = []
                 for tc in message["tool_calls"]:
                     tc = copy.deepcopy(tc)
@@ -1230,7 +1246,7 @@ class BaseHandler:
 
             # When tool_calls are present, ignore content — it's either empty or contains
             # raw tool call markup that would confuse the chat template if rendered.
-            raw_content = [] if "tool_calls" in message else (message.get("content") or [])
+            raw_content = [] if message.get("tool_calls") else (message.get("content") or [])
             if isinstance(raw_content, str):
                 raw_content = [{"type": "text", "text": raw_content}]
 

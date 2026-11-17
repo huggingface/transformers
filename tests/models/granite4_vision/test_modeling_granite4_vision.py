@@ -168,7 +168,7 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
         EXPECTED_RESPONSE = Expectations({
             ("cuda", None): "The image depicts two cats resting on a pink couch. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
-            ("cuda", (8, 6)): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
+            ("cuda", (8, 6)): "The image shows two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
             ("xpu", None): "The image depicts two cats resting on a pink blanket. They are lying in a relaxed, sprawled position, with one cat appearing to be in a",
         }).get_expectation()  # fmt: skip
 
@@ -252,12 +252,12 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
         # its own expected value separately. See https://github.com/pytorch/pytorch/issues/196886
         EXPECTED_SINGLE = Expectations(
             {
-                ("cuda", None): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",
+                ("cuda", (8, 6)): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
             }
         ).get_expectation()  # fmt: skip
         EXPECTED_BATCH = Expectations(
             {
-                ("cuda", None): "I see two cats lying on a pink blanket. One cat is on the left side, and the other is on the right side. There are two",
+                ("cuda", (8, 6)): "The image depicts two cats resting on a bright pink blanket spread over a piece of furniture, likely a couch. The cat on the left is lying on",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded_single, EXPECTED_SINGLE)

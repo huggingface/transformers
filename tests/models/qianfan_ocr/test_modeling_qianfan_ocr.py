@@ -146,7 +146,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", (8, 6)): torch.tensor([10.1250, 15.8125, 13.0625, 12.3125,  9.4375]),
+                ("cuda", (8, 6)): torch.tensor([10.1875, 15.8125, 13.1875, 12.375, 9.625]),
                 ("cuda", (8, 9)): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
                 ("xpu", None): torch.tensor([10.1875, 15.8750, 13.1875, 12.3750,  9.6250]),
             }

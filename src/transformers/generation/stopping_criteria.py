@@ -249,7 +249,9 @@ class StopStringCriteria(StoppingCriteria):
             self.stop_strings, self._stop_string_matching_mode
         )
         vocab = tokenizer.get_vocab()
-        token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
+        # Tokenizers may return the same vocabulary in a different order on each call.
+        token_list = tuple(sorted(vocab))
+        token_indices = tuple(vocab[token] for token in token_list)
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
             token_list, token_indices, tokenizer
         )
@@ -401,18 +403,23 @@ class StopStringCriteria(StoppingCriteria):
                 reversed_token = token[::-1]
                 matching_positions = []
                 possible_end_lengths = []
-                for i in range(1 - len(token), len(stop_string)):
-                    if i < 0:
-                        tok = reversed_token[-i:]
-                        i = 0
-                    else:
-                        tok = reversed_token
-                    stop = reversed_stop_string[i : i + len(tok)]
-                    if tok.startswith(stop):
-                        if i == 0:
-                            possible_end_lengths.append(min(len(tok), len(stop)))
-                        else:
-                            matching_positions.append(i)
+                # Internal matches must start with the token's last character in the reversed stop string.
+                i = reversed_stop_string.find(reversed_token[:1], 1)
+                while 0 <= i < len(stop_string):
+                    if reversed_token.startswith(reversed_stop_string[i : i + len(token)]):
+                        matching_positions.append(i)
+                    i = reversed_stop_string.find(reversed_token[:1], i + 1)
+
+                # End overlaps must end at an occurrence of the stop string's last character in the token.
+                if stop_string:
+                    i = token.find(stop_string[-1:])
+                    while i >= 0:
+                        overlap = min(i + 1, len(stop_string))
+                        if token[i + 1 - overlap : i + 1] == stop_string[-overlap:]:
+                            possible_end_lengths.append(overlap)
+                        i = token.find(stop_string[-1:], i + 1)
+                else:
+                    possible_end_lengths = [0] * max(0, len(token) - 1)
 
                 if matching_positions:
                     token_valid_positions[stop_string][tok_idx] = matching_positions

@@ -30,6 +30,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
@@ -86,7 +87,7 @@ class MiniMaxConfig(PreTrainedConfig):
     ```"""
 
     model_type = "minimax"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -250,12 +251,13 @@ class MiniMaxLightningAttention(nn.Module):
 
         return query_decay, key_decay, diagonal_decay
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_len, hidden_size = hidden_states.shape
@@ -273,8 +275,8 @@ class MiniMaxLightningAttention(nn.Module):
 
         # calculated (K.T @ V) and saved as cache
         attn_weights_inter = None
-        if past_key_values is not None:
-            attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
+        if cache is not None:
+            attn_weights_inter = cache.get_linear_cache(self.layer_idx)
 
         if attn_weights_inter is None:
             attn_weights_inter = torch.zeros(
@@ -343,8 +345,8 @@ class MiniMaxLightningAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         # update cache
-        if past_key_values is not None:
-            past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
+        if cache is not None:
+            cache.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         return attn_output, attn_weights_inter
 
@@ -384,13 +386,14 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
             self.attn_alpha_factor = config.full_attn_alpha_factor
             self.attn_beta_factor = config.full_attn_beta_factor
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
@@ -401,7 +404,7 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -436,12 +439,13 @@ class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
 class MiniMaxModel(MixtralModel):
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: MiniMaxCache | None = None,
+        cache: MiniMaxCache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -449,18 +453,18 @@ class MiniMaxModel(MixtralModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = MiniMaxCache()
-        elif use_cache and not isinstance(past_key_values, MiniMaxCache):
+        if use_cache and cache is None:
+            cache = MiniMaxCache()
+        elif use_cache and not isinstance(cache, MiniMaxCache):
             raise ValueError(
-                f"MiniMax uses cache of its own and is not compatible with `past_key_values` of type {type(past_key_values)}."
+                f"MiniMax uses cache of its own and is not compatible with `cache` of type {type(cache)}."
             )
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -472,7 +476,7 @@ class MiniMaxModel(MixtralModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -489,7 +493,7 @@ class MiniMaxModel(MixtralModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -498,7 +502,7 @@ class MiniMaxModel(MixtralModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 

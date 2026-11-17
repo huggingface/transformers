@@ -43,7 +43,7 @@ class CwmConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cwm"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `CwmModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

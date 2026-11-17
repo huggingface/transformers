@@ -859,7 +859,6 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(VJEPA2RopeAttention, index=1, layer_name="encoder.layer"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
