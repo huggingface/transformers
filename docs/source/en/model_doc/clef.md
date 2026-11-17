@@ -39,6 +39,8 @@ decide(
 )
 ```
 
+The backbone runs attention over the prompt, and `attn_implementation` selects its implementation, for example `ClefForDecision.from_pretrained(repo, attn_implementation="kernels-community/flash-attn2")` for a Flash Attention kernel (or `attn_implementation={"text_config": ...}` for the backbone alone); the attention layers of the head run sdpa (or eager) whatever the setting.
+
 Clef's decision configs set `labels` to `None` for every question type: the head pools the span of each option and reads no label token, so a question can have any number of options.
 
 ## Encoder backbones
@@ -48,7 +50,7 @@ The backbone can be any model of the Hub, including bidirectional encoders such 
 - `global_pooling="first"` makes the first attended token of each prompt (the `[CLS]` token) its global state, instead of the last one, which only a causal backbone has read the whole prompt at.
 - `prompt_style="plain"` gives a new model the decision config of `CLEF_PLAIN_TEMPLATE`: the same schema text and marks as the ChatML prompt of the checkpoints, without its turns and system prompt, between the `[CLS]` and `[SEP]` tokens of the tokenizer (or its beginning and end of sequence tokens).
 
-When the backbone has no causal language modeling head class (ModernBERT), the model has no `lm_head`: the lexical prior of the options reads the input embeddings of the backbone. Positions skip the padding, so left and right padding give the same scores with absolute position embeddings too.
+When the backbone has no causal language modeling head class (ModernBERT), the model has no `lm_head`: the lexical prior of the options reads the input embeddings of the backbone. Positions skip the padding, so left and right padding give the same scores with absolute position embeddings too. Backbones of the RoBERTa family (RoBERTa, XLM-RoBERTa, CamemBERT, MPNet) number their positions themselves, from their padding token: pad their batches with that token (the tokenizer's `pad_token`), and a prompt scores the same with an attention mask (in training) and without one (in the pipeline).
 
 ```python
 from transformers import AutoConfig, AutoModel, AutoTokenizer, ClefConfig, ClefForDecision, pipeline
@@ -70,6 +72,8 @@ UltraBERT ([`UltrabertModel`], for example `dmis-lab/UltraBERT-150M`) works the 
 
 ## Training
 
+Cloudflare has not published Clef's training objective; the loss below and its defaults are a community recipe, not an official Cloudflare objective.
+
 [`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose float32 `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms and of the RLCD term below, whose weights are fields of [`ClefConfig`]:
 
 - the cross entropy of the softmax over the options of each question, averaged over the questions. `label_smoothing` (default 0.0) mixes the uniform distribution over the options into its target.
@@ -78,15 +82,19 @@ UltraBERT ([`UltrabertModel`], for example `dmis-lab/UltraBERT-150M`) works the 
 
 `forward` takes a padded batch of prompts: `input_ids` and `attention_mask` of shape `(batch_size, length)` (left or right padding), `marks` of shape `(batch_size, num_marks)` padded with `-1`, and `num_options` and `question_type_ids` of shape `(batch_size, max_questions)` padded with `0`. A question is real when it has options; the rows of `logits` and of `labels` are the real questions of every prompt in turn, so the loss of a batch is the mean over all its questions. Padding is masked out of every attention of the head and of the routing of the options, and each span is averaged in float32 over its own tokens only, in memory linear in the number of tokens of the spans: a prompt scores the same whatever the padding side and the other prompts of its batch, up to the rounding of the backbone.
 
-Hard and soft labels give the same loss for the same target. Pass `num_items_in_batch` to the loss to divide the summed cross entropy and Brier terms by it instead of by the number of questions.
+Hard and soft labels give the same loss for the same target. A hard label must be `-100` or the index of an option of its question, and soft labels must have the shape of the logits: inconsistent labels, `option_mask` or `marks` raise a `ValueError` (checked on the device, at the cost of one synchronisation per call). Soft labels cannot ignore a question: a row of zeros still counts in the average, and feeds the Brier and RLCD terms. `forward` divides the loss by the number of questions that are not ignored; the loss function itself, `ClefForDecisionLoss` in `transformers.loss.loss_clef`, takes a `num_items_in_batch` that divides the summed cross entropy and Brier terms instead (`forward` does not take it).
+
+Train with float32 parameters under autocast (`dtype=torch.float32` with `bf16=True` in [`TrainingArguments`]): a model loaded in bfloat16 keeps the joint head in bfloat16 too (the cosine head is always in float32).
+
+Under the stock [`Trainer`], evaluation concatenates the outputs of its batches by padding the narrower ones: the `logits` with `-100` and the boolean `option_mask` with `True`, so metrics must read the options of each question from their counts (`num_options`), not from the concatenated `option_mask`. TRL's `DecisionTrainer` handles this.
+
+The pooler of a BERT-style backbone gets no gradient, since the head reads the hidden states. Under DDP with activation checkpointing, where the [`Trainer`] sets `find_unused_parameters=False`, training then raises: freeze the pooler before training (`model.model.pooler.requires_grad_(False)`), which DDP then leaves out.
 
 ### RLCD
 
 `rlcd_weight` (default 0.0) adds a policy term adapted from RLCD, the "Reinforcement Learning for Calibrated Decisions" objective of [Laya](https://github.com/NandhaKishorM/laya) (Apache-2.0). Zero-mean Gaussian noise of standard deviation `rlcd_sigma` (default 0.4) over the options of each question is added to the detached logits, `rlcd_samples` (default 32) times. Each noisy sample is rewarded by a strictly proper scoring rule against the target: the log score, plus `rlcd_spherical_weight` (default 0.75) times the spherical score, minus, on score questions, `rlcd_rps_weight` (default 1.0) times the ranked probability score. The advantage of each sample over the mean reward of the samples of its question weights the Gaussian log density of the sample, through which alone the gradient reaches the logits, and the term is averaged over the questions like the others. Ignored questions and padded options contribute nothing.
 
-The term is random, so [`ClefForDecision`] applies it in training mode only: in eval mode the loss is the supervised loss, the same at every call. The defaults are a revised variant of Laya's objective, with more samples and advantages that are not divided by their standard deviation; `rlcd_normalize_advantage=True, rlcd_samples=4` reproduces the objective of Laya's notebook.
-
-Cloudflare has not published Clef's training objective; these terms and their defaults are a community recipe, not an official Cloudflare objective.
+The term is random, so [`ClefForDecision`] applies it in training mode only: in eval mode the loss is the supervised loss, the same at every call. The defaults are a revised variant of Laya's objective, with more samples and advantages that are not divided by their standard deviation; `rlcd_weight=1.0, rlcd_normalize_advantage=True, rlcd_samples=4` reproduces the objective of Laya's notebook.
 
 ## Converting checkpoints
 
@@ -95,7 +103,7 @@ Cloudflare has not published Clef's training objective; these terms and their de
 - A clef checkpoint, or a folder trained from one, with `joint_head.safetensors` and `joint_head_config.json` next to the weights of its backbone: the joint head, or the cosine head when its `head_type` is `cosine_span_v1`, with their sizes. The temperatures (noul, choice, score) of an `unsloth_decision_config.json`, times its `head_temperature`, become those of the decision config, and its `max_len` the `model_max_length` of the tokenizer. A folder with only one of the two head files is refused.
 - A remote-code package around a native model, such as a reranker, whose weights are those of that model under a single prefix next to a task head: the prefix is stripped, the task head dropped (and named in the log), and a new head of `head_type` (`"joint"` by default, sizes from the arguments) initialized. The conversion is refused when no prefix, or more than one, holds exactly the weights of the native model. The backbone keeps the values and the precision of the source: one in mixed precision is refused.
 
-The backbone is the bare model of the `model_type` of the `config.json` of the folder, loaded strictly, whatever classes the folder registers; no code of the folder is imported. A bidirectional backbone gets `global_pooling="first"` and `prompt_style="plain"`, a causal one `"last"` and `"chatml"`.
+The backbone is the bare model of the `model_type` of the `config.json` of the folder, loaded strictly, whatever classes the folder registers; no code of the folder is imported. A new head on a bidirectional backbone gets `global_pooling="first"` and `prompt_style="plain"`, on a causal one `"last"` and `"chatml"`. A folder that ships a trained head on a bidirectional backbone does not record how the head was trained, so its conversion requires both `--global_pooling` and `--prompt_style`, as they were in training; such a folder, and one with a `cosine_span_v1` head, does not load directly with `from_pretrained` and must be converted first. Backbones in float32, bfloat16 or float16 are converted (float64 is refused). The converted weights are staged next to the output folder, and the conversion needs up to about three times the size of a half-precision source in RAM.
 
 ```bash
 python src/transformers/models/clef/convert_clef_weights_to_hf.py --source path/to/checkpoint --output path/to/clef
