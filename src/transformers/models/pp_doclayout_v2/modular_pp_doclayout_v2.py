@@ -599,11 +599,11 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     config: PPDocLayoutV2ReadingOrderConfig
 
-    # Attention is based on LayoutLMv3, only the eager path has been validated for this model
-    _supports_sdpa = False
+    # Attention is based on LayoutLMv3: the position biases are added to the scores, so FlashAttention can't be used
+    _supports_sdpa = True
     _supports_flash_attn = False
     _supports_attention_backend = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     def __init__(self, config: PPDocLayoutV2ReadingOrderConfig):
         super().__init__(config)

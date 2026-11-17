@@ -448,11 +448,13 @@ class LayoutLMv3Encoder(nn.Module):
         # As in the original implementation, the spatial bias is only used together with the 1D one
         if not self.has_relative_attention_bias:
             return None
+
         if self.has_spatial_attention_bias:
             # The 2D bias is built first so that at most two (batch_size, num_heads, seq_len, seq_len) tensors are alive
             position_bias = self._cal_2d_pos_emb(bbox).add_(self._cal_1d_pos_emb(position_ids))
         else:
             position_bias = self._cal_1d_pos_emb(position_ids)
+
         return position_bias.div_(math.sqrt(int(self.config.hidden_size / self.config.num_attention_heads)))
 
     def forward(

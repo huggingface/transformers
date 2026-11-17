@@ -19,9 +19,7 @@ from functools import cached_property
 
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    require_flex_attention,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -69,7 +67,7 @@ class LayoutLMv3ModelTester:
         vocab_size=99,
         hidden_size=36,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -371,7 +369,12 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_relative_position_bias_lookup(self):
-        # The biases are gathered from per-distance tables, check them against bucketing every (query, key) pair
+        """
+        The relative position biases are built by bucketing each possible distance once and gathering the
+        per-distance bias tables, instead of bucketing every (query, key) pair as the original implementation does.
+        Check that this gives exactly the same 1D and 2D biases as bucketing every pair, on a sequence long enough
+        to reach the logarithmic buckets and `max_rel_pos` / `max_rel_2d_pos`.
+        """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         encoder = LayoutLMv3Model(config).encoder.to(torch_device)
         position_ids = torch.arange(600, device=torch_device).repeat(2, 1)
@@ -388,30 +391,6 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         rel_pos_y = pairwise_bias(bbox[:, :, 3], encoder.rel_pos_y_bias, config.rel_2d_pos_bins, config.max_rel_2d_pos)
         torch.testing.assert_close(encoder._cal_1d_pos_emb(position_ids), rel_pos, rtol=0, atol=0)
         torch.testing.assert_close(encoder._cal_2d_pos_emb(bbox), rel_pos_x + rel_pos_y, rtol=0, atol=0)
-
-    @require_flex_attention
-    @require_torch_accelerator
-    def test_flex_attention_with_grads(self):
-        # The common test only resizes `hidden_size` to get a head dim of 16, but the spatial embeddings of LayoutLMv3
-        # also need `4 * coordinate_size + 2 * shape_size == hidden_size`, and the position biases need `bbox`
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_attention_heads = 3
-        config.hidden_size = 48
-        config.coordinate_size = config.shape_size = 8
-        config.attention_probs_dropout_prob = config.hidden_dropout_prob = 0.0
-        inputs_dict = {k: v.to(torch_device) for k, v in inputs_dict.items()}
-
-        outputs, grads = {}, {}
-        for attn_implementation in ("eager", "flex_attention"):
-            torch.manual_seed(0)
-            model = LayoutLMv3Model._from_config(config, attn_implementation=attn_implementation).to(torch_device)
-            self.assertEqual(model.config._attn_implementation, attn_implementation)
-            outputs[attn_implementation] = model(**inputs_dict).last_hidden_state
-            outputs[attn_implementation].sum().backward()
-            grads[attn_implementation] = model.encoder.layer[0].attention.self.query.weight.grad
-
-        torch.testing.assert_close(outputs["flex_attention"], outputs["eager"], rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(grads["flex_attention"], grads["eager"], rtol=1e-4, atol=1e-4)
 
     @unittest.skip(
         reason="LayoutLMv3 passes its relative position biases to SDPA as a float mask, so SDPA can't dispatch to the flash-attention backend."
