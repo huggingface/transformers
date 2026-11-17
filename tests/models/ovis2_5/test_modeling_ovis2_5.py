@@ -177,6 +177,7 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         cls.processor = Ovis2_5Processor.from_pretrained(cls.model_id)
         cls.model = Ovis2_5ForConditionalGeneration.from_pretrained(cls.model_id, device_map=torch_device)
 
