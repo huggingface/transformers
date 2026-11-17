@@ -19,6 +19,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_dummy_bert import DummyBertConfig
@@ -45,7 +46,7 @@ class DummyBertEmbeddings(nn.Module):
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values_length: int = 0,
+        cache_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -55,7 +56,7 @@ class DummyBertEmbeddings(nn.Module):
         batch_size, seq_length = input_shape
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, cache_length : seq_length + cache_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -135,11 +136,12 @@ class DummyBertSelfAttention(nn.Module):
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -150,14 +152,14 @@ class DummyBertSelfAttention(nn.Module):
         key_layer = self.key(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.value(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        if past_key_values is not None:
+        if cache is not None:
             # decoder-only dummy_bert can have a simple dynamic cache for example
-            current_past_key_values = past_key_values
-            if isinstance(past_key_values, EncoderDecoderCache):
-                current_past_key_values = past_key_values.self_attention_cache
+            current_cache = cache
+            if isinstance(cache, EncoderDecoderCache):
+                current_cache = cache.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
+            key_layer, value_layer = current_cache.update(key_layer, value_layer, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -201,12 +203,13 @@ class DummyBertCrossAttention(nn.Module):
         self.is_causal = is_causal
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: EncoderDecoderCache | None = None,
+        cache: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
@@ -217,23 +220,21 @@ class DummyBertCrossAttention(nn.Module):
         # get query proj
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
-        if past_key_values is not None and is_updated:
+        is_updated = cache.is_updated.get(self.layer_idx) if cache is not None else False
+        if cache is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
-            value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+            key_layer = cache.cross_attention_cache.layers[self.layer_idx].keys
+            value_layer = cache.cross_attention_cache.layers[self.layer_idx].values
         else:
             kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.attention_head_size)
             key_layer = self.key(encoder_hidden_states).view(kv_shape).transpose(1, 2)
             value_layer = self.value(encoder_hidden_states).view(kv_shape).transpose(1, 2)
 
-            if past_key_values is not None:
+            if cache is not None:
                 # save all states to the cache
-                key_layer, value_layer = past_key_values.cross_attention_cache.update(
-                    key_layer, value_layer, self.layer_idx
-                )
+                key_layer, value_layer = cache.cross_attention_cache.update(key_layer, value_layer, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                past_key_values.is_updated[self.layer_idx] = True
+                cache.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -275,13 +276,14 @@ class DummyBertAttention(nn.Module):
         self.self = attention_class(config, is_causal=is_causal, layer_idx=layer_idx)
         self.output = DummyBertSelfOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -289,7 +291,7 @@ class DummyBertAttention(nn.Module):
             hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = self.output(attention_output, hidden_states)
@@ -345,19 +347,20 @@ class DummyBertLayer(GradientCheckpointingLayer):
         self.intermediate = DummyBertIntermediate(config)
         self.output = DummyBertOutput(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -374,7 +377,7 @@ class DummyBertLayer(GradientCheckpointingLayer):
                 None,  # attention_mask
                 encoder_hidden_states,
                 encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
             attention_output = cross_attention_output
@@ -396,13 +399,14 @@ class DummyBertEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([DummyBertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
@@ -412,13 +416,13 @@ class DummyBertEncoder(nn.Module):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
@@ -472,7 +476,7 @@ class DummyBertLMPredictionHead(nn.Module):
 
 @auto_docstring
 class DummyBertPreTrainedModel(PreTrainedModel):
-    config_class = DummyBertConfig
+    config: DummyBertConfig
     base_model_prefix = "dummy_bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -511,7 +515,7 @@ class DummyBertPreTrainedModel(PreTrainedModel):
 class DummyBertModel(DummyBertPreTrainedModel):
     _no_split_modules = ["DummyBertEmbeddings", "DummyBertLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: DummyBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -537,6 +541,7 @@ class DummyBertModel(DummyBertPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -546,7 +551,7 @@ class DummyBertModel(DummyBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
+        cache: list[torch.Tensor] | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -561,21 +566,21 @@ class DummyBertModel(DummyBertPreTrainedModel):
         else:
             use_cache = False
 
-        if use_cache and past_key_values is None:
-            past_key_values = (
+        if use_cache and cache is None:
+            cache = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        cache_length = cache.get_seq_length() if cache is not None else 0
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
+            cache_length=cache_length,
         )
 
         attention_mask, encoder_attention_mask = self._create_attention_masks(
@@ -583,7 +588,7 @@ class DummyBertModel(DummyBertPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         encoder_outputs = self.encoder(
@@ -591,7 +596,7 @@ class DummyBertModel(DummyBertPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_ids=position_ids,
             **kwargs,
@@ -602,7 +607,7 @@ class DummyBertModel(DummyBertPreTrainedModel):
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
+            cache=encoder_outputs.cache,
         )
 
     def _create_attention_masks(
@@ -611,14 +616,14 @@ class DummyBertModel(DummyBertPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        past_key_values,
+        cache,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
         else:
             attention_mask = create_bidirectional_mask(

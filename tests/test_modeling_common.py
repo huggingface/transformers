@@ -1745,11 +1745,20 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+                pre_hook_mock = unittest.mock.Mock(return_value=None)
+                checkpointing_layer.register_forward_pre_hook(pre_hook_mock)
+                # count the runs of the forward that the layer hands to the checkpoint function
+                checkpoint_func = checkpointing_layer._gradient_checkpointing_func
+                forward_mock = unittest.mock.Mock()
+
+                def checkpoint_with_forward_mock(forward, *args):
+                    forward_mock.side_effect = forward
+                    return checkpoint_func(forward_mock, *args)
 
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
                 with unittest.mock.patch.object(
-                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
-                ) as forward_mock:
+                    checkpointing_layer, "_gradient_checkpointing_func", side_effect=checkpoint_with_forward_mock
+                ) as checkpoint_mock:
                     set_seed(42)
                     loss = model(**inputs).loss
                     loss.backward()
@@ -1758,6 +1767,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
                     # forward more than once.
                     self.assertGreater(forward_mock.call_count, 1)
+                    self.assertEqual(pre_hook_mock.call_count, checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
@@ -2149,8 +2159,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -5027,30 +5037,27 @@ class ModelTesterMixin(ExportTesterMixin):
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_tied_head_has_a_tp_plan_entry(self):
-        """A tied head IS the embedding's parameter, which a tying config shards `embedding_rowwise`,
-        so without an entry of its own `F.linear` gets a plain input and a DTensor weight."""
+    def test_tied_weights_are_sharded_together(self):
+        """A tied head IS the embedding's parameter, so the TP plan must shard both or neither: a sharded head over a
+        replicated embedding gathers `tp x vocab` logits, and a sharded embedding gives a head without an entry of its
+        own a plain input and a DTensor weight in `F.linear`."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.base_model_tp_plan is None and all(
-            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
-        ):
-            self.skipTest("Model does not have a TP plan.")
-
-        for model_class in self.all_generative_model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
-            head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
-            if (
-                not model._tied_weights_keys
-                or not isinstance(head, nn.Linear)
-                or not isinstance(embedding, nn.Embedding)
-            ):
+            try:
+                head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
+            except NotImplementedError:
                 continue
-            head_name = next(name for name, module in model.named_modules() if module is head)
-            self.assertIn(
-                head_name,
-                model.tp_plan,
-                f"{model_class.__name__} ties `{head_name}` to its input embedding, so a tying checkpoint shards the "
-                "weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
+            if not isinstance(head, nn.Linear) or not isinstance(embedding, nn.Embedding):
+                continue
+            names = {module: name for name, module in model.named_modules()}
+            if f"{names[head]}.weight" not in (model._tied_weights_keys or {}):
+                continue
+            self.assertEqual(
+                names[head] in model.tp_plan,
+                names[embedding] in model.tp_plan,
+                f"{model_class.__name__} ties `{names[head]}` to `{names[embedding]}`, so its TP plan must shard both "
+                "or neither",
             )
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
@@ -6697,6 +6704,57 @@ class ModelTesterMixin(ExportTesterMixin):
         model = base_model_class(config)
         model.to(torch_device).eval()
         model(**model_kwargs)
+
+    def test_bc_cache_name_forward(self):
+        """Test that BC is correctly handled in `forward` for the cache name."""
+        from transformers.cache_utils import DynamicCache, EncoderDecoderCache
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Copy to avoid polluting between iterations
+            local_inputs_dict = copy.deepcopy(inputs_dict)
+            with self.subTest(model_class.__name__):
+                model = model_class(config).to(torch_device)
+                model.eval()
+
+                if "cache" not in inspect.signature(model.forward).parameters.keys():
+                    self.skipTest("Do not take a cache as input to forward")
+
+                if "use_cache" in inspect.signature(model.forward).parameters.keys():
+                    local_inputs_dict["use_cache"] = True
+                output = model(**local_inputs_dict)
+                if (
+                    not isinstance(output, ModelOutput)
+                    or "cache" not in output
+                    or type(output.cache) not in (DynamicCache, EncoderDecoderCache)
+                ):
+                    self.skipTest("Not returning cache or non standard Cache")
+
+                old_name = "cache_params" if all(output.cache.is_linear) else "past_key_values"
+                empty_cache = DynamicCache(config=config.get_text_config(decoder=True))
+                if isinstance(output.cache, EncoderDecoderCache):
+                    empty_cache = EncoderDecoderCache(empty_cache, copy.deepcopy(empty_cache))
+
+                local_inputs_dict[old_name] = copy.deepcopy(empty_cache)
+                # Make sure we raise the deprecation warning
+                with warnings.catch_warnings(record=True) as warning_list:
+                    output_old_name = model(**local_inputs_dict)
+                self.assertTrue(any(f"`{old_name}` is deprecated" in str(warn.message) for warn in warning_list))
+
+                local_inputs_dict.pop(old_name)
+                local_inputs_dict["cache"] = copy.deepcopy(empty_cache)
+                output_new_name = model(**local_inputs_dict)
+
+                self.assertTrue(output_old_name.cache is not None)
+                self.assertTrue(output_new_name.cache is not None)
+                # Usually the method to fully check the cache will exist, otherwise perform a very easy check to avoid
+                # duplicating code
+                if hasattr(self, "_check_caches_are_equal"):
+                    self._check_caches_are_equal(output_old_name.cache, output_new_name.cache)
+                else:
+                    self.assertEqual(output_old_name.cache.get_seq_length(), output_new_name.cache.get_seq_length())
+                    self.assertTrue(output_old_name.cache.get_seq_length() > 0)
 
 
 global_rng = random.Random()

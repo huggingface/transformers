@@ -67,11 +67,11 @@ tar -xvf 8b_base_model_release.tar
 Thereafter, models can be loaded via:
 
 ```python
-from transformers import PersimmonForCausalLM, PersimmonTokenizer
+from transformers import AutoTokenizer, PersimmonForCausalLM
 
 
 model = PersimmonForCausalLM.from_pretrained("/output/path", device_map="auto")
-tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
+tokenizer = AutoTokenizer.from_pretrained("/output/path")
 ```
 
 - Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.

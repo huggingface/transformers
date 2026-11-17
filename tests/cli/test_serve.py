@@ -48,7 +48,7 @@ from transformers.cli.serving.utils import (
     response_events_to_chunks,
 )
 from transformers.testing_utils import (
-    require_librosa,
+    require_audio,
     require_multipart,
     require_serve,
     require_torch,
@@ -267,6 +267,16 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertNotIn("tool_calls", result[0])
         self.assertEqual(result[2]["tool_call_id"], "call_1")
         self.assertNotIn("tool_call_id", result[0])
+
+    def test_llm_empty_tool_calls_keeps_content(self):
+        """An assistant message with a null or empty `tool_calls` is a plain text message."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        for tool_calls in (None, []):
+            messages = [{"role": "assistant", "content": "Hello!", "tool_calls": tool_calls}]
+            result = get_processor_inputs_from_messages(messages, Modality.LLM)
+            self.assertEqual(result, [{"role": "assistant", "content": "Hello!"}])
 
     def test_vlm_tool_use_fields_forwarded(self):
         """Tool-use fields should be forwarded for VLM modality as well."""
@@ -2732,7 +2742,7 @@ class TestReasoningGemma(_TestReasoningBase, ServeIntegrationTestCase):
 
 
 @slow
-@require_librosa
+@require_audio
 @require_multipart
 @require_serve
 class TestTranscription(ServeIntegrationTestCase):
