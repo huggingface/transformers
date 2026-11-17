@@ -487,10 +487,13 @@ class AnyToAnyPipeline(Pipeline):
             # (accounting for the possibility of a space between the input and generated text)
             new_generated_texts = []
             postprocess_kwargs["generation_mode"] = "text"
-            decoded_inputs = self.processor.post_process_multimodal_output(
-                input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
-            )
-            decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
+            if input_ids is None:
+                decoded_inputs = [""] * len(input_texts)
+            else:
+                decoded_inputs = self.processor.post_process_multimodal_output(
+                    input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+                )
+                decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
             for text_generated, decoded_input in zip(generated_outputs, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)
