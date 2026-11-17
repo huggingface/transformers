@@ -74,7 +74,7 @@ from .integrations.accelerate import (
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model, prevent_arange_dtype_change
 from .integrations.eager_paged import eager_paged_attention_forward
-from .integrations.experts_offload import prepare_experts_offload
+from .integrations.experts_offload import prepare_experts_offload, split_experts_device_map
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
@@ -4103,8 +4103,10 @@ class PreTrainedModel(
                 `from_pretrained()` falls back to `config.fusion_config` when available. Refer to the fusion mapping
                 guide in `docs/source/en/fusion_mapping.md` for more details.
             experts_offload (`dict`, *optional*):
-                Stream MoE experts through a single-device cache for inference. Requires `cache_bytes`;
-                see `transformers.integrations.experts_offload.prepare_experts_offload` for options.
+                Options for MoE experts streamed from disk through a device cache, for inference: either with a
+                `device_map` entry mapping the experts to `"disk"` (`{"": "mps", "experts.*": "disk"}`), or alone on a
+                single-device map. Requires `cache_bytes`; see
+                `transformers.integrations.experts_offload.prepare_experts_offload` for the options.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -4269,6 +4271,8 @@ class PreTrainedModel(
                 cache_dir=cache_dir,
             )
             download_kwargs["revision"] = revision
+        # `{"experts.*": "disk"}` entries stream the experts (see `split_experts_device_map`) instead of disk offload.
+        device_map, experts_offload = split_experts_device_map(device_map, experts_offload)
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}

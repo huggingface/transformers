@@ -1081,6 +1081,31 @@ def _checkpoint_prefix(reader, name, quantized_reader=None):
     return found.pop()
 
 
+def split_experts_device_map(device_map, experts_offload):
+    """Turn ``device_map`` entries that send the experts to ``"disk"`` into expert streaming.
+
+    An entry whose key names experts modules (``"experts.*"``, ``"model.layers.*.mlp.experts"``, ...) and whose value is
+    ``"disk"`` streams every experts module from disk through the device cache, instead of Accelerate's disk offload
+    (which would read every expert of a layer at each forward). The rest of the map must place the model on one device.
+    Returns the device map without those entries and the ``experts_offload`` options (``cache_bytes`` required)."""
+    if not isinstance(device_map, dict):
+        return device_map, experts_offload
+    keys = [key for key, value in device_map.items() if value == "disk" and "experts" in str(key)]
+    if not keys:
+        return device_map, experts_offload
+    rest = {key: value for key, value in device_map.items() if key not in keys}
+    if not rest:
+        raise ValueError('Map the rest of the model to a device too, e.g. {"": "mps", "experts.*": "disk"}')
+    if "disk" in rest.values():
+        raise ValueError("Streamed experts cannot be combined with disk offload of other modules")
+    options = dict(experts_offload or {})
+    if "cache_bytes" not in options:
+        raise ValueError(
+            'Experts on "disk" stream through a device cache: pass its size, e.g. experts_offload={"cache_bytes": 8 << 30}'
+        )
+    return rest, options
+
+
 _OPTIONS = {
     "cache_bytes",
     "quantized_experts",

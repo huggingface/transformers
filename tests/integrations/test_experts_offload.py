@@ -363,6 +363,31 @@ class ExpertsOffloadTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.load(path, cache_bytes=3000, host_cache_bytes=1 << 20)  # needs quantized experts
 
+    def test_device_map_sends_experts_to_disk(self):
+        reference = tiny_qwen3_moe(10)
+        expected = greedy(reference, IDS)
+        with tempfile.TemporaryDirectory() as directory:
+            reference.save_pretrained(directory)
+            for key in ("experts.*", "model.layers.*.mlp.experts"):
+                with self.subTest(key=key):
+                    model = Qwen3MoeForCausalLM.from_pretrained(
+                        directory,
+                        attn_implementation="eager",
+                        device_map={"": "cpu", key: "disk"},
+                        experts_offload={"cache_bytes": 3 * EXPERT_BYTES},
+                    )
+                    experts = model.model.layers[0].mlp.experts
+                    self.assertIsNone(experts.gate_up_proj)
+                    self.assertEqual(experts.config._experts_implementation, "experts_offload")
+                    torch.testing.assert_close(greedy(model, IDS), expected)
+                    self.assertGreater(model.experts_offload_store.misses, 0)
+            for device_map, options in (
+                ({"experts.*": "disk"}, {"cache_bytes": EXPERT_BYTES}),  # nothing on a device
+                ({"": "cpu", "experts.*": "disk"}, None),  # no cache size
+            ):
+                with self.subTest(device_map=device_map), self.assertRaises(ValueError):
+                    Qwen3MoeForCausalLM.from_pretrained(directory, device_map=device_map, experts_offload=options)
+
     def test_expert_source_with_mixed_layouts(self):
         reference = tiny_qwen3_moe(8)
         expected = greedy(reference, IDS, tokens=8)
