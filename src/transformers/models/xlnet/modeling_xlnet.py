@@ -1232,6 +1232,18 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        if "mems" in outputs:
+            # For some reason xlnet used to switch the name here, before switching back in `prepare_inputs_for_generation`.....
+            model_kwargs["cache"] = outputs.mems
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, cache=None, use_mems=None, is_first_iteration=False, **kwargs):
         # Overwritten -- this model has unique input preparation
