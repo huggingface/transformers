@@ -117,8 +117,8 @@ class Trie:
         ["[CLS]", " This is a ", "extra_id_100"]
         ```
         """
-        # A shared starting character can be checked with Python's native string search.
-        if not self.data or (len(self.data) == 1 and next(iter(self.data)) not in text):
+        # No added token can match if none of their first characters appear in the text.
+        if not any(first_char in text for first_char in self.data):
             return [text] if text else []
 
         # indexes are counted left of the chars index.
