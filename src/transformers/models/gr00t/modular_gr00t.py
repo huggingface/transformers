@@ -1192,6 +1192,10 @@ class Gr00tProcessor(Qwen3VLProcessor):
             dim = len(stats["min"])
             values = actions[..., start : start + dim]
             start += dim
+            if dim == 0:
+                # Joint groups some embodiments disable, e.g. the end-effector poses of `xdof_relative_eef_relative_joint`
+                outputs[key] = values
+                continue
             if self._uses_mean_std(embodiment_tag, "action", key):
                 mean, std = (
                     torch.tensor(stats["mean"], dtype=torch.float64),

@@ -216,3 +216,13 @@ class Gr00tProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_gr00t_processor()
         with self.assertRaisesRegex(ValueError, "`state` is required"):
             processor.post_process_actions(torch.zeros(1, HORIZON, 16), EMBODIMENT)
+
+    def test_post_process_actions_with_disabled_group(self):
+        processor_dict = self.prepare_processor_dict()
+        # Some embodiments disable a joint group: its statistics are empty, but its relative statistics are not
+        processor_dict["statistics"][EMBODIMENT]["action"]["eef"] = {key: [] for key in joint_stats([0], [1])}
+        processor = self.processor_class(**self.prepare_components(), **processor_dict)
+        state = {"eef": self.identity_eef(1), "arm": np.zeros((1, 3)), "gripper": np.zeros((1, 1))}
+        outputs = processor.post_process_actions(torch.zeros(1, HORIZON, 16), EMBODIMENT, state=state)
+        self.assertEqual(tuple(outputs["eef"].shape), (1, HORIZON, 0))
+        self.assertEqual(tuple(outputs["arm"].shape), (1, HORIZON, 3))
