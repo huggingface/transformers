@@ -50,7 +50,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm4v_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `Glm4vMoeText`
     base_model_tp_plan = {
@@ -195,7 +195,7 @@ class Glm4vMoeConfig(PreTrainedConfig):
         "vision_config": Glm4vMoeVisionConfig,
         "text_config": Glm4vMoeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

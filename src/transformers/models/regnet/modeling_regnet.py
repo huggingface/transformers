@@ -262,7 +262,6 @@ class RegNetPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = ["RegNetYLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")

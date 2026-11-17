@@ -239,7 +239,7 @@ class NemotronHModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -257,7 +257,7 @@ class NemotronHModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -313,12 +313,12 @@ class NemotronHModelTester:
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
         # Test with cache
-        cache_params = DynamicCache(config=config)
-        outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache_params=cache_params)
+        cache = DynamicCache(config=config)
+        outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache=cache)
 
         # Reset cache for fair comparison
-        cache_params_slow = DynamicCache(config=config)
-        outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache_params=cache_params_slow)
+        cache_slow = DynamicCache(config=config)
+        outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache=cache_slow)
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
 
@@ -374,14 +374,14 @@ class NemotronHModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -441,9 +441,9 @@ class NemotronHModelTest(
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
-        if not isinstance(past_key_values, (DynamicCache, StaticCache)):
+        if not isinstance(cache, (DynamicCache, StaticCache)):
             raise ValueError("The cache does not use the correct Cache")
 
         # Use the correct config
@@ -463,7 +463,7 @@ class NemotronHModelTest(
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check each layer has the correct shape
-        for layer, layer_type in zip(past_key_values.layers, config.layer_types):
+        for layer, layer_type in zip(cache.layers, config.layer_types):
             # Moe layers use a DummyLayer
             if layer_type == "moe":
                 self.assertTrue(isinstance(layer, DummyLayer))

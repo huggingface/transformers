@@ -519,7 +519,6 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"hidden_states": LayoutLMv3Layer, "attentions": LayoutLMv3SelfAttention}
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

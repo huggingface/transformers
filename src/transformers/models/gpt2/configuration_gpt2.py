@@ -67,7 +67,7 @@ class GPT2Config(PreTrainedConfig):
     ```"""
 
     model_type = "gpt2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",

@@ -418,7 +418,6 @@ class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
     _skip_keys_device_placement = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):
@@ -575,6 +574,8 @@ class EmbeddingGemma2Model(Gemma4Model):
         r"(^|\.)audio_tower\.",
         r"(^|\.)embed_audio\.",
     ]
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
 
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
