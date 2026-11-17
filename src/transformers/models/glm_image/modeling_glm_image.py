@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -628,6 +629,21 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self.head_dim = head_dim
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the rotary `position_ids` and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the
+        forward, they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are
+        returned as they are; only the config and the tower's constants are read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -1108,6 +1124,20 @@ class GlmImageModel(GlmImagePreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -1126,8 +1156,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         ):
             image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
 
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
 
@@ -1173,6 +1202,32 @@ class GlmImageModel(GlmImagePreTrainedModel):
             )
 
         return special_image_mask
+
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`, as
+        `get_image_features` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export` free
+        of those operations. Only the config and the tower's constants are read.
+
+        Args:
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of each image's patch grid, the target grids included.
+            images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Number of images (including target grids) for each sample in the batch.
+        """
+        if image_grid_thw is None:
+            return {}
+        source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+        if source_grids.shape[0] == 0:
+            return {}
+        tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
@@ -1331,6 +1386,23 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each source image's patch grid.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`GlmImageModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

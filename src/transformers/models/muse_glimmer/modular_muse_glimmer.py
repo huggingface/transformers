@@ -16,6 +16,7 @@ from __future__ import annotations
 import itertools
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -36,13 +37,14 @@ from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ...vision_utils import (
     get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -905,6 +907,18 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         self.interpolation_align_corners = False
         self.interpolation_padding = "zeros"
 
+    def get_interpolation_inputs(self, grid_thw: torch.Tensor, kwargs: dict | None = None):
+        """The position table's interpolation indices and weights for each patch, or `kwargs`' when precomputed."""
+        return get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            padding=self.interpolation_padding,
+            kwargs=kwargs,
+        )
+
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -921,15 +935,7 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
         target_dtype = self.patch_embedding.weight.dtype
         embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-            padding=self.interpolation_padding,
-            kwargs=kwargs,
-        )
+        interp_indices, interp_weights = self.get_interpolation_inputs(grid_thw, kwargs=kwargs)
         # helper returns `(total_thw, n_taps)`, so sum over the taps axis
         pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
         embeddings = embeddings + pos_embeds.to(embeddings.dtype)
@@ -947,31 +953,6 @@ class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-def get_vision_pixel_shuffle_index(
-    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
-    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
-    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
-        return index
-    indices = []
-    offset = 0
-    for frames, height, width in grid_thw.tolist():
-        frames, height, width = int(frames), int(height), int(width)
-        permutation = torch.arange(height * width, device=grid_thw.device)
-        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
-        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
-        if frames > 1:
-            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
-            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
-            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
-        indices.append(permutation + offset)
-        offset += frames * height * width
-    return torch.cat(indices, dim=0)
 
 
 @auto_docstring
@@ -1005,6 +986,40 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         shuffle_index = get_vision_pixel_shuffle_index(grid_thw, factor, kwargs=kwargs)
         hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the full and window attention's `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position
+        table's `interp_indices` and `interp_weights`, the rotary `position_ids` and the merger's
+        `pixel_shuffle_index`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
+        operations. Those already in `kwargs` are returned as they are; only the config and the tower's constants are
+        read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        interp_indices, interp_weights = self.patch_embedder.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
+        pixel_shuffle_index = get_vision_pixel_shuffle_index(grid_thw, self.merge_size, kwargs=kwargs)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "position_ids": position_ids,
+            "pixel_shuffle_index": pixel_shuffle_index,
+        }
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1079,6 +1094,23 @@ class MuseGlimmerModel(Kimi_K25Model):
         self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
+    def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        tower's (see [`MuseGlimmerVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
+        `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export`
+        free of those operations. Only the config and the tower's constants are read.
+
+        Args:
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of each image's patch grid.
+        """
+        if image_grid_thw is None:
+            return {}
+        tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,

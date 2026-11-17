@@ -19,6 +19,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -1538,6 +1539,21 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
         self.norm = Dots3NoteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the rotary `position_ids` of the patches, and the attention's `cu_seqlens` and `max_seqlen`.
+        Passed back to the forward, they keep `torch.compile` and `torch.export` free of those operations. Those
+        already in `kwargs` are returned as they are; only the config is read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width dimensions of feature shape for each image.
+        """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
 
     @merge_with_config_defaults
     @capture_outputs
