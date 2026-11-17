@@ -56,11 +56,13 @@ def _test_tp_gradient_accumulation(_rank, model_path, input_ids):
         batch = input_ids.roll(step, dims=-1)
         (model(batch, labels=batch).loss / 3).backward()
         (model_tp(batch, labels=batch).loss / 3).backward()
-        for layer, layer_tp in zip(model.model.layers, model_tp.model.layers):
+        for layer_idx, (layer, layer_tp) in enumerate(zip(model.model.layers, model_tp.model.layers)):
             for name in ("q_norm", "k_norm"):
                 expected = getattr(layer.self_attn, name).weight.grad
                 actual = getattr(layer_tp.self_attn, name).weight.grad
-                torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-4)
+                context = f"layer {layer_idx} {name}, accumulated microbatches: {step + 1}"
+                assert actual is not None and expected is not None, context
+                torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-4, msg=lambda msg: f"{context}\n{msg}")
 
 
 class Qwen3ModelTester(CausalLMModelTester):
