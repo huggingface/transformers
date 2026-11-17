@@ -2296,7 +2296,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 eos_token_id=eos_token_id,
             )
             logits_processor = model._get_logits_processor(gen_config)
-            gen_config.do_sample = False
             regular_generated_tokens, regular_logprobs = regular_generate(
                 model=model,
                 tokenizer=tokenizer,
