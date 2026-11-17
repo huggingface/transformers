@@ -6853,8 +6853,9 @@ def mrope_position_ids(config, inputs_dict):
         for token_type, key in ((1, "image_grid_thw"), (2, "video_grid_thw"))
         if inputs_dict.get(key) is not None
     }
+    attention_mask = inputs_dict.get("attention_mask")
     position_ids = create_mrope_position_ids(
-        inputs_dict["mm_token_type_ids"].tolist(), inputs_dict["attention_mask"].tolist(), grids
+        inputs_dict["mm_token_type_ids"].tolist(), None if attention_mask is None else attention_mask.tolist(), grids
     )
     return torch.tensor(position_ids, device=inputs_dict["input_ids"].device)
 

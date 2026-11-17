@@ -50,6 +50,7 @@ if is_torch_available():
 
 
 class Qwen3VLVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     base_model_class = Qwen3VLModel
     config_class = Qwen3VLConfig
 

@@ -192,6 +192,7 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     base_model_class = Qwen3_5MoeModel
     config_class = Qwen3_5MoeConfig
 

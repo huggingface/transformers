@@ -154,6 +154,7 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class CohereCompassModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     base_model_class = CohereCompassModel
     config_class = CohereCompassConfig
 

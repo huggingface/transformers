@@ -54,6 +54,7 @@ if is_torch_available():
 
 
 class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     base_model_class = Cosmos3OmniModel
     config_class = Cosmos3OmniConfig
 
