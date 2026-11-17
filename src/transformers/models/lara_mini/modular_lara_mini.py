@@ -31,7 +31,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import no_inherit_decorator
+from ..flint.modeling_flint import FlintSparseMoeBlock
 from ..helium.modeling_helium import HeliumRMSNorm
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3RotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
 from ..qwen3_5.modeling_qwen3_5 import (
@@ -48,7 +48,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextForCausalLM,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
-    Qwen3NextSparseMoeBlock,
     Qwen3NextTopKRouter,
 )
 
@@ -145,10 +144,8 @@ class LaraMiniRMSNorm(HeliumRMSNorm):
     """RMSNorm that applies its weight in float32 and only then casts back to the input dtype."""
 
 
-@no_inherit_decorator
 class LaraMiniRMSNormGated(Qwen3_5RMSNormGated):
-    """Gated RMSNorm that applies its weight in float32 and rounds to the input dtype before the gate. It has no
-    `RMSNormGated` hub kernel, which would round differently."""
+    """Gated RMSNorm that applies its weight in float32 and rounds to the input dtype before the gate, as in training."""
 
     def forward(self, hidden_states: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
@@ -217,8 +214,7 @@ class LaraMiniAttention(Qwen3Attention):
 class LaraMiniGatedDeltaNet(Qwen3_5GatedDeltaNet):
     """Qwen3.5 gated delta net. The published checkpoints fuse its input projections into one `in_proj` (rows
     `[query | key | value | z | b | a]`) and name its gated norm `out_norm`: `conversion_mapping.py` splits and
-    renames them when loading, and restores them when saving. It has no `Qwen3_5GatedDeltaNet` hub kernel, which
-    replaces the whole forward, gated norm included."""
+    renames them when loading, and restores them when saving."""
 
 
 class LaraMiniExperts(Qwen3NextExperts):
@@ -238,21 +234,8 @@ class LaraMiniTopKRouter(Qwen3NextTopKRouter):
         return router_logits, router_scores, router_indices
 
 
-class LaraMiniSparseMoeBlock(Qwen3NextSparseMoeBlock):
-    """Routed experts plus one shared expert, added without a gate."""
-
-    def __init__(self, config: LaraMiniConfig):
-        super().__init__(config)
-        del self.shared_expert_gate
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-        expert_output = expert_output + shared_expert_output
-        return expert_output.reshape(batch_size, sequence_length, hidden_dim)
+class LaraMiniSparseMoeBlock(FlintSparseMoeBlock):
+    pass
 
 
 class LaraMiniDecoderLayer(GradientCheckpointingLayer):
@@ -315,6 +298,7 @@ class LaraMiniPreTrainedModel(Qwen3NextPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        # Not Qwen3-Next's: it zero-initializes its RMSNorms, which scale by `1 + weight`
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, LaraMiniGatedDeltaNet):
             init.ones_(module.dt_bias)
