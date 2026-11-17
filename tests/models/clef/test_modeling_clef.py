@@ -419,6 +419,26 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertIsInstance(decide.model, ClefForDecision)
         self.assertTrue(decide.decision_config.sort_choices)
 
+    def test_from_pretrained_with_loading_info(self):
+        # `output_loading_info` gives the model, with its decision config, and the weights it initialized anew
+        from transformers import AutoModelForDecision
+
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            loaded, info = AutoModelForDecision.from_pretrained(directory, output_loading_info=True)
+            self.assertIsInstance(loaded, ClefForDecision)
+            self.assertEqual(loaded.decision_config, model.decision_config)
+            self.assertEqual(set(info["missing_keys"]), set())
+            state = load_file(f"{directory}/model.safetensors")
+            removed = next(key for key in state if key.startswith("model.layers."))
+            del state[removed]
+            save_file(state, f"{directory}/model.safetensors", metadata={"format": "pt"})
+            loaded, info = ClefForDecision.from_pretrained(directory, output_loading_info=True)
+        self.assertEqual(set(info["missing_keys"]), {removed})
+        self.assertEqual(loaded.decision_config, model.decision_config)
+
     def test_any_number_of_options(self):
         # Clef pools spans and reads no label token: its decision configs cap no question type
         many = {
