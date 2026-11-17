@@ -2263,24 +2263,22 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         is_encoder_decoder: bool = False,
         num_new_tokens: int = 1,
     ) -> dict:
+        # Non standard cache name, so need to override here
         if "past_buckets_states" in outputs:
-            # For some reason reformer used to switch the name here, before switching back in `prepare_inputs_for_generation`.....
-            model_kwargs["cache"] = outputs.past_buckets_states
+            model_kwargs["past_buckets_states"] = outputs.past_buckets_states
         return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self, input_ids, cache=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
     ):
-        # Overitten -- different expected inputs/outputs
-
         # only last token for inputs_ids if past is defined in kwargs
-        if cache is not None:
+        if kwargs.get("past_buckets_states") is not None:
             input_ids = input_ids[:, -1:]
 
         model_inputs = {
             "input_ids": input_ids,
-            "past_buckets_states": cache,
+            "past_buckets_states": kwargs.get("past_buckets_states"),
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
