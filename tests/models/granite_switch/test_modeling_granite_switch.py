@@ -88,6 +88,13 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
     # then puts a zero on every `lora_A` gradient, so an untrained model legitimately has LoRA
     # parameters with no gradient.
     test_all_params_have_gradient = False
+    # The switch's codebook is a fixed 512 KB buffer (`ms_code_m` is 6 or 8), about 73% of this tiny
+    # model, so the offload tests need a GPU budget that holds the embedding and the switch.
+    model_split_percents = [0.5, 0.9, 0.95]
+
+    @unittest.skip("Needs a GPU budget under half the tiny model, which cannot hold the switch's codebook")
+    def test_disk_offload_bin(self):
+        pass
 
     def test_control_token_routes_latest_wins(self):
         """Every token takes the adapter of the most recent control token, and 0 before the first."""

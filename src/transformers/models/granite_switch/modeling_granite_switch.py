@@ -505,6 +505,22 @@ class GraniteSwitchLoRALinear(nn.Module):
         return output_flat
 
 
+class GraniteSwitchLoRASlices(nn.Module):
+    """
+    The per-slice LoRA tensors of [`GraniteSwitchMergedLoRALinear`], named `0`, `1`, ... like an
+    `nn.ParameterList`. Read by calling it: accelerate hooks the module that owns a parameter, so with
+    offloading the tensors are only on the execution device during this module's own call.
+    """
+
+    def __init__(self, parameters: list[nn.Parameter]):
+        super().__init__()
+        for index, parameter in enumerate(parameters):
+            self.register_parameter(str(index), parameter)
+
+    def forward(self) -> tuple[torch.Tensor, ...]:
+        return tuple(self.parameters())
+
+
 class GraniteSwitchMergedLoRALinear(nn.Module):
     r"""
     The fused-projection counterpart of [`GraniteSwitchLoRALinear`], used for QKV and gate/up.
@@ -546,10 +562,10 @@ class GraniteSwitchMergedLoRALinear(nn.Module):
 
         self.base_layer = nn.Linear(in_features, self.total_out_features, bias=bias)
 
-        self.lora_A_slices = nn.ParameterList(
+        self.lora_A_slices = GraniteSwitchLoRASlices(
             [nn.Parameter(torch.empty(num_adapters, 1, max_lora_rank, in_features)) for _ in output_slices]
         )
-        self.lora_B_slices = nn.ParameterList(
+        self.lora_B_slices = GraniteSwitchLoRASlices(
             [nn.Parameter(torch.empty(num_adapters, 1, output_size, max_lora_rank)) for output_size in output_slices]
         )
 
@@ -571,14 +587,10 @@ class GraniteSwitchMergedLoRALinear(nn.Module):
             output_flat = output
 
         offset = 0
-        for slice_idx, output_size in enumerate(self.output_slices):
+        for output_size, lora_A, lora_B in zip(self.output_slices, self.lora_A_slices(), self.lora_B_slices()):
             # The slice is a view, so writing through it updates the fused output in place.
             _add_switched_lora(
-                x_flat,
-                output_flat[:, offset : offset + output_size],
-                adapter_indices_flat,
-                self.lora_A_slices[slice_idx],
-                self.lora_B_slices[slice_idx],
+                x_flat, output_flat[:, offset : offset + output_size], adapter_indices_flat, lora_A, lora_B
             )
             offset += output_size
 
@@ -1435,9 +1447,9 @@ class GraniteSwitchPreTrainedModel(PreTrainedModel):
             init.kaiming_uniform_(module.lora_A, a=5**0.5)
             init.zeros_(module.lora_B)
         elif isinstance(module, GraniteSwitchMergedLoRALinear):
-            for lora_A in module.lora_A_slices:
+            for lora_A in module.lora_A_slices.parameters():
                 init.kaiming_uniform_(lora_A, a=5**0.5)
-            for lora_B in module.lora_B_slices:
+            for lora_B in module.lora_B_slices.parameters():
                 init.zeros_(lora_B)
         elif isinstance(module, MultiSwitch):
             # Both are constructed, not trained, so "initializing" them means re-deriving them from
