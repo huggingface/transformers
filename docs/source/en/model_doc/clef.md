@@ -39,6 +39,33 @@ decide(
 )
 ```
 
+Clef's decision configs set `labels` to `None` for every question type: the head pools the span of each option and reads no label token, so a question can have any number of options.
+
+## Encoder backbones
+
+The backbone can be any model of the Hub, including bidirectional encoders such as BERT or ModernBERT. Two fields of [`ClefConfig`] adapt the head to them:
+
+- `global_pooling="first"` makes the first attended token of each prompt (the `[CLS]` token) its global state, instead of the last one, which only a causal backbone has read the whole prompt at.
+- `prompt_style="plain"` gives a new model the decision config of `CLEF_PLAIN_TEMPLATE`: the same schema text and marks as the ChatML prompt of the checkpoints, without its turns and system prompt, between the `[CLS]` and `[SEP]` tokens of the tokenizer (or its beginning and end of sequence tokens).
+
+When the backbone has no causal language modeling head class (ModernBERT), the model has no `lm_head`: the lexical prior of the options reads the input embeddings of the backbone. Positions skip the padding, so left and right padding give the same scores with absolute position embeddings too.
+
+```python
+from transformers import AutoConfig, AutoModel, AutoTokenizer, ClefConfig, ClefForDecision, pipeline
+
+text_config = AutoConfig.from_pretrained("answerdotai/ModernBERT-base")
+config = ClefConfig(
+    text_config=text_config,
+    backbone_hidden_size=text_config.hidden_size,
+    global_pooling="first",
+    prompt_style="plain",
+)
+model = ClefForDecision(config)
+# The weights of the pretrained encoder; the head is new and is to be trained
+model.model.load_state_dict(AutoModel.from_pretrained("answerdotai/ModernBERT-base").state_dict())
+decide = pipeline("decision", model=model, tokenizer=AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base"))
+```
+
 ## Training
 
 [`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose float32 `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms, whose weights are fields of [`ClefConfig`]:

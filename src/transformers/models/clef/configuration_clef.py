@@ -43,6 +43,22 @@ CLEF_TEMPLATE = r"""{#- Cloudflare/clef, clef-flash (joint_schema_model.encode_r
 {%- endfor -%}
 {{- "<|split|>\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nJOINT SCHEMA DECISIONS:" -}}"""
 
+# The same schema text and marks for backbones without a chat format (encoders): no ChatML turns nor system prompt,
+# between the `[CLS]` and `[SEP]` of the tokenizer (or its beginning and end of sequence tokens)
+CLEF_PLAIN_TEMPLATE = r"""{#- Clef's prompt (see CLEF_TEMPLATE) without the ChatML wrapper, for encoder backbones. -#}
+{%- macro r(x) %}{{ x if x is string else x|tojson(sort_keys=true, separators=(",", ":")) }}{% endmacro -%}
+{{- (cls_token or bos_token or "") ~ "STATE:\n<|split|>" ~ r(state) ~ "<|split|>\n\nSCHEMA FIELDS:\n" -}}
+{%- for q in questions -%}
+{{- "<|split|>\nFIELD " ~ loop.index ~ "\nID: " ~ q.name ~ "\nTYPE: " ~ q.type ~ "\nINSTRUCTION: <|mark|>" ~ r(q.name if q.instructions is none or q.instructions == "" else q.instructions) ~ "<|mark|>\nALLOWED OPTIONS:\n" -}}
+{%- for key in q.options -%}
+{%- set d = q.descriptions[loop.index0] -%}
+{%- if q.type == "noul" and d is none %}{% set d = {"true": "The proposition is true or the answer is yes.", "false": "The proposition is false or the answer is no."}[key] %}{% endif -%}
+{{- "OPTION " ~ loop.index ~ ": <|mark|>" ~ r({"option_id": key} if d is none else {"option_id": key, "description": d}) ~ "<|mark|>\n" -}}
+{%- endfor -%}
+{{- "END FIELD\n" -}}
+{%- endfor -%}
+{{- "<|split|>\n" ~ (sep_token or eos_token or "") -}}"""
+
 
 @auto_docstring(checkpoint="Cloudflare/clef")
 @strict
@@ -67,6 +83,12 @@ class ClefConfig(PreTrainedConfig):
         Width of the projections of the cosine head.
     cosine_initial_scale (`float`, *optional*, defaults to 12.0):
         Initial value of the temperature of the cosine of the cosine head, which is learned in log space.
+    global_pooling (`str`, *optional*, defaults to `"last"`):
+        Which attended token of each prompt is its global state, which the joint head reads: `"last"` for causal
+        backbones, which have read the whole prompt there, or `"first"` (the `[CLS]` token) for bidirectional ones.
+    prompt_style (`str`, *optional*, defaults to `"chatml"`):
+        The template of the decision config of a new model: `"chatml"` for the ChatML prompt of the checkpoints of
+        clef, or `"plain"` for the same schema text between the `[CLS]` and `[SEP]` of an encoder.
 
     Example:
     ```python
@@ -97,6 +119,8 @@ class ClefConfig(PreTrainedConfig):
     head_type: str = "joint"
     cosine_width: int = 512
     cosine_initial_scale: float = 12.0
+    global_pooling: str = "last"
+    prompt_style: str = "chatml"
 
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
@@ -105,10 +129,23 @@ class ClefConfig(PreTrainedConfig):
     @staticmethod
     def decision_config(head_configs: dict, text_config: dict):
         """The decision config of a clef checkpoint, from its config files, or `None` for any other checkpoint."""
-
         if "joint_head_config" not in head_configs:
             return None
-        return DecisionConfig(noul_options=["true", "false"], sort_choices=True, chat_template=CLEF_TEMPLATE)
+        return ClefConfig.prompt_decision_config("chatml")
+
+    @staticmethod
+    def prompt_decision_config(prompt_style: str = "chatml") -> DecisionConfig:
+        """
+        The decision config of clef with the template of `prompt_style`. Its head pools the spans of the options and
+        reads no label token: it takes any number of options of every question type.
+        """
+        chat_template = CLEF_PLAIN_TEMPLATE if prompt_style == "plain" else CLEF_TEMPLATE
+        return DecisionConfig(
+            labels={"noul": None, "choice": None, "score": None},
+            noul_options=["true", "false"],
+            sort_choices=True,
+            chat_template=chat_template,
+        )
 
     def __post_init__(self, joint_head_config: dict | None = None, **kwargs):
         if joint_head_config:  # the config of the head of a clef checkpoint, whose config is `text_config`
@@ -119,6 +156,10 @@ class ClefConfig(PreTrainedConfig):
             )
             self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
             self.intermediate_size = joint_head_config["feedforward"]
+        if self.global_pooling not in ("last", "first"):
+            raise ValueError(f"`global_pooling` must be 'last' or 'first', got {self.global_pooling!r}.")
+        if self.prompt_style not in ("chatml", "plain"):
+            raise ValueError(f"`prompt_style` must be 'chatml' or 'plain', got {self.prompt_style!r}.")
         if self.head_type not in ("joint", "cosine"):
             raise ValueError(f"`head_type` must be 'joint' or 'cosine', got {self.head_type!r}.")
         if self.cosine_width <= 0:

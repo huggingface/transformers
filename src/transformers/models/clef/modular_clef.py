@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -26,6 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoConfig, AutoModel
+from ..auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
@@ -48,6 +50,22 @@ CLEF_TEMPLATE = r"""{#- Cloudflare/clef, clef-flash (joint_schema_model.encode_r
 {{- "END FIELD\n" -}}
 {%- endfor -%}
 {{- "<|split|>\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nJOINT SCHEMA DECISIONS:" -}}"""
+
+# The same schema text and marks for backbones without a chat format (encoders): no ChatML turns nor system prompt,
+# between the `[CLS]` and `[SEP]` of the tokenizer (or its beginning and end of sequence tokens)
+CLEF_PLAIN_TEMPLATE = r"""{#- Clef's prompt (see CLEF_TEMPLATE) without the ChatML wrapper, for encoder backbones. -#}
+{%- macro r(x) %}{{ x if x is string else x|tojson(sort_keys=true, separators=(",", ":")) }}{% endmacro -%}
+{{- (cls_token or bos_token or "") ~ "STATE:\n<|split|>" ~ r(state) ~ "<|split|>\n\nSCHEMA FIELDS:\n" -}}
+{%- for q in questions -%}
+{{- "<|split|>\nFIELD " ~ loop.index ~ "\nID: " ~ q.name ~ "\nTYPE: " ~ q.type ~ "\nINSTRUCTION: <|mark|>" ~ r(q.name if q.instructions is none or q.instructions == "" else q.instructions) ~ "<|mark|>\nALLOWED OPTIONS:\n" -}}
+{%- for key in q.options -%}
+{%- set d = q.descriptions[loop.index0] -%}
+{%- if q.type == "noul" and d is none %}{% set d = {"true": "The proposition is true or the answer is yes.", "false": "The proposition is false or the answer is no."}[key] %}{% endif -%}
+{{- "OPTION " ~ loop.index ~ ": <|mark|>" ~ r({"option_id": key} if d is none else {"option_id": key, "description": d}) ~ "<|mark|>\n" -}}
+{%- endfor -%}
+{{- "END FIELD\n" -}}
+{%- endfor -%}
+{{- "<|split|>\n" ~ (sep_token or eos_token or "") -}}"""
 
 
 @auto_docstring(checkpoint="Cloudflare/clef")
@@ -73,6 +91,12 @@ class ClefConfig(PreTrainedConfig):
         Width of the projections of the cosine head.
     cosine_initial_scale (`float`, *optional*, defaults to 12.0):
         Initial value of the temperature of the cosine of the cosine head, which is learned in log space.
+    global_pooling (`str`, *optional*, defaults to `"last"`):
+        Which attended token of each prompt is its global state, which the joint head reads: `"last"` for causal
+        backbones, which have read the whole prompt there, or `"first"` (the `[CLS]` token) for bidirectional ones.
+    prompt_style (`str`, *optional*, defaults to `"chatml"`):
+        The template of the decision config of a new model: `"chatml"` for the ChatML prompt of the checkpoints of
+        clef, or `"plain"` for the same schema text between the `[CLS]` and `[SEP]` of an encoder.
 
     Example:
     ```python
@@ -103,6 +127,8 @@ class ClefConfig(PreTrainedConfig):
     head_type: str = "joint"
     cosine_width: int = 512
     cosine_initial_scale: float = 12.0
+    global_pooling: str = "last"
+    prompt_style: str = "chatml"
 
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
@@ -111,11 +137,23 @@ class ClefConfig(PreTrainedConfig):
     @staticmethod
     def decision_config(head_configs: dict, text_config: dict):
         """The decision config of a clef checkpoint, from its config files, or `None` for any other checkpoint."""
-        from ...decision import DecisionConfig
-
         if "joint_head_config" not in head_configs:
             return None
-        return DecisionConfig(noul_options=["true", "false"], sort_choices=True, chat_template=CLEF_TEMPLATE)
+        return ClefConfig.prompt_decision_config("chatml")
+
+    @staticmethod
+    def prompt_decision_config(prompt_style: str = "chatml") -> DecisionConfig:
+        """
+        The decision config of clef with the template of `prompt_style`. Its head pools the spans of the options and
+        reads no label token: it takes any number of options of every question type.
+        """
+        chat_template = CLEF_PLAIN_TEMPLATE if prompt_style == "plain" else CLEF_TEMPLATE
+        return DecisionConfig(
+            labels={"noul": None, "choice": None, "score": None},
+            noul_options=["true", "false"],
+            sort_choices=True,
+            chat_template=chat_template,
+        )
 
     def __post_init__(self, joint_head_config: dict | None = None, **kwargs):
         if joint_head_config:  # the config of the head of a clef checkpoint, whose config is `text_config`
@@ -126,6 +164,10 @@ class ClefConfig(PreTrainedConfig):
             )
             self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
             self.intermediate_size = joint_head_config["feedforward"]
+        if self.global_pooling not in ("last", "first"):
+            raise ValueError(f"`global_pooling` must be 'last' or 'first', got {self.global_pooling!r}.")
+        if self.prompt_style not in ("chatml", "plain"):
+            raise ValueError(f"`prompt_style` must be 'chatml' or 'plain', got {self.prompt_style!r}.")
         if self.head_type not in ("joint", "cosine"):
             raise ValueError(f"`head_type` must be 'joint' or 'cosine', got {self.head_type!r}.")
         if self.cosine_width <= 0:
@@ -302,6 +344,7 @@ class ClefEmbeddings(nn.Module):
         self.option_context_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_lexical_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.type_embedding = nn.Embedding(len(Question.questions_types), hidden_size)
+        self.global_pooling = config.global_pooling
 
     def forward(
         self,
@@ -324,12 +367,15 @@ class ClefEmbeddings(nn.Module):
         span_lexical = pool_spans(output_embeddings[input_ids], starts, ends)
         questions = span_states[batch, instructions].to(dtype)
         contexts, lexical = span_states[batch, option_spans].to(dtype), span_lexical[batch, option_spans].to(dtype)
-        # The global state is the last token each prompt attends to
+        # The global state is the first or the last token each prompt attends to
+        first = self.global_pooling == "first"
         if attention_mask is None:
-            global_state = hidden_states[:, -1:]
+            global_state = hidden_states[:, :1] if first else hidden_states[:, -1:]
         else:
-            last = (attention_mask.long() * torch.arange(attention_mask.shape[-1], device=marks.device)).argmax(-1)
-            global_state = hidden_states[batch, last[:, None]]
+            attended = attention_mask.long()  # `argmax` gives the first attended token
+            if not first:  # the attended token of the highest position
+                attended = attended * torch.arange(attended.shape[-1], device=marks.device)
+            global_state = hidden_states[batch, attended.argmax(-1)[:, None]]
         options = (
             self.option_context_projection(contexts)
             + self.option_lexical_projection(lexical)
@@ -371,8 +417,9 @@ class ClefEncoder(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """`fields` are the projected questions, which route the options; `field_embeddings` are added to them after."""
         memory_mask = None if attention_mask is None else padding_mask(attention_mask.bool(), memory.dtype)
+        # Positional, so that the memory gets its gradients under reentrant activation checkpointing too
         for layer in self.evidence_layers:
-            options = layer(options, memory, attention_mask=memory_mask, **kwargs)
+            options = layer(options, memory, memory_mask, **kwargs)
 
         # Each question routes its own options only
         routing_logits = fields @ options.transpose(-1, -2) / math.sqrt(fields.shape[-1])
@@ -383,13 +430,7 @@ class ClefEncoder(nn.Module):
         fields = fields + self.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings
         field_mask = padding_mask(is_question, fields.dtype)
         for layer in self.layers:
-            fields = layer(
-                fields,
-                attention_mask=field_mask,
-                encoder_hidden_states=memory,
-                encoder_attention_mask=memory_mask,
-                **kwargs,
-            )
+            fields = layer(fields, field_mask, memory, memory_mask, **kwargs)
         return options, self.field_norm(fields)
 
 
@@ -421,6 +462,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
     base_model_prefix = "model"
     _supports_sdpa = True
+    supports_gradient_checkpointing = True  # when its backbone does, see `ClefForDecision`
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -477,11 +519,53 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
             self._keep_in_fp32_modules_strict = ["cosine_head"]  # float32 when loaded in half precision
             self.cosine_head = ClefCosineHead(config)
         else:
-            self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+            if config.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
+                # The output embeddings of the causal language model, tied to its input embeddings when it ties them
+                embeddings = next(
+                    name for name, module in self.model.named_modules() if module is self.model.get_input_embeddings()
+                )
+                self._tied_weights_keys = {"lm_head.weight": f"model.{embeddings}.weight"}
+                self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+            else:  # an encoder without a language modeling head: the lexical prior reads its input embeddings
+                self._tied_weights_keys = {}
             self.embeddings = ClefEmbeddings(config)
             self.encoder = ClefEncoder(config)
             self.scorer = ClefScorer(config)
         self.post_init()
+
+    def post_init(self):
+        """The decision config of a new model is clef's, in its `prompt_style`; `from_pretrained` reads the saved one."""
+        super().post_init()
+        self.decision_config = self.config.prompt_decision_config(self.config.prompt_style)
+
+    def _set_gradient_checkpointing(
+        self, enable: bool = True, gradient_checkpointing_func=checkpoint, every_n_layers=1
+    ):
+        """
+        Activation checkpointing of the backbone, which it delegates to, and of the layers of the head. Raises when the
+        backbone does not support it, rather than checkpointing the head alone.
+        """
+        if not self.model.supports_gradient_checkpointing:
+            if enable:
+                raise ValueError(
+                    f"The backbone of {self.__class__.__name__} ({self.model.__class__.__name__}) does not support "
+                    "activation checkpointing."
+                )
+        else:
+            self.model._set_gradient_checkpointing(enable, gradient_checkpointing_func, every_n_layers)
+        head_layers = [  # the evidence and decoder layers of the joint head
+            module
+            for name, module in self.named_modules()
+            if isinstance(module, GradientCheckpointingLayer) and not name.startswith("model.")
+        ]
+        for index, module in enumerate(head_layers):
+            module.gradient_checkpointing = enable and index % every_n_layers == 0
+            module._gradient_checkpointing_func = gradient_checkpointing_func
+
+    def lexical_embeddings(self) -> torch.Tensor:
+        """The table of the embeddings of the tokens that gives the lexical prior of the options."""
+        lm_head = getattr(self, "lm_head", None)
+        return self.model.get_input_embeddings().weight if lm_head is None else lm_head.weight
 
     @can_return_tuple
     @auto_docstring
@@ -537,7 +621,7 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 marks,
                 num_options,
                 question_type_ids,
-                self.lm_head.weight,
+                self.lexical_embeddings(),
                 option_question_ids,
                 is_option,
                 attention_mask,
