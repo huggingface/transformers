@@ -28,7 +28,6 @@ from transformers import (
     VideoLlavaModel,
     VideoLlavaProcessor,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -47,9 +46,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class VideoLlavaVisionText2TextModelTester:
@@ -234,6 +230,23 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    def test_nonlegacy_input_name(self):
+        """
+        Tests that we support legacy `pixel_values_images` and the recommended `pixel_values` as input.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        nonlegacy_input_dict = input_dict.copy()
+        nonlegacy_input_dict["pixel_values"] = nonlegacy_input_dict["pixel_values_images"]
+        del nonlegacy_input_dict["pixel_values_images"]
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                out1 = model(**input_dict)
+                out2 = model(**nonlegacy_input_dict)
+
+            torch.testing.assert_close(out1[0], out2[0])
 
     @run_test_using_subprocess
     def test_mixed_input(self):

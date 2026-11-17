@@ -91,6 +91,9 @@ class NemotronIntegrationTest(unittest.TestCase):
                 ("cuda", 7): [
                     "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
                 ],
+                ("cuda", 8): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
+                ],
             }
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -111,7 +114,7 @@ class NemotronIntegrationTest(unittest.TestCase):
     def test_nemotron_8b_generation_fa2(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXT = [
-            "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
+            "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(

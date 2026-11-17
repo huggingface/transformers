@@ -39,7 +39,6 @@ rendered properly in your Markdown viewer.
 
 ```bash
 RUN_SLOW=1 pytest tests/
-RUN_SLOW=1 pytest examples/
 ```
     結果は[here](https://github.com/huggingface/transformers/actions)で観察できます。
 
@@ -499,7 +498,7 @@ TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 これを使用するいくつかのテストがあります：
 
 - [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
-- [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
+- [test_trainer_distributed_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed_deepspeed.py)
 
 実行ポイントにすぐに移動するには、これらのテスト内で `execute_subprocess_async` 呼び出しを検索してください。
 
@@ -696,7 +695,7 @@ from transformers.testing_utils import TestCasePlus
 
 class PathExampleTest(TestCasePlus):
     def test_something_involving_local_locations(self):
-        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt16"
 ```
 
 もし、`pathlib` を介してパスを操作する必要がない場合、または単に文字列としてパスが必要な場合は、`pathlib` オブジェクトに `str()` を呼び出すか、`_str` で終わるアクセサを使用できます。例：

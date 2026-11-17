@@ -61,7 +61,9 @@ def main(pipeline_file_path: str, fix_and_overwrite: bool = False):
     for task, pipeline_class in pipelines:
         if TASK_PATTERN not in pipeline_signature:
             raise ValueError(f"Can't find `{TASK_PATTERN}` in pipeline signature: {pipeline_signature}")
-        pipeline_type = pipeline_class if isinstance(pipeline_class, str) else pipeline_class.__name__
+        pipeline_type = (
+            pipeline_class.rsplit(".", 1)[-1] if isinstance(pipeline_class, str) else pipeline_class.__name__
+        )
         new_pipeline_signature = pipeline_signature.replace(TASK_PATTERN, f"task: Literal[{task}]")
         new_generated_code += f"@overload\ndef pipeline{new_pipeline_signature} -> {pipeline_type}: ...\n"
 

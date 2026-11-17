@@ -36,14 +36,14 @@ logger = logging.get_logger(__name__)
 @dataclass
 class UnivNetModelOutput(ModelOutput):
     r"""
-    waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+    waveforms (`torch.Tensor` of shape `(batch_size, sequence_length)`):
         Batched 1D (mono-channel) output audio waveforms.
-    waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+    waveform_lengths (`torch.Tensor` of shape `(batch_size,)`):
         The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
-    waveforms: torch.FloatTensor | None = None
-    waveform_lengths: torch.FloatTensor | None = None
+    waveforms: torch.Tensor | None = None
+    waveform_lengths: torch.Tensor | None = None
 
 
 class UnivNetKernelPredictorResidualBlock(nn.Module):
@@ -72,7 +72,7 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         self.conv1 = nn.Conv1d(self.channels, self.channels, self.kernel_size, padding=padding, bias=True)
         self.conv2 = nn.Conv1d(self.channels, self.channels, self.kernel_size, padding=padding, bias=True)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor):
         # hidden_states should have shape (batch_size, channels, seq_length)
         residual = hidden_states
         hidden_states = self.dropout(hidden_states)
@@ -150,18 +150,18 @@ class UnivNetKernelPredictor(nn.Module):
             self.resnet_hidden_channels, self.bias_channels, self.resnet_kernel_size, padding=padding, bias=True
         )
 
-    def forward(self, spectrogram: torch.FloatTensor):
+    def forward(self, spectrogram: torch.Tensor):
         """
         Maps a conditioning log-mel spectrogram to a tensor of convolutional kernels and biases, for use in location
         variable convolutional layers. Note that the input spectrogram should have shape (batch_size, input_channels,
         seq_length).
 
         Args:
-            spectrogram (`torch.FloatTensor` of shape `(batch_size, input_channels, seq_length)`):
+            spectrogram (`torch.Tensor` of shape `(batch_size, input_channels, seq_length)`):
                 Tensor containing the log-mel spectrograms.
 
         Returns:
-            tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
+            tuple[`torch.Tensor, `torch.Tensor`]: tuple of tensors where the first element is the tensor of
             location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
             self.conv_out_channels, self.conv_kernel_size, seq_length)` and the second element is the tensor of
             location variable convolution biases of shape `(batch_size, self.conv_layers. self.conv_out_channels,
@@ -268,9 +268,9 @@ class UnivNetLvcResidualBlock(nn.Module):
     # Based on https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L171
     def location_variable_convolution(
         self,
-        hidden_states: torch.FloatTensor,
-        kernel: torch.FloatTensor,
-        bias: torch.FloatTensor,
+        hidden_states: torch.Tensor,
+        kernel: torch.Tensor,
+        bias: torch.Tensor,
         dilation: int = 1,
         hop_size: int = 256,
     ):
@@ -282,18 +282,18 @@ class UnivNetLvcResidualBlock(nn.Module):
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, in_channels, in_length)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, in_channels, in_length)`):
                 The input sequence of shape (batch, in_channels, in_length).
-            kernel (`torch.FloatTensor` of shape `(batch_size, in_channels, out_channels, kernel_size, kernel_length)`):
+            kernel (`torch.Tensor` of shape `(batch_size, in_channels, out_channels, kernel_size, kernel_length)`):
                 The local convolution kernel of shape (batch, in_channels, out_channels, kernel_size, kernel_length).
-            bias (`torch.FloatTensor` of shape `(batch_size, out_channels, kernel_length)`):
+            bias (`torch.Tensor` of shape `(batch_size, out_channels, kernel_length)`):
                 The bias for the local convolution of shape (batch, out_channels, kernel_length).
             dilation (`int`, *optional*, defaults to 1):
                 The dilation of convolution.
             hop_size (`int`, *optional*, defaults to 256):
                 The hop_size of the conditioning sequence.
         Returns:
-            `torch.FloatTensor`: the output sequence after performing local convolution with shape (batch_size,
+            `torch.Tensor`: the output sequence after performing local convolution with shape (batch_size,
             out_channels, in_length).
         """
         batch, _, in_length = hidden_states.shape
@@ -389,7 +389,7 @@ class UnivNetLvcBlock(nn.Module):
             [UnivNetLvcResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)]
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, spectrogram: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor, spectrogram: torch.Tensor):
         # hidden_states: (batch_size, hidden_channels, seq_length)
         # spectrogram: (batch_size, cond_channels, cond_length)
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
@@ -469,15 +469,15 @@ class UnivNetModel(PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor,
-        noise_sequence: torch.FloatTensor | None = None,
-        padding_mask: torch.FloatTensor | None = None,
+        input_features: torch.Tensor,
+        noise_sequence: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | UnivNetModelOutput:
+    ) -> tuple[torch.Tensor] | UnivNetModelOutput:
         r"""
-        noise_sequence (`torch.FloatTensor`, *optional*):
+        noise_sequence (`torch.Tensor`, *optional*):
             Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
             sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
             config.model_in_channels)`. If not supplied, will be randomly generated.

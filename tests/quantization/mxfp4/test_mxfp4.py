@@ -133,7 +133,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             _patch_no_accelerator(),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
-            patch("transformers.quantizers.quantizer_mxfp4.Mxfp4HfQuantizer._lazy_import_kernels"),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -143,9 +142,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             # CPU already supported MXFP4
             quantizer.validate_environment()
 
-    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
+    @unittest.skipUnless(torch_device == "cuda", "test requires CUDA")
     def test_quantizer_validation_low_compute_capability(self):
-        """Test quantizer validation with CUDA low compute capability or supported XPU"""
+        """Test quantizer validation with CUDA low compute capability"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -156,9 +155,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 quantizer.validate_environment()
 
-    @unittest.skipUnless(torch_device in {"cuda", "xpu"}, "test requires CUDA or XPU")
+    @unittest.skipUnless(torch_device == "cuda", "test requires CUDA")
     def test_quantizer_validation_low_compute_capability_with_prequantized(self):
-        """Test pre-quantized validation with CUDA low compute capability or supported XPU"""
+        """Test pre-quantized validation with CUDA low compute capability"""
         with patch("torch.cuda.get_device_capability", return_value=(7, 0)):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -192,7 +191,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
             _patch_no_accelerator(),
             patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
             patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
-            patch("transformers.quantizers.quantizer_mxfp4.Mxfp4HfQuantizer._lazy_import_kernels"),
         ):
             from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
 
@@ -325,19 +323,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 class Mxfp4IntegrationTest(unittest.TestCase):
     """Test mxfp4 integration functions"""
 
-    def test_should_convert_module(self):
-        """Test module conversion decision logic"""
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        # Should convert by default
-        self.assertTrue(should_convert_module("model", None))
-        self.assertTrue(should_convert_module("model", []))
-
-        # Should not convert if in exclusion list
-        patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module("lm_head", patterns))
-        self.assertTrue(should_convert_module("experts", patterns))
-
     @require_torch
     def test_convert_moe_packed_tensors(self):
         """Test unpacking of quantized tensors"""
@@ -351,22 +336,47 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.shape, (2, 8 * 16 * 2, 4))
         self.assertEqual(result.dtype, torch.bfloat16)
 
+    @require_torch
+    def test_dequantize_to_target_dtype(self):
+        """Test that dequantized experts follow the dtype of the parameter they load into"""
+        from transformers import GptOssConfig, GptOssForCausalLM
+        from transformers.integrations.mxfp4 import Mxfp4Dequantize
+
+        config = GptOssConfig(
+            vocab_size=16,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=2,
+        )
+        with torch.device("meta"):
+            model = GptOssForCausalLM(config).to(torch.float32)
+
+        # gate_up_proj packs 2 * intermediate_size rows of hidden_size / 32 blocks, 16 bytes each
+        blocks = torch.randint(0, 255, (2, 64, 1, 16), dtype=torch.uint8)
+        scales = torch.randint(100, 150, (2, 64, 1), dtype=torch.uint8)
+        layer_name = "model.layers.0.mlp.experts.gate_up_proj"
+        result = Mxfp4Dequantize(hf_quantizer=None).convert(
+            {"gate_up_proj_blocks": blocks, "gate_up_proj_scales": scales}, model=model, full_layer_name=layer_name
+        )
+        self.assertEqual(result[layer_name].shape, (2, 32, 64))
+        self.assertEqual(result[layer_name].dtype, torch.float32)
+
     @REQUIRE_TRITON_MXFP4
     @require_kernels
     @require_torch
     def test_quantize_to_mxfp4(self):
         """Test quantization function"""
+        from transformers.integrations.hub_kernels import get_kernel
         from transformers.integrations.mxfp4 import quantize_to_mxfp4
-        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
-
-        config = Mxfp4Config()
-        quantizer = Mxfp4HfQuantizer(config)
 
         # Create dummy weight tensor
         device = torch_device
         w = torch.randn(32, 64, 128, dtype=torch.bfloat16, device=torch.device(device))
 
-        quantized_w, w_scale = quantize_to_mxfp4(w, quantizer._lazy_import_kernels())
+        quantized_w, w_scale = quantize_to_mxfp4(w, get_kernel("kernels-community/gpt-oss-triton-kernels", version=1))
 
         # Check that shapes are reasonable
         self.assertEqual(quantized_w.dtype, torch.uint8)
@@ -597,3 +607,44 @@ class Mxfp4ModelTest(unittest.TestCase):
 
         # we should at least have 3 times memory reduction in total for this model
         assert model_size[""] > quantized_model_size[""] * 3
+
+
+@require_torch
+@REQUIRE_TRITON_MXFP4
+@require_kernels
+@slow
+@unittest.skipUnless(
+    torch_device in ["cpu", "xpu"],
+    "MXFP4 weights only stay quantized with `use_kernels=True` on CPU and XPU, other devices dequantize to bf16",
+)
+class Mxfp4KernelsModelTest(unittest.TestCase):
+    model_name = "openai/gpt-oss-20b"
+    input_text = "Once upon a time"
+
+    def setUp(self):
+        gc.collect()
+        _empty_accelerator_cache()
+
+    def tearDown(self):
+        gc.collect()
+        _empty_accelerator_cache()
+
+    def test_quantized_mlp_uses_megablocks_kernel(self):
+        """With `use_kernels=True`, the quantized MLP keeps its MXFP4 experts and runs the megablocks hub kernel"""
+        from transformers.integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4GptOssMLP
+
+        model = GptOssForCausalLM.from_pretrained(
+            self.model_name, dtype=torch.bfloat16, device_map=torch_device, use_kernels=True
+        )
+        for layer in model.model.layers:
+            self.assertIsInstance(layer.mlp, Mxfp4GptOssMLP)
+            self.assertIsInstance(layer.mlp.experts, Mxfp4GptOssExperts)
+            self.assertIn("MegaBlocksMoeMLP", layer.mlp.forward.__qualname__)
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            output_sequences = model.generate(**encoded_input, max_new_tokens=10, do_sample=False)
+        generated_text = tokenizer.decode(output_sequences[0], skip_special_tokens=True)
+
+        self.assertIn(generated_text, Mxfp4ModelTest.EXPECTED_OUTPUTS)

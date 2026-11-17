@@ -40,9 +40,10 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_bamba import BambaConfig
@@ -86,7 +87,6 @@ class BambaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -206,12 +206,13 @@ class BambaAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -224,8 +225,8 @@ class BambaAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -248,20 +249,23 @@ class BambaAttention(nn.Module):
 
 
 class BambaRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
-
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
         return self.weight * hidden_states.to(input_dtype)
 
 
@@ -572,7 +576,7 @@ def mamba2_chunk_scan(
 def eager_causal_conv1d_forward(
     module: nn.Module,
     hidden_states: torch.Tensor,
-    cache_params: Cache | None = None,
+    cache: Cache | None = None,
     use_precomputed_states: bool = False,
     **kwargs,
 ) -> torch.Tensor:
@@ -580,17 +584,17 @@ def eager_causal_conv1d_forward(
     layer_idx = module.layer_idx
     hidden_states = hidden_states.transpose(1, 2)
 
-    if use_precomputed_states and seq_len == 1 and not cache_params.layers[layer_idx].record_past:
+    if use_precomputed_states and seq_len == 1 and not cache.is_recording_past(layer_idx):
         hidden_states = causal_conv1d_update(
             hidden_states,
-            cache_params.layers[layer_idx].conv_states[0],
+            cache.get_conv_state(layer_idx),
             module.conv1d.weight.squeeze(1),
             module.conv1d.bias,
             activation=module.activation,
         )
     else:
-        if cache_params is not None:
-            hidden_states = cache_params.update_conv_state(
+        if cache is not None:
+            hidden_states = cache.update_conv_state(
                 hidden_states,
                 layer_idx,
                 conv_kernel_size=module.conv_kernel_size,
@@ -604,7 +608,7 @@ def eager_causal_conv1d_forward(
             **kwargs,
         )
 
-        if cache_params is not None:
+        if cache is not None:
             hidden_states = hidden_states[:, :, -seq_len:]
 
     return hidden_states.transpose(1, 2)
@@ -616,14 +620,14 @@ def eager_ssd_forward(
     B: torch.Tensor,
     C: torch.Tensor,
     dt: torch.Tensor,
-    cache_params: Cache | None = None,
+    cache: Cache | None = None,
     use_precomputed_states: bool = False,
     **kwargs,
 ) -> torch.Tensor:
     batch_size, seq_len, _ = hidden_states.shape
     layer_idx = module.layer_idx
     A = -torch.exp(module.A_log.float())
-    recurrent_state = cache_params.layers[layer_idx].recurrent_states[0] if use_precomputed_states else None
+    recurrent_state = cache.get_recurrent_state(layer_idx) if use_precomputed_states else None
 
     # Recurrent form
     if use_precomputed_states and seq_len == 1:
@@ -651,7 +655,7 @@ def eager_ssd_forward(
         return scan_output.view(batch_size, 1, -1)
 
     # Chunk form
-    output_final_state = cache_params is not None
+    output_final_state = cache is not None
     scan_result = mamba2_chunk_scan(
         hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
         dt,
@@ -671,7 +675,7 @@ def eager_ssd_forward(
 
     if output_final_state:
         scan_output, final_state = scan_result
-        cache_params.update_recurrent_state(final_state, layer_idx=layer_idx)
+        cache.update_recurrent_state(final_state, layer_idx=layer_idx)
     else:
         scan_output = scan_result
 
@@ -742,7 +746,9 @@ class BambaMixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.norm = BambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = BambaRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.empty(self.num_heads))
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
             self.init_bamba_weights()
@@ -758,10 +764,11 @@ class BambaMixer(nn.Module):
         init.ones_(self.dt_bias)
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
@@ -771,7 +778,7 @@ class BambaMixer(nn.Module):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
 
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
@@ -803,14 +810,14 @@ class BambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         # The convolution updates the cache, so whether it held a previous state must be read before it
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        use_precomputed_states = cache is not None and cache.has_previous_state(self.layer_idx)
         causal_conv1d_interface: Callable = ALL_CAUSAL_CONV1D_FUNCTIONS.get_interface(
             self.config._linear_attn_implementation, eager_causal_conv1d_forward
         )
         hidden_states_B_C = causal_conv1d_interface(
             self,
             hidden_states_B_C,
-            cache_params=cache_params,
+            cache=cache,
             use_precomputed_states=use_precomputed_states,
             **kwargs,
         )
@@ -830,7 +837,7 @@ class BambaMixer(nn.Module):
             B,
             C,
             dt,
-            cache_params=cache_params,
+            cache=cache,
             use_precomputed_states=use_precomputed_states,
             **kwargs,
         )
@@ -896,16 +903,17 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
         else:
             raise ValueError(f"Invalid layer_type: {layer_type!r}")
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -913,7 +921,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
         if self.block_type == "linear_attention":
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
-                cache_params=past_key_values,
+                cache=cache,
                 attention_mask=attention_mask,
                 **kwargs,
             )
@@ -923,7 +931,7 @@ class BambaDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -945,7 +953,7 @@ class BambaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BambaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
@@ -955,7 +963,6 @@ class BambaPreTrainedModel(PreTrainedModel):
         "attentions": BambaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, BambaMixer):
@@ -988,13 +995,14 @@ class BambaModel(BambaPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -1005,8 +1013,8 @@ class BambaModel(BambaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = inputs_embeds
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
@@ -1017,7 +1025,7 @@ class BambaModel(BambaPreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             # Create the masks
@@ -1032,7 +1040,7 @@ class BambaModel(BambaPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layers_block_type[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -1042,7 +1050,7 @@ class BambaModel(BambaPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1053,7 +1061,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: BambaConfig):
         super().__init__(config)
         self.model = BambaModel(config)
         self.vocab_size = config.vocab_size
@@ -1065,13 +1073,14 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1098,15 +1107,15 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1118,7 +1127,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

@@ -46,7 +46,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     """
 
     model_type = "mimo_v2_flash"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -54,6 +54,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -67,10 +68,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
@@ -104,7 +104,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     # MiMo-V2-Flash specific
     head_dim: int = 192
     v_head_dim: int = 128
-    sliding_window: int = 128
+    sliding_window: int = 129
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     attention_value_scale: float | None = 0.707
@@ -128,6 +128,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
+        # The reference SGLang implementation attends to `sliding_window_size` previous tokens plus the query.
+        if kwargs.get("sliding_window_size") is not None:
+            self.sliding_window = kwargs["sliding_window_size"] + 1
 
         super().__post_init__(**kwargs)
 

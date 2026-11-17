@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 class Kosmos2_5TextConfig(PreTrainedConfig):
     model_type = "kosmos_2_5_text_model"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
         "hidden_size": "embed_dim",
@@ -109,27 +109,15 @@ class Kosmos2_5Config(PreTrainedConfig):
     """
 
     model_type = "kosmos-2.5"
-    sub_configs = {"text_config": Kosmos2_5TextConfig, "vision_config": Kosmos2_5VisionConfig}
+    sub_configs_defaults = {
+        "text_config": Kosmos2_5TextConfig,
+        "vision_config": Kosmos2_5VisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     latent_query_num: int = 2048
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Kosmos2_5TextConfig()
-            logger.info("`text_config` is `None`. initializing the `Kosmos2_5TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Kosmos2_5TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Kosmos2_5VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Kosmos2_5VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Kosmos2_5VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Kosmos2_5Config", "Kosmos2_5TextConfig", "Kosmos2_5VisionConfig"]

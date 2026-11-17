@@ -263,7 +263,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self,
         raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         truncation: str | None = None,
-        padding: str | None = None,
+        padding: bool | str | None = None,
         max_length: int | None = None,
         sampling_rate: int | None = None,
         return_tensors: str | TensorType | None = None,
@@ -284,8 +284,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 If `config.fusion` is set to True, shorter audios also need to return 4 mels, which will just be a
                 copy of the original mel obtained from the padded audio.
                     - `rand_trunc` will select a random crop of the mel spectrogram.
-            padding (`str`, *optional*):
-               Padding pattern for shorter audio inputs. Three patterns were originally implemented:
+            padding (`bool`, `str`, *optional*):
+                Padding pattern for shorter audio inputs. If `True`, defaults to `self.padding`.
+                Available patterns:
                     - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
                     - `repeat`: the audio is repeated and then cut to fit the `max_length`
                     - `pad`: the audio is padded.
@@ -299,7 +300,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
         """
         truncation = truncation if truncation is not None else self.truncation
-        padding = padding if padding else self.padding
+        if padding is True or padding is None:
+            padding = self.padding
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:

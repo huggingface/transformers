@@ -65,11 +65,11 @@ class CausalConv1dInterface(LinearAttentionInterface):
     Interface for the causal depthwise convolution of a linear attention layer and the handling of its conv state.
 
     A registered function has the signature
-    `(module, hidden_states, cache_params=None, use_precomputed_states=False, **kwargs) -> hidden_states`, where:
+    `(module, hidden_states, cache=None, use_precomputed_states=False, **kwargs) -> hidden_states`, where:
 
     - `module` is the mixer, from which the function reads `conv1d`, `activation`, `conv_kernel_size` and `layer_idx`.
     - `hidden_states` has shape `(batch_size, seq_len, conv_dim)` and is the input to the convolution.
-    - `use_precomputed_states` is whether `cache_params` held a previous state for this layer before the forward pass.
+    - `use_precomputed_states` is whether `cache` held a previous state for this layer before the forward pass.
     - The returned `hidden_states` has the same shape and is the output of the convolution, after the activation.
     """
 
@@ -81,7 +81,7 @@ class SSDInterface(LinearAttentionInterface):
     Interface for the selective scan of Mamba2 (state space duality, SSD) and the handling of its recurrent state.
 
     A registered function has the signature
-    `(module, hidden_states, B, C, dt, cache_params=None, use_precomputed_states=False, **kwargs) -> scan_output`,
+    `(module, hidden_states, B, C, dt, cache=None, use_precomputed_states=False, **kwargs) -> scan_output`,
     where:
 
     - `module` is the mixer, from which the function reads `A_log`, `D`, `dt_bias`, `time_step_limit`, `layer_idx` and
@@ -89,8 +89,8 @@ class SSDInterface(LinearAttentionInterface):
     - `hidden_states` has shape `(batch_size, seq_len, num_heads * head_dim)`.
     - `B` and `C` have shape `(batch_size, seq_len, n_groups * ssm_state_size)`.
     - `dt` has shape `(batch_size, seq_len, num_heads)` and is the time step before `dt_bias` and softplus.
-    - `use_precomputed_states` is whether `cache_params` held a previous state for this layer before the forward pass.
-      It cannot be read from `cache_params` here because the convolution has already updated it.
+    - `use_precomputed_states` is whether `cache` held a previous state for this layer before the forward pass.
+      It cannot be read from `cache` here because the convolution has already updated it.
     - `scan_output` has shape `(batch_size, seq_len, num_heads * head_dim)` and is the output of the selective scan,
       including the `D` skip connection but before the gated normalization.
     """

@@ -66,7 +66,7 @@ class LasrEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "lasr_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     hidden_size: int = 512
     num_hidden_layers: int = 17
@@ -125,7 +125,9 @@ class LasrCTCConfig(PreTrainedConfig):
     """
 
     model_type = "lasr_ctc"
-    sub_configs = {"encoder_config": LasrEncoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": LasrEncoderConfig,
+    }
 
     vocab_size: int = 512
     ctc_loss_reduction: str = "mean"
@@ -134,12 +136,8 @@ class LasrCTCConfig(PreTrainedConfig):
     pad_token_id: int = 0
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = LasrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = LasrEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
+        self.initializer_range = self.encoder_config.initializer_range
 
     @property
     def inputs_to_logits_ratio(self):

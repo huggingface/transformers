@@ -36,8 +36,10 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -243,7 +245,7 @@ class JambaModelTester:
         model.eval()
 
         outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -261,7 +263,7 @@ class JambaModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -300,7 +302,14 @@ class JambaModelTester:
 
 
 @require_torch
-class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class JambaModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     all_model_classes = (
         (
             JambaModel,

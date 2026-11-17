@@ -143,8 +143,6 @@ class AnyToAnyPipeline(Pipeline):
         if "image" in self.model.input_modalities or "video" in self.model.input_modalities:
             requires_backends(self, "vision")
             requires_backends(self, "torchvision")
-        if "audio" in self.model.input_modalities:
-            requires_backends(self, "librosa")
         self.check_model_type(MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES)
 
     def _sanitize_parameters(
@@ -177,7 +175,7 @@ class AnyToAnyPipeline(Pipeline):
             preprocess_params["processor_kwargs"] = processor_kwargs
 
         # Forward kwargs
-        forward_kwargs["generate_kwargs"] = generate_kwargs or {}
+        forward_kwargs["generate_kwargs"] = dict(generate_kwargs or {})
         if generation_mode is not None and generation_mode != "text":
             forward_kwargs["generate_kwargs"]["generation_mode"] = generation_mode
         # Qwen-Omni models need to know the origin of audio, to align mm position ids
@@ -233,6 +231,8 @@ class AnyToAnyPipeline(Pipeline):
         if skip_special_tokens is not None:
             postprocess_params["skip_special_tokens"] = skip_special_tokens
         postprocess_params["generation_mode"] = generation_mode
+        if "tools" in kwargs:
+            postprocess_params["tools"] = kwargs["tools"]
         return preprocess_params, forward_kwargs, postprocess_params
 
     @overload
@@ -308,8 +308,9 @@ class AnyToAnyPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
                 specified at the same time as `return_text`.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the potential extra spaces in the text output.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the potential extra spaces in the text output. Defaults to the tokenizer's
+                `clean_up_tokenization_spaces` setting.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
                 last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
                 By default this is `True` when the final message in the input chat has the `assistant` role and
@@ -381,7 +382,19 @@ class AnyToAnyPipeline(Pipeline):
             # Handle Mistral tokenizer which does not accept processing kwargs
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
-                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                    k: v
+                    for k, v in chat_template_kwargs.items()
+                    if k
+                    in (
+                        "continue_final_message",
+                        "add_generation_prompt",
+                        "tokenize",
+                        "return_dict",
+                        "return_tensors",
+                        "padding",
+                        "truncation",
+                        "max_length",
+                    )
                 }
 
             model_inputs = self.processor.apply_chat_template(
@@ -420,11 +433,16 @@ class AnyToAnyPipeline(Pipeline):
         prompt_text = model_inputs.pop("text")
         input_ids = model_inputs.get("input_ids", model_inputs.get("decoder_input_ids"))
 
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        if "generation_config" not in generate_kwargs:
-            generate_kwargs["generation_config"] = self.generation_config
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
+        if (
+            isinstance(generated_sequence, torch.Tensor)
+            and input_ids is not None
+            and generated_sequence.ndim == 2
+            and generated_sequence.shape[0] > input_ids.shape[0]
+        ):
+            generated_sequence = generated_sequence.reshape(input_ids.shape[0], -1, generated_sequence.shape[-1])
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}
 
     def postprocess(
@@ -433,16 +451,26 @@ class AnyToAnyPipeline(Pipeline):
         return_type=None,
         continue_final_message=None,
         skip_special_tokens=None,
+        tools=None,
         **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
         input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
+        if isinstance(generated_sequence, torch.Tensor) and generated_sequence.ndim == 3:
+            generated_sequence = generated_sequence.flatten(0, 1)
+        candidates_per_input = (
+            len(generated_sequence) // len(input_texts) if isinstance(generated_sequence, torch.Tensor) else 1
+        )
+        input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
             return [
-                {"input_text": input_texts[i], "generated_token_ids": generated_sequence[i]}
-                for i in range(len(input_texts))
+                {
+                    "input_text": input_text.messages if isinstance(input_text, Chat) else input_text,
+                    "generated_token_ids": generated_sequence[i],
+                }
+                for i, input_text in enumerate(input_texts)
             ]
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
@@ -465,6 +493,7 @@ class AnyToAnyPipeline(Pipeline):
             decoded_inputs = self.processor.post_process_multimodal_output(
                 input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
             )
+            decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
             for text_generated, decoded_input in zip(generated_outputs, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)
@@ -487,12 +516,17 @@ class AnyToAnyPipeline(Pipeline):
                         continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                     if continue_final_message:
                         # With assistant prefill, concat onto the end of the last message
-                        new_text = dict(prompt_text.messages[-1]["content"][-1].items())
-                        new_text["text"] += generated_text
+                        content = prompt_text.messages[-1]["content"]
+                        if isinstance(content, str):
+                            content += generated_text
+                        else:
+                            new_text = dict(content[-1].items())
+                            new_text["text"] += generated_text
+                            content = content[:-1] + [new_text]
                         generated_text = list(prompt_text.messages)[:-1] + [
                             {
                                 "role": prompt_text.messages[-1]["role"],
-                                "content": prompt_text.messages[-1]["content"][:-1] + [new_text],
+                                "content": content,
                             }
                         ]
                     else:
@@ -501,7 +535,9 @@ class AnyToAnyPipeline(Pipeline):
                             # New-style templates need to see the prompt as `prefix`, because chat
                             # templates often pre-write part of the assistant message (e.g. an
                             # opening <think> tag), which affects parsing.
-                            assistant_message = self.tokenizer.parse_response(generated_text, prefix=decoded_input)
+                            assistant_message = self.tokenizer.parse_response(
+                                generated_text, prefix=decoded_input, tools=tools
+                            )
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
                         generated_text = list(prompt_text.messages) + [assistant_message]

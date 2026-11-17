@@ -77,8 +77,6 @@ Ahora puedes pasar los `input_ids` y el language embedding al modelo:
 >>> outputs = model(input_ids, langs=langs)
 ```
 
-El script [run_generation.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-generation/run_generation.py) puede generar texto con language embeddings utilizando los checkpoints `xlm-clm`.
-
 ### XLM sin language embeddings
 
 Los siguientes modelos XLM no requieren language embeddings durante la inferencia:

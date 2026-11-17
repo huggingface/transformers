@@ -54,7 +54,7 @@ Data2Vec の使用を開始するのに役立つ公式 Hugging Face およびコ
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`Data2VecVisionForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://cola.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
+- [`Data2VecVisionForImageClassification`] は、この [ノートブック](https://cola.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - カスタム データセットで [`TFData2VecVisionForImageClassification`] を微調整するには、[このノートブック](https://colab.research.google.com/github/sayakpaul/TF-2.0-Hacks/blob/master/data2vec_vision_image_classification.ipynb) を参照してください。 ）。
 
 **Data2VecText ドキュメント リソース**

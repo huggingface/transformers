@@ -188,7 +188,7 @@ class WatermarkDetector:
 
     def _compute_pval(self, x, loc=0, scale=1):
         z = (x - loc) / scale
-        return 1 - (0.5 * (1 + np.sign(z) * (1 - np.exp(-2 * z**2 / np.pi))))
+        return 0.5 * torch.special.erfc(torch.as_tensor(z / np.sqrt(2))).numpy()
 
     def __call__(
         self,
@@ -211,6 +211,13 @@ class WatermarkDetector:
                     if `return_dict=True` otherwise a `np.ndarray`.
 
         """
+        has_bos = input_ids[:, 0] == self.bos_token_id
+
+        if torch.any(has_bos) != torch.all(has_bos):
+            raise ValueError(
+                "Some batch contains inconsistent leading BOS token. Make sure "
+                "to prepare input with the same tokenization parameters."
+            )
 
         # Let's assume that if one batch start with `bos`, all batched also do
         if input_ids[0, 0] == self.bos_token_id:
@@ -277,14 +284,14 @@ class BayesianWatermarkDetectorModelOutput(ModelOutput):
     Base class for outputs of models predicting if the text is watermarked.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss.
-        posterior_probabilities (`torch.FloatTensor` of shape `(1,)`):
+        posterior_probabilities (`torch.Tensor` of shape `(1,)`):
             Multiple choice classification loss.
     """
 
-    loss: torch.FloatTensor | None = None
-    posterior_probabilities: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    posterior_probabilities: torch.Tensor | None = None
 
 
 class BayesianDetectorWatermarkedLikelihood(nn.Module):

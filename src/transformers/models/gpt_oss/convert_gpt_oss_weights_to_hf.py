@@ -695,15 +695,23 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
 {%- for message in loop_messages -%}
     {#- At this point only assistant/user/tool messages should remain #}
     {%- if message.role == 'assistant' -%}
+        {#- Reasoning is read from `reasoning_content`, falling back to the older `thinking` field #}
+        {%- if message.reasoning_content is defined and message.reasoning_content is not none %}
+            {%- set reasoning = message.reasoning_content %}
+        {%- elif message.thinking is defined and message.thinking is not none %}
+            {%- set reasoning = message.thinking %}
+        {%- else %}
+            {%- set reasoning = none %}
+        {%- endif %}
         {#- Checks to ensure the messages are being passed in the format we expect #}
         {%- if "content" in message %}
             {%- if "<|channel|>analysis<|message|>" in message.content or "<|channel|>final<|message|>" in message.content %}
-                {{- raise_exception("You have passed a message containing <|channel|> tags in the content field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'thinking' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the content field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'reasoning_content' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
             {%- endif %}
         {%- endif %}
-        {%- if "thinking" in message %}
-            {%- if "<|channel|>analysis<|message|>" in message.thinking or "<|channel|>final<|message|>" in message.thinking %}
-                {{- raise_exception("You have passed a message containing <|channel|> tags in the thinking field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'thinking' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
+        {%- if reasoning is not none %}
+            {%- if "<|channel|>analysis<|message|>" in reasoning or "<|channel|>final<|message|>" in reasoning %}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the reasoning_content field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'reasoning_content' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
             {%- endif %}
         {%- endif %}
         {%- if "tool_calls" in message %}
@@ -722,12 +730,12 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
             {%- if tool_call.function %}
                 {%- set tool_call = tool_call.function %}
             {%- endif %}
-            {%- if message.content and message.thinking %}
-                {{- raise_exception("Cannot pass both content and thinking in an assistant message with tool calls! Put the analysis message in one or the other, but not both.") }}
+            {%- if message.content and reasoning %}
+                {{- raise_exception("Cannot pass both content and reasoning_content in an assistant message with tool calls! Put the analysis message in one or the other, but not both.") }}
             {%- elif message.content and not future_final_message.found %}
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content + "<|end|>" }}
-            {%- elif message.thinking and not future_final_message.found %}
-                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {%- elif reasoning and not future_final_message.found %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + reasoning + "<|end|>" }}
             {%- endif %}
             {{- "<|start|>assistant to=" }}
             {{- "functions." + tool_call.name + "<|channel|>commentary " }}
@@ -738,8 +746,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str):
         {%- elif loop.last and not add_generation_prompt %}
             {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
             {#- This is a situation that should only occur in training, never in inference. #}
-            {%- if "thinking" in message %}
-                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {%- if reasoning is not none %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + reasoning + "<|end|>" }}
             {%- endif %}
             {#- <|return|> indicates the end of generation, but <|end|> does not #}
             {#- <|return|> should never be an input to the model, but we include it as the final token #}

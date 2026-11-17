@@ -18,6 +18,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -102,7 +103,7 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
     ```"""
 
     def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(**kwargs)
 
         if self.encoder_config.cat_hidden_layers is not None:
             for idx in self.encoder_config.cat_hidden_layers:

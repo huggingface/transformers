@@ -21,13 +21,14 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -70,8 +71,11 @@ class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
 @strict
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
-    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vision_config": Exaone4_5_VisionConfig,
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
+    }
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -80,20 +84,9 @@ class Exaone4_5_Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = self.vision_config.get("model_type", "exaone4_5_vision")
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["exaone4_5_vision"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
-            # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
-            if self.text_config["model_type"] == "exaone4_5_text":
-                self.text_config["model_type"] = "exaone4"
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["exaone4"]()
+        # BC: EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
+        if isinstance(self.text_config, dict) and self.text_config["model_type"] == "exaone4_5_text":
+            self.text_config["model_type"] = "exaone4"
 
         super().__post_init__(**kwargs)
 
@@ -201,13 +194,13 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
-    config_class = Exaone4_5_Config
+    config: Exaone4_5_Config
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
-    config_class = Exaone4_5_VisionConfig
+    config: Exaone4_5_VisionConfig
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -229,22 +222,25 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
 
 
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -292,7 +288,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
 
         # Differ from Qwen: vision encoder uses 2D rotary positional embeddings (2D-RoPE)
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -300,7 +296,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -308,7 +304,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -331,17 +327,20 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     and adopts a Grouped Query Attention (GQA) structure throughout the multimodal stack.
     """
 
+    input_modalities = ("image", "video", "text")
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -382,7 +381,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             video_grid_thw=video_grid_thw,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -390,8 +389,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -402,7 +401,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -417,21 +416,16 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         raise AttributeError("Exaone4.5 doesn't use 3D positions")
 
 
-class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Exaone4_5_Processor(Qwen2VLProcessor):
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     @property
     def model_input_names(self):
         return super().model_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Exaone4_5_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Exaone4_5_Config",

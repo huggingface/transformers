@@ -25,7 +25,6 @@ from torch import nn
 
 from transformers.cache_utils import Cache
 
-from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
@@ -34,9 +33,10 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
@@ -179,12 +179,13 @@ class HunYuanDenseV1Attention(nn.Module):
         self.query_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.key_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -199,8 +200,8 @@ class HunYuanDenseV1Attention(nn.Module):
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -234,12 +235,13 @@ class HunYuanDenseV1DecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = HunYuanDenseV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -251,7 +253,7 @@ class HunYuanDenseV1DecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -272,7 +274,7 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HunYuanDenseV1DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -284,29 +286,6 @@ class HunYuanDenseV1PreTrainedModel(PreTrainedModel):
         "attentions": HunYuanDenseV1Attention,
     }
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-
-        # DynamicNTKAlphaRotary - unique to this model
-        if "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
-                dim = module.config.head_dim
-                rope_theta = module.config.rope_parameters["rope_theta"]
-                alpha = module.config.rope_parameters["alpha"]
-
-                base = rope_theta * alpha ** (dim / (dim - 2))
-                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-            else:
-                rope_fn = (
-                    ROPE_INIT_FUNCTIONS[module.rope_type]
-                    if module.rope_type != "default"
-                    else module.compute_default_rope_parameters
-                )
-                buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
-
 
 class HunYuanDenseV1RotaryEmbedding(nn.Module):
     def __init__(self, config: HunYuanDenseV1Config):
@@ -317,19 +296,17 @@ class HunYuanDenseV1RotaryEmbedding(nn.Module):
         self.config = config
         self.rope_type = self.config.rope_parameters["rope_type"]
 
-        # Diff from Llama - DynamicNTKAlphaRotary
+        # Diff from Llama - DynamicNTKAlphaRotary. The checkpoints label it "dynamic", but a fixed `alpha` makes the
+        # frequencies static, so we give it its own type to keep `dynamic_rope_update` from recomputing them.
         if self.rope_type == "dynamic" and self.config.rope_parameters.get("alpha"):
-            self.dim = config.head_dim
-            base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
-                self.config.head_dim / (self.config.head_dim - 2)
-            )
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.config.head_dim))
-            self.attention_scaling = 1.0
-        else:
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config)
+            self.rope_type = "ntk_alpha"
+
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type == "ntk_alpha":
+            rope_init_fn = self.compute_ntk_alpha_rope_parameters
+        elif self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
@@ -353,7 +330,6 @@ class HunYuanDenseV1RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -362,6 +338,26 @@ class HunYuanDenseV1RotaryEmbedding(nn.Module):
         sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    @staticmethod
+    def compute_ntk_alpha_rope_parameters(config: HunYuanDenseV1Config, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies for NTK-aware scaling with a fixed `alpha`, which only stretches the RoPE
+        base. Unlike `dynamic` scaling, the result does not depend on the sequence length.
+
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        dim = config.head_dim
+        base = config.rope_parameters["rope_theta"] * config.rope_parameters["alpha"] ** (dim / (dim - 2))
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
 
 
 @auto_docstring
@@ -382,6 +378,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -390,8 +387,8 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -401,11 +398,11 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -413,7 +410,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -426,7 +423,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -434,7 +431,7 @@ class HunYuanDenseV1Model(HunYuanDenseV1PreTrainedModel):
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -445,7 +442,7 @@ class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: HunYuanDenseV1Config):
         super().__init__(config)
         self.model = HunYuanDenseV1Model(config)
         self.vocab_size = config.vocab_size
@@ -454,6 +451,7 @@ class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -461,8 +459,8 @@ class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -489,16 +487,15 @@ class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -507,7 +504,7 @@ class HunYuanDenseV1ForCausalLM(HunYuanDenseV1PreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

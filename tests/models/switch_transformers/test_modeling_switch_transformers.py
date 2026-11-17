@@ -232,7 +232,7 @@ class SwitchTransformersModelTester:
         )
         result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
@@ -281,7 +281,7 @@ class SwitchTransformersModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -290,9 +290,7 @@ class SwitchTransformersModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, output_router_logits=False)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, cache=cache, output_router_logits=False)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -322,7 +320,7 @@ class SwitchTransformersModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(
+        output, cache = model(
             input_ids, attention_mask=attn_mask, use_cache=True, output_router_logits=False
         ).to_tuple()
 
@@ -345,9 +343,9 @@ class SwitchTransformersModelTester:
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)[
             "last_hidden_state"
         ]
-        output_from_past = model(
-            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_router_logits=False
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache, attention_mask=attn_mask, output_router_logits=False)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -370,7 +368,7 @@ class SwitchTransformersModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True, output_router_logits=False)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -386,7 +384,7 @@ class SwitchTransformersModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_router_logits=False,
         )["last_hidden_state"]
 
@@ -401,7 +399,7 @@ class SwitchTransformersModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     @slow
-    def create_and_check_generate_with_past_key_values(
+    def create_and_check_generate_with_cache(
         self,
         config,
         input_ids,
@@ -491,7 +489,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -601,9 +598,9 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
 
     def test_router_losses_are_computed_from_router_logits(self):
         # Regression test for #48293: the router used to return its max routing probability in place of the raw
@@ -1025,6 +1022,12 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
                     0.0378, 0.0525, -0.2119, 0.1328, 0.3926, -0.2012, -0.1240, -0.1826,
                     0.0405, -0.3477, -0.0229, -0.1025, -0.1572, -0.1309
                 ],
+                ("xpu",5): [
+                    -0.2002, -0.1973,  0.5312, -0.2988,  0.1064,  0.0219,  0.6211, -0.1035,
+                    -0.0530,  0.2988,  0.0055,  0.1748,  0.1377, -0.1680, -0.0996,  0.0265,
+                    0.0374,  0.0537, -0.2119,  0.1299,  0.3906, -0.2041, -0.1250, -0.1807,
+                    0.0396, -0.3477, -0.0247, -0.1011, -0.1562, -0.1309
+                ]
             }
         )
         EXPECTED_MEAN_LOGITS = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=torch.bfloat16)

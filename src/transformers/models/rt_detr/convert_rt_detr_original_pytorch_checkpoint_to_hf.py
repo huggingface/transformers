@@ -579,8 +579,8 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
     # finally, create HuggingFace model and load state dict
-    model = RTDetrForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    state_dict = {key: value.contiguous() for key, value in state_dict.items()}
+    model = RTDetrForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     # load image processor

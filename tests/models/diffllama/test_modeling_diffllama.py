@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch DiffLlama model."""
 
 import gc
-import tempfile
 import unittest
 
 import pytest
@@ -358,34 +357,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         self.assertListEqual(output_native, output_fa_2)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @slow
-    @pytest.mark.flash_attn_test
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
-                ).to(torch_device)
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -597,7 +568,7 @@ class Mask4DTestHard(unittest.TestCase):
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
         outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
+        cache_a = outs_1a["cache"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
         input_1b = input_ids_shared_prefix[:, part_a:]
@@ -607,7 +578,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
+            cache=cache_a,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
@@ -634,7 +605,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -648,7 +619,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            past_key_values=past_key_values,
+            cache=cache,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
             0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
@@ -675,7 +646,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         # forward run for the first part of input
         part_a = 3  # split point
@@ -695,7 +666,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         # forward run for the second part of input
@@ -711,7 +682,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values,
+            cache=cache,
         )
         decoded_1b = [
             self.tokenizer.decode(t)

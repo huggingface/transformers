@@ -40,6 +40,7 @@ from transformers import (
     Qwen2TokenizerFast,
     Qwen3MoeConfig,
     RobertaTokenizer,
+    Siglip2Tokenizer,
     TokenizersBackend,
     is_tokenizers_available,
     logging,
@@ -86,6 +87,37 @@ if is_mistral_common_available():
 class AutoTokenizerTest(unittest.TestCase):
     def setUp(self):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
+
+    # Byte-level tokenizer.json + Hub tokenizer_class LlamaTokenizer/Fast
+    # needs to be loaded as TokenizersBackend to support decoding of byte-level tokens.
+    BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS = [
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "deepseek-ai/deepseek-llm-7b-base",
+        "deepseek-ai/DeepSeek-V2-Lite",
+        "deepseek-ai/DeepSeek-V3-Base",
+        "deepseek-ai/DeepSeek-V3.2-Exp",
+        "deepseek-ai/deepseek-vl-1.3b-base",
+        "deepseek-ai/deepseek-vl2-tiny",
+        "deepseek-ai/DeepSeek-OCR",
+        "facebook/chameleon-7b",
+        "deepseek-community/Janus-Pro-1B",
+        "stepfun-ai/Step-3.5-Flash",
+        "Salesforce/xLAM-1b-fc-r",
+        "microsoft/wavecoder-ultra-6.7b",
+        "LSX-UniWue/LLaMmlein_1B_prerelease",
+        "AI-MO/NuminaMath-7B-TIR",
+        "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+    ]
+
+    @slow
+    @require_tokenizers
+    @parameterized.expand(BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS)
+    def test_byte_level_llama_tokenizer_class_uses_tokenizers_backend(self, repo_id):
+        text = "Hello world. 嗯，"
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        # exact type: LlamaTokenizer subclasses TokenizersBackend
+        self.assertIs(type(tokenizer), TokenizersBackend)
+        self.assertEqual(tokenizer.decode(tokenizer.encode(text, add_special_tokens=False)), text)
 
     @slow
     def test_tokenizer_from_pretrained(self):
@@ -973,6 +1005,15 @@ class NopConfig(PreTrainedConfig):
         """Regression: qwen2 model with wrong Hub tokenizer_class='LlamaTokenizerFast' must use Qwen2Tokenizer."""
         tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
         self.assertIsInstance(tokenizer, Qwen2Tokenizer)
+
+    @slow
+    @require_tokenizers
+    def test_siglip2_ignores_incorrect_hub_tokenizer_class(self):
+        """Hub tokenizer_class is GemmaTokenizer; SigLIP2 was trained lowercased."""
+        tokenizer = AutoTokenizer.from_pretrained("google/siglip2-base-patch16-naflex")
+        self.assertIsInstance(tokenizer, Siglip2Tokenizer)
+        self.assertEqual(tokenizer.encode("Lion"), [14340, 1])
+        self.assertEqual(tokenizer.encode("lion"), [14340, 1])
 
     @require_tokenizers
     @require_sentencepiece

@@ -18,8 +18,6 @@ import unittest
 from transformers import (
     AutoProcessor,
     MiniCPMV4_7Config,
-    MiniCPMV4_7VisionConfig,
-    Qwen3_5TextConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -114,8 +112,7 @@ GOLDEN_CANVAS_LAYOUTS = {
 class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniCPMV4_7Model
     config_class = MiniCPMV4_7Config
-    text_config_class = Qwen3_5TextConfig
-    vision_config_class = MiniCPMV4_7VisionConfig
+
     conditional_generation_class = MiniCPMV4_7ForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -129,9 +126,9 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("slice_end_id", 13)
         kwargs.setdefault("newline_id", 14)
         # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
-        kwargs.setdefault("image_size", 32)
+        kwargs.setdefault("image_size", 64)
         kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("vocab_size", 256)
         kwargs.setdefault("hidden_size", 64)
         kwargs.setdefault("intermediate_size", 37)
@@ -239,51 +236,6 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
             "target_sizes": target_sizes,
             "mm_token_type_ids": self._mm_token_type_ids(input_ids),
         }
-
-    def get_config(self):
-        text_config = {
-            "model_type": "qwen3_5_text",
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "head_dim": self.head_dim,
-            "intermediate_size": self.intermediate_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "hidden_act": "silu",
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_parameters": self.rope_parameters,
-            "tie_word_embeddings": self.tie_word_embeddings,
-            "bos_token_id": self.bos_token_id,
-            "eos_token_id": self.eos_token_id,
-            "pad_token_id": self.pad_token_id,
-            "layer_types": self.layer_types,
-            "linear_conv_kernel_dim": self.linear_conv_kernel_dim,
-            "linear_key_head_dim": self.linear_key_head_dim,
-            "linear_value_head_dim": self.linear_value_head_dim,
-            "linear_num_key_heads": self.linear_num_key_heads,
-            "linear_num_value_heads": self.linear_num_value_heads,
-        }
-        vision_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "intermediate_size": self.vision_intermediate_size,
-            "image_size": self.image_size,
-            "patch_size": self.patch_size,
-            "num_channels": self.num_channels,
-            "hidden_act": self.vision_hidden_act,
-        }
-        return MiniCPMV4_7Config(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            image_size=self.image_size,
-            drop_vision_last_layer=False,
-            insert_layer_id=self.insert_layer_id,
-            **self._canvas_marker_ids,
-        )
 
 
 @require_torch
@@ -474,16 +426,14 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         model = self.model_tester._mrope_model()
         model.rope_deltas = torch.tensor([[-3]], device=torch_device)
 
-        past_key_values = DynamicCache()
+        cache = DynamicCache()
         num_kv_heads = model.config.text_config.num_key_value_heads
         head_dim = model.config.text_config.head_dim
         prefilled = torch.zeros(1, num_kv_heads, 8, head_dim, device=torch_device)
-        past_key_values.update(prefilled, prefilled, 0)
+        cache.update(prefilled, prefilled, 0)
 
         inputs_embeds = torch.zeros(1, 1, model.config.text_config.hidden_size, device=torch_device)
-        position_ids = model.compute_3d_position_ids(
-            input_ids=None, inputs_embeds=inputs_embeds, past_key_values=past_key_values
-        )
+        position_ids = model.compute_3d_position_ids(input_ids=None, inputs_embeds=inputs_embeds, cache=cache)
 
         self.assertIsNotNone(position_ids)
         self.assertEqual(tuple(position_ids.shape), (3, 1, 1))
@@ -541,9 +491,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4_7"
+    model_id = "openbmb/MiniCPM-V-4.7-1B"
 
-    @slow
     def test_small_model_logits(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -552,7 +501,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device)
 
         with torch.no_grad():
@@ -561,7 +515,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertTrue(torch.isfinite(logits).all().item())
 
-    @slow
     def test_small_model_vision_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -583,7 +536,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -591,13 +549,16 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                ("cuda", (8, 0)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                ("rocm", (9, 4)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                ("xpu", 5): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
             }
         ).get_expectation()
         # fmt: on
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_video_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -619,7 +580,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -627,14 +593,15 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the video. The scene is an indoor tennis court. There are two people playing tennis. The main person in the foreground is",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 0)): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
+                ("xpu", 5): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
 
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_vision_generation_batch(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -664,6 +631,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -671,15 +639,19 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
                 ("cuda", (8, 0)): [
-                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a'
                 ] * 2,
+                ("xpu", 5): [
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a',
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal',
+                ],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
-    @slow
     def test_small_model_vision_generation_batch_mixed(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -710,6 +682,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -717,11 +690,24 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- It’s",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
                 ("cuda", (8, 0)): [
-                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
-                    'Okay, the user is asking "Who are you?" This is a straightforward question about my identity. I need to introduce myself clearly and concisely',
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
+                ("rocm", (9, 4)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
+                ("xpu", 5): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
                 ],
             }
-        )  # fmt: skip
+        )
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)

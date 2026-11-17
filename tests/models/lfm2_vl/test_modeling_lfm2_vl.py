@@ -236,6 +236,9 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): [
                     "In this image, we see two cats sleeping on a pink blanket. They are both very relaxed and comfortable. They are both grey"
                 ],
+                ("xpu", 5): [
+                    "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()[0]
@@ -283,6 +286,14 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                 (None, None): [
                     "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
                     "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
+                ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
+                ],
+                ("xpu", 5): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
                 ],
             }
         )
@@ -367,6 +378,10 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     "In this image, we see a statue of a woman holding a torch. This statue is located on a small island surrounded by water",
+                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
+                ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see the Statue of Liberty, a symbol of freedom and democracy. It stands on a small island in",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],
             }

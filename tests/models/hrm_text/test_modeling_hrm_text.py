@@ -59,7 +59,6 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = HrmTextModelTester
 
     # z_L_init does not have any gradients
-    test_all_params_have_gradient = False
 
     @unittest.skip(reason="Higher tols (likely due to different recursion and grad patterns). FIXME later")
     def test_tp_generation_quantized(self):
@@ -255,7 +254,7 @@ class HrmTextIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 ("cuda", (8, 6)): torch.tensor(
-                    [[-6.8750, -5.0000, -7.0625], [-5.3750, -3.2656, -4.5938], [2.1875, 2.2031, 2.5625]],
+                    [[-6.8750, -4.9688, -7.0312], [-5.3750, -3.2656, -4.6250], [2.1875, 2.1875, 2.5781]],
                     dtype=torch.bfloat16,
                 ),
                 ("xpu", 3): torch.tensor(

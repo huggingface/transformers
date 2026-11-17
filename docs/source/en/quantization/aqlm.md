@@ -20,7 +20,7 @@ Additive Quantization of Language Models ([AQLM](https://huggingface.co/papers/2
 
 AQLM also supports fine-tuning with [LoRA](https://huggingface.co/docs/peft/package_reference/lora) with the [PEFT](https://huggingface.co/docs/peft) library, and is fully compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster inference and training.
 
-Run the command below to install the AQLM library with kernel support for both GPU and CPU inference and training. AQLM only works with Python 3.10+.
+Run the command below to install the AQLM library with kernel support for both GPU and CPU inference and training.
 
 ```bash
 pip install aqlm[gpu,cpu]

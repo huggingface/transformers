@@ -49,7 +49,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -63,6 +63,9 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -131,7 +134,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     model_type = "qwen3_vl_moe_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -169,8 +172,11 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl_moe"
-    sub_configs = {"vision_config": Qwen3VLMoeVisionConfig, "text_config": Qwen3VLMoeTextConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vision_config": Qwen3VLMoeVisionConfig,
+        "text_config": Qwen3VLMoeTextConfig,
+    }
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -181,19 +187,9 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl_moe":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "qwen3_vl_moe":
-                self.vision_config["model_type"] = "qwen3_vl_moe_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "qwen3_vl_moe_vision"
         super().__post_init__(**kwargs)
 
 

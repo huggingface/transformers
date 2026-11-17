@@ -222,7 +222,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -308,6 +308,7 @@ class ConvNextV2ModelIntegrationTest(unittest.TestCase):
         expected_slice = Expectations(
             {
                 (None, None): torch.tensor([0.9989, 0.1953, -0.4382]),
+                ("cuda", 8): torch.tensor([0.9987, 0.1953, -0.4381]),
                 ("xpu", 5): torch.tensor([0.9986, 0.1953, -0.4381]),
             }
         ).get_expectation().to(torch_device)

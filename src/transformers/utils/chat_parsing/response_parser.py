@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from copy import deepcopy
 from inspect import isfunction, ismethod
 from typing import Any
 
@@ -43,7 +44,14 @@ def _coerce(raw: str, types: tuple[str, ...]) -> Any:
     for type_name in types:
         try:
             if type_name == "integer":
-                return int(raw)
+                try:
+                    return int(raw)
+                except ValueError:
+                    # JSON Schema integers include whole numbers written as floats, e.g. "3.0"
+                    number = float(raw)
+                    if not number.is_integer():
+                        continue
+                    return int(number)
             if type_name == "number":
                 number = float(raw)
                 if number != number or number in (float("inf"), float("-inf")):
@@ -139,7 +147,7 @@ class ResponseParser:
                 self._tool_params[fn["name"]] = properties if isinstance(properties, dict) else {}
         self._buffer: str = ""
         self._pos: int = 0
-        self._output: dict[str, Any] = dict(self._spec.defaults)
+        self._output: dict[str, Any] = deepcopy(self._spec.defaults)
         self._implicit_name: str | None = self._spec.implicit
         # Unified current-region state: starts in the implicit region (or a
         # null sink if none was declared), and returns there after every close.
@@ -213,9 +221,11 @@ class ResponseParser:
                 if kind == "open":
                     self._close_current(events)
                     self._open_explicit(events, field, m)
-                else:  # "close" (always the implicit region's close here,
-                    #   since explicit regions only expose their own close)
+                else:  # "close" (of the open explicit region, or of the implicit region)
                     had_content = self._opened
+                    # Named groups in the close pattern join the open pattern's captures in the transform
+                    # scope. priority: close captures > open captures
+                    self._captures.update({k: v for k, v in m.groupdict().items() if v is not None})
                     self._close_current(events)
                     # Zero-width close on an already-empty region would just
                     # re-fire next iteration -- bail out to make progress.
@@ -309,20 +319,29 @@ class ResponseParser:
     def _can_grow(self, kind: str, field: ResponseTemplateField, m: Any) -> bool:
         r"""Whether a *complete* match ending at the current buffer edge could still
         change as more input arrives -- in which case we defer rather than commit. A
-        match ending before the edge has already seen its terminating byte and is
-        final. At the edge: zero-width matches (`$` / `\Z`) are only real at true
-        EOS; a fully-present literal that no other literal in its set extends cannot
-        grow (the fast path that keeps literal delimiters zero-latency); anything
-        else (regex delimiters, prefix-overlapping literal lists) might."""
-        if m.end() != len(self._buffer):
-            return False
-        if m.start() == m.end():
-            return True
+        literal match ending before the edge has already seen its terminating byte and
+        is final, but a regex match there can still lean on an end-of-input assertion
+        (`$` also matches just before a trailing newline, and `\Z` can sit inside a
+        lookahead), so it is only final if it survives the buffer being extended. At
+        the edge: zero-width matches (`$` / `\Z`) are only real at true EOS; a
+        fully-present literal that no other literal in its set extends cannot grow
+        (the fast path that keeps literal delimiters zero-latency); anything else
+        (regex delimiters, prefix-overlapping literal lists) might."""
         literals, can_extend = (
             (field.open_literals, field.open_literal_can_extend)
             if kind == "open"
             else (field.close_literals, field.close_literal_can_extend)
         )
+        if m.end() != len(self._buffer):
+            if literals is not None:
+                return False
+            # We pretend the stream continues with a character that is neither a newline nor the end of
+            # input. If the match moves or its captures change, it was relying on the current buffer edge.
+            pattern = field.open_re if kind == "open" else field.close_re
+            extended = pattern.match(self._buffer + "\x00", m.start())
+            return extended is None or extended.span() != m.span() or extended.groupdict() != m.groupdict()
+        if m.start() == m.end():
+            return True
         return literals is None or can_extend
 
     def _accumulate(self, events: list[dict], text: str) -> None:

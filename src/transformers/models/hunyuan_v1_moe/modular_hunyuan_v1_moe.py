@@ -21,10 +21,10 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
@@ -63,12 +63,13 @@ class HunYuanMoEV1Attention(LlamaAttention):
         self.query_layernorm = HunYuanMoEV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.key_layernorm = HunYuanMoEV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -83,8 +84,8 @@ class HunYuanMoEV1Attention(LlamaAttention):
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -167,30 +168,11 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
         "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, HunYuanMoEV1Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        # DynamicNTKAlphaRotary - unique to this model
-        elif "RotaryEmbedding" in module.__class__.__name__ and hasattr(module, "original_inv_freq"):
-            if module.rope_type == "dynamic" and module.config.rope_parameters.get("alpha"):
-                dim = module.config.head_dim
-                rope_theta = module.config.rope_parameters["rope_theta"]
-                alpha = module.config.rope_parameters["alpha"]
-
-                base = rope_theta * alpha ** (dim / (dim - 2))
-                buffer_value = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-            else:
-                rope_fn = (
-                    ROPE_INIT_FUNCTIONS[module.rope_type]
-                    if module.rope_type != "default"
-                    else module.compute_default_rope_parameters
-                )
-                buffer_value, _ = rope_fn(module.config)
-            init.copy_(module.inv_freq, buffer_value)
-            init.copy_(module.original_inv_freq, buffer_value)
 
 
 class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):

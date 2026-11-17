@@ -37,9 +37,10 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_zamba2 import Zamba2Config
@@ -125,7 +126,6 @@ class Zamba2RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -278,12 +278,13 @@ class Zamba2Attention(nn.Module):
 
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         layer_idx: int,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -307,8 +308,8 @@ class Zamba2Attention(nn.Module):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -637,7 +638,7 @@ def mamba2_chunk_scan(
 def eager_causal_conv1d_forward(
     module: nn.Module,
     hidden_states: torch.Tensor,
-    cache_params: Cache | None = None,
+    cache: Cache | None = None,
     use_precomputed_states: bool = False,
     **kwargs,
 ) -> torch.Tensor:
@@ -645,17 +646,17 @@ def eager_causal_conv1d_forward(
     layer_idx = module.layer_idx
     hidden_states = hidden_states.transpose(1, 2)
 
-    if use_precomputed_states and seq_len == 1 and not cache_params.layers[layer_idx].record_past:
+    if use_precomputed_states and seq_len == 1 and not cache.is_recording_past(layer_idx):
         hidden_states = causal_conv1d_update(
             hidden_states,
-            cache_params.layers[layer_idx].conv_states[0],
+            cache.get_conv_state(layer_idx),
             module.conv1d.weight.squeeze(1),
             module.conv1d.bias,
             activation=module.activation,
         )
     else:
-        if cache_params is not None:
-            hidden_states = cache_params.update_conv_state(
+        if cache is not None:
+            hidden_states = cache.update_conv_state(
                 hidden_states,
                 layer_idx,
                 conv_kernel_size=module.conv_kernel_size,
@@ -669,7 +670,7 @@ def eager_causal_conv1d_forward(
             **kwargs,
         )
 
-        if cache_params is not None:
+        if cache is not None:
             hidden_states = hidden_states[:, :, -seq_len:]
 
     return hidden_states.transpose(1, 2)
@@ -681,14 +682,14 @@ def eager_ssd_forward(
     B: torch.Tensor,
     C: torch.Tensor,
     dt: torch.Tensor,
-    cache_params: Cache | None = None,
+    cache: Cache | None = None,
     use_precomputed_states: bool = False,
     **kwargs,
 ) -> torch.Tensor:
     batch_size, seq_len, _ = hidden_states.shape
     layer_idx = module.layer_idx
     A = -torch.exp(module.A_log.float())
-    recurrent_state = cache_params.layers[layer_idx].recurrent_states[0] if use_precomputed_states else None
+    recurrent_state = cache.get_recurrent_state(layer_idx) if use_precomputed_states else None
 
     # Recurrent form
     if use_precomputed_states and seq_len == 1:
@@ -716,7 +717,7 @@ def eager_ssd_forward(
         return scan_output.view(batch_size, 1, -1)
 
     # Chunk form
-    output_final_state = cache_params is not None
+    output_final_state = cache is not None
     scan_result = mamba2_chunk_scan(
         hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
         dt,
@@ -736,7 +737,7 @@ def eager_ssd_forward(
 
     if output_final_state:
         scan_output, final_state = scan_result
-        cache_params.update_recurrent_state(final_state, layer_idx=layer_idx)
+        cache.update_recurrent_state(final_state, layer_idx=layer_idx)
     else:
         scan_output = scan_result
 
@@ -828,10 +829,11 @@ class Zamba2MambaMixer(nn.Module):
         init.ones_(self.dt_bias)
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
@@ -841,7 +843,7 @@ class Zamba2MambaMixer(nn.Module):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
 
-        if self.training and cache_params is None:
+        if self.training and cache is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
@@ -873,14 +875,14 @@ class Zamba2MambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         # The convolution updates the cache, so whether it held a previous state must be read before it
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        use_precomputed_states = cache is not None and cache.has_previous_state(self.layer_idx)
         causal_conv1d_interface: Callable = ALL_CAUSAL_CONV1D_FUNCTIONS.get_interface(
             self.config._linear_attn_implementation, eager_causal_conv1d_forward
         )
         hidden_states_B_C = causal_conv1d_interface(
             self,
             hidden_states_B_C,
-            cache_params=cache_params,
+            cache=cache,
             use_precomputed_states=use_precomputed_states,
             **kwargs,
         )
@@ -900,7 +902,7 @@ class Zamba2MambaMixer(nn.Module):
             B,
             C,
             dt,
-            cache_params=cache_params,
+            cache=cache,
             use_precomputed_states=use_precomputed_states,
             **kwargs,
         )
@@ -963,30 +965,31 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: torch.Tensor,
         layer_idx: int,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
+            hidden_states (`torch.Tensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.Tensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
                 This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
                 concatenated tensor is then used as input of the pre-attention RMSNorm
                 (see fig. 2 in https://huggingface.co/papers/2405.16712).
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            cache (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
         """
@@ -996,7 +999,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             layer_idx=layer_idx,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -1014,6 +1017,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1021,7 +1025,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         layer_idx: int | None = None,
         attention_mask: torch.Tensor | None = None,
         causal_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_ids: torch.LongTensor | None = None,
         transformer_hidden_states: torch.Tensor | None = None,
@@ -1029,13 +1033,13 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            cache (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
         """
 
         residual = hidden_states
@@ -1049,7 +1053,7 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mamba(
             hidden_states=hidden_states,
-            cache_params=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             **kwargs,
         )
@@ -1068,6 +1072,7 @@ class Zamba2HybridLayer(GradientCheckpointingLayer):
         self.mamba_decoder = mamba
         self.shared_transformer = shared_transformer
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1075,25 +1080,25 @@ class Zamba2HybridLayer(GradientCheckpointingLayer):
         layer_idx: int | None = None,
         attention_mask: torch.Tensor | None = None,
         causal_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            original_hidden_states (`torch.FloatTensor`): word embedding output that will be concatenated with
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.Tensor`): word embedding output that will be concatenated with
             hidden activations to form the input of the shared transformer layer.
             layer_idx (`int`): layer number.
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            cache (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
         """
@@ -1103,7 +1108,7 @@ class Zamba2HybridLayer(GradientCheckpointingLayer):
             original_hidden_states=original_hidden_states,
             layer_idx=layer_idx,
             attention_mask=causal_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             position_ids=position_ids,
             **kwargs,
@@ -1114,7 +1119,7 @@ class Zamba2HybridLayer(GradientCheckpointingLayer):
             hidden_states,
             transformer_hidden_states=transformer_hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -1129,7 +1134,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Zamba2HybridLayer", "Zamba2MambaDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_sdpa = True
@@ -1139,7 +1144,6 @@ class Zamba2PreTrainedModel(PreTrainedModel):
         "attentions": Zamba2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Zamba2MambaMixer):
@@ -1192,13 +1196,14 @@ class Zamba2Model(Zamba2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -1215,11 +1220,11 @@ class Zamba2Model(Zamba2PreTrainedModel):
         original_hidden_states = torch.clone(inputs_embeds)
         # original_hidden_states: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1228,7 +1233,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -1249,7 +1254,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                 layer_idx,
                 causal_mask_mapping["linear_attention"],
                 causal_mask_mapping["full_attention"],
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
@@ -1260,7 +1265,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
     def get_layers(self):
@@ -1318,13 +1323,14 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1351,16 +1357,15 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1374,7 +1379,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1411,13 +1416,14 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1427,7 +1433,7 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1466,7 +1472,7 @@ class Zamba2ForSequenceClassification(Zamba2PreTrainedModel):
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )

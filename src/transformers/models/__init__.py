@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .align import *
     from .altclip import *
     from .apertus import *
+    from .apertus1p5 import *
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
@@ -39,11 +40,13 @@ if TYPE_CHECKING:
     from .axk1 import *
     from .axk2 import *
     from .aya_vision import *
+    from .bailing_hybrid import *
     from .bamba import *
     from .bark import *
     from .bart import *
     from .barthez import *
     from .bartpho import *
+    from .beam import *
     from .beit import *
     from .bert import *
     from .bert_generation import *
@@ -129,6 +132,7 @@ if TYPE_CHECKING:
     from .doge import *
     from .donut import *
     from .dots1 import *
+    from .dots3_note import *
     from .dpr import *
     from .dpt import *
     from .edgetam import *
@@ -162,6 +166,7 @@ if TYPE_CHECKING:
     from .flaubert import *
     from .flava import *
     from .flex_olmo import *
+    from .flint import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -201,8 +206,10 @@ if TYPE_CHECKING:
     from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
+    from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
+    from .granite_docling import *
     from .granite_speech import *
     from .granite_speech5 import *
     from .granite_speech_plus import *
@@ -227,6 +234,7 @@ if TYPE_CHECKING:
     from .hunyuan_vl import *
     from .hy_v3 import *
     from .hy_v4 import *
+    from .hy_v4_vl import *
     from .hyperclovax import *
     from .hyperclovax_vision_v2 import *
     from .ibert import *
@@ -237,16 +245,21 @@ if TYPE_CHECKING:
     from .imagegpt import *
     from .informer import *
     from .inkling import *
+    from .inkling2 import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internlm3 import *
     from .internvl import *
+    from .iquestcoder import *
     from .jais2 import *
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jev import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *
+    from .kolibri1 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -261,6 +274,8 @@ if TYPE_CHECKING:
     from .lfm2 import *
     from .lfm2_moe import *
     from .lfm2_vl import *
+    from .lfm3 import *
+    from .lfm3_vl import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
@@ -292,6 +307,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .mimo_v2_flash import *
     from .minicpm3 import *
+    from .minicpm_ocr import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *
@@ -302,6 +318,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mistral4 import *
+    from .mistral_large4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
@@ -315,15 +332,18 @@ if TYPE_CHECKING:
     from .modernbert import *
     from .modernbert_decoder import *
     from .modernvbert import *
+    from .molmo2 import *
     from .moonshine import *
     from .moonshine_streaming import *
     from .moshi import *
+    from .moss_transcribe_diarize import *
     from .mpnet import *
     from .mpt import *
     from .mra import *
     from .mt5 import *
     from .muse_glimmer import *
     from .muse_glimmer_assistant import *
+    from .muse_spark import *
     from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
@@ -332,6 +352,7 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
+    from .nemotron3_5_transcribe import *
     from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
@@ -349,6 +370,8 @@ if TYPE_CHECKING:
     from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
+    from .omniasr import *
+    from .omniasr_ctc import *
     from .oneformer import *
     from .openai import *
     from .openai_privacy_filter import *
@@ -379,11 +402,14 @@ if TYPE_CHECKING:
     from .pixio import *
     from .pixtral import *
     from .plbart import *
+    from .pocket_tts import *
+    from .pocket_tts_audio_tokenizer import *
     from .poolformer import *
     from .pop2piano import *
     from .pp_chart2table import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_doclayout_v4 import *
     from .pp_formulanet import *
     from .pp_lcnet import *
     from .pp_lcnet_v3 import *
@@ -489,10 +515,13 @@ if TYPE_CHECKING:
     from .trocr import *
     from .tvp import *
     from .udop import *
+    from .ultrabert import *
+    from .ultravbert import *
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *
     from .univnet import *
+    from .unlimited_ocr import *
     from .upernet import *
     from .uvdoc import *
     from .vaultgemma import *
@@ -527,6 +556,7 @@ if TYPE_CHECKING:
     from .wav2vec2_phoneme import *
     from .wav2vec2_with_lm import *
     from .wavlm import *
+    from .wavtokenizer import *
     from .whisper import *
     from .x_clip import *
     from .xcodec import *
