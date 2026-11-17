@@ -11,6 +11,7 @@ from .utils import (
     is_quanto_greater,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
+    is_tracing,
 )
 
 
@@ -208,6 +209,8 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = torch.tensor(0, dtype=torch.long)
+        # Its host-side copy: the mask reads it in eager, where the tensor would sync
+        self.cumulative_length_int = 0
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
         self.record_past = False
 
@@ -223,6 +226,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         # Filled on the device rather than copied from the host: a copy would sync once per layer
         self._sliding_window_tensor = torch.full((), self.sliding_window, dtype=torch.long, device=self.device)
         self.cumulative_length = torch.zeros((), dtype=torch.long, device=self.device)
+        self.cumulative_length_int = 0
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -242,6 +246,8 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             self.lazy_initialization(key_states, value_states)
 
         self.cumulative_length = self.cumulative_length + key_states.shape[-2]
+        if not is_tracing(key_states):
+            self.cumulative_length_int += key_states.shape[-2]
 
         # Compute the full states
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
@@ -268,13 +274,15 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.is_initialized:
             return query_length, 0
         if self.record_past:  # the cache may hold more than the window until the next `crop`
-            cumulative_length = int(self.cumulative_length)
-            kv_offset = max(cumulative_length - self.sliding_window + 1, 0)
-            return min(cumulative_length, self.sliding_window - 1) + query_length, kv_offset
+            kv_offset = max(self.cumulative_length_int - self.sliding_window + 1, 0)
+            return min(self.cumulative_length_int, self.sliding_window - 1) + query_length, kv_offset
         # The cached states are the last `min(seen, sliding_window - 1)` tokens: sizing the mask from their count and
         # the tensor counter needs no branch on whether the window is full. Before their first update they're the 1-D
         # empty tensor `lazy_initialization` leaves (a layer that keeps its prefill apart, Unlimited OCR's, decodes so).
         cached_length = self.keys.shape[-2] if self.keys.dim() == 4 else 0
+        # Nothing in a dynamic window is unwritten, so in eager an int offset lets SDPA skip the mask
+        if not is_tracing(self.cumulative_length):
+            return cached_length + query_length, self.cumulative_length_int - cached_length
         return cached_length + query_length, self.cumulative_length - cached_length
 
     def get_seq_length(self) -> int:
@@ -313,11 +321,13 @@ class DynamicSlidingWindowLayer(DynamicLayer):
                 self.keys = self.keys[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
                 self.values = self.values[:, :, -self.sliding_window + 1 - tokens_to_remove : -tokens_to_remove, :]
                 self.cumulative_length = self.cumulative_length - tokens_to_remove
+                self.cumulative_length_int -= tokens_to_remove
 
         # If we did not reach the sliding window, we can do the same as for a full attention layer
         else:
             super().crop(tokens_to_remove)
             self.cumulative_length = torch.tensor(self.keys.shape[-2], dtype=torch.long, device=self.keys.device)
+            self.cumulative_length_int = self.keys.shape[-2]
 
 
 class DynamicIndexedLayer(DynamicLayer):
