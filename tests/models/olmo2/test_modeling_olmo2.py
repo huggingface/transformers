@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch OLMo2 model."""
 
+import copy
 import unittest
 
 import pytest
@@ -23,11 +24,14 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_kernels,
     require_tokenizers,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
+from transformers.utils.import_utils import get_device_type, is_kernels_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -43,6 +47,13 @@ if is_torch_available():
         Olmo2ForSequenceClassification,
         Olmo2Model,
     )
+    from transformers.models.olmo2.modeling_olmo2 import Olmo2RMSNorm
+
+
+if is_kernels_available():
+    from kernels import Mode, kernelize, use_kernel_mapping
+
+    from transformers.integrations.hub_kernels import get_kernel_mapping_transformers
 
 
 class Olmo2ModelTester:
@@ -182,6 +193,33 @@ class Olmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         self.model_tester = Olmo2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Olmo2Config, hidden_size=32)
+
+    @require_kernels
+    @require_torch_gpu
+    def test_kernelized_post_norm_gradients(self):
+        torch.manual_seed(0)
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        reference = Olmo2ForCausalLM(config).to(torch_device).train()
+        kernelized = copy.deepcopy(reference)
+
+        # Exercise the default RMSNorm mapping independently of attention kernels.
+        backend = get_device_type(kernelized.device)
+        mapping = {"RMSNorm": {backend: get_kernel_mapping_transformers()["RMSNorm"][backend]}}
+        with use_kernel_mapping(mapping, inherit_mapping=False):
+            for module in kernelized.modules():
+                if isinstance(module, Olmo2RMSNorm):
+                    kernelize(module, mode=Mode.TRAINING, device=backend, use_fallback=False)
+
+        expected = reference(**inputs, labels=inputs["input_ids"])
+        actual = kernelized(**inputs, labels=inputs["input_ids"])
+        expected.loss.backward()
+        actual.loss.backward()
+
+        # The old kernel matches forward but overwrites gradients shared with
+        # the residual branches around OLMo2's post-attention and post-MLP norms.
+        torch.testing.assert_close(actual.loss, expected.loss, atol=1e-5, rtol=1e-5)
+        for (name, expected_param), actual_param in zip(reference.named_parameters(), kernelized.parameters()):
+            torch.testing.assert_close(actual_param.grad, expected_param.grad, atol=1e-4, rtol=1e-4, msg=name)
 
     def test_config(self):
         self.config_tester.run_common_tests()

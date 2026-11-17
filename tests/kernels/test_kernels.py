@@ -474,15 +474,6 @@ class TestKernelsEnv(TestCasePlus):
 
 @require_kernels
 class TestKernelUtilities(TestCasePlus):
-    @parameterized.expand(["cuda", "rocm"])
-    def test_rmsnorm_uses_kernel_with_safe_backward(self, device):
-        # Earlier builds overwrite the incoming gradient, corrupting residual
-        # branches in post-norm models such as OLMo2.
-        expected = LayerRepository(repo_id="kernels-community/liger-kernels", layer_name="LigerRMSNorm", version=4)
-        mapping = hub_kernels_pkg.get_kernel_mapping_transformers()["RMSNorm"][device]
-        for repository in mapping.values():
-            self.assertEqual(repository, expected)
-
     def test_is_kernel_regex(self):
         valid = [
             "org/model",
