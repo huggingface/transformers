@@ -159,7 +159,6 @@ class ConfigTestUtils(unittest.TestCase):
                 "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",
-                "_linear_attn_implementation_internal",
                 "_post_init_done",
             ],
         )

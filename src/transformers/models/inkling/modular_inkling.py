@@ -30,6 +30,7 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -52,7 +53,9 @@ from ..gemma3.modeling_gemma3 import (
 from ..higgs_audio_v2.modeling_higgs_audio_v2 import HiggsAudioV2Embeddings
 from ..llama.modeling_llama import LlamaRMSNorm, repeat_kv
 from ..mixtral.modeling_mixtral import MixtralExperts
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
+from ..qwen3_next.modeling_qwen3_next import (
+    apply_mask_to_padding_states,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -594,7 +597,7 @@ class InklingMoE(nn.Module):
         return hidden_states
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class InklingShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
         super().__init__()
@@ -626,32 +629,16 @@ class InklingShortConvolution(nn.Module):
 
         residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, conv_mask)
-        seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
-        else:
-            conv_state = None
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
-            )
-
-            # Drop the additional previous states
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        hidden_states = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states,
+            cache,
+            self.layer_idx,
+            state_idx=self.conv_idx,
+            seq_idx=kwargs.get("seq_idx"),
+        )
 
         hidden_states = hidden_states.transpose(1, 2)
         hidden_states = (hidden_states + residual).to(dtype=input_dtype)

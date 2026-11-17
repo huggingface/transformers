@@ -27,10 +27,10 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.linear_attention import ALL_CAUSAL_CONV1D_FUNCTIONS, ALL_SSD_FUNCTIONS
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_linear_attn_utils import causal_conv1d_forward, ssd_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -50,8 +50,6 @@ from ..llama.modeling_llama import (
 )
 from ..mamba2.modeling_mamba2 import (
     apply_mask_to_padding_states,
-    eager_causal_conv1d_forward,
-    eager_ssd_forward,
     mamba2_split_conv1d_scan_combined,
 )
 from .configuration_falcon_h1 import FalconH1Config
@@ -185,7 +183,13 @@ class FalconH1Mixer(BambaMixer):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
+        batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
+        if cache is not None:
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            recurrent_state = None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -194,13 +198,15 @@ class FalconH1Mixer(BambaMixer):
         projected_states = self.in_proj(hidden_states)
         projected_states = projected_states * self.mup_vector
 
+        A = -torch.exp(self.A_log.float())
+        fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
         if self.training and cache is None:
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.dt_bias,
-                A=-torch.exp(self.A_log.float()),
+                A,
                 D=self.D,
                 chunk_size=self.chunk_size,
                 activation=self.activation,
@@ -212,8 +218,7 @@ class FalconH1Mixer(BambaMixer):
                 ngroups=self.n_groups,
                 norm_before_gate=False,
                 return_final_states=False,
-                dt_limit=self.time_step_limit,
-                **kwargs,
+                **fused_kwargs,
             )
 
             # Only kernels can use this shortcircuit, fallback to normal torch otherwise
@@ -225,40 +230,26 @@ class FalconH1Mixer(BambaMixer):
         )
 
         # 2. Convolution sequence transformation
-        # The convolution updates the cache, so whether it held a previous state must be read before it
-        use_precomputed_states = cache is not None and cache.has_previous_state(self.layer_idx)
-        causal_conv1d_interface: Callable = ALL_CAUSAL_CONV1D_FUNCTIONS.get_interface(
-            self.config._linear_attn_implementation, eager_causal_conv1d_forward
-        )
-        hidden_states_B_C = causal_conv1d_interface(
-            self,
+        hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
+        hidden_states_B_C = causal_conv1d_forward(
+            self.conv1d,
             hidden_states_B_C,
-            cache=cache,
-            use_precomputed_states=use_precomputed_states,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
             **kwargs,
         )
 
         # 3. SSM transformation
-        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
-        groups_state_size = self.n_groups * self.ssm_state_size
+        hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
         hidden_states, B, C = torch.split(
-            hidden_states_B_C, [self.intermediate_size, groups_state_size, groups_state_size], dim=-1
-        )
-        ssd_interface: Callable = ALL_SSD_FUNCTIONS.get_interface(
-            self.config._linear_attn_implementation, eager_ssd_forward
-        )
-        scan_output = ssd_interface(
-            self,
-            hidden_states,
-            B,
-            C,
-            dt,
-            cache=cache,
-            use_precomputed_states=use_precomputed_states,
-            **kwargs,
+            hidden_states_B_C,
+            [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
+            dim=-1,
         )
 
-        # Key difference 2: Norm based handling as optional between z and norm
+        scan_output = ssd_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        # Key difference 3: Norm based handling as optional between z and norm
         if self.mamba_rms_norm:
             scan_output = self.norm(scan_output, gate)
         else:

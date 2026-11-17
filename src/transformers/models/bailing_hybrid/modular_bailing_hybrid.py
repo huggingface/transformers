@@ -26,6 +26,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_linear_attn_utils import causal_conv1d_forward
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
@@ -41,8 +42,6 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
 from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextLinearAttention,
     Glm5NextTextRMSNormGated,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     chunk_kimi_delta_attention,
     recurrent_kimi_delta_attention,
 )
@@ -328,33 +327,20 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
             [self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)], dim=-1
         ).transpose(1, 2)
 
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
-        if conv_state is not None and seq_len == 1:
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-            if cache is not None:
-                mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
         query, key, value = [states.view(hidden_shape) for states in (query, key, value)]

@@ -125,13 +125,6 @@ _import_structure = {
         "run_hp_search_wandb",
     ],
     "liger": ["apply_liger_kernel"],
-    "linear_attention": [
-        "ALL_CAUSAL_CONV1D_FUNCTIONS",
-        "ALL_SSD_FUNCTIONS",
-        "CausalConv1dInterface",
-        "LinearAttentionInterface",
-        "SSDInterface",
-    ],
     "metal_quantization": [
         "MetalLinear",
         "replace_with_metal_linear",
@@ -284,13 +277,6 @@ if TYPE_CHECKING:
         run_hp_search_wandb,
     )
     from .liger import apply_liger_kernel
-    from .linear_attention import (
-        ALL_CAUSAL_CONV1D_FUNCTIONS,
-        ALL_SSD_FUNCTIONS,
-        CausalConv1dInterface,
-        LinearAttentionInterface,
-        SSDInterface,
-    )
     from .metal_quantization import (
         MetalLinear,
         replace_with_metal_linear,

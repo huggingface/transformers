@@ -22,6 +22,7 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -37,7 +38,9 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
+from ..qwen3_next.modeling_qwen3_next import (
+    apply_mask_to_padding_states,
+)
 from .configuration_lfm2 import Lfm2Config
 
 
@@ -125,7 +128,7 @@ class Lfm2Attention(LlamaAttention):
         return output, attn_weights
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_forward, causal_conv1d_fn])
 class Lfm2ShortConv(nn.Module):
     def __init__(
         self,
@@ -160,34 +163,12 @@ class Lfm2ShortConv(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
-
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         BCx = self.in_proj(hidden_states).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
-        else:
-            conv_state = None
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
-
-            # Drop the additional previous states
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
+        hidden_states = causal_conv1d_forward(self.conv, hidden_states, cache, self.layer_idx, **kwargs)
 
         y = C * hidden_states
         y = y.transpose(-1, -2).contiguous()

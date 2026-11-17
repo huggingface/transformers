@@ -21,6 +21,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -35,8 +36,6 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
     Qwen3_5VisionRotaryEmbedding,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -166,7 +165,13 @@ class Qwen3_5MoeTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
     pass

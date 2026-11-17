@@ -42,44 +42,47 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
     base_model_class = HYV4VLModel
     conditional_generation_class = HYV4VLForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 48)
-        kwargs.setdefault("intermediate_size", 96)
-        kwargs.setdefault("moe_intermediate_size", 32)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 4)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("qk_nope_head_dim", 16)
-        kwargs.setdefault("qk_rope_head_dim", 16)
-        kwargs.setdefault("v_head_dim", 16)
-        kwargs.setdefault("q_lora_rank", 32)
-        kwargs.setdefault("kv_lora_rank", 16)
-        kwargs.setdefault("n_routed_experts", 4)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("index_head_dim", 16)
-        kwargs.setdefault("index_n_heads", 2)
-        kwargs.setdefault("index_topk", 16)
-        kwargs.setdefault("hc_mult", 2)
-        kwargs.setdefault(
-            "rope_parameters", {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [4, 2, 2]}
-        )
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 6)
-        kwargs.setdefault("vision_hidden_size", 32)
-        kwargs.setdefault("vision_intermediate_size", 64)
-        kwargs.setdefault("vision_num_attention_heads", 2)
-        kwargs.setdefault("vision_num_key_value_heads", None)
-        kwargs.setdefault("vision_num_hidden_layers", 2)
-        kwargs.setdefault("vision_hidden_act", "gelu")
-        kwargs.setdefault("vision_max_image_size", 64)
-        kwargs.setdefault("vision_out_hidden_size", kwargs["hidden_size"])
-        super().__init__(parent, **kwargs)
-        self.grid_hw = self.image_size // self.patch_size
-        self.num_image_patches = self.grid_hw**2
+    small_config_overrides = {
+        "batch_size": 2,
+        "vocab_size": 256,
+        "hidden_size": 48,
+        "intermediate_size": 96,
+        "moe_intermediate_size": 32,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        "head_dim": 16,
+        "qk_nope_head_dim": 16,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 16,
+        "q_lora_rank": 32,
+        "kv_lora_rank": 16,
+        "n_routed_experts": 4,
+        "n_shared_experts": 1,
+        "index_head_dim": 16,
+        "index_n_heads": 2,
+        "index_topk": 16,
+        "hc_mult": 2,
+        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [4, 2, 2]},
+        "video_token_id": 4,
+        "image_size": 16,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 6,
+        "vision_hidden_size": 32,
+        "vision_intermediate_size": 64,
+        "vision_num_attention_heads": 2,
+        "vision_num_key_value_heads": None,
+        "vision_num_hidden_layers": 2,
+        "vision_hidden_act": "gelu",
+        "vision_max_image_size": 64,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("vision_out_hidden_size", values["hidden_size"])
+        values["grid_hw"] = values["image_size"] // values["patch_size"]
+        values["num_image_patches"] = values["grid_hw"] ** 2
+        return values
 
     @property
     def _special_token_ids(self):

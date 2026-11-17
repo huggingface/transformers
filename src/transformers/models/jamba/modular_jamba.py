@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_linear_attn_utils import causal_conv1d_forward
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,8 +39,6 @@ from ..falcon_mamba.modeling_falcon_mamba import FalconMambaMixer
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
 from ..mamba.modeling_mamba import (
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     mamba_selective_scan,
     mamba_selective_state_update,
 )
@@ -174,12 +173,11 @@ class JambaMambaMixer(FalconMambaMixer):
     ):
         seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
-        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -192,32 +190,14 @@ class JambaMambaMixer(FalconMambaMixer):
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            hidden_states_B_C = causal_conv1d_update(
-                hidden_states_B_C,
-                conv_state,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-            )
-        else:
-            if cache is not None:
-                hidden_states_B_C = cache.update_conv_state(
-                    hidden_states_B_C,
-                    self.layer_idx,
-                    conv_kernel_size=self.conv_kernel_size,
-                )
-
-            hidden_states_B_C = causal_conv1d_fn(
-                hidden_states_B_C,
-                self.conv1d.weight.squeeze(1),
-                self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            if cache is not None:
-                hidden_states_B_C = hidden_states_B_C[:, :, -seq_len:]
+        hidden_states_B_C = causal_conv1d_forward(
+            self.conv1d,
+            hidden_states_B_C,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         # 3. SSM transformation
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C.transpose(1, 2), attention_mask)
