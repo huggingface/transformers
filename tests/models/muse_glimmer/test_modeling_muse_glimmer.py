@@ -144,7 +144,7 @@ class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 8): TEXT_LOGITS_CUDA_8,
+                ("cuda", 8): [-9.625, -10.125, -10.375, -10.25, -9.125],
                 ("cuda", 10): [-9.625, -10.25, -10.5625, -10.25, -9.25],
             }
         )  # fmt: skip
@@ -186,7 +186,7 @@ class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 8): IMAGE_LOGITS_CUDA_8,
+                ("cuda", 8): [-10.875, -11.3125, -11.1875, -10.3125, -10.5625],
                 ("cuda", 10): [-10.9375, -11.375, -11.1875, -10.375, -10.5625],
             }
         )  # fmt: skip
