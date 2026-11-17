@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,53 @@ def greedy(model, ids, tokens=6):
         return model.generate(torch.tensor(ids), max_new_tokens=tokens, do_sample=False, pad_token_id=0)
 
 
+class PaddedSource:
+    """An external expert store over a model's experts: float32 gate_up and down, plus (layer 1) a padding tensor,
+    so the two layers differ in size and get one pool each."""
+
+    def __init__(self, model):
+        self.experts = {}
+        for index, layer in enumerate(model.model.layers):
+            experts = layer.mlp.experts
+            self.experts[f"source.{index}"] = (experts.gate_up_proj.detach(), experts.down_proj.detach(), index)
+        self.prefixes = list(self.experts)
+        self.read_bytes = self.read_calls = 0
+
+    def prefix(self, module_name):
+        return f"source.{module_name.split('.')[2]}"
+
+    def layout(self, prefix):
+        gate_up, down, index = self.experts[prefix]
+        layout = [(tuple(gate_up.shape[1:]), torch.float32), (tuple(down.shape[1:]), torch.float32)]
+        return layout + ([((16,), torch.uint8)] if index else [])
+
+    def expert_bytes(self, prefix):
+        return sum(math.prod(shape) * dtype.itemsize for shape, dtype in self.layout(prefix))
+
+    def read(self, prefix, expert, out):
+        gate_up, down, _ = self.experts[prefix]
+        blob = torch.cat([gate_up[expert].reshape(-1).view(torch.uint8), down[expert].reshape(-1).view(torch.uint8)])
+        out[: blob.numel()] = blob
+        out[blob.numel() :] = 7
+        self.read_bytes += out.numel()
+        self.read_calls += 1
+
+
+def reference_compute(module, store, hidden_states, top_k_index, top_k_weights, routing, experts, pinned):
+    """`expert_compute` for :class:`PaddedSource`: every route through `store.expert_tensors`."""
+    result = torch.zeros_like(hidden_states)
+    prefix = module.offload_prefix
+    for expert in experts:
+        gate_up, down, *padding = store.expert_tensors(prefix, expert)
+        if padding:
+            assert bool((padding[0] == 7).all())
+        token, slot = (t.to(hidden_states.device) for t in torch.where(routing == expert))
+        activated = module._apply_gate(torch.nn.functional.linear(hidden_states[token], gate_up))
+        output = torch.nn.functional.linear(activated, down) * top_k_weights[token, slot, None]
+        result.index_add_(0, token, output.to(result.dtype))
+    return result
+
+
 # TODO(portability): run on Linux/macOS/Windows and parameterize available devices; current loads use CPU.
 @require_torch
 class ExpertsOffloadTest(unittest.TestCase):
@@ -87,6 +135,7 @@ class ExpertsOffloadTest(unittest.TestCase):
             self.assertIsNone(experts.gate_up_proj)
             self.assertEqual(experts.config._experts_implementation, "experts_offload")
             self.assertFalse(any(name.endswith(("gate_up_proj", "down_proj")) for name in model.state_dict()))
+            self.assertIsNone(model.experts_offload_store.pools[0].banks)  # device pools are taken at the first use
             torch.testing.assert_close(greedy(model, IDS), greedy(reference, IDS))
             self.assertGreater(model.experts_offload_store.misses, 0)
 
@@ -314,6 +363,49 @@ class ExpertsOffloadTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.load(path, cache_bytes=3000, host_cache_bytes=1 << 20)  # needs quantized experts
 
+    def test_expert_source_with_mixed_layouts(self):
+        reference = tiny_qwen3_moe(8)
+        expected = greedy(reference, IDS, tokens=8)
+        source = PaddedSource(reference)
+        with tempfile.TemporaryDirectory() as directory:
+            reference.save_pretrained(directory)
+            sizes = [source.expert_bytes(prefix) for prefix in source.prefixes]
+            self.assertNotEqual(*sizes)  # one pool per layer
+            for io_threads, depth, slots in ((0, 0, 0), (0, 0, 2), (2, 1, 2), (2, 2, EXPERTS)):
+                with self.subTest(io_threads=io_threads, depth=depth, slots=slots):
+                    model = self.load(
+                        directory, cache_bytes=slots * sum(sizes), io_threads=io_threads, prefetch_depth=depth,
+                        expert_source=source, expert_compute=reference_compute,
+                    )  # fmt: skip
+                    store = model.experts_offload_store
+                    self.assertEqual(len(store.pools), 2)
+                    self.assertEqual([pool.num_slots for pool in store.pools], [slots, slots])
+                    self.assertEqual(model.model.layers[1].mlp.experts.offload_prefix, source.prefixes[1])
+                    torch.testing.assert_close(greedy(model, IDS, tokens=8), expected)
+                    self.assertEqual(store.pending, {})
+                    self.assertGreater(store.stats()["read_calls"], 0)
+                    for pool in store.pools:
+                        self.assertLessEqual(len(pool.cache), pool.num_slots)
+                    if slots == EXPERTS:
+                        self.assertEqual(store.misses, 2 * EXPERTS - store.installed_ahead)
+            with self.assertRaises(ValueError):
+                self.load(directory, expert_source=source)  # needs expert_compute
+
+    def test_cold_prefill_routes_matches_eager(self):
+        reference = tiny_qwen3_moe(9)
+        expected = greedy(reference, IDS, tokens=8)
+        with tempfile.TemporaryDirectory() as directory:
+            reference.save_pretrained(directory)
+            # 14 routes per layer in the 7-token prompt, 2 per decode step.
+            model = self.load(
+                directory, io_threads=2, prefetch_depth=0, cold_prefill_routes=8, prefill_readahead_routes=8,
+                prefill_install_ahead=True,
+            )  # fmt: skip
+            torch.testing.assert_close(greedy(model, IDS, tokens=8), expected)
+            store = model.experts_offload_store
+            self.assertEqual(store.cold_installed, {})
+            self.assertFalse(store.cold)
+
     def test_inference_only_and_option_validation(self):
         reference = tiny_qwen3_moe(7)
         with tempfile.TemporaryDirectory() as directory:
@@ -355,6 +447,7 @@ class ExpertStorePolicyTest(unittest.TestCase):
         expert_bytes = 3 * intermediate * hidden * 4
         store = ExpertStore(reader, cache_experts * expert_bytes, "cpu", torch.float32, policy=policy)
         store.register("layer", SimpleNamespace(num_experts=experts, intermediate_dim=intermediate, hidden_dim=hidden))
+        store.allocate()
         return store, banks
 
     def test_lfu_keeps_a_hot_set_where_lru_thrashes(self):
@@ -379,3 +472,15 @@ class ExpertStorePolicyTest(unittest.TestCase):
         for expert in [0, 1] * 20 + [4, 5] * 20:
             store.get("layer", expert)
         self.assertEqual({key[1] for key in store.cache}, {4, 5})
+
+    def test_cold_calls_keep_the_decode_set(self):
+        store, _ = self.make_store("lru", cache_experts=3)
+        for expert in (0, 1):
+            store.acquire("layer", expert)
+        store.cold = True  # a long prefill: installs 2, hits 0 without refreshing it
+        store.acquire("layer", 2)
+        store.acquire("layer", 0)
+        store.demote("layer")
+        store.cold = False
+        store.acquire("layer", 3)  # evicts the cold install, not the decode set
+        self.assertEqual({key[1] for key in store.cache}, {0, 1, 3})

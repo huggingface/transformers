@@ -169,10 +169,48 @@ class SafetensorsReader:
         return gate_up, self.read(f"{prefix}.{expert}.down_proj.weight")
 
 
-class ExpertStore:
-    """Shared device pool with LRU or decaying LFU admission, for one inference request at a time.
+def _layout_bytes(layout):
+    return sum(math.prod(shape) * dtype.itemsize for shape, dtype in layout)
 
-    Staging and uncached experts can exceed the cache budget."""
+
+class _Pool:
+    """Device slots shared by the MoE layers whose experts have one layout; LRU (or LFU) within the pool."""
+
+    def __init__(self, layout, num_slots, packed):
+        self.layout = layout  # [(shape, dtype)] of one expert's tensors, in storage order
+        self.slot_bytes = _layout_bytes(layout)
+        self.num_slots = num_slots
+        self.packed = packed
+        self.slot_buffer = self.banks = None  # see `materialize`
+        self.free_slots = list(range(num_slots - 1, -1, -1))
+        self.cache = OrderedDict()  # key -> slot, least recently used first
+        self.heap = []  # LFU: (count, sequence, key); stale entries are discarded lazily
+        self.num_experts = 0  # over the pool's layers
+
+    def materialize(self, device):
+        if self.banks is not None:
+            return
+        if self.packed:
+            # One row of bytes per slot, viewed as the expert's tensors: one copy per install.
+            self.slot_buffer = torch.empty((self.num_slots, self.slot_bytes), device=device, dtype=torch.uint8)
+            self.banks = list(_split_expert(self.slot_buffer, self.layout))
+        else:
+            self.banks = [
+                torch.empty((self.num_slots, *shape), device=device, dtype=dtype) for shape, dtype in self.layout
+            ]
+
+
+class ExpertStore:
+    """Device pools of expert slots with LRU or decaying LFU admission, for one inference request at a time.
+
+    Layers whose experts share a layout share a pool; with several layouts (mixed quantization, an external expert
+    source), the budget gives every layer the same number of slots. Staging and uncached experts can exceed the budget.
+
+    Experts come from the checkpoint (floating point), from `quantized_experts` (MLX affine bytes), or from an
+    ``expert_source``: an object with ``layout(prefix)`` (``[(shape, dtype)]`` of one expert's tensors, stored
+    contiguously in that order), ``read(prefix, expert, out)`` (fill ``out``, a CPU uint8 tensor of the expert's size)
+    and ``read_bytes`` / ``read_calls`` counters; optionally ``prefix(module_name)`` (its key for an experts module)
+    and ``pool_key(prefix)`` (layers with equal keys share a pool; defaults to the layout)."""
 
     def __init__(
         self,
@@ -184,28 +222,28 @@ class ExpertStore:
         decay_every=4096,
         io_threads=0,
         quantized=None,
+        source=None,
     ):
         if cache_bytes < 0:
             raise ValueError("cache_bytes must be nonnegative")
         if policy not in ("lru", "lfu"):
             raise ValueError(f"Unknown cache policy {policy!r}; use 'lru' or 'lfu'")
+        if source is not None and quantized is not None:
+            raise ValueError("Use either quantized_experts or expert_source, not both")
         self.policy = policy
         self.decay_every = decay_every
         self.counts = {}
-        self.heap = []  # (count, sequence, key); discard stale entries lazily
         self.sequence = 0
         self.lookups = 0
         self.not_admitted = 0
         self.reader = reader
+        self.source = source
         self.cache_bytes = cache_bytes
         self.device = torch.device(device)
         self.dtype = dtype
-        self.cache = OrderedDict()
         self.resident_bytes = 0
         self.peak_cache_bytes = 0
         self.hits = self.misses = self.evictions = 0
-        self.gate_up_pool = self.down_pool = None
-        self.pools = None
         self.quantized = None
         if quantized is not None:
             info = json.loads((Path(quantized) / "quantization.json").read_text(encoding="utf-8"))
@@ -217,26 +255,34 @@ class ExpertStore:
                 info["group_size"],
             )
             self.gather_qmm = _load_gather_qmm(self.device)
-        self.num_slots = 0
-        self.free_slots = []
-        # expert -> slot per layer, kept on the host (installs and evictions are host bookkeeping) and copied to the
-        # device only when a device-side lookup needs it.
+        # Layers register first (`register`), then `allocate` sizes the pools from the whole set of layouts.
+        self.layouts = {}  # prefix -> (pool key, layout, num_experts)
+        self.pools = []
+        self.pool_of = {}
+        # expert -> slot per layer (the pool's num_slots when absent), kept on the host (installs and evictions are host
+        # bookkeeping) and copied to the device only when a device-side lookup needs it.
         self.slot_tables = {}
         self.host_slot_tables = {}
         self.stale_slot_tables = set()
         self.total_experts = 0
         self.compute = "grouped_mm"
+        self.expert_compute = None  # see `experts_offload_forward`
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload-io") if io_threads else None
         self.pending = {}
         self.window = 2 * io_threads
         self.prefetched = self.prefetch_used = self.installed_ahead = 0
+        # Long prefill calls (`cold_prefill_routes`): hits do not refresh, and the experts installed for a layer move to
+        # the cold end of its pool once that layer's call is done, so one long prompt does not flush the decode set.
+        self.cold = False
+        self.cold_installed = {}
         # Retain host buffers until the next routing copy synchronizes the device.
         self.inflight = []
-        # Recycled host buffers of quantized experts, see `_host_buffer`.
+        # Recycled host buffers for expert bytes, all of the largest expert size, see `_host_buffer`.
         self.free_host_buffers = []
+        self.host_buffer_bytes = 0
         self.commit = False  # see `_commit_mps`
-        # Optional host tier (quantized experts): a pool of expert rows in host memory between storage and the device
-        # cache, see `allocate_host_cache`. `host_busy` holds the rows handed out and not yet released.
+        # Optional host tier (expert bytes, one layout): a pool of expert rows in host memory between storage and the
+        # device cache, see `allocate_host_cache`. `host_busy` holds the rows handed out and not yet released.
         self.host_pool = None
         self.host_slots = 0
         self.host_cache = OrderedDict()
@@ -246,16 +292,23 @@ class ExpertStore:
         self.host_hits = self.host_misses = 0
 
     def register(self, prefix, module):
+        """Validate one experts module's tensors and record its layout; returns the checkpoint keys it replaces."""
+        if self.pools:
+            raise ValueError("Register every experts module before `allocate`")
         shapes = {
             "gate_up_proj": (module.num_experts, 2 * module.intermediate_dim, module.hidden_dim),
             "down_proj": (module.num_experts, module.hidden_dim, module.intermediate_dim),
         }
-        if self.quantized is not None and f"{prefix}.experts" in self.quantized[0].tensors:
-            candidates = [f"{prefix}.gate_up_proj", f"{prefix}.down_proj"] + [
-                f"{prefix}.{expert}.{projection}.weight"
-                for expert in range(module.num_experts)
-                for projection in ("gate_proj", "up_proj", "down_proj")
-            ]
+        per_expert = [
+            f"{prefix}.{expert}.{projection}.weight"
+            for expert in range(module.num_experts)
+            for projection in ("gate_proj", "up_proj", "down_proj")
+        ]
+        if self.source is not None or (
+            self.quantized is not None and f"{prefix}.experts" in self.quantized[0].tensors
+        ):
+            # Experts come from elsewhere: skip whatever the checkpoint holds for them.
+            candidates = [f"{prefix}.{suffix}" for suffix in shapes] + per_expert
             names = {name: None for name in candidates if name in self.reader.tensors}
         elif f"{prefix}.gate_up_proj" in self.reader.tensors:
             names = {f"{prefix}.{suffix}": shape for suffix, shape in shapes.items()}
@@ -272,10 +325,81 @@ class ExpertStore:
                 continue
             if name not in self.reader.tensors or self.reader.shape(name) != shape:
                 raise ValueError(f"Missing or incompatible expert tensor {name}; expected {shape}")
-        if self.quantized is not None:
+        if self.source is not None:
+            layout = [(tuple(shape), dtype) for shape, dtype in self.source.layout(prefix)]
+            key = self.source.pool_key(prefix) if hasattr(self.source, "pool_key") else None
+        elif self.quantized is not None:
             self._check_quantized(prefix, module)
-        self._register_slots(prefix, module)
+            layout, key = self._quantized_shapes(module), None
+        else:
+            layout = [
+                ((2 * module.intermediate_dim, module.hidden_dim), self.dtype),
+                ((module.hidden_dim, module.intermediate_dim), self.dtype),
+            ]
+            key = None
+        self.layouts[prefix] = (key if key is not None else tuple(layout), layout, module.num_experts)
+        self.total_experts += module.num_experts
         return set(names)
+
+    def allocate(self, materialize=True):
+        """Size the device pools: one per layout, each layer getting the same number of slots. Their memory is taken
+        now, or with ``materialize=False`` at the first lookup (after loading, so the loading peak excludes them)."""
+        groups = {}
+        for prefix, (key, layout, _) in self.layouts.items():
+            groups.setdefault(key, (layout, []))[1].append(prefix)
+        layer_bytes = [_layout_bytes(layout) for _, layout, _ in self.layouts.values()]
+        if not groups:
+            raise ValueError("No experts module registered")
+        if len(groups) == 1:
+            sizes = [self.cache_bytes // layer_bytes[0]]
+        else:
+            per_layer = self.cache_bytes // sum(layer_bytes)
+            sizes = [per_layer * len(prefixes) for _, prefixes in groups.values()]
+        packed = self.quantized is not None
+        for (layout, prefixes), num_slots in zip(groups.values(), sizes):
+            pool = _Pool(layout, num_slots, packed)
+            self.pools.append(pool)
+            for prefix in prefixes:
+                self.pool_of[prefix] = pool
+                experts = self.layouts[prefix][2]
+                pool.num_experts += experts
+                self.slot_tables[prefix] = torch.full((experts,), num_slots, device=self.device)
+                self.host_slot_tables[prefix] = torch.full((experts,), num_slots)
+        self.host_buffer_bytes = max(pool.slot_bytes for pool in self.pools)
+        self.materialized = False
+        if materialize:
+            self.materialize()
+
+    def materialize(self):
+        """Take the pools' device memory (once)."""
+        if not self.materialized:
+            for pool in self.pools:
+                pool.materialize(self.device)
+            self.materialized = True
+
+    # Single-pool views, kept for callers that predate size classes.
+    @property
+    def num_slots(self):
+        return sum(pool.num_slots for pool in self.pools)
+
+    @property
+    def slot_bytes(self):
+        if len(self.pools) != 1:
+            raise ValueError("slot_bytes is defined for a single pool; see `pools`")
+        return self.pools[0].slot_bytes
+
+    @property
+    def cache(self):
+        """Every resident key -> slot (read-only view over the pools)."""
+        return {key: slot for pool in self.pools for key, slot in pool.cache.items()}
+
+    @property
+    def gate_up_pool(self):
+        return self.pools[0].banks[0] if len(self.pools) == 1 and self.quantized is None else None
+
+    @property
+    def down_pool(self):
+        return self.pools[0].banks[1] if len(self.pools) == 1 and self.quantized is None else None
 
     def _quantized_shapes(self, module):
         """Per-expert shapes and dtypes of the quantized tensors, in pool order."""
@@ -303,39 +427,9 @@ class ExpertStore:
                 "(quantized from a checkpoint in the execution dtype)"
             )
 
-    def _register_slots(self, prefix, module):
-        if self.quantized is not None:
-            shapes = self._quantized_shapes(module)
-        else:
-            shapes = [
-                ((2 * module.intermediate_dim, module.hidden_dim), self.dtype),
-                ((module.hidden_dim, module.intermediate_dim), self.dtype),
-            ]
-        if self.pools is None:
-            self._pool_shapes = shapes
-            self.slot_bytes = sum(math.prod(shape) * dtype.itemsize for shape, dtype in shapes)
-            self.num_slots = self.cache_bytes // self.slot_bytes
-            if self.quantized is not None:
-                self.slot_buffer = torch.empty(
-                    (self.num_slots, self.slot_bytes), device=self.device, dtype=torch.uint8
-                )
-                self.pools = list(_split_expert(self.slot_buffer, shapes))
-            else:
-                self.pools = [
-                    torch.empty((self.num_slots, *shape), device=self.device, dtype=dtype) for shape, dtype in shapes
-                ]
-            if self.quantized is None:
-                self.gate_up_pool, self.down_pool = self.pools
-            self.free_slots = list(range(self.num_slots - 1, -1, -1))
-        elif [tuple(pool.shape[1:]) for pool in self.pools] != [shape for shape, _ in shapes]:
-            raise ValueError("All MoE layers must have the same expert shapes to share the expert pool")
-        self.slot_tables[prefix] = torch.full((module.num_experts,), self.num_slots, device=self.device)
-        self.host_slot_tables[prefix] = torch.full((module.num_experts,), self.num_slots)
-        self.total_experts += module.num_experts
-
     def all_resident(self):
         """Whether every expert is cached, allowing routing to stay on the device."""
-        return len(self.cache) == self.total_experts
+        return sum(len(pool.cache) for pool in self.pools) == self.total_experts
 
     def _count(self, key):
         self.lookups += 1
@@ -343,60 +437,71 @@ class ExpertStore:
             return
         if self.decay_every and self.lookups % self.decay_every == 0:
             self.counts = {k: v / 2 for k, v in self.counts.items() if v >= 0.25}
-            self.heap = []
-            for resident in self.cache:
-                self._push(resident)
+            for pool in self.pools:
+                pool.heap = []
+                for resident in pool.cache:
+                    self._push(resident)
         self.counts[key] = self.counts.get(key, 0) + 1
-        if key in self.cache:
+        if key in self.pool_of[key[0]].cache:
             self._push(key)
 
     def _push(self, key):
         self.sequence += 1
-        heapq.heappush(self.heap, (self.counts.get(key, 0), self.sequence, key))
+        heapq.heappush(self.pool_of[key[0]].heap, (self.counts.get(key, 0), self.sequence, key))
 
-    def _least_used(self):
-        while self.heap:
-            count, _, key = self.heap[0]
-            if key in self.cache and count == self.counts.get(key, 0):
+    def _least_used(self, pool):
+        while pool.heap:
+            count, _, key = pool.heap[0]
+            if key in pool.cache and count == self.counts.get(key, 0):
                 return key, count
-            heapq.heappop(self.heap)
+            heapq.heappop(pool.heap)
         return None, None
 
-    def _evict(self, victim):
-        entry = self.cache.pop(victim)
-        self.resident_bytes -= entry[-1]
+    def _evict(self, pool, victim):
+        slot = pool.cache.pop(victim)
+        self.resident_bytes -= pool.slot_bytes
         self.evictions += 1
-        self.free_slots.append(entry[0])
-        self.host_slot_tables[victim[0]][victim[1]] = self.num_slots
+        pool.free_slots.append(slot)
+        self.host_slot_tables[victim[0]][victim[1]] = pool.num_slots
         self.stale_slot_tables.add(victim[0])
 
-    def _make_room(self, key, size, pinned=()):
-        """Evict unpinned experts until size fits; return False if admission is declined."""
-        if size > self.cache_bytes:
+    def _make_room(self, key, pinned=()):
+        """Evict unpinned experts of the key's pool until a slot is free; return False if admission is declined."""
+        pool = self.pool_of[key[0]]
+        if not pool.num_slots:
             return False
         if self.policy == "lfu":
-            while self.cache and self.resident_bytes + size > self.cache_bytes:
-                victim, count = self._least_used()
+            while not pool.free_slots:
+                victim, count = self._least_used(pool)
                 if victim is None or victim in pinned or self.counts.get(key, 0) <= count:
                     self.not_admitted += 1
                     return False
-                heapq.heappop(self.heap)
-                self._evict(victim)
+                heapq.heappop(pool.heap)
+                self._evict(pool, victim)
             return True
-        while self.cache and self.resident_bytes + size > self.cache_bytes:
-            victim = next((k for k in self.cache if k not in pinned), None)
+        while not pool.free_slots:
+            victim = next((k for k in pool.cache if k not in pinned), None)
             if victim is None:
                 self.not_admitted += 1
                 return False
-            self._evict(victim)
+            self._evict(pool, victim)
         return True
 
+    def demote(self, prefix):
+        """Move the experts installed for ``prefix`` during a cold call to the cold end of their pool."""
+        cache = self.pool_of[prefix].cache
+        for key in self.cold_installed.pop(prefix, ()):
+            if key in cache:
+                cache.move_to_end(key, last=False)
+
     def allocate_host_cache(self, host_cache_bytes):
-        """Keep up to ``host_cache_bytes`` of quantized experts in (pinned) host memory, between storage and the device
+        """Keep up to ``host_cache_bytes`` of expert bytes in (pinned) host memory, between storage and the device
         cache: a device-cache miss then costs one host-to-device copy instead of a storage read. Worth it when host
         memory is larger than device memory (discrete GPUs); on unified memory the device cache already is host RAM."""
-        if self.quantized is None:
-            raise ValueError("host_cache_bytes needs quantized_experts")
+        if self.quantized is None and self.source is None:
+            raise ValueError("host_cache_bytes needs quantized_experts or an expert_source")
+        if len(self.pools) != 1:
+            raise ValueError("host_cache_bytes needs experts of a single layout")
         self.host_slots = host_cache_bytes // self.slot_bytes
         if not self.host_slots:
             return
@@ -421,9 +526,17 @@ class ExpertStore:
                 self.host_busy.discard(row)
         return row is not None
 
+    def _read_bytes(self, prefix, expert, out):
+        """Read one expert's bytes into ``out`` (a CPU uint8 tensor of its pool's slot size)."""
+        if self.source is not None:
+            self.source.read(prefix, expert, out)
+        else:
+            self.quantized[0].read(f"{prefix}.experts", expert, out=out)
+        return out
+
     def _read_host_cached(self, prefix, expert):
-        """A quantized expert through the host tier: a hit hands out its row, a miss reads into a free (or the least
-        recently used, not busy) row. Returns None when every row is busy. Safe on I/O threads."""
+        """An expert through the host tier: a hit hands out its row, a miss reads into a free (or the least recently
+        used, not busy) row. Returns None when every row is busy. Safe on I/O threads."""
         key = (prefix, expert)
         with self.host_lock:
             row = self.host_cache.get(key)
@@ -442,7 +555,7 @@ class ExpertStore:
             self.host_busy.add(row)
             self.host_misses += 1
         try:
-            self.quantized[0].read(f"{prefix}.experts", expert, out=self.host_pool[row])
+            self._read_bytes(prefix, expert, self.host_pool[row])
         except BaseException:
             with self.host_lock:
                 self.host_busy.discard(row)
@@ -454,7 +567,7 @@ class ExpertStore:
 
     def preload_host(self):
         """Read every expert into the host tier now (in parallel when there are I/O threads)."""
-        keys = [(prefix, expert) for prefix, table in self.slot_tables.items() for expert in range(table.numel())]
+        keys = [(prefix, expert) for prefix, table in self.host_slot_tables.items() for expert in range(table.numel())]
         if self.host_slots < len(keys):
             raise ValueError(
                 f"host preload needs room for all {len(keys)} experts; the host tier has {self.host_slots}"
@@ -473,26 +586,28 @@ class ExpertStore:
             tensors = self._read_host_cached(prefix, expert)
             if tensors is not None:
                 return tensors
-        if self.quantized is not None:
+        if self.quantized is not None or self.source is not None:
             # Straight into a recycled pinned buffer: copying pinned memory to the device costs the host ~5x less
             # than pageable memory (0.03 vs 0.14 ms for a 2 MB expert on an M5).
-            return (self.quantized[0].read(f"{prefix}.experts", expert, out=self._host_buffer()),)
+            return (self._read_bytes(prefix, expert, self._host_buffer()[: self.pool_of[prefix].slot_bytes]),)
         return tuple(t.to(self.dtype) for t in self.reader.read_expert(prefix, expert))
 
     def _host_buffer(self):
-        """A host buffer for one quantized expert, pinned when the device can use it; called from I/O threads."""
+        """A host buffer for one expert (of the largest size, so one size is recycled), pinned when the device can
+        use it; called from I/O threads."""
         try:
             return self.free_host_buffers.pop()
         except IndexError:
-            return torch.empty(self.slot_bytes, dtype=torch.uint8, pin_memory=self.device.type != "cpu")
+            return torch.empty(self.host_buffer_bytes, dtype=torch.uint8, pin_memory=self.device.type != "cpu")
 
     def prefetch(self, prefix, experts):
         """Start reading the experts of ``prefix`` that are neither resident nor already being read."""
         if self.executor is None:
             return
+        cache = self.pool_of[prefix].cache
         for expert in experts:
             key = (prefix, expert)
-            if key not in self.cache and key not in self.pending:
+            if key not in cache and key not in self.pending:
                 self.pending[key] = self.executor.submit(self._read_host, prefix, expert)
                 self.prefetched += 1
 
@@ -521,20 +636,21 @@ class ExpertStore:
         """One expert on the device, for a single use."""
         tensors = self._take_host(prefix, expert)
         self.inflight.append(tensors)
-        if self.quantized is not None:
-            return _split_expert(tensors[0].to(self.device, non_blocking=True), self._pool_shapes)
+        if self.quantized is not None or self.source is not None:
+            return _split_expert(tensors[0].to(self.device, non_blocking=True), self.pool_of[prefix].layout)
         return tuple(t.to(self.device, non_blocking=True) for t in tensors)
 
     def release_host_buffers(self):
         """Called right after a host synchronization: every queued copy has read its host buffer."""
         # TODO(portability): validate copy completion and slot reuse on each backend before releasing buffers.
-        if self.quantized is not None:
+        if self.quantized is not None or self.source is not None:
             # list.append / pop are atomic, so I/O threads can take buffers back while this runs.
             for tensors in self.inflight:
                 if self._release_host_row(tensors[0]):
                     continue  # a host-tier row: it stays cached, now free to be evicted
-                if tensors[0].dtype == torch.uint8 and tensors[0].numel() == self.slot_bytes:
-                    self.free_host_buffers.append(tensors[0])
+                buffer = tensors[0] if tensors[0]._base is None else tensors[0]._base
+                if buffer.dtype == torch.uint8 and buffer.numel() == self.host_buffer_bytes:
+                    self.free_host_buffers.append(buffer)
         self.inflight.clear()
 
     def synchronize(self):
@@ -563,63 +679,89 @@ class ExpertStore:
 
     def install_ahead(self, prefix, experts):
         """Install prefetched experts while queued device work runs, without counting lookups."""
+        if not self.materialized:
+            self.materialize()
+        cache = self.pool_of[prefix].cache
         for expert in experts:
             key = (prefix, expert)
             # Only finished reads: waiting here would delay the next layer's launches for guesses that may go unused.
-            if key in self.cache or key not in self.pending or not self.pending[key].done():
+            if key in cache or key not in self.pending or not self.pending[key].done():
                 continue
-            if self._install(key, self.slot_bytes) is not None:
-                self.installed_ahead += 1
+            if self._install(key) is None:
+                break  # the pool is full of pinned experts
+            self.installed_ahead += 1
 
-    def _install(self, key, size, pinned=()):
-        if not self._make_room(key, size, pinned):
+    def _install(self, key, pinned=()):
+        if not self._make_room(key, pinned):
             return None
-        slot = self.free_slots.pop()
+        pool = self.pool_of[key[0]]
         # Keep host buffers alive until the next host synchronization.
         tensors = self._take_host(*key)
+        slot = pool.free_slots.pop()
         self.inflight.append(tensors)
-        if self.quantized is not None:
-            self.slot_buffer[slot].copy_(tensors[0], non_blocking=True)
+        if pool.slot_buffer is not None:
+            pool.slot_buffer[slot].copy_(tensors[0], non_blocking=True)
+        elif self.source is not None:
+            offset = 0
+            for bank in pool.banks:
+                size = bank[slot].numel() * bank.element_size()
+                bank[slot].view(-1).view(torch.uint8).copy_(tensors[0][offset : offset + size], non_blocking=True)
+                offset += size
         else:
-            for pool, tensor in zip(self.pools, tensors):
-                pool[slot].copy_(tensor, non_blocking=True)
+            for bank, tensor in zip(pool.banks, tensors):
+                bank[slot].copy_(tensor, non_blocking=True)
         self.host_slot_tables[key[0]][key[1]] = slot
         self.stale_slot_tables.add(key[0])
-        self.cache[key] = (slot, size)
-        self.resident_bytes += size
+        pool.cache[key] = slot
+        if self.cold:
+            self.cold_installed.setdefault(key[0], []).append(key)
+        self.resident_bytes += pool.slot_bytes
         self.peak_cache_bytes = max(self.peak_cache_bytes, self.resident_bytes)
         if self.policy == "lfu":
             self._push(key)
         return slot
 
     def acquire(self, prefix, expert, pinned=()):
-        """Make an expert resident in the pool; returns its slot, or None when it runs once without being cached."""
+        """Make an expert resident in its pool; returns its slot, or None when it runs once without being cached."""
+        if not self.materialized:
+            self.materialize()
         key = (prefix, expert)
         self._count(key)
-        if key in self.cache:
+        cache = self.pool_of[prefix].cache
+        if key in cache:
             self.hits += 1
-            self.cache.move_to_end(key)
-            return self.cache[key][0]
+            if not self.cold:
+                cache.move_to_end(key)
+            return cache[key]
         self.misses += 1
-        return self._install(key, self.slot_bytes, pinned)
+        return self._install(key, pinned)
+
+    def expert_tensors(self, prefix, expert):
+        """The device tensors of one expert without counting a lookup: pool views when resident, else read for this use."""
+        pool = self.pool_of[prefix]
+        slot = pool.cache.get((prefix, expert))
+        if slot is None:
+            return self._read(prefix, expert)
+        return tuple(bank[slot] for bank in pool.banks)
 
     def get(self, prefix, expert):
         """Return the device tensors of one expert (pool views when cached, else read for this use only)."""
         slot = self.acquire(prefix, expert)
         if slot is None:
             return self._read(prefix, expert)
-        return tuple(pool[slot] for pool in self.pools)
+        return tuple(bank[slot] for bank in self.pool_of[prefix].banks)
 
     def _readers(self):
-        return [self.reader] + ([self.quantized[0]] if self.quantized else [])
+        return [self.reader] + ([self.quantized[0]] if self.quantized else []) + ([self.source] if self.source else [])
 
     def preload(self):
         """Load every expert now (reads in parallel), when the cache holds them all: no storage reads afterwards."""
-        if self.num_slots < self.total_experts:
-            raise ValueError(
-                f"preload needs room for all {self.total_experts} experts; the cache has {self.num_slots} slots"
-            )
-        for prefix, table in self.slot_tables.items():
+        for pool in self.pools:
+            if pool.num_slots < pool.num_experts:
+                raise ValueError(
+                    f"preload needs room for all {pool.num_experts} experts of a pool; it has {pool.num_slots} slots"
+                )
+        for prefix, table in self.host_slot_tables.items():
             experts = list(range(table.numel()))
             self.prefetch(prefix, experts)
             for expert in experts:
@@ -635,6 +777,7 @@ class ExpertStore:
             "not_admitted": self.not_admitted,
             "policy": self.policy,
             "slots": self.num_slots,
+            "pools": len(self.pools),
             "prefetched": self.prefetched,
             "prefetch_used": self.prefetch_used,
             "installed_ahead": self.installed_ahead,
@@ -649,13 +792,12 @@ class ExpertStore:
 
 
 class _PoolExperts:
-    """Expose pool banks to MoE kernels; slot num_slots uses their expert-parallel sentinel handling."""
+    """Expose a pool's banks to MoE kernels; slot num_slots uses their expert-parallel sentinel handling."""
 
-    def __init__(self, module, store):
+    def __init__(self, module, pool):
         self.module = module
-        self.num_experts = store.num_slots
-        self.gate_up_proj = store.gate_up_pool
-        self.down_proj = store.down_pool
+        self.num_experts = pool.num_slots
+        self.gate_up_proj, self.down_proj = pool.banks
         self.act_fn = module.act_fn
         self.has_gate = getattr(module, "has_gate", True)
         self.has_bias = getattr(module, "has_bias", False)
@@ -769,23 +911,24 @@ def _quantized_sorted_forward(module, store, hidden_states, top_k_index, top_k_w
     result.index_add_(0, order // top_k, output)
 
 
-def _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights):
+def _quantized_pool_forward(module, store, pool, hidden_states, slots, top_k_weights):
     """Resident quantized experts through `gather_qmm`; non-resident routes (slot ``num_slots``) contribute zero."""
     num_tokens, top_k = slots.shape
     rhs = slots.reshape(-1)
-    valid = rhs < store.num_slots
+    valid = rhs < pool.num_slots
     weights = (top_k_weights.reshape(-1) * valid)[:, None]
-    output = _quantized_mlp(module, store, hidden_states.repeat_interleave(top_k, dim=0), store.pools, rhs * valid)
+    output = _quantized_mlp(module, store, hidden_states.repeat_interleave(top_k, dim=0), pool.banks, rhs * valid)
     return (output * weights.to(output.dtype)).view(num_tokens, top_k, -1).sum(dim=1).to(hidden_states.dtype)
 
 
 def _pool_forward(module, store, hidden_states, top_k_index, top_k_weights, slots=None):
+    pool = store.pool_of[module.offload_prefix]
     if slots is None:
         slots = store.device_slot_table(module.offload_prefix)[top_k_index]
     if store.quantized is not None:
-        return _quantized_pool_forward(module, store, hidden_states, slots, top_k_weights)
+        return _quantized_pool_forward(module, store, pool, hidden_states, slots, top_k_weights)
     kernel = ExpertsInterface._global_mapping[store.compute]
-    return kernel(_PoolExperts(module, store), hidden_states, slots, top_k_weights)
+    return kernel(_PoolExperts(module, pool), hidden_states, slots, top_k_weights)
 
 
 def _commit_mps(store):
@@ -802,7 +945,13 @@ def _commit_mps(store):
 
 
 def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
-    """The ``experts_offload`` experts implementation: resident experts from the cache, missing ones from disk."""
+    """The ``experts_offload`` experts implementation: resident experts from the cache, missing ones from disk.
+
+    With an ``expert_compute`` callable, this forward does the routing copy, reads, read-ahead, next-layer guesses and
+    installs, and the callable computes the output: ``expert_compute(module, store, hidden_states, top_k_index,
+    top_k_weights, routing, experts, pinned)``, where ``routing`` is ``top_k_index`` on the host, ``experts`` the sorted
+    routed experts and ``pinned`` the keys made resident for this call (the others are read with
+    ``store.expert_tensors``)."""
     if module.training or torch.is_grad_enabled():
         raise RuntimeError("experts_offload is inference-only: use eval() and torch.no_grad() / inference_mode()")
     store = module.offload_store
@@ -811,7 +960,7 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
             "Moving/casting a streamed model after loading is unsupported; reload on the target device/dtype"
         )
     prefix = module.offload_prefix
-    if store.all_resident():
+    if store.expert_compute is None and store.all_resident():
         store.hits += top_k_index.numel()
         return _pool_forward(module, store, hidden_states, top_k_index, top_k_weights)
     # Copy routing and next-layer predictions to the host together.
@@ -837,7 +986,8 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
         raise ValueError("Expert parallelism and sentinel expert IDs are unsupported")
     store.prefetch(prefix, experts[: store.window])
     readahead = module.offload_readahead_routes
-    if readahead and module.offload_next_prefix is not None and top_k_index.numel() >= readahead:
+    readahead_next = readahead and module.offload_next_prefix is not None and top_k_index.numel() >= readahead
+    if readahead_next:
         # A long prompt routes to nearly every expert of every layer: read the next layer's while this one computes.
         store.prefetch(module.offload_next_prefix, range(module.num_experts))
     width = top_k_index.shape[0] * (next_layer[1].top_k if predict else 0)
@@ -846,18 +996,28 @@ def experts_offload_forward(module, hidden_states, top_k_index, top_k_weights):
         store.prefetch(next_prefix, guessed)
     if after_next is not None:
         store.prefetch(after_next[0], torch.unique(routes[top_k_index.numel() + width :]).tolist())
+    cold_routes = module.offload_cold_prefill_routes
+    store.cold = bool(cold_routes) and store.policy == "lru" and top_k_index.numel() >= cold_routes
     try:
         result = _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_weights, routing, experts)
     finally:
         store.discard(prefix)
+        # Also demotes what a previous cold call installed ahead for this layer; `store.cold` stays set until the next
+        # call, so the next layer's installs below are demoted after that layer runs.
+        store.demote(prefix)
     if store.commit:
         _commit_mps(store)
     if guessed:
         store.install_ahead(next_prefix, guessed)
+    if readahead_next and module.offload_prefill_install_ahead:
+        # The next layer's reads started above: queue the finished ones' copies behind this layer's compute, so that
+        # layer finds them installed instead of copying while the device idles after its routing copy.
+        store.install_ahead(module.offload_next_prefix, range(module.num_experts))
     return result
 
 
 def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_weights, routing, experts):
+    pool = store.pool_of[prefix]
     pinned, uncached = set(), []
     for position, expert in enumerate(experts):
         store.prefetch(prefix, experts[position + 1 : position + 1 + store.window])
@@ -865,6 +1025,8 @@ def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_
             uncached.append(expert)
         else:
             pinned.add((prefix, expert))
+    if store.expert_compute is not None:
+        return store.expert_compute(module, store, hidden_states, top_k_index, top_k_weights, routing, experts, pinned)
     if store.quantized is not None and _sorted_kernel_applies(top_k_index.numel(), len(experts)):
         # A group of experts at a time: a prefill that routes to every expert never holds a whole layer of them.
         result = torch.zeros(hidden_states.shape, dtype=torch.float32, device=hidden_states.device)
@@ -873,8 +1035,8 @@ def _offloaded_experts(module, store, prefix, hidden_states, top_k_index, top_k_
             per_expert = []
             for position, expert in enumerate(group):
                 if (prefix, expert) in pinned:
-                    slot = store.cache[(prefix, expert)][0]
-                    per_expert.append([pool[slot] for pool in store.pools])
+                    slot = pool.cache[(prefix, expert)]
+                    per_expert.append([bank[slot] for bank in pool.banks])
                 else:
                     store.prefetch(prefix, experts[start + position + 1 : start + position + 1 + store.window])
                     per_expert.append(store._read(prefix, expert))
@@ -934,6 +1096,10 @@ _OPTIONS = {
     "host_cache_bytes",
     "host_preload",
     "prefill_readahead_routes",
+    "prefill_install_ahead",
+    "cold_prefill_routes",
+    "expert_source",
+    "expert_compute",
 }
 
 
@@ -958,8 +1124,18 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         host_cache_bytes (`int`, defaults to 0): host memory (pinned on accelerators) kept as a tier of quantized
             experts between storage and the device cache; for discrete GPUs with more host than device memory.
         host_preload (`bool`, defaults to `False`): read every expert into the host tier at load time.
+        prefill_install_ahead (`bool`, defaults to `False`): with `prefill_readahead_routes`, also install the next
+            layer's finished reads behind this layer's compute.
+        cold_prefill_routes (`int`, defaults to 0): calls with at least this many routes (long prompts) do not refresh
+            the LRU order on hits, and the experts they install move to the cold end once the layer is done, so a long
+            prompt does not evict the experts decoding keeps using. 0 disables. LRU only.
         mps_commit (`bool`, defaults to `True`): on MPS, commit the queued work after each decoder-layer sub-block and
             after the experts, so the GPU runs it while the host encodes what follows.
+        expert_source (*optional*): read experts from an external store instead of the checkpoint (see
+            :class:`ExpertStore`); needs `expert_compute`. Layers may differ in layout: each layout gets its own pool and
+            every layer the same number of slots.
+        expert_compute (`Callable`, *optional*): computes the experts output over the pools (see
+            :func:`experts_offload_forward`); required with `expert_source`, where the experts' format is the source's.
     """
     options = dict(options)
     unknown = set(options) - _OPTIONS
@@ -969,6 +1145,9 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         raise ValueError("experts_offload reads experts from safetensors checkpoints only")
     if dtype not in _DTYPES.values():
         raise ValueError("experts_offload needs a floating dtype (float32/float16/bfloat16)")
+    source = options.get("expert_source")
+    if (source is None) != (options.get("expert_compute") is None):
+        raise ValueError("expert_source and expert_compute go together")
     if options.get("experts_implementation", "grouped_mm") not in ("grouped_mm", "batched_mm"):
         raise ValueError("experts_offload supports experts_implementation 'grouped_mm' or 'batched_mm'")
     ExpertsInterface.register("experts_offload", experts_offload_forward)
@@ -982,8 +1161,10 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         policy=options.get("cache_policy", "lru"),
         io_threads=options.get("io_threads", 4),
         quantized=options.get("quantized_experts"),
+        source=source,
     )
     store.compute = options.get("experts_implementation", "grouped_mm")
+    store.expert_compute = options.get("expert_compute")
     experts = [
         (name, module)
         for name, module in model.named_modules()
@@ -997,7 +1178,10 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
             raise ValueError(
                 f"experts_offload supports gated, concatenated, untransposed experts without bias: {name}"
             )
-        prefix = _checkpoint_prefix(reader, name, store.quantized[0] if store.quantized else None)
+        if source is not None:
+            prefix = source.prefix(name) if hasattr(source, "prefix") else name
+        else:
+            prefix = _checkpoint_prefix(reader, name, store.quantized[0] if store.quantized else None)
         consumed.update(store.register(prefix, module))
         module.register_parameter("gate_up_proj", None)
         module.register_parameter("down_proj", None)
@@ -1009,6 +1193,9 @@ def prepare_experts_offload(model, checkpoint_files, *, dtype, device, options):
         module.offload_predict_max_routes = options.get("predict_max_routes", 64)
         module.offload_next = module.offload_after_next = None
         module.offload_readahead_routes = options.get("prefill_readahead_routes", 4096)
+        module.offload_prefill_install_ahead = options.get("prefill_install_ahead", False)
+        module.offload_cold_prefill_routes = options.get("cold_prefill_routes", 0)
+    store.allocate(materialize=False)
     depth = options.get("prefetch_depth", 2)
     routers = []
     for name, module in experts:
