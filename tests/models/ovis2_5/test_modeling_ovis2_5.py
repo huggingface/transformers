@@ -24,6 +24,7 @@ from transformers import (
     Ovis2_5Processor,
     is_torch_available,
 )
+from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -121,8 +122,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         # The official-key mapping targets the conditional model's `model.*` subtree.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    @parameterized.expand([("image",), ("video",)])
-    def test_visual_pooler_outputs(self, modality):
+    @parameterized.expand([("image", False), ("image", True), ("video", False), ("video", True)])
+    def test_visual_pooler_outputs(self, modality, precomputed):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = Ovis2_5Model(config).to(torch_device).eval()
         if modality == "video":
@@ -130,6 +131,19 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             inputs["video_grid_thw"] = inputs.pop("image_grid_thw")
             inputs["input_ids"][inputs["input_ids"] == config.image_start_token_id] = config.video_start_token_id
             inputs["input_ids"][inputs["input_ids"] == config.image_end_token_id] = config.video_end_token_id
+
+        if precomputed:
+            with torch.no_grad():
+                expected_hidden_state = model(**inputs).last_hidden_state
+            feature_keys = (
+                ("pixel_values", "image_grid_thw")
+                if modality == "image"
+                else ("pixel_values_videos", "video_grid_thw")
+            )
+            feature_inputs = {key: inputs.pop(key) for key in feature_keys}
+            with torch.no_grad():
+                features = getattr(model, f"get_{modality}_features")(**feature_inputs, return_dict=True)
+            inputs["mm_encoder_outputs"] = {modality: BaseModelOutputWithPooling(pooler_output=features.pooler_output)}
 
         text_inputs = []
 
@@ -140,6 +154,9 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         hook.remove()
+
+        if precomputed:
+            torch.testing.assert_close(outputs.last_hidden_state, expected_hidden_state, rtol=0, atol=0)
 
         pooler_output = getattr(outputs, f"{modality}_pooler_output")
         visual_mask = inputs["input_ids"] == getattr(config, f"{modality}_token_id")

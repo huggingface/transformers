@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -455,17 +456,6 @@ class Ovis2_5MultiModalProjector(nn.Module):
         return self.visual_embeddings_table(indicator_token_ids)
 
 
-@auto_docstring
-@dataclass
-class Ovis2_5VisualFeaturesOutput(BaseModelOutputWithPooling):
-    r"""
-    visual_indicator_features (`torch.FloatTensor` of shape `(4, hidden_size)`, *optional*):
-        Learned image-begin, image-end, video-begin, and video-end embeddings, in that order.
-    """
-
-    visual_indicator_features: torch.FloatTensor | None = None
-
-
 @auto_docstring(
     custom_intro="""
     Base class for Ovis2_5 outputs, with hidden states and attentions.
@@ -610,7 +600,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -618,15 +608,9 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             **kwargs,
         )
         visual_features = self.multi_modal_projector(vision_outputs.pooler_output)
-        visual_indicator_features = self.multi_modal_projector.get_visual_indicator_features(visual_features.device)
         split_sizes = (image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2).tolist()
-        return Ovis2_5VisualFeaturesOutput(
-            last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=torch.split(visual_features, split_sizes),
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-            visual_indicator_features=visual_indicator_features,
-        )
+        vision_outputs.pooler_output = torch.split(visual_features, split_sizes)
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -729,7 +713,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 input_ids,
                 inputs_embeds,
                 image_features,
-                image_outputs.visual_indicator_features,
                 num_visual_inputs=len(image_outputs.pooler_output),
                 is_video=False,
             )
@@ -741,7 +724,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 input_ids,
                 inputs_embeds,
                 video_features,
-                video_outputs.visual_indicator_features,
                 num_visual_inputs=len(video_outputs.pooler_output),
                 is_video=True,
             )
@@ -772,7 +754,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5VisualFeaturesOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         return self.get_image_features(
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
@@ -784,7 +766,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.Tensor,
         visual_features: torch.Tensor,
-        visual_indicator_features: torch.Tensor | None,
         num_visual_inputs: int,
         is_video: bool,
     ) -> torch.Tensor:
@@ -801,9 +782,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
         )
 
-        if visual_indicator_features is None:
-            return inputs_embeds
-
+        visual_indicator_features = self.multi_modal_projector.get_visual_indicator_features(visual_features.device)
         if is_video:
             boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
             indicator_indexes = (2, 3)
