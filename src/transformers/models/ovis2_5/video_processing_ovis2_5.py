@@ -23,7 +23,6 @@ import math
 import torch
 from torchvision.transforms.v2 import functional as tvF
 
-from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
@@ -118,28 +117,28 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
 
     def resize(
         self,
-        videos: torch.Tensor,
+        videos: "torch.Tensor",
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
         temporal_factor: int,
         **kwargs,
-    ) -> torch.Tensor:
-        """Resize each frame with the released Ovis2.5 spatial policy."""
+    ) -> "torch.Tensor":
+        """Resize dynamically based on input video aspect ratio."""
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 
         height, width = videos.shape[-2:]
-        # Match Ovis2.5 image resizing; GLM4V also factors in the video frame count.
         resized_height, resized_width = smart_resize(
             height=height,
             width=width,
+            num_frames=videos.shape[1],
             factor=factor,
+            temporal_factor=temporal_factor,
             min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
         )
-        return TorchvisionBackend.resize(
-            self,
+        return super().resize(
             image=videos,
             size=SizeDict(height=resized_height, width=resized_width),
             resample=resample,
@@ -303,7 +302,7 @@ class Ovis2_5VideoProcessor(BaseVideoProcessor):
                 f"`patch_size * merge_size` ({factor}), got ({resized_height}, {resized_width})."
             )
 
-        # Match `patchify`'s last-frame padding when the frame count is not divisible by the temporal patch size.
+        # Released checkpoints use temporal_patch_size=1; match `patchify` for explicit processor overrides too.
         num_temporal_patches = math.ceil(num_frames / temporal_patch_size)
         return num_temporal_patches * (resized_height // patch_size) * (resized_width // patch_size)
 
