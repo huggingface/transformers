@@ -415,11 +415,16 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(mask_mapping := attention_mask, dict):
+            mask_cache = cache
+            if mask_cache is None:
+                # Use an empty cache only for mask metadata: queries follow the context tokens.
+                mask_cache = DFlashCache()
+                mask_cache.set_previous_accepted_tokens(context_hidden_states.shape[1])
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": noise_embeds,
                 "attention_mask": attention_mask,
-                "cache": cache,
+                "cache": mask_cache,
             }
             # The queries corresponding to `noise_embeds` must attend bi-directionally to each other, and causally to previous k/v states
             # derived from the main model's `context_hidden_states`. However, since they strictly correspond to positions larger than
