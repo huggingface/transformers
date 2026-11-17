@@ -173,14 +173,18 @@ class Question:
         elif kind == "score":
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
-        labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
-        if len(labels) < len(criteria):
+        if kind in config.labels and config.labels[kind] is None:  # a head that reads any number of options: no labels
+            labels = None
+        else:
+            labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
+        if labels is not None and len(labels) < len(criteria):
             raise ValueError(
                 f"Question {name!r}: this model reads at most {len(labels)} options for a {kind} question, got "
                 f"{len(criteria)} (`labels.{kind}` in its decision config)."
             )
         options, descriptions = list(criteria), list(criteria.values())
-        return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions)
+        labels = [] if labels is None else labels[: len(options)]
+        return cls(name, kind, question.get("instructions"), options, labels, descriptions)
 
     def answer(self, probabilities: list[float]) -> dict[str, Any]:
         """The System One answer, from the probabilities of the options."""

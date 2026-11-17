@@ -15,7 +15,9 @@
 import functools
 import json
 import re
+import tempfile
 import unittest
+from pathlib import Path
 
 from transformers import (
     AutoProcessor,
@@ -133,6 +135,47 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertIn("Question 'a': `type` must be one of noul, choice, score, got 'Choice'.", str(error.exception))
         self.assertIn("(a noul question looks like", str(error.exception))
         self.assertIn("unexpected keyword argument 'instruction'", str(error.exception))
+
+    def test_label_tokens_cap_the_options(self):
+        # By default each option is read from the logit of its label token: at most 26 options (A to Z)
+        criteria = {f"option {index}": None for index in range(27)}
+        request = {"state": "s", "questions": {"x": {"type": "choice", "criteria": criteria}}}
+        with self.assertRaisesRegex(ValueError, "at most 26 options for a choice question, got 27"):
+            render(self.tokenizer, request)
+        # Labels of the decision config cap them the same way
+        config = DecisionConfig(labels={"choice": ["a", "b"]}, chat_template="{{ question.name }}<|mark|>")
+        request = {"state": "s", "questions": {"x": {"type": "choice", "criteria": {"x": None, "y": None, "z": None}}}}
+        with self.assertRaisesRegex(ValueError, "at most 2 options"):
+            render(self.tokenizer, request, config)
+
+    def test_labels_none_lifts_the_cap(self):
+        # Heads that read spans declare no labels: any number of options, and the template gets no labels
+        config = DecisionConfig(
+            labels={"noul": None, "choice": None, "score": None},
+            chat_template="{% for q in questions %}{{ q.name }}{{ q.labels|length }}<|mark|>{% endfor %}",
+        )
+        questions = {
+            "pick": {"type": "choice", "criteria": {f"option {index}": None for index in range(40)}},
+            "rate": {"type": "score", "criteria": [f"level {index}" for index in range(30)]},
+            "yes": {"type": "noul"},
+        }
+        (prompt,) = render(self.tokenizer, {"state": "s", "questions": questions}, config)
+        self.assertEqual([len(question.options) for question in prompt.questions], [40, 30, 2])
+        self.assertEqual([question.labels for question in prompt.questions], [[], [], []])
+        # Only the types it lists: the others keep their default labels and cap
+        config = DecisionConfig(labels={"choice": None}, chat_template="{{ question.name }}<|mark|>")
+        questions = {"rate": {"type": "score", "criteria": [f"level {index}" for index in range(27)]}}
+        with self.assertRaisesRegex(ValueError, "at most 26 options for a score question"):
+            render(self.tokenizer, {"state": "s", "questions": questions}, config)
+
+    def test_labels_none_survive_save_and_reload(self):
+        config = DecisionConfig(labels={"noul": None, "choice": None, "score": ["low", "high"]})
+        with tempfile.TemporaryDirectory() as directory:
+            config.save_pretrained(directory)
+            saved = json.loads(Path(directory, "decision.json").read_text(encoding="utf-8"))
+            reloaded = DecisionConfig.from_pretrained(directory)
+        self.assertEqual(saved["labels"], {"noul": None, "choice": None, "score": ["low", "high"]})
+        self.assertEqual(reloaded.labels, config.labels)
 
     def test_each_request_carries_its_questions(self):
         for request in (REQUEST["state"], '{"a": 1}', {"questions": REQUEST["questions"]}):

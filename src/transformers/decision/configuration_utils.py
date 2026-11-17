@@ -32,9 +32,11 @@ class DecisionConfig:
     Settings of a decision model, saved as `decision.json` (and its chat template as `decision_template.jinja`).
 
     Args:
-        labels (`dict[str, list[str]]`, *optional*):
+        labels (`dict[str, list[str] | None]`, *optional*):
             Single-token labels of the options per question type, for heads that read them from the logits. Defaults to
-            `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise.
+            `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise, which caps the number of options. `None` for a type
+            declares a head that reads any number of options of that type (e.g. one that pools their spans): its
+            questions have no labels and no cap.
         temperature (`dict[str, float]`, *optional*):
             Temperature per question type, applied to the option scores before the softmax. Defaults to 1.
         calibration (`dict[str, float]`, *optional*):
@@ -56,7 +58,7 @@ class DecisionConfig:
             Subfolder of the LoRA that the pipeline loads on the model, for repos that don't keep it at their root.
     """
 
-    labels: dict[str, list[str]] = field(default_factory=dict)
+    labels: dict[str, list[str] | None] = field(default_factory=dict)
     temperature: dict[str, float | int] = field(default_factory=dict)
     calibration: dict[str, float | int] | None = None
     noul_band: list[float] | None = None
