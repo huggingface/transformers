@@ -117,11 +117,11 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         )
         return config, inputs_dict
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # max cache length can be smaller than sequence length
-        max_length = past_key_values.get_max_length()
+        max_length = cache.get_max_length()
         seq_length = min(seq_length, max_length) if max_length >= 0 else seq_length
-        super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
+        super()._check_cache_for_generate(batch_size, cache, seq_length, config)
 
     def _check_attention_shapes(self, layer, seq_length, k_shape, v_shape):
         # Super method assumes that there is only layer.keys/values but reference sliding window layers
@@ -168,7 +168,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
                 # Pass attention mask explicitly as input_ids_reference sometimes contains randomly generated
                 # pad tokens which trips up the automatic attention mask generation.
                 attention_mask=torch.ones_like(input_ids_reference),
-                past_key_values=out_prefill.past_key_values,
+                cache=out_prefill.cache,
                 max_new_tokens=3,
                 do_sample=False,
                 return_dict_in_generate=True,
@@ -178,7 +178,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
             prompt_length = inputs_dict["input_ids"].shape[1]
             reference_layers = [
-                layer for layer in out.past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+                layer for layer in out.cache.layers if layer._layer_type == "reference_sliding_attention"
             ]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:
@@ -208,7 +208,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
             input_ids = inputs_dict["input_ids"]
             prompt_length = input_ids.shape[1]
-            past_key_values = (
+            cache = (
                 StaticCache(config=config.get_text_config(), max_cache_len=prompt_length + num_decode_steps)
                 if cache_implementation == "static"
                 else DynamicCache(config=config.get_text_config())
@@ -217,12 +217,10 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             next_tokens = input_ids
             with torch.no_grad():
                 for _ in range(num_decode_steps + 1):
-                    outputs = model(input_ids=next_tokens, past_key_values=past_key_values, use_cache=True)
+                    outputs = model(input_ids=next_tokens, cache=cache, use_cache=True)
                     next_tokens = outputs.logits[:, -1:].argmax(dim=-1)
 
-            reference_layers = [
-                layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention"
-            ]
+            reference_layers = [layer for layer in cache.layers if layer._layer_type == "reference_sliding_attention"]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:
                 self.assertEqual(layer.prefill_length, prompt_length)
@@ -252,7 +250,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             )
 
             reference_layers = [
-                layer for layer in out.past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+                layer for layer in out.cache.layers if layer._layer_type == "reference_sliding_attention"
             ]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:

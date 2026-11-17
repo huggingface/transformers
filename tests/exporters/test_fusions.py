@@ -141,10 +141,10 @@ def _decode_feeds(program, vocab_size):
     """Inputs for one new token after a random past cache."""
     generator = np.random.default_rng(0)
     inputs = {value.name: [int(dim) for dim in value.shape] for value in program.graph.inputs}
-    past_length = next(shape[2] for name, shape in inputs.items() if "past_key_values" in name)
+    past_length = next(shape[2] for name, shape in inputs.items() if "cache" in name)
     feeds = {}
     for name, shape in inputs.items():
-        if "past_key_values" in name:
+        if "cache" in name:
             feeds[name] = generator.standard_normal(shape).astype(np.float32)
         elif "mask" in name:
             feeds[name] = np.ones(shape, dtype=np.int64)

@@ -257,8 +257,8 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -401,12 +401,12 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         pass
 
     @is_flaky(description="Large difference with A10. Still flaky after setting larger tolerance")
-    def test_generate_continue_from_past_key_values(self):
-        super().test_generate_continue_from_past_key_values()
+    def test_generate_continue_from_cache(self):
+        super().test_generate_continue_from_cache()
 
     # Overridden because the head count comes from the decoder sub-config (mirrors `DiaModelTest`).
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -414,8 +414,8 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         )
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        use_cache = decoder_past_key_values is not None
-        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+        use_cache = decoder_cache is not None
+        has_static_cache = isinstance(decoder_cache, StaticCache)
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
@@ -429,9 +429,9 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 # hybrid caches have layers with no fixed max, so pick the first layer reporting a real length
                 query_length = next(
                     (
-                        decoder_past_key_values.get_max_length(i)
-                        for i in range(len(decoder_past_key_values))
-                        if decoder_past_key_values.get_max_length(i) != -1
+                        decoder_cache.get_max_length(i)
+                        for i in range(len(decoder_cache))
+                        if decoder_cache.get_max_length(i) != -1
                     ),
                     prompt_length + generated_length,
                 )

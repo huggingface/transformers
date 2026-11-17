@@ -491,7 +491,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
         pass
 
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         """Overwrite because IDEFICS needs image attention mask to be also processed"""
 
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
@@ -538,7 +538,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
             inputs["input_ids"] = outputs_cached.sequences
             if "attention_mask" in inputs:
@@ -555,7 +555,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -702,7 +702,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         """Overwrite because IDEFICS needs image attention mask to be also processed"""
 
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
@@ -749,7 +749,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             outputs_cached = model.generate(**inputs, do_sample=False, max_new_tokens=3, return_dict_in_generate=True)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
             inputs["input_ids"] = outputs_cached.sequences
             if "attention_mask" in inputs:
@@ -766,7 +766,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertListEqual(outputs.sequences.tolist(), outputs_cached.sequences.tolist())
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     @pytest.mark.generate
     def test_generate_without_input_ids(self):
@@ -823,7 +823,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
             # inputs may need to be tweaked across `generate` calls (like the attention mask).
             initial_output = model.generate(**inputs, max_new_tokens=3, **generation_kwargs)
-            inputs["past_key_values"] = initial_output.past_key_values
+            inputs["cache"] = initial_output.cache
 
             new_attention_len = input_ids.shape[1] + initial_output.sequences.shape[-1]
             continued_embeds = torch.cat(
@@ -846,7 +846,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             # Verify that the combined outputs match the full generation.
             combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
             self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
-            self._check_caches_are_similar(outputs.past_key_values, cached_output.past_key_values)
+            self._check_caches_are_similar(outputs.cache, cached_output.cache)
 
     def _check_caches_are_similar(self, cache1, cache2):
         # In this continuation setup, rare numerical drift appears on the newest cache slot only.
@@ -872,7 +872,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             torch.testing.assert_close(values1[..., -1:, :], values2[..., -1:, :], rtol=rtol, atol=atol)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         """
         Overwrite from generation tests because Idefics has only SDPA layers.

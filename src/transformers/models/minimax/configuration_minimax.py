@@ -59,7 +59,7 @@ class MiniMaxConfig(PreTrainedConfig):
     ```"""
 
     model_type = "minimax"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

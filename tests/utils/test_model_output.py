@@ -14,12 +14,14 @@
 
 import io
 import unittest
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import pytest
 
-from transformers import AlbertForMaskedLM
-from transformers.testing_utils import require_torch
+from transformers import AlbertForMaskedLM, logging
+from transformers.modeling_outputs import BaseModelOutputWithPast
+from transformers.testing_utils import CaptureLogger, require_torch
 from transformers.utils import ModelOutput, is_torch_available
 
 
@@ -175,6 +177,75 @@ class ModelOutputTester(unittest.TestCase):
 
         input_dict = {"input_ids": torch.randint(0, 30000, (1, 512), dtype=torch.int64, requires_grad=False)}
         assert torch.allclose(model(**input_dict).logits, loaded_ep(**input_dict).logits)
+
+    def test_bc_cache_name_outputs(self):
+        """Test that BC is correctly handled in model outputs classes for the cache name."""
+        # We can use any output class with a cache attribute to test all functionalities, and we don't care about the value
+        output = BaseModelOutputWithPast(cache=0)
+
+        # Test all getattr names, including all ones
+        self.assertEqual(output.cache, 0)
+        with ensure_deprecation_warning():
+            self.assertEqual(output.past_key_values, 0)
+        with ensure_deprecation_warning():
+            self.assertEqual(output.cache_params, 0)
+
+        # Test all getitem names, including all ones
+        self.assertEqual(output["cache"], 0)
+        with ensure_deprecation_warning():
+            self.assertEqual(output["past_key_values"], 0)
+        with ensure_deprecation_warning():
+            self.assertEqual(output["cache_params"], 0)
+
+        # Test the in operator
+        self.assertTrue("cache" in output)
+        with ensure_deprecation_warning():
+            self.assertTrue("past_key_values" in output)
+        with ensure_deprecation_warning():
+            self.assertTrue("cache_params" in output)
+
+        # Test the get method
+        self.assertEqual(output.get("cache"), 0)
+        with ensure_deprecation_warning():
+            self.assertEqual(output.get("past_key_values"), 0)
+        with ensure_deprecation_warning():
+            self.assertEqual(output.get("cache_params"), 0)
+
+        # Test the setattr method
+        with ensure_deprecation_warning():
+            output.past_key_values = 1
+            self.assertEqual(output.cache, 1)
+        with ensure_deprecation_warning():
+            output.cache_params = 2
+            self.assertEqual(output.cache, 2)
+
+        # Test the setitem method
+        with ensure_deprecation_warning():
+            output["past_key_values"] = 3
+            self.assertEqual(output.cache, 3)
+        with ensure_deprecation_warning():
+            output["cache_params"] = 4
+            self.assertEqual(output.cache, 4)
+
+        # Test that we can still call __init__ with the old names (very important for remote code mdoels, as usually we have
+        # `return ModelOutput(past_key_values=past_key_values, ...)`)
+        with ensure_deprecation_warning():
+            foo = BaseModelOutputWithPast(past_key_values=0)
+        self.assertEqual(foo.cache, 0)
+        with ensure_deprecation_warning():
+            foo = BaseModelOutputWithPast(cache_params=0)
+        self.assertEqual(foo.cache, 0)
+
+
+@contextmanager
+def ensure_deprecation_warning():
+    logger = logging.get_logger("transformers.utils.generic")
+    logger.warning_once.cache_clear()
+    try:
+        with CaptureLogger(logger) as cl:
+            yield
+    finally:
+        assert "`past_key_values`/`cache_params` are deprecated." in cl.out
 
 
 class ModelOutputTestNoDataclass(ModelOutput):
