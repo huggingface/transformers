@@ -389,6 +389,8 @@ with manager.pause():
     manager.restore_memory()
 ```
 
+A tensor allocated during the pause and still alive at `restore_memory` can sit in the middle of the freed memory, so the cache no longer fits in one piece. Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to avoid this.
+
 ### Tensor parallel timeout
 
 Under tensor parallelism, the manager creates a CPU communication group to coordinate request submissions, cancellations, and shutdown across ranks. `cpu_group_timeout` limits how long a collective on this group can block before the process crashes. If one rank stalls, the timeout prevents the others from waiting forever.
