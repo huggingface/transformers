@@ -201,6 +201,10 @@ class BenchmarkConfig:
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
+            "prompt_length_policy": "repeat_tokens_to_exact_length",
+            "eos_token_id": -1 if self.continuous_batching else None,
+            "allow_block_sharing": False if self.continuous_batching else None,
+            "auto_switch_to_flash": False if self.continuous_batching else None,
             "warmup_iterations": self.warmup_iterations,
             "measurement_iterations": self.measurement_iterations,
             "gpu_monitoring": self.gpu_monitoring,
