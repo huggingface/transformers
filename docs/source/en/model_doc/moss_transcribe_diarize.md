@@ -202,13 +202,17 @@ conversation with the audio in the user turn and the target transcription as the
 out with `-100`).
 
 ```python
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoProcessor
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 model.train()
 
+transcription = (
+    "[0.00][S01] Welcome to this demonstration of automatic speech recognition and speaker diarization using an "
+    "end-to-end transformer model.[7.47]"
+)
 conversation = [
     [
         {
@@ -220,23 +224,20 @@ conversation = [
                 },
             ],
         },
-        {
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "[0.00][S01] Mister quilter is apostle of the middle classes, and we are glad to welcome his gospel.[3.00]",
-                },
-            ],
-        },
+        {"role": "assistant", "content": [{"type": "text", "text": transcription}]},
     ],
 ]
+
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
     output_labels=True,
 ).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())

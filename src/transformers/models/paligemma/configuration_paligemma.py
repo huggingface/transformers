@@ -75,7 +75,7 @@ class PaliGemmaConfig(PreTrainedConfig):
             },
         ),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None

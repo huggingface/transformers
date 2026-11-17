@@ -587,7 +587,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         )
 
     @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
