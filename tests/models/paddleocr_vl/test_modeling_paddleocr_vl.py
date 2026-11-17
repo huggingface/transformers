@@ -248,7 +248,10 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
             mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
+            mm_types = (input_ids == config.image_token_id).long()
+            positions = {"input_ids": input_ids, "mm_token_type_ids": mm_types, "image_grid_thw": image_grid_thw}
             _ = model(
+                position_ids=mrope_position_ids(config, positions),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,

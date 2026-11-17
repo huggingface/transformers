@@ -160,6 +160,8 @@ class VLMModelTest(MultiModalModelTest):
             for key in batch_tensors_to_double:
                 if key in curr_input_dict and curr_input_dict[key] is not None:
                     curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
+            if (position_ids := curr_input_dict.get("position_ids")) is not None and position_ids.ndim == 3:
+                curr_input_dict["position_ids"] = torch.cat([position_ids, position_ids], dim=1)  # (axes, batch, seq)
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
