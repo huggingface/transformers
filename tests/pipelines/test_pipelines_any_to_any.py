@@ -57,6 +57,80 @@ if is_torch_available():
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
 
+    @staticmethod
+    def _make_media_only_pipe(model_id):
+        import torch
+
+        from transformers import AutoModelForMultimodalLM
+
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.float32).eval()
+        return AnyToAnyPipeline(
+            model=model, processor=processor, task="any-to-any", device=0 if torch.cuda.is_available() else -1
+        )
+
+    def test_media_only_gemma3n_image_audio(self):
+        from PIL import Image
+
+        pipe = self._make_media_only_pipe("tiny-random/gemma-3n")
+        sr = pipe.processor.feature_extractor.sampling_rate
+        requests = ({"images": Image.new("RGB", (64, 64), "white")}, {"audio": np.zeros(sr, dtype=np.float32)})
+        for media in requests:
+            for output_mode in ({"return_tensors": True}, {"return_full_text": False}, {"return_full_text": True}):
+                with self.subTest(modality=next(iter(media)), output_mode=output_mode):
+                    result = pipe(**media, max_new_tokens=1, **output_mode)
+                    self.assertEqual(len(result), 1)
+                    self.assertIsNone(result[0]["input_text"])
+                    self.assertIn(
+                        "generated_token_ids" if "return_tensors" in output_mode else "generated_text", result[0]
+                    )
+
+    def test_media_only_gemma3_image(self):
+        from PIL import Image
+
+        pipe = self._make_media_only_pipe("tiny-random/gemma-3")
+        result = pipe(images=Image.new("RGB", (64, 64), "white"), return_tensors=True, max_new_tokens=1)
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0]["input_text"])
+        self.assertIn("generated_token_ids", result[0])
+
+    def test_media_only_gemma4_image(self):
+        from PIL import Image
+
+        pipe = self._make_media_only_pipe("tiny-random/gemma-4-dense")
+        result = pipe(images=Image.new("RGB", (64, 64), "white"), return_tensors=True, max_new_tokens=1)
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0]["input_text"])
+        self.assertIn("generated_token_ids", result[0])
+
+    def test_media_only_explicit_none_audio(self):
+        pipe = self._make_media_only_pipe("tiny-random/gemma-3n")
+        sr = pipe.processor.feature_extractor.sampling_rate
+        result = pipe(text=None, audio=np.zeros(sr, dtype=np.float32), return_tensors=True, max_new_tokens=1)
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0]["input_text"])
+        self.assertIn("generated_token_ids", result[0])
+
+    def test_media_only_audio_dict_and_batch(self):
+        pipe = self._make_media_only_pipe("tiny-random/gemma-3n")
+        sr = pipe.processor.feature_extractor.sampling_rate
+        request = {"audio": np.zeros(sr, dtype=np.float32)}
+        one = pipe(request, return_tensors=True, max_new_tokens=1)
+        many = pipe([request, request], return_tensors=True, max_new_tokens=1)
+        for outputs, count in ((one, 1), (many, 2)):
+            flat = [r for item in outputs for r in (item if isinstance(item, list) else [item])]
+            self.assertEqual(len(flat), count)
+            for record in flat:
+                self.assertIsNone(record["input_text"])
+                self.assertIn("generated_token_ids", record)
+
+    def test_media_only_empty_request_rejected(self):
+        pipe = object.__new__(AnyToAnyPipeline)
+        for kwargs in ({}, {"text": None}):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, "provide text, images, videos, or audio"):
+                    pipe(**kwargs)
+
     def test_string_assistant_prefill_full_text(self):
         import copy
 

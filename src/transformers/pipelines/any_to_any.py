@@ -257,7 +257,7 @@ class AnyToAnyPipeline(Pipeline):
 
     def __call__(
         self,
-        text: str | list[str] | list[dict],
+        text: str | list[str] | list[dict] | None = None,
         images: str | list[str] | list[list[str]] | ImageInput | None = None,
         videos: str | list[str] | VideoInput | None = None,
         audio: str | list[str] | AudioInput | None = None,
@@ -327,8 +327,8 @@ class AnyToAnyPipeline(Pipeline):
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
-        if images is None and text is None:
-            raise ValueError("You must at least provide either text or images.")
+        if all(x is None for x in (text, images, videos, audio)):
+            raise ValueError("You must provide text, images, videos, or audio.")
 
         if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
@@ -410,7 +410,7 @@ class AnyToAnyPipeline(Pipeline):
             inputs = {}
         else:
             inputs = inputs.copy()  # avoid in-place changes if users passed dict
-            text = inputs.pop("text")
+            text = inputs.pop("text", None)
 
             # Feature extractor do not load audio files and expect a decoded array
             if inputs.get("audio", None) is not None and hasattr(self.processor, "feature_extractor"):
@@ -455,7 +455,7 @@ class AnyToAnyPipeline(Pipeline):
         **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
-        input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
+        input_texts = [input_texts] if input_texts is None or isinstance(input_texts, (str, Chat)) else input_texts
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
         if isinstance(generated_sequence, torch.Tensor) and generated_sequence.ndim == 3:
