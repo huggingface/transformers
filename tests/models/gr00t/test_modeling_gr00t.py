@@ -18,7 +18,14 @@ import unittest
 from parameterized import parameterized
 
 from transformers import Gr00tConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -266,6 +273,23 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
         torch.testing.assert_close(actions, actions_again)
         torch.testing.assert_close(single_step, inputs_dict["noise"] + velocity)
 
+    def test_half_precision_model_accepts_float32_inputs(self):
+        # The processor returns a float32 `state`: the model runs it, the noise and the actions in its own dtype
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gr00tForConditionalGeneration(config).to(torch_device, torch.bfloat16)
+        inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
+        self.assertEqual(inputs_dict["state"].dtype, torch.float32)
+        loss = model(**inputs_dict).loss
+        self.assertEqual(loss.dtype, torch.bfloat16)
+        loss.backward()
+
+        model.eval()
+        inputs_dict.pop("actions"), inputs_dict.pop("timestep")
+        with torch.no_grad():
+            actions = model.sample_actions(**inputs_dict)
+        self.assertEqual(actions.dtype, torch.bfloat16)
+        self.assertTrue(torch.isfinite(actions).all())
+
     def test_eager_matches_sdpa_sample_actions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for key in ("actions", "timestep"):
@@ -344,6 +368,12 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
         pass
 
     @unittest.skip(
+        "The DiT always cross-attends with text-only or image-only masks, so SDPA can't use its flash backend, as in PI0"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
         "The backbone's final norm is unused by design and gets no gradient; "
         "covered by `test_training_gradients_reach_used_parameters`"
     )
@@ -369,6 +399,12 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
 @require_torch_accelerator
 class Gr00tModelIntegrationTest(unittest.TestCase):
     checkpoint = "nvidia/GR00T-N1.7-3B"
+
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     @staticmethod
     def get_inputs():
@@ -400,21 +436,42 @@ class Gr00tModelIntegrationTest(unittest.TestCase):
         for key, values in loading_info.items():
             self.assertEqual(len(values), 0, f"{key}: {values}")
 
-    def test_sample_actions(self):
-        model = Gr00tForConditionalGeneration.from_pretrained(self.checkpoint, dtype=torch.float32)
-        model = model.to(torch_device).eval()
+    def _sample_actions(self, dtype):
+        model = Gr00tForConditionalGeneration.from_pretrained(self.checkpoint, dtype=dtype, device_map=torch_device)
         inputs = {key: value.to(torch_device) for key, value in self.get_inputs().items()}
+        inputs["pixel_values"] = inputs["pixel_values"].to(dtype)
         with torch.no_grad():
             actions = model.sample_actions(**inputs)
-
         self.assertEqual(tuple(actions.shape), (1, 40, 132))
-        expected_first_steps = torch.tensor(
-            [
-                [-0.1292, -0.0473, 0.1391, 0.9806, -0.1003, -0.0310],
-                [-0.0541, 0.1053, 0.0915, 1.0008, 0.0806, 0.0461],
-                [-0.0534, 0.1125, 0.0912, 1.0006, 0.0559, 0.0444],
-            ]
-        )
-        expected_last_step = torch.tensor([0.0054, -0.0755, -0.1167, 0.9673, 0.1616, -0.1279])
-        torch.testing.assert_close(actions[0, :3, :6].cpu(), expected_first_steps, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(actions[0, -1, :6].cpu(), expected_last_step, atol=1e-3, rtol=1e-3)
+        self.assertEqual(actions.dtype, dtype)
+        # The first three and the last action steps, first six dims
+        return torch.cat([actions[0, :3, :6], actions[0, -1:, :6]]).float().cpu()
+
+    def test_sample_actions(self):
+        # Matches the original GR00T N1.7 implementation (Isaac-GR00T `n1.7-release`) within 5e-5
+        expected = Expectations(
+            {
+                (None, None): [
+                    [-0.1292, -0.0473, 0.1391, 0.9806, -0.1003, -0.0310],
+                    [-0.0541, 0.1053, 0.0915, 1.0008, 0.0806, 0.0461],
+                    [-0.0534, 0.1125, 0.0912, 1.0006, 0.0559, 0.0444],
+                    [0.0054, -0.0755, -0.1167, 0.9673, 0.1616, -0.1279],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
+        actions = self._sample_actions(torch.float32)
+        torch.testing.assert_close(actions, torch.tensor(expected), atol=1e-3, rtol=1e-3)
+
+    def test_sample_actions_bf16(self):
+        expected = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    [-0.1318, -0.0483, 0.1367, 0.9805, -0.0996, -0.0293],
+                    [-0.0552, 0.1045, 0.0889, 1.0000, 0.0801, 0.0488],
+                    [-0.0537, 0.1123, 0.0898, 1.0000, 0.0547, 0.0449],
+                    [0.0000, -0.0762, -0.1133, 0.9688, 0.1582, -0.1279],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
+        actions = self._sample_actions(torch.bfloat16)
+        torch.testing.assert_close(actions, torch.tensor(expected), atol=2e-2, rtol=2e-2)

@@ -719,6 +719,10 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         """
         batch_size = state.shape[0]
         device = state.device
+        # The processor returns float32 tensors: run them in the dtype of the model, as the original GR00T does
+        state = state.to(self.dtype)
+        noise = noise.to(self.dtype) if noise is not None else None
+        actions = actions.to(self.dtype) if actions is not None else None
 
         if timestep is None:
             timestep = self.sample_time(batch_size, device)
@@ -793,6 +797,7 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         """
         num_steps = num_steps or self.config.num_inference_steps
         batch_size = state.shape[0]
+        state = state.to(self.dtype)
         if noise is None:
             noise = torch.randn(
                 batch_size,
@@ -801,6 +806,7 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
                 device=state.device,
                 dtype=state.dtype,
             )
+        noise = noise.to(self.dtype)
 
         vlm_features = self.model.get_vlm_features(
             input_ids=input_ids,

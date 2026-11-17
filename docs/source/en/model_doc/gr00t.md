@@ -62,8 +62,10 @@ processor = Gr00tProcessor.from_pretrained("gr00t-n1.7-3b")
 model = Gr00tForConditionalGeneration.from_pretrained("gr00t-n1.7-3b", dtype=torch.bfloat16, device_map="auto")
 
 embodiment = "oxe_droid_relative_eef_relative_joint"
-print(processor.modality_configs[embodiment]["video"]["modality_keys"])  # the camera views, in order
-images = [Image.new("RGB", (320, 240)), Image.new("RGB", (320, 240))]  # replace with the camera images
+video_config = processor.modality_configs[embodiment]["video"]
+print(video_config["modality_keys"], video_config["delta_indices"])  # the camera views, and the frames of each view
+# Replace with the camera images: 2 frames (15 steps ago and now) of the 2 views, ordered frame first, then view
+images = [Image.new("RGB", (320, 240)) for _ in range(4)]
 state = {  # replace with the robot state of each joint group
     "eef_9d": np.zeros((1, 9)),
     "gripper_position": np.zeros((1, 1)),
@@ -73,10 +75,28 @@ state = {  # replace with the robot state of each joint group
 inputs = processor(
     images=[images], text="pick up the bowl", state=state, embodiment_tag=embodiment, return_tensors="pt"
 ).to(model.device)
-inputs["state"] = inputs["state"].to(model.dtype)
 normalized_actions = model.sample_actions(**inputs)
 actions = processor.post_process_actions(normalized_actions, embodiment, state=state)
 print({key: value.shape for key, value in actions.items()})  # (1, 40, dim) for each joint group
+```
+
+## Training
+
+Pass the raw action chunk of each joint group as `actions` to the processor. It converts the relative groups to the frame of the current state, normalizes them, and pads them to `max_action_dim`, returning `actions` and the `action_mask` of their valid entries. The model then returns the flow-matching loss.
+
+```python
+actions = {  # the next 40 steps of each joint group
+    "eef_9d": np.zeros((1, 40, 9)),
+    "gripper_position": np.zeros((1, 40, 1)),
+    "joint_position": np.zeros((1, 40, 7)),
+}
+inputs = processor(
+    images=[images], text="pick up the bowl", state=state, actions=actions, embodiment_tag=embodiment, return_tensors="pt"
+).to(model.device)
+
+model.train()
+loss = model(**inputs).loss
+loss.backward()
 ```
 
 ## Gr00tConfig
@@ -98,6 +118,7 @@ print({key: value.shape for key, value in actions.items()})  # (1, 40, dim) for 
 [[autodoc]] Gr00tProcessor
     - __call__
     - normalize_state
+    - normalize_actions
     - post_process_actions
 
 ## Gr00tDiT
