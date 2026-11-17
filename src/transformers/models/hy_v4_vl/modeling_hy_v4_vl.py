@@ -48,13 +48,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import (
-    accepts_precomputed_kwargs,
-    get_max_seqlen,
-    is_flash_attention_requested,
-    maybe_autocast,
-    merge_with_config_defaults,
-)
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens
 from .configuration_hy_v4_vl import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig
@@ -1395,9 +1389,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
-    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
-    @auto_docstring
     def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1407,11 +1399,10 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         r"""
         All videos' features as one tensor; `get_video_features` splits them per video.
         """
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        # Same implementation as for images
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
 
     @can_return_tuple
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -1421,9 +1412,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         # Same implementation as for images
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
-    @auto_docstring
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -1433,22 +1422,22 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         r"""
         All images' features as one tensor; `get_image_features` splits them per image.
         """
-        pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
+        vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
+        return vision_outputs
 
     @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         # Each merged row carries one extra newline token
         merge = self.config.vision_config.spatial_merge_size
         split_sizes = image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output.squeeze(0), split_sizes.tolist())
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes.tolist())
         return vision_outputs
 
     def get_placeholder_mask(
