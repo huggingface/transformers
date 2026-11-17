@@ -30,7 +30,6 @@ from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -75,7 +74,6 @@ class Kolibri1_1Indexer(nn.Module):
 
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
         super().__init__()
-        self.pool_source_layer = config.index_source_layers[layer_idx]
         self.is_pool_source = layer_idx in config.index_layers
         self.num_heads = config.index_num_heads
         self.topk = config.index_topk
@@ -172,18 +170,14 @@ class Kolibri1_1Indexer(nn.Module):
         query_states: torch.Tensor,
         key_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        shared_kv_states: KVSharingDict,
-    ) -> torch.Tensor:
-        """Return the mask of the keys each query attends to, of the same shape as the 4D `attention_mask`."""
+        index_pool: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the mask of the keys each query attends to, of the same shape as the 4D `attention_mask`, and the
+        pool it selected them from: a new one for indexers, otherwise `index_pool`, the one of the preceding indexer."""
         visible = attention_mask[:, 0] if attention_mask.dtype == torch.bool else attention_mask[:, 0] == 0
-        # `Kolibri1_1Model.forward` drops the pool once the last layer selecting from it is done
-        pool_key = f"index_pool_{self.pool_source_layer}"
         if self.is_pool_source:
-            pool = self.select_pool(query_states, key_states, visible)
-            shared_kv_states[pool_key] = (pool,)
-        else:
-            (pool,) = shared_kv_states[pool_key]
-        return self.select_tokens(query_states, key_states, visible, pool).unsqueeze(1)
+            index_pool = self.select_pool(query_states, key_states, visible)
+        return self.select_tokens(query_states, key_states, visible, index_pool).unsqueeze(1), index_pool
 
 
 def rotate_half(x):
@@ -292,8 +286,9 @@ class Kolibri1_1Attention(nn.Module):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         shared_kv_states: KVSharingDict | None = None,
+        index_pool: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -319,7 +314,7 @@ class Kolibri1_1Attention(nn.Module):
                 raise ValueError(
                     "Sparse attention layers need an explicit 4D attention mask to overlay their selection."
                 )
-            selected_mask = self.indexer(query_states, key_states, attention_mask, shared_kv_states)
+            selected_mask, index_pool = self.indexer(query_states, key_states, attention_mask, index_pool)
             if attention_mask.dtype == torch.bool:
                 # The selection only ever keeps visible keys
                 attention_mask = selected_mask
@@ -348,7 +343,7 @@ class Kolibri1_1Attention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        return attn_output, attn_weights, index_pool
 
 
 class Kolibri1_1MLP(nn.Module):
@@ -498,26 +493,29 @@ class Kolibri1_1DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        shared_kv_states: KVSharingDict,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
+        index_pool: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
-        hidden_states, _ = self.self_attn(
+        # Indexers return a new pool of candidate keys, the other layers pass on the one they were given
+        hidden_states, _, index_pool = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
+            shared_kv_states=shared_kv_states,
+            index_pool=index_pool,
             **kwargs,
         )
-
         hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -526,7 +524,7 @@ class Kolibri1_1DecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.post_mlp_layernorm(hidden_states)
         hidden_states = residual + hidden_states
-        return hidden_states
+        return hidden_states, index_pool
 
 
 @auto_docstring
@@ -631,12 +629,6 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
             for i, layer in enumerate(self.layers)
             if layer.self_attn.is_kv_shared_layer
         }
-        # The pool of each indexer is a `[B, L, L]` mask: it is dropped after the last layer selecting from it
-        sources = config.index_source_layers
-        self._pools_freed_after = {
-            max(i for i, s in enumerate(sources) if s == source): f"index_pool_{source}"
-            for source in config.index_layers
-        }
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -685,14 +677,16 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        # Keys and values shared across layers, and the pools of the indexers, for the current forward only. Keeping
-        # the pools in this dict lets `KVSharingDict.to` move them across devices with `device_map`
+        # Keys and values shared across layers, for the current forward only
         shared_kv_states = KVSharingDict()
-        # Layers may be recomputed for gradients (gradient checkpointing), and then need the pools again
-        free_pools = not self.training and not torch.is_grad_enabled()
+        # The candidate keys of the latest indexer, a `[batch_size, query_length, key_length]` mask
+        index_pool = None
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
+            if i in self.config.index_layers:
+                # An indexer selects a new pool: drop the previous one first, so that two never exist at once
+                index_pool = None
+            hidden_states, index_pool = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
@@ -700,10 +694,9 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 shared_kv_states=shared_kv_states,
+                index_pool=index_pool,
                 **kwargs,
             )
-            if free_pools and i in self._pools_freed_after:
-                del shared_kv_states[self._pools_freed_after[i]]
 
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(

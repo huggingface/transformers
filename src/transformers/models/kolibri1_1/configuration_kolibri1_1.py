@@ -200,14 +200,5 @@ class Kolibri1_1Config(PreTrainedConfig):
             for layer_idx, source in enumerate(self.kv_source_layers)
         ]
 
-    @property
-    def index_source_layers(self) -> list[int | None]:
-        """For each layer, the indexer whose pool it selects keys from, or `None` for sliding-attention layers."""
-        sources, latest = [], None
-        for layer_idx, layer_type in enumerate(self.layer_types):
-            latest = layer_idx if layer_idx in self.index_layers else latest
-            sources.append(latest if layer_type == "indexed_attention" else None)
-        return sources
-
 
 __all__ = ["Kolibri1_1Config"]

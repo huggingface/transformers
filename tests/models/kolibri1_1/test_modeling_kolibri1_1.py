@@ -15,7 +15,6 @@
 
 import tempfile
 import unittest
-from unittest import mock
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
@@ -31,8 +30,6 @@ if is_torch_available():
     import torch
 
     from transformers import Kolibri1_1Config, Kolibri1_1ForCausalLM, Kolibri1_1Model
-    from transformers.cache_utils import KVSharingDict
-    from transformers.models.kolibri1_1 import modeling_kolibri1_1
     from transformers.models.kolibri1_1.modeling_kolibri1_1 import (
         Kolibri1_1Indexer,
         nvfp4_fake_quantize,
@@ -240,32 +237,3 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
                 _, loading_info = model_class.from_pretrained(tmp_dir, output_loading_info=True)
                 self.assertEqual(loading_info["unexpected_keys"], set())
                 self.assertEqual(loading_info["missing_keys"], set())
-
-    def test_pools_are_freed_after_their_last_reader(self):
-        # Layer 1 is an indexer without reindexers, like the 15th layer of Kolibri 1.1; layers 3 and 4 read the pool
-        # of layer 2
-        config = self.model_tester.get_config()
-        config.index_layers = [1, 2]
-        self.assertEqual(config.index_source_layers, [None, 1, 2, 2, 2])
-        model = Kolibri1_1Model(config).to(torch_device).eval()
-        events = []
-
-        class RecordingKVSharingDict(KVSharingDict):
-            def __delitem__(self, key):
-                events.append(f"free {key}")
-                super().__delitem__(key)
-
-        for layer_idx, layer in enumerate(model.layers):
-            layer.register_forward_hook(lambda *_, layer_idx=layer_idx: events.append(f"layer {layer_idx}"))
-        layers = [f"layer {layer_idx}" for layer_idx in range(config.num_hidden_layers)]
-        input_ids = torch.randint(3, config.vocab_size, (2, 12), device=torch_device)
-
-        with mock.patch.object(modeling_kolibri1_1, "KVSharingDict", RecordingKVSharingDict):
-            with torch.no_grad():
-                freed = model(input_ids).last_hidden_state
-            self.assertEqual(events, [*layers[:2], "free index_pool_1", *layers[2:], "free index_pool_2"])
-            # With gradients, pools are kept until the end of the forward, in case layers are recomputed
-            events.clear()
-            kept = model(input_ids).last_hidden_state
-            self.assertEqual(events, layers)
-        torch.testing.assert_close(kept.detach(), freed)
