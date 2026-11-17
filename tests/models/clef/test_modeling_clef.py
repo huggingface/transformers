@@ -475,14 +475,51 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertEqual(ClefConfig().head_type, "joint")
         torch.manual_seed(0)
         model = ClefForDecision(self.config)
-        keys = set(model.state_dict())
-        self.assertIn("lm_head.weight", keys)
-        self.assertFalse(any(key.startswith("cosine_head") for key in keys))
-        self.assertTrue(any(key.startswith("scorer.") for key in keys))
+        keys = list(model.state_dict())
+        # The keys of the model at 71872b2023, before the cosine head, for this tiny config
+        self.assertEqual({key.split(".")[0] for key in keys}, {"model", "lm_head", "embeddings", "encoder", "scorer"})
+        self.assertEqual(len(keys), 93)
+        self.assertEqual(len([key for key in keys if key.startswith("model.")]), 26)
 
     def test_invalid_head_type(self):
         with self.assertRaises(ValueError):
             ClefConfig(head_type="bilinear")
+        with self.assertRaises(ValueError):
+            ClefConfig(head_type="cosine", cosine_width=0)
+
+    def test_cosine_head_stays_float32_in_half_precision(self):
+        model = self.cosine_model()
+        inputs = self.collate(self.ragged_prompts())
+        labels = torch.tensor([1, 4, 0, 3, 2, 0])
+        with torch.no_grad():
+            expected = model(**inputs).logits
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            loaded = ClefForDecision.from_pretrained(directory, dtype=torch.bfloat16)
+        for name, parameter in loaded.cosine_head.named_parameters():
+            self.assertEqual(parameter.dtype, torch.float32, name)
+        self.assertTrue(all(p.dtype == torch.bfloat16 for p in loaded.model.parameters()))
+        output = loaded(**inputs, labels=labels)
+        self.assertEqual(output.logits.dtype, torch.float32)
+        output.loss.backward()
+        for name, parameter in loaded.cosine_head.named_parameters():
+            self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+        torch.testing.assert_close(output.logits, expected, atol=0.5, rtol=0.1)
+        # A model cast afterwards with `.to()` still runs: the head computes in float32 whatever its weights
+        model.to(torch.bfloat16)
+        self.assertEqual(model(**inputs).logits.dtype, torch.float32)
+
+    def test_cosine_under_autocast(self):
+        model = self.cosine_model()
+        inputs = self.collate(self.ragged_prompts())
+        labels = torch.tensor([1, 4, 0, 3, 2, 0])
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            output = model(**inputs, labels=labels)
+        self.assertEqual(output.logits.dtype, torch.float32)
+        output.loss.backward()
+        for name, parameter in model.cosine_head.named_parameters():
+            self.assertEqual(parameter.dtype, torch.float32, name)
+            self.assertTrue(torch.isfinite(parameter.grad).all(), name)
 
     def test_pipeline_with_cosine(self):
         model = self.cosine_model()

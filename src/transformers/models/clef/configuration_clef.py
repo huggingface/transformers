@@ -121,6 +121,8 @@ class ClefConfig(PreTrainedConfig):
             self.intermediate_size = joint_head_config["feedforward"]
         if self.head_type not in ("joint", "cosine"):
             raise ValueError(f"`head_type` must be 'joint' or 'cosine', got {self.head_type!r}.")
+        if self.cosine_width <= 0:
+            raise ValueError(f"`cosine_width` must be positive, got {self.cosine_width}.")
         if self.cosine_initial_scale <= 0:
             raise ValueError(f"`cosine_initial_scale` must be positive, got {self.cosine_initial_scale}.")
         if self.num_key_value_heads is None:

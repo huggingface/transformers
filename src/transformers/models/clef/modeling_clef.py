@@ -306,6 +306,11 @@ class ClefCosineHead(nn.Module):
         self.option_norm = nn.LayerNorm(width)
         self.logit_scale = nn.Parameter(torch.tensor(math.log(config.cosine_initial_scale)))
 
+    @staticmethod
+    def project(spans: torch.Tensor, projection: nn.Linear, norm: nn.LayerNorm) -> torch.Tensor:
+        spans = nn.functional.linear(spans.float(), projection.weight.float(), projection.bias.float())
+        return nn.functional.layer_norm(spans, norm.normalized_shape, norm.weight.float(), norm.bias.float(), norm.eps)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -317,9 +322,10 @@ class ClefCosineHead(nn.Module):
         batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
         starts, ends, instructions, option_spans = span_indices(marks, num_options, option_question_ids, is_option)
         span_states = pool_spans(hidden_states, starts, ends)
+        # Float32 whatever the dtype of the weights (a model cast with `.to()`) and outside of autocast
         with torch.autocast(device_type=hidden_states.device.type, enabled=False):
-            questions = self.question_norm(self.question_projection(span_states[batch, instructions]))
-            options = self.option_norm(self.option_projection(span_states[batch, option_spans]))
+            questions = self.project(span_states[batch, instructions], self.question_projection, self.question_norm)
+            options = self.project(span_states[batch, option_spans], self.option_projection, self.option_norm)
         questions = nn.functional.normalize(questions.float(), dim=-1)[batch, option_question_ids]
         options = nn.functional.normalize(options.float(), dim=-1)
         return (questions * options).sum(-1) * self.logit_scale.clamp(max=math.log(100.0)).exp()
@@ -524,6 +530,7 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         self.model = AutoModel.from_config(config.text_config)
         if config.head_type == "cosine":  # no language modeling head, nothing to tie
             self._tied_weights_keys = {}
+            self._keep_in_fp32_modules_strict = ["cosine_head"]  # float32 when loaded in half precision
             self.cosine_head = ClefCosineHead(config)
         else:
             self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
