@@ -53,6 +53,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -162,13 +163,17 @@ def fetch_job_log(job_id, repo=REPO, token=None):
         print(f"  URL error fetching log for job {job_id}: {e.reason}", file=sys.stderr)
         return ""
 
-    # Step 2: fetch the signed blob URL without any auth headers
-    try:
-        with urllib.request.urlopen(blob_url, timeout=120) as resp:
-            return resp.read().decode("utf-8", errors="replace")
-    except Exception as e:
-        print(f"  Error fetching log content for job {job_id}: {e}", file=sys.stderr)
-        return ""
+    # Step 2: fetch the signed blob URL without any auth headers. Retry: the blob storage can fail temporarily
+    # (e.g. "HTTP Error 503: Egress is over the account limit").
+    for attempt in range(1, 4):
+        try:
+            with urllib.request.urlopen(blob_url, timeout=120) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            print(f"  Error fetching log content for job {job_id} (attempt {attempt}/3): {e}", file=sys.stderr)
+            if attempt < 3:
+                time.sleep(10)
+    return ""
 
 
 def get_previous_run(current_run_id, workflow, repo=REPO, token=None):
