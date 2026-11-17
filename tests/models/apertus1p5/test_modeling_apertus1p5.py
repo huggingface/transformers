@@ -68,22 +68,22 @@ class Apertus1p5Vision2TextModelTester(VLMModelTester):
         conditional_generation_class = Apertus1p5ForConditionalGeneration
     config_class = Apertus1p5Config
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("audio_token_id", 4)
+    small_config_overrides = {
+        "audio_token_id": 4,
         # image codes use ids 40-59 and audio codes 60-71
-        kwargs.setdefault("image_token_offset", 40)
-        kwargs.setdefault("audio_token_offset", 60)
-        kwargs.setdefault("vision_codebook_size", 20)
-        kwargs.setdefault("base_channels", 32)
-        kwargs.setdefault("channel_multiplier", [1, 2, 1])  # downsamples by 4, the default `patch_size`
-        kwargs.setdefault("num_res_blocks", 2)
-        kwargs.setdefault("embed_dim", 16)
-        kwargs.setdefault("latent_channels", 16)
-        kwargs.setdefault("audio_codebook_size", 12)
-        kwargs.setdefault("num_filters", 8)
-        kwargs.setdefault("upsampling_ratios", [2, 2])
-        kwargs.setdefault("codebook_dim", 32)  # equal to `hidden_size`: the quantizer has no projections
-        super().__init__(parent, **kwargs)
+        "image_token_offset": 40,
+        "audio_token_offset": 60,
+        "vision_codebook_size": 20,
+        "base_channels": 32,
+        "channel_multiplier": [1, 2, 1],  # downsamples by 4, the default `patch_size`
+        "num_res_blocks": 2,
+        "embed_dim": 16,
+        "latent_channels": 16,
+        "audio_codebook_size": 12,
+        "num_filters": 8,
+        "upsampling_ratios": [2, 2],
+        "codebook_dim": 32,  # equal to `hidden_size`: the quantizer has no projections
+    }
 
     @property
     def _special_token_ids(self):
@@ -145,24 +145,24 @@ class Apertus1p5Audio2TextModelTester(ALMModelTester):
     config_class = Apertus1p5Config
     audio_mask_key = "padding_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("audio_token_id", 4)
-        kwargs.setdefault("image_token_offset", 40)
-        kwargs.setdefault("audio_token_offset", 60)
-        kwargs.setdefault("audio_codebook_size", 12)
-        kwargs.setdefault("num_filters", 8)
-        kwargs.setdefault("upsampling_ratios", [2, 2])
-        kwargs.setdefault("codebook_dim", 32)  # equal to `hidden_size`: the quantizer has no projections
-        kwargs.setdefault("feat_seq_length", 20)
-        kwargs.setdefault("vision_codebook_size", 20)
-        kwargs.setdefault("base_channels", 32)
-        kwargs.setdefault("channel_multiplier", [1, 2, 1])
-        kwargs.setdefault("num_res_blocks", 2)
-        kwargs.setdefault("embed_dim", 16)
-        kwargs.setdefault("latent_channels", 16)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "pad_token_id": 0,
+        "image_token_id": 3,
+        "audio_token_id": 4,
+        "image_token_offset": 40,
+        "audio_token_offset": 60,
+        "audio_codebook_size": 12,
+        "num_filters": 8,
+        "upsampling_ratios": [2, 2],
+        "codebook_dim": 32,  # equal to `hidden_size`: the quantizer has no projections
+        "feat_seq_length": 20,
+        "vision_codebook_size": 20,
+        "base_channels": 32,
+        "channel_multiplier": [1, 2, 1],
+        "num_res_blocks": 2,
+        "embed_dim": 16,
+        "latent_channels": 16,
+    }
 
     @property
     def _special_token_ids(self):
