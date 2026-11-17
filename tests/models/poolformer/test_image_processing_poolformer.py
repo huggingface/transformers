@@ -32,6 +32,8 @@ class PoolFormerImageProcessingTester(ImageProcessingTester):
 @require_vision
 class PoolFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = PoolFormerImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
 
 @require_torch

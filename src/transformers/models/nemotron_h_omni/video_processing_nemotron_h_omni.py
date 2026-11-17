@@ -40,6 +40,8 @@ class NemotronH_Omni_Reasoning_V3VideoProcessorInitKwargs(VideosKwargs, total=Fa
         Patch-grid budget each frame is resized towards.
     video_maintain_aspect_ratio (`bool`, *optional*, defaults to `True`):
         Whether to preserve the frame aspect ratio when choosing the tile; a square tile is used otherwise.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        Number of consecutive frames packed into one tubelet, stacked along the channel dimension.
     """
 
     norm_mean: list[float] | None
@@ -48,15 +50,18 @@ class NemotronH_Omni_Reasoning_V3VideoProcessorInitKwargs(VideosKwargs, total=Fa
     downsample_ratio: float
     video_target_num_patches: int
     video_maintain_aspect_ratio: bool
+    temporal_patch_size: int
 
 
 @auto_docstring
 class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
     r"""
     Frames are resized to a single aspect-preserving tile whose patch grid sits near
-    `video_target_num_patches`, then normalized with `norm_mean` / `norm_std`. This is the video
-    counterpart of [`NemotronH_Omni_Reasoning_V3ImageProcessor`], which uses a per-image dynamic
-    resolution budget instead.
+    `video_target_num_patches`, then normalized with `norm_mean` / `norm_std`, and every
+    `temporal_patch_size` consecutive frames are packed into one tubelet. The videos are stacked into
+    `pixel_values_videos` of shape `(num_videos, num_tubelets, temporal_patch_size * num_channels, height, width)`.
+    This is the video counterpart of [`NemotronH_Omni_Reasoning_V3ImageProcessor`], which uses a per-image
+    dynamic resolution budget instead.
     """
 
     valid_kwargs = NemotronH_Omni_Reasoning_V3VideoProcessorInitKwargs
@@ -68,6 +73,7 @@ class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
     downsample_ratio = 0.5
     video_target_num_patches = 1024
     video_maintain_aspect_ratio = True
+    temporal_patch_size = 2
 
     def __init__(self, **kwargs: Unpack[NemotronH_Omni_Reasoning_V3VideoProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -103,10 +109,12 @@ class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
             ph = pw = side
         return pw, ph
 
-    def _preprocess(self, videos: list["torch.Tensor"], return_tensors=None, **kwargs):
+    def _preprocess(
+        self, videos: list["torch.Tensor"], temporal_patch_size: int | None = None, return_tensors=None, **kwargs
+    ):
+        temporal_patch_size = temporal_patch_size or self.temporal_patch_size
         norm_mean = torch.tensor(self.norm_mean).view(1, 3, 1, 1)
         norm_std = torch.tensor(self.norm_std).view(1, 3, 1, 1)
-        divisor = self._downsample_factor
 
         # Frames of one video share a size, so the whole clip resizes in a single batched call.
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -131,19 +139,24 @@ class NemotronH_Omni_Reasoning_V3VideoProcessor(BaseVideoProcessor):
             resized_grouped[shape] = frames.view(num_videos, num_frames, *frames.shape[1:])
         resized_videos = reorder_videos(resized_grouped, grouped_videos_index)
 
-        # One tile per frame; every frame of a clip shares its size and so its token count.
-        num_tokens = []
-        for video in videos:
-            wp, hp = self._compute_target_patches(*video.shape[-2:])
-            num_tokens.extend([(wp * hp) // (divisor**2)] * video.shape[0])
-
-        pixel_values_videos = torch.cat(resized_videos, dim=0)
+        tubelets, frame_counts = [], []
+        for video in resized_videos:
+            frames, channels, height, width = video.shape
+            if frames % temporal_patch_size:
+                padding = video[-1:].expand(temporal_patch_size - frames % temporal_patch_size, -1, -1, -1)
+                video = torch.cat([video, padding])
+            tubelets.append(video.reshape(-1, temporal_patch_size * channels, height, width))
+            frame_counts.append(frames)
+        if len({video.shape for video in tubelets}) > 1:
+            raise ValueError(
+                "All videos of one call must have the same number of tubelets and frame size to be stacked, but got "
+                f"{sorted({tuple(video.shape) for video in tubelets})}; process them separately."
+            )
 
         return BatchFeature(
             data={
-                "pixel_values_videos": pixel_values_videos,
-                "num_patches": [1] * pixel_values_videos.shape[0],
-                "num_tokens": num_tokens,
+                "pixel_values_videos": torch.stack(tubelets),
+                "num_frames": frame_counts,
             },
             tensor_type=return_tensors,
         )

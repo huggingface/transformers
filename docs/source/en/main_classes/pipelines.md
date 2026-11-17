@@ -386,6 +386,45 @@ Pipelines available for computer vision tasks include the following.
 
 Pipelines available for natural language processing tasks include the following.
 
+### DecisionPipeline
+
+> [!WARNING]
+> Decision models, the `decision` pipeline and `DecisionConfig` are experimental: their API may change at any time, without deprecation.
+
+Each call asks its questions: a request `{"state": ..., "questions": ...}`, or a state with `questions`:
+
+```python
+from transformers import pipeline
+
+decide = pipeline("decision", model="autotrust/GEV-26B-Decide")
+decide(
+    {
+        "state": "I was charged twice for my order and want a refund.",
+        "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
+    }
+)
+```
+
+Images come as `assets`, like in the System One API: each placeholder in the state, the instructions or the criteria is
+replaced with its image. An asset is `{"type": "image", "format": "png", "data_base64": ...}`, a PIL image, a path or a
+URL, and the model needs a processor that handles images.
+
+```python
+decide(
+    {
+        "state": "The customer sent photo-1 and asks if it is damaged.",
+        "assets": {"photo-1": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"},
+        "questions": {"damaged": {"type": "noul", "instructions": "Is the product in the photo damaged?"}},
+    }
+)
+```
+
+[[autodoc]] DecisionPipeline
+    - __call__
+    - all
+
+[[autodoc]] DecisionConfig
+
 ### FillMaskPipeline
 
 [[autodoc]] FillMaskPipeline

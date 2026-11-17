@@ -30,7 +30,7 @@ The figure below illustrates the architecture of PoolFormer. Taken from the [ori
 
 <img width="600" src="https://user-images.githubusercontent.com/15921929/142746124-1ab7635d-2536-4a0e-ad43-b4fe2c5a525d.png"/>
 
-This model was contributed by [heytanay](https://huggingface.co/heytanay). The original code can be found [here](https://github.com/sail-sg/poolformer).
+This model was contributed by heytanay. The original code can be found [here](https://github.com/sail-sg/poolformer).
 
 ## Usage tips
 

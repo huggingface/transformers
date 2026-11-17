@@ -78,6 +78,13 @@ class GraniteSpeechPlusForConditionalGenerationModelTest(ALMModelTest, unittest.
     # `test_get_audio_features_output` (which assumes hidden_dim) does not apply.
     skip_test_audio_features_output_shape = True
 
+    # FIXME: @eustlb, re-enable once ibm-granite/granite-speech-4.1-2b-plus is re-uploaded without `.model.model`
+    @unittest.skip(
+        reason="ibm-granite/granite-speech-4.1-2b-plus was saved with the #45534 bug (`language_model.model.model.*`)"
+    )
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
+
     @unittest.skip(reason="FIXME eustlib, ALMs could accept embeddings as input.")
     def test_inputs_embeds_matches_input_ids(self):
         pass
