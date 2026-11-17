@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -451,26 +450,6 @@ class Ovis2_5MultiModalProjector(nn.Module):
         return self.visual_embeddings_table(indicator_token_ids)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Ovis2_5 outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class Ovis2_5ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_pooler_output (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
-        Image features produced by the vision encoder and projected to the language model hidden size.
-    video_pooler_output (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_video_tokens, hidden_size)`.
-        Video features produced by the vision encoder and projected to the language model hidden size.
-    """
-
-    image_pooler_output: torch.FloatTensor | None = None
-    video_pooler_output: torch.FloatTensor | None = None
-
-
 @auto_docstring
 class Ovis2_5PreTrainedModel(PreTrainedModel):
     config: Ovis2_5Config
@@ -669,7 +648,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5ModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
@@ -699,8 +678,6 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
 
-        image_features = None
-        video_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_outputs = mm_encoder_outputs["image"]
             image_features = torch.cat(image_outputs.pooler_output, dim=0)
@@ -732,13 +709,11 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        return Ovis2_5ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_pooler_output=image_features,
-            video_pooler_output=video_features,
         )
 
     @accepts_precomputed_kwargs(modality="video")

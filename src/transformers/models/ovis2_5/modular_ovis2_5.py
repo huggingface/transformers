@@ -24,7 +24,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -43,7 +43,6 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
-from ..lfm3_vl.modeling_lfm3_vl import Lfm3VlModelOutputWithPast
 from ..llava.modeling_llava import LlavaModel
 from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6VisionEmbeddings
 from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGlimmerVisionRotaryEmbedding
@@ -414,10 +413,6 @@ class Ovis2_5MultiModalProjector(nn.Module):
         return self.visual_embeddings_table(indicator_token_ids)
 
 
-class Ovis2_5ModelOutputWithPast(Lfm3VlModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
     config: Ovis2_5Config
@@ -684,7 +679,7 @@ class Ovis2_5Model(LlavaModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Ovis2_5ModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
         if pixel_values is not None and pixel_values_videos is not None:
@@ -714,8 +709,6 @@ class Ovis2_5Model(LlavaModel):
                 **kwargs,
             )
 
-        image_features = None
-        video_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_outputs = mm_encoder_outputs["image"]
             image_features = torch.cat(image_outputs.pooler_output, dim=0)
@@ -747,13 +740,11 @@ class Ovis2_5Model(LlavaModel):
             return_dict=True,
             **kwargs,
         )
-        return Ovis2_5ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_pooler_output=image_features,
-            video_pooler_output=video_features,
         )
 
 

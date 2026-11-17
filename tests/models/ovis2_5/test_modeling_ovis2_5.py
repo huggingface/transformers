@@ -146,6 +146,8 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             outputs = model(**inputs)
 
         torch.testing.assert_close(outputs.last_hidden_state, expected_hidden_state, rtol=0, atol=0)
+        self.assertNotIn("image_pooler_output", outputs)
+        self.assertNotIn("video_pooler_output", outputs)
 
     def test_video_forward(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
