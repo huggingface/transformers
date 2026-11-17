@@ -289,7 +289,6 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
