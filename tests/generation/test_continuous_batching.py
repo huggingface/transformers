@@ -2029,6 +2029,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             try:
                 if release:
                     self._wait_until_generating(manager)
+                    with self.assertRaises(RuntimeError):  # the loop is running
+                        manager.release_memory()
                     with manager.pause():
                         self.assertTrue(manager.batch_processor.scheduler.active_requests, "no request in flight")
                         allocated = backend_memory_allocated(torch_device)
