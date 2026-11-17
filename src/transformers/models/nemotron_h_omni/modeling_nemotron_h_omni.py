@@ -221,7 +221,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             lambda: f"`pixel_values` holds {pixel_values.shape[0]} patches but `image_grid_hw` describes "
             f"{int(image_grid_hw.prod(-1).sum())}",
         )
-        pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
+        pixel_values = pixel_values.to(dtype=self.vision_model.dtype)
         vision_outputs = self.vision_model(pixel_values, image_grid_hw=image_grid_hw, **kwargs)
 
         image_features = vision_outputs.features
@@ -251,7 +251,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
     def get_video_features(
         self, pixel_values_videos: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
-        pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.config.torch_dtype)
+        pixel_values_videos = pixel_values_videos.to(dtype=self.vision_model.dtype)
         temporal_patch_dim = self.video_temporal_patch_dim
         num_frames, channels, height, width = pixel_values_videos.shape
 
