@@ -125,7 +125,6 @@ class HunYuanVLRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)
@@ -645,7 +644,6 @@ class HunYuanVLPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -657,6 +655,7 @@ class HunYuanVLPreTrainedModel(PreTrainedModel):
             init.normal_(module.image_sep, mean=0.0, std=embed_std)
 
 
+@auto_docstring
 class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
     """
     HunYuanVL vision tower: patch embedding -> transformer blocks -> per-image patch merger.

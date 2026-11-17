@@ -691,7 +691,6 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(UniSpeechSatAttention, index=1, layer_name="encoder"),  # noqa: F821
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

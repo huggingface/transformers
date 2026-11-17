@@ -51,7 +51,6 @@ To give some examples of how much VRAM it roughly takes to load a model in bfloa
 - [**Bloom**](https://huggingface.co/bigscience/bloom) requires 2 \* 176 GB = **352 GB** VRAM
 - [**Llama-2-70b**](https://huggingface.co/meta-llama/Llama-2-70b-hf) requires 2 \* 70 GB = **140 GB** VRAM
 - [**Falcon-40b**](https://huggingface.co/tiiuae/falcon-40b) requires 2 \* 40 GB = **80 GB** VRAM
-- [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b) requires 2 \* 30 GB = **60 GB** VRAM
 - [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder) requires 2 \* 15.5 = **31 GB** VRAM
 
 As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](./perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](./perf_train_gpu_many#pipeline-parallelism).
@@ -416,10 +415,7 @@ As an alternative, *ALiBi* proposes a much simpler relative position encoding sc
 
 As shown in the [ALiBi](https://huggingface.co/papers/2108.12409) paper, this simple relative positional encoding allows the model to retain a high performance even at very long text input sequences.
 
-*ALiBi* is used in multiple of today's most important LLMs, such as:
-
-- [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
-- [**BLOOM**](https://huggingface.co/bigscience/bloom)
+*ALiBi* is used in multiple of today's most important LLMs, such as [BLOOM](https://huggingface.co/bigscience/bloom)
 
 Both *RoPE* and *ALiBi* position encodings can extrapolate to input lengths not seen during training whereas it has been shown that extrapolation works much better out-of-the-box for *ALiBi* as compared to *RoPE*.
 For ALiBi, one simply increases the values of the lower triangular position matrix to match the length of the input sequence.
@@ -616,7 +612,6 @@ MQA has seen wide adoption by the community and is now used by many of the most 
 
 - [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
 - [**PaLM**](https://huggingface.co/papers/2204.02311)
-- [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
 - [**BLOOM**](https://huggingface.co/bigscience/bloom)
 
 Also, the checkpoint used in this notebook - `bigcode/octocoder` - makes use of MQA.
