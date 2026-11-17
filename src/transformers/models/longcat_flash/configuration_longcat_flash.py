@@ -67,15 +67,15 @@ class LongcatFlashConfig(PreTrainedConfig):
         "layers.*.self_attn.*.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.*.kv_b_proj": "colwise",
         "layers.*.self_attn.*.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts.identity_expert": "moe_identity_expert",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlps.*.gate_proj": "colwise",
         "layers.*.mlps.*.up_proj": "colwise",
         "layers.*.mlps.*.down_proj": "rowwise",
     }
-
+    base_model_ep_plan = {
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
