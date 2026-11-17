@@ -31,38 +31,28 @@ license (non-commercial use) in a gated repository: request access on the model 
 
 This model was contributed by [cvalgian](https://huggingface.co/cvalgian).
 
-## Architecture
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
-Every layer has one token mixer, chosen per layer by `layer_types`, followed by a mixture-of-experts block. The released
-model repeats the pattern gated delta net, sliding-window attention, gated delta net, global attention, sliding-window
-attention over its 34 layers.
+## Usage tips
 
-- `"linear_attention"` layers are gated delta nets (GDN), as in Qwen3.5. The published checkpoints fuse their input
-  projections into one `in_proj` and call their gated output RMSNorm `out_norm`; these weights are converted when the
-  model is loaded and converted back when it is saved.
-- `"sliding_attention"` layers attend to the last `sliding_window` tokens (the current one included) with rotary
-  position embeddings.
-- `"full_attention"` layers attend to the whole sequence without position embeddings. The sliding-window and GDN
-  layers carry position information.
-- Both attention kinds use grouped-query attention with an RMSNorm on each query and key head.
-- The mixture of experts routes each token to 4 of 128 experts with a float32 softmax router and adds an ungated shared
-  expert.
-
-The RMSNorms apply their weight in float32. Install [flash-linear-attention](https://github.com/fla-org/flash-linear-attention)
-and [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) for fast GDN kernels; without them a PyTorch
-implementation is used.
+- The published checkpoints fuse the gated delta net (GDN) input projections into one `in_proj` and call their gated
+  output norm `out_norm`. They are converted when the model is loaded and converted back when it is saved.
+- The GDN layers use fast GPU kernels when available: Hub kernels when loading with `use_kernels=True`, otherwise the
+  [flash-linear-attention](https://github.com/fla-org/flash-linear-attention) and
+  [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) packages if installed. Without them, they fall back to a
+  slower PyTorch implementation.
 
 ## Example
 
 The following example shows how to generate text using the `AutoModelForCausalLM` class.
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "translated/Lara-4-Mini-Base"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 inputs = tokenizer("La capitale d'Italia è", return_tensors="pt").to(model.device)
 output = model.generate(**inputs, max_new_tokens=32, do_sample=False)
@@ -88,11 +78,12 @@ config = LoraConfig(
 model = get_peft_model(model, config)
 ```
 
-Adapters trained with the Hub remote code (`trust_remote_code=True`) target the fused `linear_attn.in_proj` instead.
-They load here only partially and without a warning: the `in_proj` LoRA weights are dropped. Convert them by copying
-`lora_A` to the four projections and splitting `lora_B` by rows into
-`[2 * key_dim + value_dim, value_dim, num_v_heads, num_v_heads]`. The word embeddings are tied, so don't merge an
-adapter on `embed_tokens` or `lm_head` without untying them first.
+> [!WARNING]
+> Adapters trained with the Hub remote code (`trust_remote_code=True`) target the fused `linear_attn.in_proj` instead.
+> They load here only partially and without a warning: the `in_proj` LoRA weights are dropped. Convert them by copying
+> `lora_A` to the four projections and splitting `lora_B` by rows into
+> `[2 * key_dim + value_dim, value_dim, num_v_heads, num_v_heads]`. The word embeddings are tied, so don't merge an
+> adapter on `embed_tokens` or `lm_head` without untying them first.
 
 ## LaraMiniConfig
 
