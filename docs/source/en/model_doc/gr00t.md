@@ -99,6 +99,15 @@ loss = model(**inputs).loss
 loss.backward()
 ```
 
+During training, the model drops the state embedding of a sample with probability `state_dropout_prob`. The original GR00T training pipeline also replaces the normalized state input of a sample with zeros with probability 0.2 in its processor (`state_dropout_prob` of the original `processor_config.json`). To reproduce it, zero `inputs["state"]` for a random subset of the batch before the forward pass.
+
+```python
+keep_state = torch.rand(inputs["state"].shape[0], device=inputs["state"].device) >= 0.2
+inputs["state"] = inputs["state"] * keep_state[:, None]
+```
+
+The image processor pads non-square camera images to a square before resizing, as the original GR00T N1.7 release (`n1.7-release` tag) does whatever the `letter_box_transform` setting.
+
 ## Gr00tConfig
 
 [[autodoc]] Gr00tConfig
