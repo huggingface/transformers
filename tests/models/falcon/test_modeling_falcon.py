@@ -79,6 +79,22 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    def test_packed_sequences_do_not_attend_across_documents(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FalconForCausalLM(config).to(torch_device).eval()
+        seq_a = torch.randint(0, config.vocab_size, (1, 5), device=torch_device)
+        seq_b = torch.randint(0, config.vocab_size, (1, 7), device=torch_device)
+        packed_ids = torch.cat([seq_a, seq_b], dim=1)
+        packed_position_ids = torch.cat([torch.arange(5), torch.arange(7)]).unsqueeze(0).to(torch_device)
+
+        with torch.no_grad():
+            packed_logits = model(packed_ids, position_ids=packed_position_ids, use_cache=False).logits
+            logits_a = model(seq_a, use_cache=False).logits
+            logits_b = model(seq_b, use_cache=False).logits
+
+        torch.testing.assert_close(packed_logits[:, :5], logits_a, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(packed_logits[:, 5:], logits_b, rtol=1e-4, atol=1e-4)
+
 
 @require_torch
 class FalconLanguageGenerationTest(unittest.TestCase):
