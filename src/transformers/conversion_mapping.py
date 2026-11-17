@@ -2236,6 +2236,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
     ]
     mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
+    # The original GR00T N1.7 checkpoints declare `model_type: "Gr00tN1d7"`
+    mapping["Gr00tN1d7"] = mapping["gr00t"].copy()
 
     mapping["kimi_k25"] += mapping["qwen2_moe"].copy()
 
