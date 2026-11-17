@@ -4470,7 +4470,7 @@ class PreTrainedModel(
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
-            if device_map_uses_accelerator(device_map) and not use_kernels:
+            if not use_kernels and device_map_uses_accelerator(device_map):
                 logger.warning_once(
                     "We detected the usage of an accelerator (e.g. cuda) but kernels is turned off (`use_kernels=False`). "
                     "Consider turning on kernels to gain maximum speedups!"
