@@ -2157,8 +2157,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         tokenizer, model = get_tokenizer_and_model(
             model_id, "flash_attention_2", torch_device, torch.bfloat16, upcast_lm_head=True
         )
-        user_messages = [_DEFAULT_USER_MESSAGES[0], _DEFAULT_USER_MESSAGES[2]]
-        input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
 
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=8)
         continuous_batching_config = ContinuousBatchingConfig(
@@ -2171,9 +2170,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Generated with a regular generate in bf16, without CB nor upcast lm_head
         expected_texts = Expectations(
             {
-                ("cuda", (10, 0)): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
+                ("cuda", (10, 0)): ["The robe takes 2 bolts", "Janet's ducks lay ", "If Seattle has 20 sheep,"],
                 # Default expectation was not tested but needs to be there to avoid crashes. Feel free to change.
-                (None, None): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
+                (None, None): ["The robe takes 2 bolts", "Janet's ducks lay ", "If Seattle has 20 sheep,"],
             }
         ).get_expectation()
         self.assertEqual(len(outputs), len(expected_texts))
