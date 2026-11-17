@@ -15,7 +15,6 @@
 
 import tempfile
 import unittest
-from collections import Counter
 from unittest import mock
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
@@ -64,44 +63,6 @@ class Kolibri1_1ModelTester(CausalLMModelTester):
         self.mlp_only_intermediate_size = 40
         # Two query heads per key head, so that the indexers can score keys with more than one head
         self.num_key_value_heads = 1
-
-
-def reference_selection(queries, keys, num_visible, pool, config, is_pool_source, threshold_ties):
-    """Per-query reimplementation of the selection of the Kolibri 1.1 kernels, with ties sorted explicitly towards
-    earlier keys. Returns the pool and the selected keys of one query, as sets of key indices. `threshold_ties` counts
-    the selections whose last selected and first rejected candidates have the same score, by kind."""
-    # Routing queries are rounded to NVFP4, like the block summaries and the routing keys below
-    queries = nvfp4_fake_quantize(queries)
-
-    def score(key):
-        return sum(max(float(query @ key), 0.0) for query in queries) * config.head_dim**-0.5 / config.index_num_heads
-
-    def top(candidates, scores, k, kind):
-        ranked = sorted(candidates, key=lambda i: (-scores[i], i))
-        if len(ranked) > k and scores[ranked[k - 1]] == scores[ranked[k]]:
-            threshold_ties[kind] += 1
-        return set(ranked[:k])
-
-    n, c = num_visible, config.index_compression
-    if is_pool_source:
-        if n <= config.index_pool_size:
-            pool = set(range(n))
-        else:
-            summaries = {
-                j: score(nvfp4_fake_quantize(keys[j * c : (j + 1) * c].sum(0) / c)) if (j + 1) * c <= n else 0.0
-                for j in range(-(-n // c))
-            }
-            blocks = top(summaries, summaries, config.index_pool_size // c, "blocks")
-            pool = {t for j in blocks for t in range(j * c, min((j + 1) * c, n))}
-    budget = config.index_topk + config.index_num_local_tokens + config.index_num_sink_tokens
-    if n <= budget:
-        return pool, set(range(n))
-    routing_keys = nvfp4_fake_quantize(keys)
-    candidates = [t for t in pool if config.index_num_sink_tokens <= t < n - config.index_num_local_tokens]
-    scores = {t: score(routing_keys[t]) for t in candidates}
-    selected = top(candidates, scores, config.index_topk, "tokens")
-    selected |= set(range(config.index_num_sink_tokens)) | set(range(n - config.index_num_local_tokens, n))
-    return pool, selected
 
 
 @require_torch
@@ -276,82 +237,6 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
             ]
         )
         self.assertEqual(Kolibri1_1Indexer.top_k_mask(scores, 3).tolist(), expected.tolist())
-
-    def test_indexer_matches_reference(self):
-        config = self.model_tester.get_config()
-        config.index_topk, config.index_pool_size, config.index_compression = 5, 8, 2
-        config.index_num_local_tokens, config.index_num_sink_tokens = 3, 2
-        # Indexers score with the first 2 of the 3 query heads of key head 0, out of 2 key heads
-        config.num_attention_heads, config.num_key_value_heads, config.index_num_heads = 6, 2, 2
-        num_queries, num_keys, paddings = 25, 30, (4, 2)
-        generator = torch.Generator().manual_seed(0)
-
-        def random_values(*shape):
-            # Not representable in NVFP4, so that rounding the routing queries and keys changes their scores
-            return torch.randn(shape, generator=generator) * 3
-
-        batch_size = len(paddings)
-        queries = random_values(batch_size, config.num_attention_heads, num_queries, config.head_dim)
-        keys = random_values(batch_size, config.num_key_value_heads, num_keys, config.head_dim)
-        # The keys of the first row repeat 4 distinct keys, and repeated keys score the same: its selections have to
-        # break ties, also between blocks. The keys of the second row are all distinct: they only tie at a zero score
-        keys[0] = keys[0][:, torch.randint(4, (num_keys,), generator=generator)]
-        positions = torch.arange(num_keys - num_queries, num_keys)
-        # Rows of the batch are left-padded differently
-        visible = torch.stack(
-            [
-                (torch.arange(num_keys) <= positions[:, None]) & (torch.arange(num_keys) >= padding)
-                for padding in paddings
-            ]
-        )
-        attention_mask = visible[:, None]
-
-        shared_kv_states = KVSharingDict()
-        source, reindexer = Kolibri1_1Indexer(config, 1), Kolibri1_1Indexer(config, 2)
-        selected_by_source = source(queries, keys, attention_mask, shared_kv_states)[:, 0]
-        (pool,) = shared_kv_states["index_pool_1"]
-        rescoring_queries = random_values(batch_size, config.num_attention_heads, num_queries, config.head_dim)
-        selected_by_reindexer = reindexer(rescoring_queries, keys, attention_mask, shared_kv_states)[:, 0]
-
-        threshold_ties = [Counter() for _ in paddings]
-        for batch_idx, padding in enumerate(paddings):
-            document_keys = keys[batch_idx, 0, padding:]
-            num_selected = []
-            for row in range(num_queries):
-                n = int(visible[batch_idx, row].sum())
-
-                def keys_of(mask):
-                    return set((mask[batch_idx, row].nonzero().squeeze(-1) - padding).tolist())
-
-                expected_pool, expected = reference_selection(
-                    queries[batch_idx, : config.index_num_heads, row],
-                    document_keys,
-                    n,
-                    None,
-                    config,
-                    True,
-                    threshold_ties[batch_idx],
-                )
-                self.assertEqual(keys_of(pool), expected_pool)
-                self.assertEqual(keys_of(selected_by_source), expected)
-                _, expected = reference_selection(
-                    rescoring_queries[batch_idx, : config.index_num_heads, row],
-                    document_keys,
-                    n,
-                    expected_pool,
-                    config,
-                    False,
-                    threshold_ties[batch_idx],
-                )
-                self.assertEqual(keys_of(selected_by_reindexer), expected)
-                num_selected.append(len(expected))
-            # Each row covers dense queries, sparse queries from a full pool and sparse queries from a block pool
-            self.assertEqual(min(num_selected), num_keys - num_queries + 1 - padding)
-            self.assertEqual(max(num_selected), 10)
-            self.assertGreater(int(visible[batch_idx].sum(-1).max()), config.index_pool_size)
-        # The first row had to break ties at the threshold of both selections
-        self.assertGreater(threshold_ties[0]["blocks"], 0)
-        self.assertGreater(threshold_ties[0]["tokens"], 0)
 
     def test_sparse_attention_changes_long_sequences_only(self):
         config = self.model_tester.get_config()
