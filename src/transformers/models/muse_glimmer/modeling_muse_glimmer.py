@@ -52,6 +52,7 @@ from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -784,31 +785,6 @@ class MuseGlimmerVisionRotaryEmbedding(nn.Module):
         return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
-def get_vision_pixel_shuffle_index(
-    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
-    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
-    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
-        return index
-    indices = []
-    offset = 0
-    for frames, height, width in grid_thw.tolist():
-        frames, height, width = int(frames), int(height), int(width)
-        permutation = torch.arange(height * width, device=grid_thw.device)
-        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
-        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
-        if frames > 1:
-            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
-            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
-            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
-        indices.append(permutation + offset)
-        offset += frames * height * width
-    return torch.cat(indices, dim=0)
-
-
 @auto_docstring
 class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     config: MuseGlimmerVisionConfig
@@ -957,6 +933,22 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        tower's (see [`MuseGlimmerVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
+        `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export`
+        free of those operations. Only the config and the tower's constants are read.
+
+        Args:
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of each image's patch grid.
+        """
+        if image_grid_thw is None:
+            return {}
+        tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
+
     @accepts_precomputed_kwargs(modality="image")
     def get_image_embeddings(
         self,
@@ -992,6 +984,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
         vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="video")
     @auto_docstring
     def get_video_embeddings(
         self,
@@ -1134,22 +1127,6 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
-        tower's (see [`MuseGlimmerVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
-        `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export`
-        free of those operations. Only the config and the tower's constants are read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of each image's patch grid.
-        """
-        if image_grid_thw is None:
-            return {}
-        tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)
-        return {f"image_{name}": value for name, value in tower_inputs.items()}
 
 
 @auto_docstring
