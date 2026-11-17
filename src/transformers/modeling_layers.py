@@ -92,7 +92,7 @@ class GradientCheckpointingLayer(nn.Module):
             # can be wrapped more than once. Only the outermost wrapper checkpoints.
             is_outermost = type(self).forward is forward_with_checkpointing
             # Without gradients there is no backward to replay the layer, so it runs as is, cache included (e.g.
-            # continuous batching generating from a model in training mode)
+            # generating from a model in training mode). `merge_with_config_defaults` keeps `use_cache` the same way.
             if self.gradient_checkpointing and self.training and torch.is_grad_enabled() and is_outermost:
                 do_warn = False
                 layer_name = self.__class__.__name__
