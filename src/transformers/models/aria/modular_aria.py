@@ -43,7 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig, AutoTokenizer
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
@@ -715,7 +715,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -726,7 +726,6 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaExperts):
@@ -744,7 +743,6 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
@@ -827,6 +825,7 @@ class AriaModel(LlavaModel):
 
         return image_outputs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -834,7 +833,7 @@ class AriaModel(LlavaModel):
         pixel_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -867,7 +866,7 @@ class AriaModel(LlavaModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -875,7 +874,7 @@ class AriaModel(LlavaModel):
 
         return AriaModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
@@ -911,6 +910,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -918,7 +918,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -993,7 +993,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_mask=pixel_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1013,7 +1013,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return AriaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

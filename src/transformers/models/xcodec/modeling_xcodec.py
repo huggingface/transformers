@@ -335,7 +335,6 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     input_modalities = "audio"
     _no_split_modules = ["XcodecResidualVectorQuantization"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):

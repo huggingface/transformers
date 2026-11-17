@@ -721,7 +721,6 @@ class GroupViTPreTrainedModel(PreTrainedModel):
         "attentions": GroupViTAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
 
@@ -890,7 +889,7 @@ class GroupViTTextTransformer(GroupViTPreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         kwargs.pop("is_causal", None)

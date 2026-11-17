@@ -111,13 +111,36 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    @parameterized.expand([("no_checkpointing", False), ("checkpointing", True)])
+    def test_lerope_training(self, name, activation_checkpointing):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MistralLarge4ForConditionalGeneration(config).to(torch_device).train()
+        alpha = model.model.language_model.rotary_emb.alpha
+        self.assertIsInstance(alpha, torch.nn.Parameter)
+
+        if activation_checkpointing:
+            model.activation_checkpointing_enable()
+
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        before = alpha.detach().clone()
+        model(**inputs, labels=inputs["input_ids"], use_cache=False).loss.backward()
+        self.assertIsNotNone(alpha.grad)
+        self.assertTrue(torch.isfinite(alpha.grad).all())
+        self.assertGreater(alpha.grad.norm().item(), 0)
+        optimizer.step()
+        self.assertFalse(torch.equal(before, alpha))
+
+    @unittest.skip("Reentrant checkpointing is not supported with differentiable LeRoPE embeddings.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # KV-shared layers attend to the cache of their source layer and leave their own cache layer empty, and NoPE
         # layers cache an empty rotary key
         config = config.get_text_config(decoder=True)
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
         k_shape, v_shape = self._get_attention_shape(batch_size, seq_length, config)
-        for layer_idx, layer in enumerate(past_key_values.layers):
+        for layer_idx, layer in enumerate(cache.layers):
             if config.kv_source_layers[layer_idx] != layer_idx:
                 self.assertIsNone(layer.keys)
             else:
