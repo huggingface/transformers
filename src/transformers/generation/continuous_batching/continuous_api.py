@@ -816,7 +816,8 @@ class ContinuousBatchingManager:
             with torch.inference_mode(self._inference_mode):
                 self._run_generation_loop()
 
-        self._generation_thread = threading.Thread(target=run_generation_loop)
+        use_inference_mode = torch.is_inference_mode_enabled()
+        self._generation_thread = threading.Thread(target=self._run_generation_loop, args=(use_inference_mode,))
         self._generation_thread.start()
 
     def stop(
