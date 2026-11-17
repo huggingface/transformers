@@ -147,7 +147,6 @@ def chunk_and_pad_features(
     if padded_feature is not None:
         return padded_feature, chunk_lengths
 
-    # Each chunk's frames, right-padded with zeros to the longest chunk
     chunk_index = get_audio_chunk_index(chunk_lengths, kwargs=kwargs)
     padding_mask = torch.arange(chunk_index.shape[1], device=chunk_index.device) < chunk_lengths[:, None]
     padded_feature = input_features[:, chunk_index.clamp(max=input_features.shape[1] - 1)] * padding_mask
@@ -670,7 +669,6 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)
@@ -994,16 +992,9 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         self.conv2d1 = value
 
     def get_data_dependent_inputs(self, feature_lens: torch.LongTensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `feature_lens` with data-dependent operations (host syncs, loops over the
-        audios): the chunks' `chunk_lengths` and `chunk_index`, the non-padding frames' `valid_indices`, and the
-        windowed attention's `cu_seqlens` and `max_seqlen`. Passed back to the forward, they keep `torch.compile` and
-        `torch.export` free of those operations.
-
-        Args:
-            feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
-                The mel length of each audio.
-        """
+        """What the forward derives from `feature_lens` with data-dependent ops: the chunks' `chunk_lengths` and
+        `chunk_index`, the non-padding frames' `valid_indices`, and the windowed attention's `cu_seqlens` and
+        `max_seqlen`."""
         chunk_lengths = get_audio_chunk_lengths(feature_lens, self.n_window)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
         return {
@@ -2919,8 +2910,39 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
-        return super().__call__(
-            text=text, images=images, videos=videos, audio=audio, audio_kwargs=audio_kwargs, **kwargs
+        videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
+        for key in ("seconds_per_chunk", "position_id_per_seconds"):
+            if key in videos_kwargs:
+                logger.warning_once(
+                    f"Passing `{key}` in `videos_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+                # "videos_kwargs" has priority for backwards compatibility
+                kwargs[key] = videos_kwargs.pop(key)
+
+        if kwargs.pop("use_audio_in_video", False) or videos_kwargs.pop("use_audio_in_video", False):
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            kwargs["load_audio_from_video"] = True
+        return OmniModalProcessorMixin.__call__(
+            self,
+            images=images,
+            text=text,
+            videos=videos,
+            audio=audio,
+            audio_kwargs=audio_kwargs,
+            videos_kwargs=videos_kwargs,
+            **kwargs,
+        )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
+        if "n_window" in kwargs:
+            kwargs["audio_kwargs"] = dict(kwargs.get("audio_kwargs", {}))
+            kwargs["audio_kwargs"].setdefault("n_window", kwargs.pop("n_window"))
+        return super()._get_num_multimodal_tokens(
+            image_sizes=image_sizes, video_sizes=video_sizes, audio_lengths=audio_lengths, **kwargs
         )
 
     def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:

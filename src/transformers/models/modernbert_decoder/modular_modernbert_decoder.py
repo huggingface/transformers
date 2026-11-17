@@ -346,7 +346,6 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         "attentions": ModernBertDecoderAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)
 

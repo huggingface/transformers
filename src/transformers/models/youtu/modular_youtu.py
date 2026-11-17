@@ -18,7 +18,6 @@
 # limitations under the License.
 
 
-import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -127,7 +126,6 @@ class YoutuDecoderLayer(LlamaDecoderLayer):
 
 
 class YoutuPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)

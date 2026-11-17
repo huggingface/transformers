@@ -886,7 +886,6 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
         "cross_attentions": BridgeTowerCrossAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         std = self.config.initializer_factor

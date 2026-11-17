@@ -572,7 +572,6 @@ class MuseSparkTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -919,7 +918,6 @@ class MuseSparkVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -972,18 +970,9 @@ class MuseSparkVisionModel(MuseSparkPreTrainedModel):
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the full and window attention's `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position
-        table's `interp_indices` and `interp_weights`, the rotary `position_ids` and the merger's
-        `pixel_shuffle_index`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
-        operations. Those already in `kwargs` are returned as they are; only the config and the tower's constants are
-        read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width patch-grid dimensions for each packed image or video.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the full and window attention's
+        `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position table's `interp_indices` and
+        `interp_weights`, the rotary `position_ids` and the merger's `pixel_shuffle_index`."""
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
@@ -1315,16 +1304,9 @@ class MuseSparkModel(MuseSparkPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
         tower's (see [`MuseSparkVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
-        `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export`
-        free of those operations. Only the config and the tower's constants are read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of each image's patch grid.
-        """
+        `get_image_embeddings` takes them."""
         if image_grid_thw is None:
             return {}
         tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)

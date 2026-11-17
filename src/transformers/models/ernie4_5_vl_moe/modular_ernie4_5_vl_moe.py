@@ -265,7 +265,6 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
 
         return inv_freq_3d, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)
@@ -716,27 +715,14 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
 def get_vision_temporal_slice_index(
     grid_thw: torch.Tensor, spatial_merge_size: int, kwargs: dict | None = None
 ) -> torch.Tensor:
-    """Gather index pairing each video's even and odd frames (an image's frame with itself) after the spatial merge,
-    or pop `"temporal_slice_index"` from `kwargs` if precomputed.
-
-    Example:
-        Video frames `[1, -1, 2, -2, 3, -3]` pair as `[[1, -1], [2, -2], [3, -3]]`; an image `[1]` as `[[1, 1]]`.
-
-    Args:
-        grid_thw: `(num_images_or_videos, 3)` — temporal, height and width of each entry's patch grid.
-        spatial_merge_size: the spatial merge applied before the temporal one.
-        kwargs: optional caller kwargs — if it contains `"temporal_slice_index"` it is popped and returned.
-
-    Returns:
-        `(total_temporally_merged_tokens, 2)` long — the two merged tokens each output token concatenates.
-    """
+    """Pairs each video's even and odd frames (an image's frame with itself), or pops `"temporal_slice_index"`."""
     if kwargs is not None and (index := kwargs.pop("temporal_slice_index", None)) is not None:
         return index
     pairs, offset = [], 0
     for frames, height, width in grid_thw.tolist():
         spatial_size = height * width // spatial_merge_size**2
         tokens = torch.arange(spatial_size, device=grid_thw.device)
-        # A video's frames pair up, an odd last one is dropped; an image's frame pairs with itself
+        # An odd last frame is dropped
         for even in range(0, 2 * (frames // 2), 2) if frames > 1 else [0]:
             odd = even + 1 if frames > 1 else even
             pairs.append(
@@ -767,22 +753,15 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
         self.after_norm = Ernie4_5_VLMoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
 
-    def _temporal_slicing(self, hidden_states, grid_thw, kwargs: dict | None = None):
-        """
-        Pairs each video's even and odd frames (an image's frame with itself) along the hidden dimension, see
-        [`get_vision_temporal_slice_index`]. Hard-coded for `temporal_merge_size == 2`.
-        """
-        index = get_vision_temporal_slice_index(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        return hidden_states[index].flatten(1)
-
-    def forward(self, hidden_states, grid_thw, kwargs: dict | None = None):
+    def forward(self, hidden_states, grid_thw, **kwargs):
         # image spatial
         # reshape imitates convolution via linear projection
         hidden_states = hidden_states.reshape([-1, hidden_states.shape[-1] * (self.spatial_merge_size**2)])
         hidden_states = self.spatial_linear(hidden_states)
 
         # video temporal
-        hidden_states = self._temporal_slicing(hidden_states, grid_thw, kwargs=kwargs)
+        temporal_slice_index = get_vision_temporal_slice_index(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        hidden_states = hidden_states[temporal_slice_index].flatten(1)
         hidden_states = self.temporal_linear(hidden_states)
 
         # final mlp
@@ -915,17 +894,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes with data-dependent operations (see
+        """The inputs the forward computes with data-dependent operations (see
         [`Qwen2VLModel.get_data_dependent_inputs`]), and the resampler's `temporal_slice_index` (see
-        [`get_vision_temporal_slice_index`]), prefixed `image_` and `video_`.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video.
-        """
+        [`get_vision_temporal_slice_index`]), prefixed `image_` and `video_`."""
         inputs = super().get_data_dependent_inputs(
             image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw, **kwargs
         )
@@ -945,9 +916,8 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         r"""
         All videos' features as one tensor; `get_video_features` splits them per video.
         """
-        resampler_kwargs = {"temporal_slice_index": kwargs.pop("temporal_slice_index", None)}
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
-        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw, kwargs=resampler_kwargs)
+        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw, **kwargs)
         video_outputs.pooler_output = video_embeds
         return video_outputs
 
@@ -976,9 +946,8 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         r"""
         All images' features as one tensor; `get_image_features` splits them per image.
         """
-        resampler_kwargs = {"temporal_slice_index": kwargs.pop("temporal_slice_index", None)}
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
-        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw, kwargs=resampler_kwargs)
+        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_embeds
         return image_outputs
 

@@ -148,7 +148,6 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
         "attentions": GraniteMoeAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GraniteMoeExperts):

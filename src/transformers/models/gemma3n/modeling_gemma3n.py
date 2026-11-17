@@ -1353,7 +1353,6 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("image", "text", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
@@ -1562,7 +1561,6 @@ class Gemma3nRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -1927,6 +1925,7 @@ class Gemma3nMultimodalEmbedder(nn.Module):
 class Gemma3nModel(Gemma3nPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
@@ -2189,6 +2188,8 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
     accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3nConfig):
