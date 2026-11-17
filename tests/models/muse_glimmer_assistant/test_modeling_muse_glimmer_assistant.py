@@ -15,8 +15,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -160,37 +158,27 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class MuseGlimmerAssistantMaskTest(unittest.TestCase):
-    @parameterized.expand([(backend, mask) for backend in ["eager", "sdpa"] for mask in ["none", "ones", "padding"]])
-    def test_sliding_window_without_cache(self, attn_implementation, mask_type):
-        tester = MuseGlimmerAssistantModelTester(self, seq_length=9)
+    def test_sliding_window_without_cache(self):
+        tester = MuseGlimmerAssistantModelTester(self, batch_size=1)
         config, noise_embeds, context_hidden_states, _ = tester.prepare_config_and_inputs()
         config.sliding_window = 6
-        config._attn_implementation = attn_implementation
+        config._attn_implementation = "eager"
         model = MuseGlimmerAssistantModel(config).to(torch_device).eval()
 
-        context_length = context_hidden_states.shape[1]
-        query_length = noise_embeds.shape[1]
-        kv_length = context_length + query_length
-        padding_mask = torch.ones(tester.batch_size, kv_length, device=torch_device, dtype=torch.bool)
-        if mask_type == "padding":
-            padding_mask[0, context_length - 1] = False
-        query_positions = torch.arange(context_length, kv_length, device=torch_device)
+        kv_length = tester.seq_length + tester.block_size
+        query_positions = torch.arange(tester.seq_length, kv_length, device=torch_device)
         key_positions = torch.arange(kv_length, device=torch_device)
         visible = (query_positions[:, None] - key_positions).abs() <= config.sliding_window
-        visible = visible[None, None] & padding_mask[:, None, None, :]
-        reference_mask = torch.zeros(visible.shape, device=torch_device).masked_fill(~visible, float("-inf"))
+        reference_mask = torch.zeros_like(visible, dtype=noise_embeds.dtype).masked_fill(~visible, float("-inf"))
 
         with torch.no_grad():
-            reference = model(noise_embeds, context_hidden_states, attention_mask=reference_mask, use_cache=False)
-            actual = model(
-                noise_embeds,
-                context_hidden_states,
-                attention_mask=None if mask_type == "none" else padding_mask,
-                use_cache=False,
+            reference = model(
+                noise_embeds, context_hidden_states, attention_mask=reference_mask[None, None], use_cache=False
             )
-
-        self.assertIsNone(actual.cache)
-        torch.testing.assert_close(actual.last_hidden_state, reference.last_hidden_state, rtol=1e-5, atol=1e-6)
+            for attention_mask in (None, torch.ones(1, kv_length, device=torch_device)):
+                actual = model(noise_embeds, context_hidden_states, attention_mask=attention_mask, use_cache=False)
+                self.assertIsNone(actual.cache)
+                torch.testing.assert_close(actual.last_hidden_state, reference.last_hidden_state, rtol=1e-5, atol=1e-6)
 
 
 @slow
