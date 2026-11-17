@@ -600,7 +600,8 @@ jobs:
       group: aws-m8i-8xl-cache
     container:
       image: huggingface/transformers-torch-light
-    if: always()
+    # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
+    if: ${{ !cancelled() }}
     needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
@@ -619,14 +620,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 transformers/utils/analyze_vllm_ci.py \
+          python3 transformers/utils/analyze_ci_report.py \
             --run-id "$GITHUB_RUN_ID" \
+            --workflow vllm-ci-caller.yml \
             --repo "$GITHUB_REPOSITORY" \
             --output-dir ./vllm-ci-reports \
             --plugin vllm
 
       - name: Show new failing tests
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           python3 - <<'EOF'
           import glob, json, os, sys
@@ -659,7 +661,7 @@ jobs:
           EOF
 
       - name: Upload failure reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vllm-ci-failure-reports

@@ -48,6 +48,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("apertus", "ApertusModel"),
+        ("apertus1p5", "Apertus1p5Model"),
+        ("apertus1p5_text", "Apertus1p5TextModel"),
         ("arcee", "ArceeModel"),
         ("aria", "AriaModel"),
         ("aria_text", "AriaTextModel"),
@@ -275,6 +277,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hunyuan_vl_vision", "HunYuanVLVisionTransformer"),
         ("hy_v3", "HYV3Model"),
         ("hy_v4", "HYV4Model"),
+        ("hy_v4_vl", "HYV4VLModel"),
+        ("hy_v4_vl_text", "HYV4VLTextModel"),
+        ("hy_v4_vl_vision", "HYV4VLVisionModel"),
         ("hyperclovax", "HyperCLOVAXModel"),
         ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2Model"),
         ("ibert", "IBertModel"),
@@ -309,6 +314,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("kosmos-2.5", "Kosmos2_5Model"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextModel"),
         ("laguna", "LagunaModel"),
+        ("lara_mini", "LaraMiniModel"),
         ("lasr_ctc", "LasrForCTC"),
         ("lasr_encoder", "LasrEncoder"),
         ("layoutlm", "LayoutLMModel"),
@@ -634,6 +640,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
         ("wavlm", "WavLMModel"),
+        ("wavtokenizer", "WavTokenizerModel"),
+        ("wavtokenizer_encoder", "WavTokenizerEncoderModel"),
         ("whisper", "WhisperModel"),
         ("xclip", "XCLIPModel"),
         ("xcodec", "XcodecModel"),
@@ -767,6 +775,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         # Model for Causal LM mapping
         ("afmoe", "AfmoeForCausalLM"),
         ("apertus", "ApertusForCausalLM"),
+        ("apertus1p5_text", "Apertus1p5TextForCausalLM"),
         ("arcee", "ArceeForCausalLM"),
         ("aria_text", "AriaTextForCausalLM"),
         ("axk1", "AXK1ForCausalLM"),
@@ -868,6 +877,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("kimi_linear", "KimiLinearForCausalLM"),
         ("kolibri1", "Kolibri1ForCausalLM"),
         ("laguna", "LagunaForCausalLM"),
+        ("lara_mini", "LaraMiniForCausalLM"),
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
         ("lfm3", "Lfm3ForCausalLM"),
@@ -1165,6 +1175,7 @@ MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", "Apertus1p5ForConditionalGeneration"),
         ("aria", "AriaForConditionalGeneration"),
         ("aya_vision", "AyaVisionForConditionalGeneration"),
         ("blip", "BlipForConditionalGeneration"),
@@ -1202,6 +1213,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("granite4_vision", "Granite4VisionForConditionalGeneration"),
         ("granite_docling", "GraniteDoclingForConditionalGeneration"),
         ("hunyuan_vl", "HunYuanVLForConditionalGeneration"),
+        ("hy_v4_vl", "HYV4VLForConditionalGeneration"),
         ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
@@ -2152,6 +2164,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
         ("neucodec", "NeuCodecModel"),
         ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
+        ("wavtokenizer", "WavTokenizerModel"),
         ("xcodec2", "Xcodec2Model"),
     ]
 )

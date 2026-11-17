@@ -1841,21 +1841,39 @@ The command returns the following response.
 
 ## v1/models
 
-The `v1/models` endpoint scans your local Hugging Face cache and returns a list of downloaded models in the OpenAI-compatible format. Third-party tools use this endpoint to discover available models.
-
-Download a model before running `transformers serve`.
-
-```bash
-transformers download Qwen/Qwen2.5-0.5B-Instruct
-```
-
-Once downloaded, the model appears in `/v1/models` responses.
+The `v1/models` endpoint returns the models the server can serve in the OpenAI-compatible format. Third-party tools use this endpoint to discover available models.
 
 ```shell
 curl http://localhost:8000/v1/models
 ```
 
-The endpoint returns a JSON object with available models.
+What it lists depends on how the server was started.
+
+- `transformers serve` loads models on demand, so the endpoint lists the models downloaded in your local Hugging Face cache, and the models that are loaded but not in the cache, like a model served from a local path.
+- `transformers serve <model>` only answers for that model, so the endpoint lists it alone.
+
+Download a model for it to appear in the list before it is loaded.
+
+```bash
+transformers download Qwen/Qwen2.5-0.5B-Instruct
+```
+
+Each model has a `status`, which isn't part of the OpenAI format. It is `loaded` when the model is in memory, and `unloaded` when it is downloaded and loads on the first request that names it.
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "object": "model",
+      "created": 1776183469,
+      "owned_by": "Qwen",
+      "status": {"value": "unloaded"}
+    }
+  ]
+}
+```
 
 ## Loading models
 
