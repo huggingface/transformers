@@ -446,7 +446,8 @@ class PagedAttentionCache:
         came back at the same address, which captured CUDA graphs rely on."""
         # Whatever used the memory in between can leave it reserved by the caching allocator in pieces, none of them
         # large enough for the cache: hand them back to the device first
-        torch.accelerator.empty_cache()
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
         self.cache_tensor.untyped_storage().resize_(self._host_copy.numel())
         self.cache_tensor.copy_(self._host_copy, non_blocking=True)
         # The generation loop reads the cache on its own stream
