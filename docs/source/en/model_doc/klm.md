@@ -61,6 +61,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## Notes
 
 - The original Hub checkpoint's configuration and weight names are converted automatically by `from_pretrained`.
+- Direct `load_state_dict` calls also accept the original KLM weight layout, including checkpoints saved by default
+  `save_pretrained` calls. This supports trainer best-checkpoint reloads and resume without replacing parameter objects.
+  Pass `save_original_format=False` to `save_pretrained` to write native names explicitly; the conversion script does this.
 - The model needs `input_ids`, to look up n-grams and to find where documents start. `inputs_embeds` is not supported.
 - The first token after padding starts a document, so left padding is never read. Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 - The n-gram keys are computed from `vocab_size`. Resizing the token embeddings of a pretrained checkpoint changes `vocab_size`, and with it every key, so add tokens within the existing vocabulary instead.

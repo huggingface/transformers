@@ -17,6 +17,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, is_torch_available
 from transformers.testing_utils import require_torch
@@ -24,15 +25,135 @@ from transformers.testing_utils import require_torch
 
 if is_torch_available():
     import torch
-    from safetensors.torch import save_file
+    from safetensors.torch import load_file, save_file
 
     from transformers import KlmForCausalLM
     from transformers.core_model_loading import Stack, Unbind
+    from transformers.models.klm.convert_klm_weights_to_hf import convert as convert_checkpoint
     from transformers.models.klm.convert_klm_weights_to_hf import convert_config, convert_state_dict
 
 
 @require_torch
 class KlmCheckpointConversionTest(unittest.TestCase):
+    def test_default_checkpoint_reloads_directly_without_replacing_parameters(self):
+        # Unsloth DecisionTrainer uses encoder.load_state_dict(), not from_pretrained(),
+        # when restoring its best checkpoint or resuming a full fine-tune.
+        with tempfile.TemporaryDirectory() as source:
+            self._original_checkpoint(source)
+            for auto_class in (AutoModel, AutoModelForCausalLM):
+                with self.subTest(auto_class=auto_class.__name__):
+                    model = auto_class.from_pretrained(source)
+                    optimizer = torch.optim.AdamW(model.parameters())
+                    with torch.no_grad():
+                        for parameter in model.parameters():
+                            parameter.add_(0.125)
+                    expected = {key: value.clone() for key, value in model.state_dict().items()}
+                    parameter_ids = {name: id(parameter) for name, parameter in model.named_parameters()}
+                    with tempfile.TemporaryDirectory() as saved:
+                        model.save_pretrained(saved)
+                        state = load_file(str(Path(saved) / "model.safetensors"))
+                        self.assertTrue(any("attn_res_query" in key for key in state))
+                        keys = list(state)
+                        with torch.no_grad():
+                            for parameter in model.parameters():
+                                parameter.zero_()
+                        missing, unexpected = model.load_state_dict(state, strict=False)
+                        self.assertEqual(missing, [])
+                        self.assertEqual(unexpected, [])
+                        self.assertEqual(list(state), keys)
+                        model.load_state_dict(state, strict=True)
+                    self.assertEqual(
+                        {name: id(parameter) for name, parameter in model.named_parameters()}, parameter_ids
+                    )
+                    self.assertEqual(
+                        {id(p) for group in optimizer.param_groups for p in group["params"]},
+                        set(parameter_ids.values()),
+                    )
+                    for name, value in model.state_dict().items():
+                        torch.testing.assert_close(value, expected[name], rtol=0, atol=0)
+
+    def test_partial_original_projection_and_assign(self):
+        with tempfile.TemporaryDirectory() as source:
+            model = self._original_checkpoint(source)
+        parameter = model.model.layers[0].linear_attn.b_proj.weight
+        value = torch.randn_like(parameter, dtype=torch.float64)
+        state = {"model.blocks.0.mixer.b_proj.weight": value}
+        missing, unexpected = model.load_state_dict(state, strict=False, assign=True)
+        self.assertNotIn("model.layers.0.linear_attn.b_proj.weight", missing)
+        self.assertEqual(unexpected, [])
+        self.assertEqual(model.model.layers[0].linear_attn.b_proj.weight.dtype, torch.float64)
+        torch.testing.assert_close(model.model.layers[0].linear_attn.b_proj.weight, value, rtol=0, atol=0)
+        self.assertEqual(list(state), ["model.blocks.0.mixer.b_proj.weight"])
+
+    def test_incomplete_original_convolution_does_not_partially_load(self):
+        with tempfile.TemporaryDirectory() as source:
+            model = self._original_checkpoint(source)
+            original = load_file(str(Path(source) / "model.safetensors"))
+        before = model.model.norm.weight.detach().clone()
+        partial = {
+            "model.blocks.0.mixer.q_conv1d.weight": original["model.blocks.0.mixer.q_conv1d.weight"],
+            "model.norm.weight": torch.zeros_like(before),
+        }
+        with self.assertRaisesRegex(ValueError, "convolution"):
+            model.load_state_dict(partial, strict=False)
+        torch.testing.assert_close(model.model.norm.weight, before, rtol=0, atol=0)
+
+    def test_mixed_original_and_native_keys_are_rejected(self):
+        with tempfile.TemporaryDirectory() as source:
+            model = self._original_checkpoint(source)
+            original = load_file(str(Path(source) / "model.safetensors"))
+        original["model.layers.0.input_residual.query"] = model.model.layers[0].input_residual.query.detach().clone()
+        with self.assertRaisesRegex(ValueError, "original and native"):
+            model.load_state_dict(original, strict=False)
+
+    def test_native_partial_state_keeps_pytorch_strictness(self):
+        with tempfile.TemporaryDirectory() as source:
+            model = self._original_checkpoint(source)
+        state = {"model.norm.weight": model.model.norm.weight.detach().clone(), "unknown.weight": torch.zeros(1)}
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        self.assertTrue(missing)
+        self.assertEqual(unexpected, ["unknown.weight"])
+        with self.assertRaises(RuntimeError):
+            model.load_state_dict(state)
+
+    def test_untied_output_weight_is_not_inferred(self):
+        with tempfile.TemporaryDirectory() as source:
+            model = self._original_checkpoint(source)
+            original = load_file(str(Path(source) / "model.safetensors"))
+        model.config.tie_word_embeddings = False
+        model.lm_head = torch.nn.Linear(model.config.hidden_size, model.config.vocab_size, bias=False)
+        expected = model.lm_head.weight.detach().clone()
+        missing, unexpected = model.load_state_dict(original, strict=False)
+        self.assertEqual(missing, ["lm_head.weight"])
+        self.assertEqual(unexpected, [])
+        torch.testing.assert_close(model.lm_head.weight, expected, rtol=0, atol=0)
+
+    def test_partial_and_malformed_original_residual_bank(self):
+        with tempfile.TemporaryDirectory() as source:
+            model = self._original_checkpoint(source)
+            original = load_file(str(Path(source) / "model.safetensors"))
+        rows = original["model.attn_res_query"]
+        missing, unexpected = model.load_state_dict({"model.attn_res_query": rows}, strict=False)
+        self.assertEqual(unexpected, [])
+        self.assertNotIn("model.layers.0.input_residual.query", missing)
+        torch.testing.assert_close(model.model.layers[0].input_residual.query, rows[0], rtol=0, atol=0)
+        with self.assertRaisesRegex(ValueError, "residual bank"):
+            model.load_state_dict({"model.attn_res_query": rows[:-1]}, strict=False)
+
+    def test_converter_writes_native_checkpoint(self):
+        with tempfile.TemporaryDirectory() as source, tempfile.TemporaryDirectory() as target:
+            self._original_checkpoint(source)
+            # Tokenizer copying is independent of the weight layout under test.
+            with patch("transformers.models.klm.convert_klm_weights_to_hf.AutoTokenizer.from_pretrained"):
+                convert_checkpoint(source, target)
+            state = load_file(str(Path(target) / "model.safetensors"))
+            self.assertIn("model.layers.0.linear_attn.conv1d.weight", state)
+            self.assertNotIn("model.attn_res_query", state)
+            restored = AutoModelForCausalLM.from_pretrained(target)
+            missing, unexpected = restored.load_state_dict(state, strict=False)
+            self.assertLessEqual(set(missing), {"lm_head.weight"})
+            self.assertEqual(unexpected, [])
+
     def test_residual_row_conversion(self):
         matrix = torch.arange(12).reshape(3, 4)
         split = Unbind(dim=0)

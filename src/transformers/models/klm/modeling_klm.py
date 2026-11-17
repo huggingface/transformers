@@ -53,6 +53,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_klm import KlmConfig
+from .conversion_klm import convert_state_dict
 
 
 logger = logging.get_logger(__name__)
@@ -911,6 +912,31 @@ class KlmPreTrainedModel(PreTrainedModel):
         "hidden_states": KlmDecoderLayer,
         "attentions": KlmAttention,
     }
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        """Accept original KLM checkpoints in direct trainer reloads as well as native state dicts."""
+        prefix = f"{self.base_model_prefix}." if self.base_model is not self else ""
+        original = tuple(prefix + name for name in ("embed.", "memory.", "blocks.", "attn_res_query", "attn_res_norm"))
+        if any(key.startswith(original) for key in state_dict):
+            native = tuple(prefix + name for name in ("embed_tokens.", "embed_ngrams.", "layers.", "output_residual."))
+            if any(key.startswith(native) for key in state_dict):
+                raise ValueError("KLM checkpoint mixes original and native parameter names.")
+            # The shared converter uses the causal-LM prefix; bare KlmModel snapshots omit it.
+            canonical = state_dict if prefix else {f"model.{key}": value for key, value in state_dict.items()}
+            with torch.no_grad():
+                converted = convert_state_dict(canonical, self.config)
+            state_dict = (
+                converted if prefix else {key.removeprefix("model."): value for key, value in converted.items()}
+            )
+            output_embeddings = self.get_output_embeddings()
+            if (
+                output_embeddings is not None
+                and output_embeddings.weight is self.get_input_embeddings().weight
+                and "lm_head.weight" not in state_dict
+                and f"{prefix}embed_tokens.weight" in state_dict
+            ):
+                state_dict["lm_head.weight"] = state_dict[f"{prefix}embed_tokens.weight"]
+        return super().load_state_dict(state_dict, *args, **kwargs)
 
     @torch.no_grad()
     def _init_weights(self, module):

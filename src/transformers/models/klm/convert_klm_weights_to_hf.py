@@ -34,28 +34,19 @@ tokenizer = AutoTokenizer.from_pretrained("/output/path")
 
 import argparse
 import json
-import re
 from pathlib import Path
 
-import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
 from transformers import AutoTokenizer, GenerationConfig, KlmConfig, KlmForCausalLM
+from transformers.models.klm.conversion_klm import (
+    ORIGINAL_TO_CONVERTED_KEY_MAPPING as ORIGINAL_TO_CONVERTED_KEY_MAPPING,
+)
+from transformers.models.klm.conversion_klm import (
+    convert_state_dict,
+)
 
-
-# Applied in order to the name of every original weight
-ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"^model\.embed\.": "model.embed_tokens.",
-    r"^model\.memory\.(bigram|trigram)\.": r"model.embed_ngrams.\1_embeddings.",
-    r"^model\.memory\.": "model.embed_ngrams.",
-    r"^model\.blocks\.": "model.layers.",
-    r"\.mixer_norm\.": ".input_layernorm.",
-    r"\.ffn_norm\.": ".post_attention_layernorm.",
-    r"\.ffn\.(gate|up|down)\.": r".mlp.\1_proj.",
-    r"\.(f|g)_proj\.0\.": r".\1_a_proj.",
-    r"\.(f|g)_proj\.1\.": r".\1_b_proj.",
-}
 
 # Original config names that differ from the Transformers ones
 ORIGINAL_TO_CONVERTED_CONFIG_MAPPING = {
@@ -99,47 +90,6 @@ def convert_config(original_config: dict) -> KlmConfig:
     return KlmConfig(**config)
 
 
-def convert_state_dict(original_state_dict: dict[str, torch.Tensor], config: KlmConfig) -> dict[str, torch.Tensor]:
-    state_dict = {}
-    convolutions = {}
-    for original_key, tensor in original_state_dict.items():
-        key = original_key
-        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
-            key = re.sub(pattern, replacement, key)
-        if match := re.match(r"model\.layers\.(\d+)\.mixer\.(.+)", key):
-            layer_idx, name = int(match.group(1)), match.group(2)
-            if match := re.fullmatch(r"(q|k|v)_conv1d\.weight", name):
-                # Gathered below: the three depthwise convolutions become one
-                convolutions[layer_idx, match.group(1)] = tensor
-                continue
-            attention = "self_attn" if config.layer_types[layer_idx] == "full_attention" else "linear_attn"
-            key = f"model.layers.{layer_idx}.{attention}.{name}"
-        state_dict[key] = tensor
-
-    for layer_idx, layer_type in enumerate(config.layer_types):
-        if layer_type == "linear_attention":
-            state_dict[f"model.layers.{layer_idx}.linear_attn.conv1d.weight"] = torch.cat(
-                [convolutions[layer_idx, name] for name in "qkv"], dim=0
-            )
-
-    # The original keeps the parameters of all block residuals in two matrices, with one row for each of them: the
-    # attention and the MLP of every layer in turn, then the final readout
-    queries = state_dict.pop("model.attn_res_query")
-    weights = state_dict.pop("model.attn_res_norm")
-    names = [
-        f"model.layers.{layer_idx}.{name}"
-        for layer_idx in range(config.num_hidden_layers)
-        for name in ("input_residual", "post_attention_residual")
-    ]
-    for row, name in enumerate([*names, "model.output_residual"]):
-        state_dict[f"{name}.query"] = queries[row].clone()
-        state_dict[f"{name}.weight"] = weights[row].clone()
-
-    for name in ("bigram_keys", "trigram_keys"):
-        state_dict[f"model.embed_ngrams.{name}"] = state_dict[f"model.embed_ngrams.{name}"].long()
-    return state_dict
-
-
 def convert(input_dir: str, output_dir: str):
     if not Path(input_dir).is_dir():
         input_dir = snapshot_download(input_dir, allow_patterns=["*.json", "*.safetensors"])
@@ -154,7 +104,7 @@ def convert(input_dir: str, output_dir: str):
     if missing_keys != ["lm_head.weight"] or unexpected_keys:
         raise ValueError(f"The conversion left missing keys {missing_keys} and unexpected keys {unexpected_keys}.")
     model.tie_weights()
-    model.save_pretrained(output_dir)
+    model.save_pretrained(output_dir, save_original_format=False)
 
     AutoTokenizer.from_pretrained(input_dir).save_pretrained(output_dir)
     if (input_dir / "generation_config.json").exists():
