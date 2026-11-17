@@ -2276,6 +2276,7 @@ class ModelTesterMixin(ExportTesterMixin):
         images and video are supported while 'audio' is not consistent, so we don't test
         audio models.
         """
+
         def check_multimodal_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
             model.to(torch_device)
@@ -2303,7 +2304,7 @@ class ModelTesterMixin(ExportTesterMixin):
             config._attn_implementation = "eager"
 
             # Skip if model has no vision-config, i.e. Audio/TextModelTester
-            if  getattr(config, "vision_config", None) is None:
+            if getattr(config, "vision_config", None) is None:
                 continue
 
             # No standard model output for seq2seq VLMs yet as they aren't popular

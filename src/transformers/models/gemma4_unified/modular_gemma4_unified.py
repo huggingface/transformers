@@ -533,7 +533,7 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
 
 
 class Gemma4UnifiedTextModelOutputWithPast(Gemma4TextModelOutputWithPast):
-    """
+    r"""
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.

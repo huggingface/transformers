@@ -1150,7 +1150,10 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
             **kwargs,
         )
 
-        return GraniteDoclingBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
+        return GraniteDoclingBaseModelOutputWithPast(
+            **outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
+        )
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor

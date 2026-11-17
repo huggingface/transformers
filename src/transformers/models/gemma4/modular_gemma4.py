@@ -172,7 +172,7 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
 @auto_docstring
 @dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
-    """
+    r"""
     shared_kv_states (`KVSharingDict`, *optional*):
         A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
