@@ -43,10 +43,6 @@ from ..kolibri1.modeling_kolibri1 import (
 )
 
 
-_DEFAULT_INDEX_ORDINALS = (0, 2, 3, 5)
-_DEFAULT_KV_SOURCE_ORDINALS = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
-
-
 @auto_docstring(checkpoint="Aleph-Alpha/Kolibri-1.1")
 @strict
 class Kolibri1_1Config(Kolibri1Config):
@@ -110,16 +106,18 @@ class Kolibri1_1Config(Kolibri1Config):
             self.mlp_only_layers = []
         full_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "full_attention"]
         if self.index_layers is None:
-            self.index_layers = [full_layers[o] for o in _DEFAULT_INDEX_ORDINALS if o < len(full_layers)]
+            self.index_layers = [full_layers[i] for i in (0, 2, 3, 5) if i < len(full_layers)]
         if self.kv_source_layers is None:
-            if len(full_layers) > len(_DEFAULT_KV_SOURCE_ORDINALS):
+            # For each full-attention layer, which full-attention layer it reads the K/V of
+            default_sources = (0, 0, 0, 3, 4, 5, 5, 5, 5, 0)
+            if len(full_layers) > len(default_sources):
                 raise ValueError(
-                    f"The default `kv_source_layers` covers {len(_DEFAULT_KV_SOURCE_ORDINALS)} full-attention layers, "
+                    f"The default `kv_source_layers` covers {len(default_sources)} full-attention layers, "
                     f"got {len(full_layers)}: set `kv_source_layers` explicitly."
                 )
             self.kv_source_layers = list(range(len(self.layer_types)))
-            for layer_idx, source_ordinal in zip(full_layers, _DEFAULT_KV_SOURCE_ORDINALS):
-                self.kv_source_layers[layer_idx] = full_layers[source_ordinal]
+            for layer_idx, source in zip(full_layers, default_sources):
+                self.kv_source_layers[layer_idx] = full_layers[source]
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
