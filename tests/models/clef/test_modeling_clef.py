@@ -26,6 +26,7 @@ from pathlib import Path
 from safetensors.torch import load_file, save_file
 
 from transformers import (
+    AutoConfig,
     AutoTokenizer,
     BertConfig,
     ClefConfig,
@@ -537,7 +538,10 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         return cls._encoder_tokenizer
 
     def encoder_model(self, backbone="bert", head_type="joint", text_config_kwargs=None, **config_kwargs):
-        """A tiny Clef on a tiny bidirectional backbone (`bert`: absolute positions, `modernbert`: rotary)."""
+        """
+        A tiny Clef on a tiny bidirectional backbone (`bert`: absolute positions, `modernbert`: rotary, or the
+        `model_type` of another encoder, such as `roberta`, whose positions count from its padding token id, 1).
+        """
         sizes = {
             "vocab_size": len(self.encoder_tokenizer()),
             "hidden_size": self.config.backbone_hidden_size,
@@ -546,7 +550,12 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             "num_attention_heads": 2,
             **(text_config_kwargs or {}),
         }
-        text_config = BertConfig(**sizes) if backbone == "bert" else ModernBertConfig(**sizes, pad_token_id=0)
+        if backbone == "bert":
+            text_config = BertConfig(**sizes)
+        elif backbone == "modernbert":
+            text_config = ModernBertConfig(**sizes, pad_token_id=0)
+        else:
+            text_config = AutoConfig.for_model(backbone, **sizes)
         defaults = {"cosine_width": 8, "global_pooling": "first", "prompt_style": "plain", **self.tiny_sizes}
         config = ClefConfig(text_config=text_config, head_type=head_type, **{**defaults, **config_kwargs})
         config._attn_implementation, config.dtype = "eager", torch.float32
@@ -990,24 +999,47 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 self.assert_batch_equals_singles(model, prompts, padding_side="left")
 
     def test_every_backbone_batch_and_padding_side_agree(self):
-        # Causal, BERT-style and UltraBERT backbones, both heads: a prompt scores the same alone and in a batch padded
-        # on either side, up to the float32 rounding of the backbone only
-        for backbone in ("qwen2", "bert", "modernbert", "ultrabert"):
+        # Causal, BERT-style, UltraBERT and RoBERTa backbones, both heads: a prompt scores the same alone and in a batch
+        # padded on either side, up to the float32 rounding of the backbone only. RoBERTa numbers the positions of the
+        # tokens that are not its padding token (id 1), so its batches are padded with that token
+        for backbone in ("qwen2", "bert", "modernbert", "ultrabert", "roberta"):
             for head_type in ("joint", "cosine"):
                 with self.subTest(backbone=backbone, head_type=head_type):
-                    if backbone == "qwen2":
-                        model = ClefForDecision(self.config).eval() if head_type == "joint" else self.cosine_model()
-                    elif backbone == "ultrabert":
-                        model = self.ultrabert_model(head_type)
-                    else:
-                        model = self.encoder_model(backbone, head_type)
+                    model = self.backbone_model(backbone, head_type)
                     prompts = self.ultrabert_prompts() if backbone == "ultrabert" else self.ragged_prompts()
+                    pad_token_id = 1 if backbone == "roberta" else 0
+                    if backbone == "roberta":
+                        self.assertFalse(any((p["input_ids"] == pad_token_id).any() for p in prompts))
                     for padding_side in ("right", "left"):
-                        self.assert_batch_equals_singles(model, prompts, padding_side)
+                        self.assert_batch_equals_singles(model, prompts, padding_side, pad_token_id)
                     with torch.no_grad():
-                        right = model(**self.collate(prompts, padding_side="right", pad_token_id=0)).logits
-                        left = model(**self.collate(prompts, padding_side="left", pad_token_id=0)).logits
+                        right = model(**self.collate(prompts, padding_side="right", pad_token_id=pad_token_id)).logits
+                        left = model(**self.collate(prompts, padding_side="left", pad_token_id=pad_token_id)).logits
                     torch.testing.assert_close(left, right, **self.batch_tolerance)
+
+    def backbone_model(self, backbone, head_type="joint"):
+        """A tiny Clef with a head of `head_type` on a tiny backbone: `qwen2`, `ultrabert` or an encoder."""
+        if backbone == "qwen2":
+            return ClefForDecision(self.config).eval() if head_type == "joint" else self.cosine_model()
+        if backbone == "ultrabert":
+            return self.ultrabert_model(head_type)
+        return self.encoder_model(backbone, head_type)
+
+    def test_mask_equals_no_mask_for_every_backbone_family(self):
+        # The pipeline passes no attention mask and training passes one: an unpadded prompt must score the same either
+        # way. The RoBERTa family numbers its positions from its padding index (`padding_idx + 1 + i`), so the head
+        # must leave them to it rather than count them from the mask (which shifted them by 2: a 9.25 logits difference)
+        families = ("qwen2", "bert", "modernbert", "ultrabert", "roberta", "xlm-roberta", "camembert", "mpnet")
+        for backbone in families:
+            for head_type in ("joint", "cosine"):
+                with self.subTest(backbone=backbone, head_type=head_type):
+                    model = self.backbone_model(backbone, head_type)
+                    prompt = (self.ultrabert_prompts() if backbone == "ultrabert" else self.ragged_prompts())[0]
+                    self.assertFalse((prompt["input_ids"] == 1).any())  # not the padding token of the RoBERTa family
+                    with torch.no_grad():
+                        without = model(**prompt).logits
+                        masked = model(**prompt, attention_mask=torch.ones_like(prompt["input_ids"])).logits
+                    torch.testing.assert_close(masked, without, **self.batch_tolerance)
 
     def test_ultrabert_prompt_longer_than_local_window(self):
         # Prompts several times longer than the attention radius of the local layers

@@ -562,6 +562,14 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.model = AutoModel.from_config(config.text_config)
+        # A backbone whose position embeddings have a padding index (the RoBERTa family) numbers the positions of its
+        # tokens itself, from `input_ids`, after that index: positions counted from the attention mask would be shifted
+        self._positions_from_input_ids = any(
+            isinstance(module, nn.Embedding)
+            and name.endswith("position_embeddings")
+            and module.padding_idx is not None
+            for name, module in self.model.named_modules()
+        )
         if config.head_type == "cosine":  # no language modeling head, nothing to tie
             self._tied_weights_keys = {}
             self._keep_in_fp32_modules_strict = ["cosine_head"]  # float32 when loaded in half precision
@@ -643,9 +651,10 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         option_mask (`torch.BoolTensor` of shape `(num_questions, max_options)`, *optional*):
             The options each question has, from `num_options` by default.
         """
-        # Positions that skip the padding, so that left and right padding give the same hidden states
+        # Positions that skip the padding, so that left and right padding give the same hidden states. The RoBERTa family
+        # skips its padding tokens itself, and gets the same positions with and without a mask that way
         position_ids = kwargs.pop("position_ids", None)
-        if position_ids is None and attention_mask is not None:
+        if position_ids is None and attention_mask is not None and not self._positions_from_input_ids:
             position_ids = (attention_mask.long().cumsum(-1) - 1).clamp(min=0)
         hidden_states = self.model(
             input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=False, **kwargs
