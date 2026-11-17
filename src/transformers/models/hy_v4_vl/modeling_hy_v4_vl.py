@@ -996,6 +996,7 @@ class HYV4VLVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class HYV4VLVisionModel(HYV4VLPreTrainedModel):
     """
     HYV4VL vision tower: patch embedding -> transformer blocks -> per-image patch merger.
@@ -1134,7 +1135,7 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
     config: HYV4VLTextConfig
     input_modalities = ("text",)
 
-    def __init__(self, config: HYV4VLConfig):
+    def __init__(self, config: HYV4VLTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

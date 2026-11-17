@@ -271,6 +271,9 @@ class HYV4VLTextModel(HYV4Model):
     config: HYV4VLTextConfig
     input_modalities = ("text",)
 
+    def __init__(self, config: HYV4VLTextConfig):
+        super().__init__(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
