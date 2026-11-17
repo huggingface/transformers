@@ -33,7 +33,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import torch
+from transformers.testing_utils import backend_device_count, torch_device
 
 from .important_files import IMPORTANT_MODELS
 
@@ -57,7 +57,9 @@ def run_pytest(
         - cpu_tests (bool): if True, include CPU-only tests; if False, exclude non-device tests
     """
     relative_path = subdir.relative_to(root_test_dir)
-    report_name = f"{machine_type}_{suite}_{relative_path}_test_reports"
+    # `--make-reports=<name>` writes to `reports/<name>/`, so a `/` in the name would nest the
+    # report dir instead of producing the flat one the CI emits. The CI does this same replacement.
+    report_name = f"{machine_type}_{suite}_{str(relative_path).replace('/', '_')}_test_reports"
     print(f"Suite: {suite} | Running on: {relative_path}")
 
     cmd = ["python3", "-m", "pytest", "-rsfE", "-v", f"--make-reports={report_name}", str(subdir)]
@@ -118,6 +120,11 @@ def handle_suite(
         subdirs = [s for s in subdirs if s.name >= resume_at]
     if only_in is not None:
         subdirs = [s for s in subdirs if s.name in only_in]
+        # A name that matches nothing is a typo, not a request to run nothing: say so rather than
+        # quietly running one test suite fewer than asked for.
+        unmatched = sorted(set(only_in) - {s.name for s in subdirs})
+        if unmatched:
+            print(f"[WARNING] No {suite} test dir matches: {', '.join(unmatched)}")
     if subdirs and total_processes > 1:
         # This interleaves the subdirs / files. For instance for subdirs = [A, B, C, D, E] and 2 processes:
         # - script launcehd with `--processes 0 2` will run A, C, E
@@ -243,10 +250,11 @@ if __name__ == "__main__":
 
     # Infer machine type if not provided
     if args.machine_type == "":
-        if not torch.cuda.is_available():
+        device_count = backend_device_count(torch_device)
+        if device_count == 0:
             machine_type = "cpu"
         else:
-            machine_type = "multi-gpu" if torch.cuda.device_count() > 1 else "single-gpu"
+            machine_type = "multi-gpu" if device_count > 1 else "single-gpu"
     else:
         machine_type = args.machine_type
 
