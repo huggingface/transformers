@@ -13,6 +13,7 @@
 # limitations under the License.
 """Expert parallel tests for model test classes; the distributed harness lives in `test_tensor_parallel_mixin.py`."""
 
+import copy
 import tempfile
 from abc import ABC
 from itertools import product
@@ -21,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
+from transformers.distributed.parallel_utils import _get_parameter_plan
 from transformers.testing_utils import is_expert_parallel_test, is_torch_available
 
 from .distributed_testing_utils import run_distributed
@@ -228,4 +230,20 @@ class ExpertParallelTesterMixin(ABC):
 
             run_distributed(world_size=self.tensor_parallel_size)(_test_ep_backward_impl)(
                 tmp_dir, model_class, atol, rtol, experts_implementation
+            )
+
+    def test_moe_parallel_plans_shard_experts(self):
+        """An MoE model's expert weights, the bulk of its parameters, must be sharded by every EP plan it defines.
+        A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        models = [model_class(copy.deepcopy(config)) for model_class in self.all_model_classes]
+        expert_weights = {model: _get_expert_weight_names(model) for model in models}
+        if not any(expert_weights.values()):
+            self.skipTest("Not an MoE model")
+
+        for model, names in expert_weights.items():
+            unsharded = sorted(n for n in names if _get_parameter_plan(n, model._ep_plan, is_weight=True) is None)
+            self.assertFalse(
+                unsharded, f"{type(model).__name__}: the EP plan leaves these experts replicated: {unsharded}"
             )

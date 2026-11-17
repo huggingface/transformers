@@ -33,7 +33,6 @@ class HunYuanMoEV1Config(PreTrainedConfig):
 
     model_type = "hunyuan_v1_moe"
     keys_to_ignore_at_inference = ["cache"]
-    base_model_tp_plan = {}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

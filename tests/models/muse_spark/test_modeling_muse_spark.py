@@ -121,28 +121,6 @@ class MuseSparkVision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_get_audio_features_attentions(self):
         pass
 
-    def test_moe_parallel_plans_shard_experts(self):
-        """Overload of the regular test_moe_parallel_plans_shard_experts test for muse_spark to remove experts TP plan
-        checks, because this model cannot support TP sharding for experts:
-
-        In muse_spark's MoE, there is a norm right after the down projection, so each expert's output is normalized
-        before the all-reduce. Since TP split experts across ranks, each rank holds only a part of the expert's output,
-        and the norm cannot be computed locally. And after the all-reduce, the output of each expert has been summed,
-        so the individual norms cannot be computed anymore. So this model cannot shard experts using TP, only EP.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        models = [model_class(copy.deepcopy(config)) for model_class in self.all_model_classes]
-        expert_weights = {model: _get_expert_weight_names(model) for model in models}
-        if not any(expert_weights.values()):
-            self.skipTest("Not an MoE model")
-
-        for model, names in expert_weights.items():
-            for kind, plan in [("EP", model._ep_plan)]:  # overloaded line: the loop is kept to match the parent test
-                unsharded = sorted(n for n in names if _get_parameter_plan(n, plan, is_weight=True) is None)
-                self.assertFalse(
-                    unsharded, f"{type(model).__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
-                )
-
 
 # Tests with tiny dummy checkpoint (18gb) as the real checkpoint (820B, 1.5tb) is too large for CI.
 #
