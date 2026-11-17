@@ -694,6 +694,8 @@ class ContinuousBatchingManager:
 
         # Control flow attributes
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
+        # Inference mode is thread-local: the caller's, applied to warmup and the background generation loop alike
+        self._inference_mode = torch.is_inference_mode_enabled()
 
         # Model-related attributes
         self._original_attn_impl = None  # needs to be set before the model is switched to paged attention
@@ -791,9 +793,10 @@ class ContinuousBatchingManager:
     def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
-        if self.batch_processor is None:
-            self.batch_processor = self._create_batch_processor()
-        self.batch_processor.warmup(self.model)
+        with torch.inference_mode(self._inference_mode):
+            if self.batch_processor is None:
+                self.batch_processor = self._create_batch_processor()
+            self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
     # --------------------------------------------- CONTROL FLOW METHODS --------------------------------------------- #
@@ -808,7 +811,12 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
-        self._generation_thread = threading.Thread(target=self._run_generation_loop)
+
+        def run_generation_loop() -> None:
+            with torch.inference_mode(self._inference_mode):
+                self._run_generation_loop()
+
+        self._generation_thread = threading.Thread(target=run_generation_loop)
         self._generation_thread.start()
 
     def stop(
