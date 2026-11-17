@@ -513,12 +513,24 @@ class GraniteSwitchIntegrationTest(unittest.TestCase):
         """The last positions' logits, with the adapter and without. They agree until the control token."""
         # fmt: off
         EXPECTED_MEANS = {
-            "answerability": Expectations({("mps", None): torch.tensor([0.7986, -0.6247, -3.5927, -2.3329, -4.7504])}),
-            None: Expectations({("mps", None): torch.tensor([0.7986, -0.6247, 1.1428, 0.6827, -0.9518])}),
+            "answerability": Expectations({
+                ("mps", None): torch.tensor([0.7986, -0.6247, -3.5927, -2.3329, -4.7504]),
+                ("cuda", 8): torch.tensor([0.7162, -0.7031, -3.6584, -2.3316, -4.7810]),
+            }),
+            None: Expectations({
+                ("mps", None): torch.tensor([0.7986, -0.6247, 1.1428, 0.6827, -0.9518]),
+                ("cuda", 8): torch.tensor([0.7162, -0.7031, 1.1583, 0.6546, -0.9134]),
+            }),
         }
         EXPECTED_SLICES = {
-            "answerability": Expectations({("mps", None): torch.tensor([-1.3828, 34.5000, 4.4375, 4.1562, 3.0781, 1.0781, 18.2500, 6.3750, 6.9375, 4.3438, 5.9375, 4.6875, 7.0000, -5.7500, 2.2031])}),
-            None: Expectations({("mps", None): torch.tensor([9.0625, 24.0000, 18.0000, 17.7500, 15.6250, 13.3125, 20.0000, 21.3750, 12.8750, 20.8750, 15.6250, 11.8750, 21.7500, 13.8750, 16.7500])}),
+            "answerability": Expectations({
+                ("mps", None): torch.tensor([-1.3828, 34.5000, 4.4375, 4.1562, 3.0781, 1.0781, 18.2500, 6.3750, 6.9375, 4.3438, 5.9375, 4.6875, 7.0000, -5.7500, 2.2031]),
+                ("cuda", 8): torch.tensor([-1.1484, 34.7500, 4.6562, 4.2812, 3.2188, 1.2656, 18.6250, 6.5938, 7.0625, 4.5938, 6.1250, 4.6875, 7.1875, -5.5938, 2.3125]),
+            }),
+            None: Expectations({
+                ("mps", None): torch.tensor([9.0625, 24.0000, 18.0000, 17.7500, 15.6250, 13.3125, 20.0000, 21.3750, 12.8750, 20.8750, 15.6250, 11.8750, 21.7500, 13.8750, 16.7500]),
+                ("cuda", 8): torch.tensor([9.0625, 24.1250, 18.0000, 17.7500, 15.6250, 13.3125, 19.8750, 21.3750, 12.8750, 21.0000, 15.6250, 12.0000, 21.6250, 13.8750, 16.8750]),
+            }),
         }
         # fmt: on
         for adapter_name in ("answerability", None):
@@ -540,12 +552,12 @@ class GraniteSwitchIntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         """The adapter answers in its own format, and the same prompt without it gets the base model's answer."""
         EXPECTED_TEXTS = {
-            "answerability": Expectations({("mps", None): '"answerable"'}),
-            None: Expectations({("mps", None): "The Eiffel Tower was completed in 1889."}),
+            "answerability": '"answerable"',
+            None: "The Eiffel Tower was completed in 1889.",
         }
         for adapter_name in ("answerability", None):
             with self.subTest(adapter_name=adapter_name):
                 inputs = self._inputs(adapter_name)
                 output = self.model.generate(**inputs, max_new_tokens=20, do_sample=False)
                 text = self.tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-                self.assertEqual(text, EXPECTED_TEXTS[adapter_name].get_expectation())
+                self.assertEqual(text, EXPECTED_TEXTS[adapter_name])
