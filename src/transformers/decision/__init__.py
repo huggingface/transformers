@@ -19,6 +19,7 @@ from ..utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_utils import *
+    from .modeling_cosine import *
     from .template_utils import *
 else:
     import sys

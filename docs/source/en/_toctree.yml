@@ -494,6 +494,8 @@
       title: Logging
     - local: main_classes/model
       title: Models
+    - local: main_classes/sparse_cosine_head
+      title: Sparse cosine decision head
     - local: main_classes/text_generation
       title: Text generation
     - local: main_classes/optimizer_schedules
