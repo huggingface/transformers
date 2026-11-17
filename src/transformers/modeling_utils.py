@@ -2301,7 +2301,6 @@ class PreTrainedModel(
             else:
                 self.model = decoder
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex

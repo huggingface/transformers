@@ -489,7 +489,6 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
         "sinks",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, HYV4TopkRouter):

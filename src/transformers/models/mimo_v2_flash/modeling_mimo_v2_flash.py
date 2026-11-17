@@ -113,7 +113,6 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -469,11 +468,11 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
         "attentions": MiMoV2FlashAttention,
         "router_logits": OutputRecorder(MiMoV2FlashTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    # The checkpoint stores the router weight in float32, like the correction bias
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "mlp.gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
     _compatible_flash_implementations = ["flash_attention_4"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MiMoV2FlashTopkRouter):

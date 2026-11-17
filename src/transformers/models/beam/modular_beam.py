@@ -353,7 +353,6 @@ class BeamPreTrainedModel(DeepseekV3PreTrainedModel):
     # DeepseekV3 uses this to drop its MTP layer, which Beam does not have.
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, BeamTopKRouter):
