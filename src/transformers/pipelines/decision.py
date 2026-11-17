@@ -70,6 +70,14 @@ class DecisionPipeline(Pipeline):
             use_model = isinstance(self.model, DecisionMixin) and decision_config is None
             decision_config = self.model.decision_config if use_model else DecisionConfig.from_pretrained(repo)
         self.decision_config = decision_config
+        unlabeled = sorted(kind for kind, labels in decision_config.labels.items() if labels is None)
+        if unlabeled and not isinstance(self.model, DecisionMixin):
+            raise ValueError(
+                f"{type(self.model).__name__} has no decision head: it reads each option from the logit of its label "
+                f"token, but the decision config has `labels` None for {unlabeled} (the config of a head that pools "
+                "the spans of the options, such as Clef's). Give the label tokens of those question types in "
+                "`decision_config.labels`, or load a decision model with `AutoModelForDecision`."
+            )
         if self.decision_config.adapter:  # a LoRA in a subfolder of the repo
             self.model.load_adapter(repo, adapter_kwargs={"subfolder": self.decision_config.adapter})
         self.label_token_ids = functools.cache(functools.partial(label_token_ids, self.tokenizer))

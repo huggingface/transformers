@@ -168,17 +168,23 @@ class Question:
             raise ValueError(f"Question {name!r}: a {kind} question needs `criteria` with its options.")
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
+        elif kind == "choice" and config.sort_choices:
+            criteria = dict(sorted(criteria.items()))
         elif kind == "score":
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
-        labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
-        if len(labels) < len(criteria):
+        if kind in config.labels and config.labels[kind] is None:  # a head that reads any number of options: no labels
+            labels = None
+        else:
+            labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
+        if labels is not None and len(labels) < len(criteria):
             raise ValueError(
                 f"Question {name!r}: this model reads at most {len(labels)} options for a {kind} question, got "
                 f"{len(criteria)} (`labels.{kind}` in its decision config)."
             )
         options, descriptions = list(criteria), list(criteria.values())
-        return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions)
+        labels = [] if labels is None else labels[: len(options)]
+        return cls(name, kind, question.get("instructions"), options, labels, descriptions)
 
     def answer(self, probabilities: list[float]) -> dict[str, Any]:
         """The System One answer, from the probabilities of the options."""
@@ -316,7 +322,12 @@ def prepare_inputs(
     anything [`~image_utils.load_image`] takes.
     """
     tokenizer = getattr(processor, "tokenizer", processor)
-    if MARK not in tokenizer.get_vocab():  # special: they split the text they're in, and requests can't write them
+    # Special: they split the text they're in, and requests can't write them. Known if the O(1) lookup (added and base
+    # vocabulary, fast and slow) maps `MARK` to an id that maps back to it: unknown tokens answer with a fallback id
+    # (`unk_token_id`, `None`, or the model's own, e.g. sentencepiece's 0 without an `unk_token`) that names another
+    # token. `get_vocab()` would build the whole vocabulary dictionary on every request
+    mark_id = tokenizer.convert_tokens_to_ids(MARK)
+    if mark_id is None or tokenizer.convert_ids_to_tokens(mark_id) != MARK:
         tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
     sentinel_ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
 

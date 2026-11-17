@@ -15,9 +15,14 @@
 import functools
 import json
 import re
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from transformers import (
+    AddedToken,
     AutoProcessor,
     AutoTokenizer,
     DecisionConfig,
@@ -26,6 +31,8 @@ from transformers import (
     pipeline,
 )
 from transformers.decision import DECISION_PROMPT
+from transformers.decision.template_utils import MARK, SPLIT
+from transformers.models.clef.configuration_clef import CLEF_TEMPLATE
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
@@ -134,6 +141,47 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertIn("(a noul question looks like", str(error.exception))
         self.assertIn("unexpected keyword argument 'instruction'", str(error.exception))
 
+    def test_label_tokens_cap_the_options(self):
+        # By default each option is read from the logit of its label token: at most 26 options (A to Z)
+        criteria = {f"option {index}": None for index in range(27)}
+        request = {"state": "s", "questions": {"x": {"type": "choice", "criteria": criteria}}}
+        with self.assertRaisesRegex(ValueError, "at most 26 options for a choice question, got 27"):
+            render(self.tokenizer, request)
+        # Labels of the decision config cap them the same way
+        config = DecisionConfig(labels={"choice": ["a", "b"]}, chat_template="{{ question.name }}<|mark|>")
+        request = {"state": "s", "questions": {"x": {"type": "choice", "criteria": {"x": None, "y": None, "z": None}}}}
+        with self.assertRaisesRegex(ValueError, "at most 2 options"):
+            render(self.tokenizer, request, config)
+
+    def test_labels_none_lifts_the_cap(self):
+        # Heads that read spans declare no labels: any number of options, and the template gets no labels
+        config = DecisionConfig(
+            labels={"noul": None, "choice": None, "score": None},
+            chat_template="{% for q in questions %}{{ q.name }}{{ q.labels|length }}<|mark|>{% endfor %}",
+        )
+        questions = {
+            "pick": {"type": "choice", "criteria": {f"option {index}": None for index in range(40)}},
+            "rate": {"type": "score", "criteria": [f"level {index}" for index in range(30)]},
+            "yes": {"type": "noul"},
+        }
+        (prompt,) = render(self.tokenizer, {"state": "s", "questions": questions}, config)
+        self.assertEqual([len(question.options) for question in prompt.questions], [40, 30, 2])
+        self.assertEqual([question.labels for question in prompt.questions], [[], [], []])
+        # Only the types it lists: the others keep their default labels and cap
+        config = DecisionConfig(labels={"choice": None}, chat_template="{{ question.name }}<|mark|>")
+        questions = {"rate": {"type": "score", "criteria": [f"level {index}" for index in range(27)]}}
+        with self.assertRaisesRegex(ValueError, "at most 26 options for a score question"):
+            render(self.tokenizer, {"state": "s", "questions": questions}, config)
+
+    def test_labels_none_survive_save_and_reload(self):
+        config = DecisionConfig(labels={"noul": None, "choice": None, "score": ["low", "high"]})
+        with tempfile.TemporaryDirectory() as directory:
+            config.save_pretrained(directory)
+            saved = json.loads(Path(directory, "decision.json").read_text(encoding="utf-8"))
+            reloaded = DecisionConfig.from_pretrained(directory)
+        self.assertEqual(saved["labels"], {"noul": None, "choice": None, "score": ["low", "high"]})
+        self.assertEqual(reloaded.labels, config.labels)
+
     def test_each_request_carries_its_questions(self):
         for request in (REQUEST["state"], '{"a": 1}', {"questions": REQUEST["questions"]}):
             with self.assertRaises(ValueError):
@@ -217,6 +265,14 @@ class DecisionPipelineTest(unittest.TestCase):
         with self.assertRaises(ValueError):  # a request has its questions
             pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer)("Where is my parcel?")
 
+    @require_torch
+    def test_label_head_needs_labels(self):
+        # A model without a decision head reads each option from the logit of its label token: a decision config that
+        # declares no labels (that of a head that pools spans, such as Clef's) leaves it nothing to read
+        config = DecisionConfig(labels={"noul": None, "choice": ["A", "B", "C"], "score": None})
+        with self.assertRaisesRegex(ValueError, r"label token.*`labels` None for \['noul', 'score'\]"):
+            pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer, decision_config=config)
+
     @slow
     @require_torch
     def test_serve_example(self):
@@ -225,3 +281,196 @@ class DecisionPipelineTest(unittest.TestCase):
         probabilities = decide(REQUEST)["intent"]["probabilities"]
         self.assertAlmostEqual(probabilities["refund"], 0.9241, places=3)
         self.assertAlmostEqual(probabilities["cancel"], 0.0574, places=3)
+
+
+class DecisionSentinelTokensTest(unittest.TestCase):
+    """`prepare_inputs` adds the sentinels once per tokenizer, and finds out whether it did without `get_vocab()`."""
+
+    NAME = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def fresh(self):
+        return AutoTokenizer.from_pretrained(self.NAME)
+
+    @staticmethod
+    def spy_on_get_vocab(tokenizer):
+        return mock.patch.object(type(tokenizer), "get_vocab", autospec=True, side_effect=type(tokenizer).get_vocab)
+
+    def test_known_sentinels_do_not_rebuild_the_vocabulary(self):
+        tokenizer = self.fresh()
+        with self.spy_on_get_vocab(tokenizer) as spy:
+            render(tokenizer, REQUEST)  # the first call adds the sentinels: it may read the vocabulary
+            spy.reset_mock()
+            render(tokenizer, REQUEST)
+            render(tokenizer, REQUEST)
+            self.assertEqual(spy.call_count, 0)
+
+    def test_fresh_tokenizer_gains_the_two_sentinels_once(self):
+        tokenizer = self.fresh()
+        size = len(tokenizer)
+        self.assertNotIn(MARK, tokenizer.get_vocab())
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size + 2)
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size + 2)
+        self.assertEqual(tokenizer.convert_tokens_to_ids([MARK, SPLIT]), [size, size + 1])
+        added = {token.content: token for token in tokenizer.added_tokens_decoder.values()}
+        for sentinel in (MARK, SPLIT):
+            self.assertTrue(added[sentinel].special)
+            self.assertFalse(added[sentinel].normalized)
+
+    def test_tokenizer_with_the_sentinels_is_left_alone(self):
+        tokenizer = self.fresh()
+        tokenizer.add_tokens([MARK, SPLIT], special_tokens=True)
+        size, ids = len(tokenizer), tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+        before = dict(tokenizer.added_tokens_decoder)
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size)
+        self.assertEqual(tokenizer.convert_tokens_to_ids([MARK, SPLIT]), ids)
+        self.assertEqual(tokenizer.added_tokens_decoder, before)
+
+    def test_same_prompts_as_the_vocabulary_check(self):
+        def reference(request, config):
+            tokenizer = self.fresh()
+            if MARK not in tokenizer.get_vocab():  # the check that `prepare_inputs` used to make
+                tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
+            return [(p.input_ids, p.marks) for p in render(tokenizer, request, config)]
+
+        requests = [
+            {"state": "s", "questions": {"x": {"type": "noul"}}},
+            {"state": "I want a refund", "questions": {"intent": REQUEST["questions"]["intent"]}},
+            {"state": "I want a refund", "questions": {"anger": REQUEST["questions"]["anger"]}},
+            REQUEST,
+        ]
+        for name, config in (("default", DecisionConfig()), ("clef", DecisionConfig(chat_template=CLEF_TEMPLATE))):
+            for request in requests:
+                with self.subTest(template=name, questions=list(request["questions"])):
+                    expected = reference(request, config)
+                    tokenizer = self.fresh()
+                    for _ in range(2):  # sentinels added, then known
+                        self.assertEqual(
+                            [(p.input_ids, p.marks) for p in render(tokenizer, request, config)], expected
+                        )
+
+    def test_tokenizer_without_unknown_token(self):
+        tokenizer = self.fresh()
+        self.assertIsNone(tokenizer.unk_token_id)
+        size = len(tokenizer)
+        render(tokenizer, REQUEST)
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size + 2)
+
+    def test_tokenizer_with_an_unknown_token_and_sentinels_in_its_base_vocabulary(self):
+        from tokenizers import Tokenizer, models, pre_tokenizers
+
+        from transformers import PreTrainedTokenizerFast
+
+        def build(words):
+            backend = Tokenizer(models.WordLevel({word: i for i, word in enumerate(words)}, unk_token="[UNK]"))
+            backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+            return PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]")
+
+        def prepare(tokenizer):
+            config = DecisionConfig(chat_template="{{ state }}<|mark|>")
+            return config.prepare_inputs({"state": "state", "questions": {"x": {"type": "noul"}}}, tokenizer)
+
+        words = ["[UNK]", "state", "x", "yes", "no"]
+        # an unknown token: an unknown sentinel answers with its id, which is not "known"
+        tokenizer = build(words)
+        self.assertEqual(tokenizer.convert_tokens_to_ids(MARK), tokenizer.unk_token_id)
+        prepare(tokenizer)
+        prepare(tokenizer)
+        self.assertEqual(len(tokenizer), len(words) + 2)
+        # sentinels that are ordinary tokens of the base vocabulary are used as they are
+        tokenizer = build([*words, MARK, SPLIT])
+        ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+        prepare(tokenizer)
+        self.assertEqual((len(tokenizer), tokenizer.convert_tokens_to_ids([MARK, SPLIT])), (len(words) + 2, ids))
+
+    def test_processor_exposing_a_tokenizer(self):
+        tokenizer = self.fresh()
+        size = len(tokenizer)
+        # `getattr(processor, "tokenizer", processor)`: a text-only processor delegates to its tokenizer
+        processor = SimpleNamespace(tokenizer=tokenizer, apply_chat_template=tokenizer.apply_chat_template)
+        with self.spy_on_get_vocab(tokenizer) as spy:
+            first = render(processor, REQUEST)
+            spy.reset_mock()
+            second = render(processor, REQUEST)
+            self.assertEqual(spy.call_count, 0)
+        self.assertEqual(len(tokenizer), size + 2)
+        self.assertEqual([p.input_ids for p in first], [p.input_ids for p in second])
+
+    def test_tokenizer_whose_unknown_tokens_get_a_fallback_id_without_an_unknown_token(self):
+        # Like a slow sentencepiece tokenizer built with `unk_token=None`: `piece_to_id` answers the model's own unknown
+        # id (0) for unknown pieces, while `unk_token_id` is None. A toy slow tokenizer, no sentencepiece model needed
+        from transformers.tokenization_python import PythonBackend
+
+        class FallbackIdTokenizer(PythonBackend):
+            def __init__(self):
+                self.vocab = {"<piece0>": 0, "state": 1, "x": 2}
+                super().__init__(unk_token=None)
+
+            @property
+            def vocab_size(self):
+                return len(self.vocab)
+
+            def get_vocab(self):
+                return {**self.vocab, **self.added_tokens_encoder}
+
+            def _tokenize(self, text):
+                return text.split()
+
+            def _convert_token_to_id(self, token):
+                return self.vocab.get(token, 0)  # not `unk_token_id`
+
+            def _convert_id_to_token(self, index):
+                return {i: t for t, i in self.vocab.items()}.get(index)
+
+        tokenizer = FallbackIdTokenizer()
+        self.assertIsNone(tokenizer.unk_token_id)
+        self.assertEqual(tokenizer.convert_tokens_to_ids(MARK), 0)  # the fallback, for a token it does not know
+        size = len(tokenizer)
+        config = DecisionConfig(chat_template="{{ state }}<|mark|>")
+        request = {"state": "state", "questions": {"x": {"type": "noul"}}}
+        with self.spy_on_get_vocab(tokenizer) as spy:
+            config.prepare_inputs(request, tokenizer)
+            spy.reset_mock()
+            config.prepare_inputs(request, tokenizer)
+            self.assertEqual(spy.call_count, 0)
+        self.assertEqual(len(tokenizer), size + 2)  # added once
+        mark, split = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+        self.assertEqual(len({mark, split, 0}), 3)
+        self.assertEqual(tokenizer.convert_ids_to_tokens([mark, split]), [MARK, SPLIT])
+
+    def test_tokenizer_with_only_the_split_sentinel(self):
+        # The old check only looked at `<|mark|>`: with just `<|split|>` present it adds both. `<|split|>` is already
+        # there, so that is a no-op for it, and `<|mark|>` is new: two tokens are added and the ids resolve
+        tokenizer = self.fresh()
+        tokenizer.add_tokens([SPLIT], special_tokens=True)
+        split_id, size = tokenizer.convert_tokens_to_ids(SPLIT), len(tokenizer)
+        reference = self.fresh()
+        reference.add_tokens([SPLIT], special_tokens=True)
+        if MARK not in reference.get_vocab():  # the old check
+            reference.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), len(reference))
+        self.assertEqual(len(tokenizer), size + 1)
+        self.assertEqual(tokenizer.convert_tokens_to_ids(SPLIT), split_id)
+        self.assertEqual(
+            tokenizer.convert_tokens_to_ids([MARK, SPLIT]), reference.convert_tokens_to_ids([MARK, SPLIT])
+        )
+
+    def test_unknown_token_that_is_the_mark_is_known_like_the_vocabulary_check_says(self):
+        from tokenizers import Tokenizer, models, pre_tokenizers
+
+        from transformers import PreTrainedTokenizerFast
+
+        backend = Tokenizer(models.WordLevel({MARK: 0, "state": 1, "x": 2}, unk_token=MARK))
+        backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token=MARK)
+        self.assertIn(MARK, tokenizer.get_vocab())  # old check: known, nothing added
+        tokenizer.get_vocab()
+        size = len(tokenizer)
+        DecisionConfig(chat_template="{{ state }}<|mark|>").prepare_inputs(
+            {"state": "state", "questions": {"x": {"type": "noul"}}}, tokenizer
+        )
+        self.assertEqual(len(tokenizer), size)

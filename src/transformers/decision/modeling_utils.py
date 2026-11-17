@@ -55,10 +55,13 @@ class DecisionMixin:
                 raise ValueError(f"{pretrained_model_name_or_path} has no {cls.__name__} head next to its weights.")
             config = head_config or config
         model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+        loading_info = None
+        if kwargs.get("output_loading_info"):
+            model, loading_info = model
         if decision_config is None:  # the decision config of the repo, read now like `generation_config`
             decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **_hub_kwargs(kwargs))
         model.decision_config = decision_config
-        return model
+        return model if loading_info is None else (model, loading_info)
 
     @classmethod
     def checkpoint_config(
