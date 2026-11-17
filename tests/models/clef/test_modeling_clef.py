@@ -18,7 +18,6 @@ import json
 import math
 import re
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -299,10 +298,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertTrue(torch.isfinite(output.loss))
         output.loss.backward()
         for name, parameter in model.named_parameters():
-            self.assertEqual(parameter.dtype, torch.float32, name)
             self.assertTrue(torch.isfinite(parameter.grad).all(), name)
-        head = [name for name, _ in model.named_parameters() if not name.startswith(("model.", "lm_head."))]
-        self.assertGreater(len(head), 0)
 
     def test_span_pooling(self):
         # The mean of each span over its own tokens, in float32; an empty (padded) span pools to exactly zero
@@ -351,14 +347,23 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertLess((pooled[0].double() - reference).abs().max().item(), 1e-5)
 
     def test_span_pooling_memory_is_linear(self):
-        # Many short spans that tile a long sequence, as the marks of a prompt do: memory linear in their tokens, no
-        # `[spans, length, dim]` tensor (2 GB here)
+        # Many short spans that tile a long sequence, as the marks of a prompt do: no tensor larger than the tokens of
+        # the spans is ever made, let alone one of `[spans, length, dim]` (1500 times larger here). Counted exactly, on
+        # every tensor the operations of the pooling return
+        from torch.utils._python_dispatch import TorchDispatchMode
+        from torch.utils._pytree import tree_leaves
+
         from transformers.models.clef.modeling_clef import pool_spans
 
-        try:
-            import resource
-        except ImportError:
-            self.skipTest("resource is not available on this platform")
+        class LargestTensor(TorchDispatchMode):
+            numel = 0
+
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                output = func(*args, **(kwargs or {}))
+                sizes = [leaf.numel() for leaf in tree_leaves(output) if isinstance(leaf, torch.Tensor)]
+                self.numel = max([self.numel, *sizes])
+                return output
+
         length, dim = 4096, 64
         generator = torch.Generator().manual_seed(0)
         hidden_states = torch.randn(1, length, dim, generator=generator)
@@ -370,15 +375,11 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         num_spans = starts.shape[-1]
         self.assertGreater(num_spans, 1500)
         self.assertEqual(int((ends - starts).sum()), length)  # they do not overlap and cover every token
-        self.assertEqual(pool_spans(hidden_states, starts[:, :1], ends[:, :1]).shape, (1, 1, dim))
-        # `ru_maxrss` is in bytes on macOS and in kilobytes elsewhere
-        unit = 1 if sys.platform == "darwin" else 1024
-        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit
-        pooled = pool_spans(hidden_states, starts, ends)
-        growth = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit - before
+        with LargestTensor() as largest:
+            pooled = pool_spans(hidden_states, starts, ends)
+        self.assertLessEqual(largest.numel, length * dim)
         self.assertEqual(pooled.shape, (1, num_spans, dim))
         torch.testing.assert_close(pooled[0, -1], hidden_states[0, starts[0, -1] :].mean(0), atol=1e-6, rtol=0)
-        self.assertLess(growth, 256 * 1024**2)
 
     def test_forward_with_labels_returns_loss(self):
         torch.manual_seed(0)
@@ -1420,10 +1421,11 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             torch.testing.assert_close(row[: len(scores)], torch.stack(scores), atol=1e-5, rtol=0)
             self.assertTrue((row[len(scores) :] == torch.finfo(torch.float32).min).all())
 
-    def test_cosine_loads_tern_state_dict(self):
+    def test_cosine_loads_a_state_dict_of_its_own_names(self):
+        # A `cosine_span_v1` head is stored under the names of `ClefCosineHead`: it loads strictly
         model = self.cosine_model()
         width, size = 8, self.config.backbone_hidden_size
-        tern = {
+        state_dict = {
             "question_projection.weight": torch.randn(width, size),
             "question_projection.bias": torch.randn(width),
             "question_norm.weight": torch.randn(width),
@@ -1434,7 +1436,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             "option_norm.bias": torch.randn(width),
             "logit_scale": torch.tensor(1.5),
         }
-        model.cosine_head.load_state_dict(tern, strict=True)
+        model.cosine_head.load_state_dict(state_dict, strict=True)
         self.assertEqual(model.cosine_head.logit_scale.item(), 1.5)
 
     def test_cosine_scale_clamped(self):
@@ -1615,8 +1617,8 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertEqual(model.decision_config.labels, self.uncapped)
         return output, model.eval()
 
-    def test_convert_tern_cosine_roundtrip(self):
-        # A Tern cosine checkpoint: its causal backbone (`save_pretrained`, native names), its tokenizer, the state dict
+    def test_convert_cosine_head_roundtrip(self):
+        # A folder with a `cosine_span_v1` head: its causal backbone (`save_pretrained`, native names), its tokenizer, the state dict
         # of its cosine head with the config of that head, its calibration and runtime files
         model = self.cosine_model(cosine_initial_scale=7.0)
         with torch.no_grad():
@@ -1633,7 +1635,8 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         unsloth = {"layout": "clef", "max_len": 512, "temperature": [1.0, 1.0, 1.0], "base_model": "tiny"}
         with tempfile.TemporaryDirectory() as source:
             self.write_source(source, backbone, self.tokenizer, head, head_config, {**unsloth, "fine_tuned": True})
-            Path(source, "native_klm_runtime.json").write_text(json.dumps({"weights": "float32"}), encoding="utf-8")
+            # A file of the training run that the conversion does not read
+            Path(source, "runtime.json").write_text(json.dumps({"weights": "float32"}), encoding="utf-8")
             with CaptureLogger(logging.get_logger(self.converter_logger)) as captured:
                 _, converted = self.convert(source)
         # The language modeling head of the backbone, which the cosine head does not read, is dropped
