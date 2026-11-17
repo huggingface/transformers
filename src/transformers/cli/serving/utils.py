@@ -25,8 +25,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
+from functools import lru_cache
 from queue import Queue
 from typing import TYPE_CHECKING
+
+from huggingface_hub import scan_cache_dir
+from tqdm import tqdm
 
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
@@ -80,6 +84,62 @@ def split_revision(model_id_and_revision: str) -> tuple[str, str | None]:
         return model_id_and_revision, None
     model_id, _, revision = model_id_and_revision.partition("@")
     return model_id, revision or None
+
+
+def model_owner(model_id: str) -> str:
+    """Owner of a model for `/v1/models`: `"local"` for a local path, the organization of a Hub repo."""
+    if os.path.exists(model_id):
+        return "local"
+    return model_id.split("/")[0] if "/" in model_id else ""
+
+
+@lru_cache
+def get_gen_models(cache_dir: str | None = None) -> list[dict]:
+    """List generative models (LLMs and VLMs) available in the HuggingFace cache.
+
+    Args:
+        cache_dir (`str`, *optional*): Path to the HuggingFace cache directory.
+            Defaults to the standard cache location.
+
+    Returns:
+        `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc.
+    """
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+        MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+        MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
+    )
+
+    generative_architectures = {
+        *MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values(),
+        *MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values(),
+        *MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values(),
+    }
+
+    generative_models = []
+    for repo in tqdm(scan_cache_dir(cache_dir).repos):
+        if repo.repo_type != "model":
+            continue
+        owned_by = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
+
+        for ref, revision_info in repo.refs.items():
+            # One quantization per file, each a separate model, so list files rather than the repo.
+            gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
+            model_ids = [f"{repo.repo_id}:{gguf_file}" for gguf_file in gguf_files]
+
+            # The repo itself is listed when its config names a generative architecture.
+            config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
+            config = json.loads(config_path.read_text()) if config_path is not None else None
+            architectures = (config.get("architectures") or []) if isinstance(config, dict) else []
+            if any(architecture in generative_architectures for architecture in architectures):
+                model_ids.append(repo.repo_id if ref == "main" else f"{repo.repo_id}@{ref}")
+
+            for model_id in model_ids:
+                generative_models.append(
+                    {"owned_by": owned_by, "id": model_id, "object": "model", "created": int(repo.last_modified)}
+                )
+
+    return generative_models
 
 
 class Modality(enum.Enum):
