@@ -309,16 +309,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
             attentions=outputs.attentions,
         )
 
-    def compute_3d_position_ids(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
-    def get_vision_position_ids(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
-    def get_rope_index(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
-
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
     """
     Main EXAONE 4.5 conditional generation class.
@@ -411,10 +401,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         # Force recomputation of 2D-RoPE and ignore rope_deltas
         model_inputs["position_ids"] = None
         return model_inputs
-
-    def _prepare_position_ids_for_generation(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
 
 class Exaone4_5_Processor(Qwen2VLProcessor):
     videos_kwargs = {"return_metadata": True}

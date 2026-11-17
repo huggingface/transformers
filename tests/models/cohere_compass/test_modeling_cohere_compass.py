@@ -25,7 +25,7 @@ from transformers.testing_utils import Expectations, require_torch, require_torc
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import floats_tensor
+from ...test_modeling_common import floats_tensor, mrope_position_ids
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -297,6 +297,15 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
         image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
         with torch.no_grad():
             output = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {
+                        "input_ids": input_ids,
+                        "mm_token_type_ids": mm_token_type_ids,
+                        "image_grid_thw": image_grid_thw,
+                        "attention_mask": attention_mask,
+                    },
+                ),
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 pixel_values=pixel_values,

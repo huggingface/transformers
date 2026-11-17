@@ -386,15 +386,6 @@ class Lfm3VlModel(Qwen2VLModel):
         del self.visual
         del self.rope_deltas
 
-    def get_vision_position_ids(self):
-        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
-
-    def get_rope_index(self):
-        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
-
-    def compute_3d_position_ids(self):
-        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -593,10 +584,6 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
             image_pooler_output=outputs.image_pooler_output,
             video_pooler_output=outputs.video_pooler_output,
         )
-
-    def _prepare_position_ids_for_generation(self):
-        raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
-
 
 @auto_docstring
 class Lfm3VlProcessor(Qwen3VLProcessor):

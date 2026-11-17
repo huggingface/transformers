@@ -634,6 +634,10 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "image_grid_thw": image_grid_thw},
+                ),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -719,6 +723,11 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "video_grid_thw": video_grid_thw},
+                    split_video_frames=True,
+                ),
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,

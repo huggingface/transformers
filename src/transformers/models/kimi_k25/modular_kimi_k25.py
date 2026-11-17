@@ -725,9 +725,6 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             attentions=outputs.attentions,
         )
 
-    def _prepare_position_ids_for_generation(self, **kwargs):
-        raise AttributeError("Kimi doesn't use m-rope!")
-
     def _expand_multimodal_outputs(self, **super_kwargs):
         raise AttributeError("Uses normal super call")
 

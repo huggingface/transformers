@@ -6843,8 +6843,9 @@ def find_parent_traceback(full_param_name: str, model: PreTrainedModel) -> tuple
     return name, immediate_parent_class, pretrained_parent_class
 
 
-def mrope_position_ids(config, inputs_dict):
-    """3D RoPE `position_ids` for a model tester's inputs, laid out the way the processor does it."""
+def mrope_position_ids(config, inputs_dict, split_video_frames=False):
+    """3D RoPE `position_ids` for a model tester's inputs, laid out the way the processor does it.
+    `split_video_frames`: each video frame is its own block (Qwen3-VL / GLM-4V put a timestamp between frames)."""
     from transformers.processing_utils import create_mrope_position_ids
 
     merge_size = config.vision_config.spatial_merge_size
@@ -6853,6 +6854,8 @@ def mrope_position_ids(config, inputs_dict):
         for token_type, key in ((1, "image_grid_thw"), (2, "video_grid_thw"))
         if inputs_dict.get(key) is not None
     }
+    if split_video_frames and 2 in grids:
+        grids[2] = [(1, h, w, 1) for t, h, w, _ in grids[2] for _ in range(t)]
     attention_mask = inputs_dict.get("attention_mask")
     position_ids = create_mrope_position_ids(
         inputs_dict["mm_token_type_ids"].tolist(), None if attention_mask is None else attention_mask.tolist(), grids

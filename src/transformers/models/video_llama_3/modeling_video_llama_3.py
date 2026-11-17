@@ -723,15 +723,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             video_hidden_states=video_embeds if mm_encoder_outputs.get("video") is not None else None,
         )
 
-    def get_rope_index(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    def get_vision_position_ids(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    def compute_3d_position_ids(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
 
 @auto_docstring(
     custom_intro="""
@@ -874,9 +865,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
-
-    def _prepare_position_ids_for_generation(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
 
 
 __all__ = [

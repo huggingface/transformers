@@ -53,6 +53,7 @@ class MultiModalModelTester:
     sequence_classification_class = None
     sub_configs_to_skip = []
     uses_mrope_position_ids = False  # 3D RoPE: build `position_ids` like the processor
+    mrope_split_video_frames = False  # each video frame is its own rope block
 
     # Required attributes after the initialization phase of the tester. Subclasses extend.
     _required_attributes = ("config_class", "conditional_generation_class")
@@ -165,7 +166,7 @@ class MultiModalModelTester:
         attention_mask = self.create_attention_mask(input_ids) if self.use_input_mask else None
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, **modality_inputs}
         if self.uses_mrope_position_ids:  # 3D RoPE models get their `position_ids` from the processor
-            inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict)
+            inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict, self.mrope_split_video_frames)
         return config, inputs_dict
 
     # -- Config construction helpers ----------------------------------------------------------

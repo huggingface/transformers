@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor, mrope_position_ids
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -51,6 +51,7 @@ if is_torch_available():
 
 class Qwen3VLVisionText2TextModelTester(VLMModelTester):
     uses_mrope_position_ids = True
+    mrope_split_video_frames = True
     base_model_class = Qwen3VLModel
     config_class = Qwen3VLConfig
 
@@ -141,61 +142,6 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    def test_vision_position_ids(self):
-        """
-        Tests that vision position ids are built correctly for images and for videos.
-        See https://github.com/huggingface/transformers/pull/45400
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Qwen3VLModel(config).to(torch_device)
-        batch_size = input_dict["input_ids"].shape[0]
-
-        # Test most simple case when num_image_tokens == 1. Position ids will be sunsequent and text-like
-        position_ids = model.get_rope_index(
-            input_dict["input_ids"], input_dict["mm_token_type_ids"], input_dict["image_grid_thw"]
-        )[0]
-        expected_positions = torch.arange(39)[None, None, :].repeat(3, batch_size, 1)
-        self.assertListEqual(list(position_ids.shape), [3, batch_size, 39])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Each image encodes to more than 1 token (i.e. 4 height and 3 width patches = 12 tokens)
-        image_token_id = config.image_token_id
-        pad_token_id = config.text_config.pad_token_id
-        input_ids = torch.tensor([[pad_token_id] + [image_token_id] * 12 + [pad_token_id]], device=torch_device)
-        mm_token_type_ids = torch.tensor([[0] + [1] * 12 + [0]], device=torch_device)
-        image_grid_thw = torch.tensor([[1, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 14])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Check video position ids with 2 frames, and 4 height, 3 width patches (= 12 * 2 tokens)
-        video_token_id = config.video_token_id
-        input_ids = torch.tensor(
-            [[pad_token_id] + [video_token_id] * 12 + [pad_token_id] + [video_token_id] * 12 + [pad_token_id]],
-            device=torch_device,
-        )
-        mm_token_type_ids = torch.tensor([[0] + [2] * 12 + [0] + [2] * 12 + [0]], device=torch_device)
-        video_grid_thw = torch.tensor([[2, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, video_grid_thw=video_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 10]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 10]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 27])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
     def test_image_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -241,6 +187,10 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "image_grid_thw": image_grid_thw},
+                ),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -275,10 +225,12 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
         inputs["mm_token_type_ids"] = (input_ids == config.image_token_id).long()
         inputs["pixel_values"] = torch.cat([inputs["pixel_values"], inputs["pixel_values"][:1]], dim=0)
         inputs["image_grid_thw"][1, 2] = 2
+        inputs["position_ids"] = mrope_position_ids(config, inputs)
         reference_inputs = {
             key: inputs[key].repeat_interleave(expand_size, dim=0)
             for key in ["input_ids", "attention_mask", "mm_token_type_ids"]
         }
+        reference_inputs["position_ids"] = inputs["position_ids"].repeat_interleave(expand_size, dim=1)
         reference_inputs["pixel_values"] = inputs["pixel_values"][[0] * expand_size + [1, 2, 3] * expand_size]
         reference_inputs["image_grid_thw"] = inputs["image_grid_thw"][[0] * expand_size + [1, 2] * expand_size]
         generation_kwargs = {
@@ -383,6 +335,11 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
             # TODO:we should remove this because we use timestamps for video
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "video_grid_thw": video_grid_thw},
+                    split_video_frames=True,
+                ),
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
@@ -480,6 +437,16 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {
+                        "input_ids": input_ids,
+                        "mm_token_type_ids": mm_token_type_ids,
+                        "image_grid_thw": image_grid_thw,
+                        "video_grid_thw": video_grid_thw,
+                    },
+                    split_video_frames=True,
+                ),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
