@@ -207,8 +207,9 @@ def validate_original_processor(kwargs: dict, embodiment_id_mapping: dict, confi
         for modality in ("state", "action"):
             modality_config = modalities.get(modality) or {}
             # Per-key `sin_cos_embedding_keys` are not checked: the original processor only applies them with
-            # `apply_sincos_state_encoding`, rejected above, and otherwise min/max-normalizes those keys like the port
-            unsupported_keys = ("mean_std_embedding_keys", "pass_through_keys", "min_max_embedding_keys")
+            # `apply_sincos_state_encoding`, rejected above, and otherwise min/max-normalizes those keys like the port.
+            # `mean_std_embedding_keys` are supported by `Gr00tProcessor`
+            unsupported_keys = ("pass_through_keys", "min_max_embedding_keys")
             for key in unsupported_keys:
                 if modality_config.get(key):
                     problems.append(f"{tag}.{modality}.{key}={modality_config[key]}: per-key {key} is not supported")

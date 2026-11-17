@@ -228,6 +228,36 @@ class Gr00tProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(tuple(outputs["eef"].shape), (1, HORIZON, 0))
         self.assertEqual(tuple(outputs["arm"].shape), (1, HORIZON, 3))
 
+    def test_mean_std_normalization(self):
+        # As the original processor: features with a zero std keep their raw value, only actions are clipped
+        processor_dict = self.prepare_processor_dict()
+        modality_config = processor_dict["modality_configs"][EMBODIMENT]
+        modality_config["state"]["mean_std_embedding_keys"] = ["arm"]
+        modality_config["action"]["mean_std_embedding_keys"] = ["gripper"]
+        processor = self.processor_class(**self.prepare_components(), **processor_dict)
+
+        # Arm state mean [1, 0, 5] and std [0.5, 1, 0]: the last joint is constant in the dataset
+        state = {"eef": self.identity_eef(1), "arm": np.array([[3.0, 4.0, 7.0]]), "gripper": np.array([[0.5]])}
+        normalized_state = processor.normalize_state(state, EMBODIMENT)
+        torch.testing.assert_close(normalized_state[0, 9:12], torch.tensor([4.0, 4.0, 7.0]))
+
+        # Gripper action mean 5 and std 2.5
+        actions = {
+            "eef": np.tile(self.identity_eef(1)[:, None], (1, HORIZON, 1)),
+            "arm": np.tile(state["arm"][:, None], (1, HORIZON, 1)),
+            "gripper": np.array([[[6.0], [20.0], [-10.0], [5.0]]]),
+        }
+        normalized_actions, _ = processor.normalize_actions(actions, EMBODIMENT, state=state)
+        torch.testing.assert_close(normalized_actions[0, :, 12], torch.tensor([0.4, 1.0, -1.0, 0.0]))
+        decoded = processor.post_process_actions(normalized_actions, EMBODIMENT, state=state)
+        np.testing.assert_allclose(np.asarray(decoded["gripper"])[0, :, 0], [6.0, 7.5, 2.5, 5.0], rtol=1e-6)
+
+        # A zero std keeps the model output as is when decoding
+        processor_dict["statistics"][EMBODIMENT]["action"]["gripper"]["std"] = [0.0]
+        processor = self.processor_class(**self.prepare_components(), **processor_dict)
+        decoded = processor.post_process_actions(torch.full((1, HORIZON, 16), 0.3), EMBODIMENT, state=state)
+        np.testing.assert_allclose(np.asarray(decoded["gripper"])[0, :, 0], [0.3] * HORIZON, rtol=1e-6)
+
     @staticmethod
     def small_rotation_rows(angle, axis):
         # First two rows of a rotation by `angle` radians around `axis`

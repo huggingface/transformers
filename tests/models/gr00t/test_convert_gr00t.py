@@ -144,6 +144,8 @@ class Gr00tConversionTest(unittest.TestCase):
         kwargs["modality_configs"]["test_robot"]["action"]["action_configs"][1]["rep"] = "DELTA"
         # Per-key sin/cos keys are only used with `apply_sincos_state_encoding`
         kwargs["modality_configs"]["test_robot"]["state"]["sin_cos_embedding_keys"] = ["joints"]
+        # Per-key mean/std normalization is implemented by `Gr00tProcessor`
+        kwargs["modality_configs"]["test_robot"]["state"]["mean_std_embedding_keys"] = ["eef"]
         self.convert.validate_original_processor(kwargs, {"test_robot": 10}, self.original_config)
 
     def test_unsupported_processor_settings_are_rejected(self):
@@ -161,7 +163,6 @@ class Gr00tConversionTest(unittest.TestCase):
             "relative EEF actions in XYZ_ROTVEC": lambda k, m: m["action"]["action_configs"][0].update(
                 format="XYZ_ROTVEC"
             ),
-            "per-key mean_std_embedding_keys": lambda k, m: m["state"].update(mean_std_embedding_keys=["eef"]),
             "per-key pass_through_keys": lambda k, m: m["state"].update(pass_through_keys=["joints"]),
             "use_albumentations=False": lambda k, m: k.pop("use_albumentations"),
             "apply_sincos_state_encoding=True": lambda k, m: k.update(apply_sincos_state_encoding=True),

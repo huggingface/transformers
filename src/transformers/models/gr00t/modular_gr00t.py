@@ -1142,7 +1142,10 @@ class Gr00tProcessor(Qwen3VLProcessor):
         if self._uses_mean_std(embodiment_tag, modality, key):
             mean = torch.tensor(stats["mean"], dtype=torch.float64)
             std = torch.tensor(stats["std"], dtype=torch.float64)
-            return (values - mean) / torch.where(std > 0, std, torch.ones_like(std))
+            # Features with a zero std keep their raw value, and only actions are clipped
+            has_std = std != 0
+            scaled = torch.where(has_std, (values - mean) / torch.where(has_std, std, 1.0), values)
+            return scaled.clamp(-1.0, 1.0) if self.clip_outliers and modality == "action" else scaled
         low, high = self._normalization_params(embodiment_tag, modality, key)
         # Joints with a constant value in the dataset are mapped to 0
         varying = ~torch.isclose(high, low).expand_as(values)
@@ -1335,7 +1338,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
                     torch.tensor(stats["mean"], dtype=torch.float64),
                     torch.tensor(stats["std"], dtype=torch.float64),
                 )
-                values = values * std + mean
+                values = torch.where(std != 0, values * std + mean, values)
             else:
                 low, high = self._normalization_params(embodiment_tag, "action", key)
                 values = (values.clamp(-1.0, 1.0) + 1.0) / 2.0 * (high - low) + low
