@@ -428,6 +428,14 @@ class Gr00tPreTrainedModel(PreTrainedModel):
     """
 )
 class Gr00tDiT(Gr00tPreTrainedModel):
+    _tp_plan = {
+        "layers.*.attention.q_proj": "colwise",
+        "layers.*.attention.k_proj": "colwise",
+        "layers.*.attention.v_proj": "colwise",
+        "layers.*.attention.o_proj": "rowwise",
+        "layers.*.mlp.fc1": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
+    }
     _can_record_outputs = {
         "hidden_states": OutputRecorder(Gr00tDiTLayer, num_hidden_layers_key="dit_num_hidden_layers"),
         "attentions": OutputRecorder(Gr00tAttention, index=1),
@@ -504,6 +512,16 @@ class Gr00tDiT(Gr00tPreTrainedModel):
 
 @auto_docstring
 class Gr00tModel(Gr00tPreTrainedModel):
+    # The plans of the backbone and of the DiT are merged in from their own sub-models
+    _tp_plan = {
+        "vl_refiner.layers.*.attention.q_proj": "colwise",
+        "vl_refiner.layers.*.attention.k_proj": "colwise",
+        "vl_refiner.layers.*.attention.v_proj": "colwise",
+        "vl_refiner.layers.*.attention.o_proj": "rowwise",
+        "vl_refiner.layers.*.mlp.fc1": "colwise",
+        "vl_refiner.layers.*.mlp.fc2": "rowwise",
+    }
+
     def __init__(self, config: Gr00tConfig):
         super().__init__(config)
         self.vlm = AutoModel.from_config(config.vlm_config)
