@@ -1,10 +1,11 @@
-# AMD Ryzen "Strix Halo" (gfx1151) CI on the DevLab Dispatch ephemeral pool.
+# AMD Radeon R9700 (gfx1201) CI on the DevLab Dispatch ephemeral pool.
 #
 # This file keeps its name on purpose: the pool's runner group allows this
 # workflow path, so we iterate here rather than adding new workflow files.
 #
-# The gfx1151 image is built + pushed separately by build-amd-gfx1151-image.yml;
-# the jobs here just PULL it via a job-level `container:`.
+# NOTE: the container image below is still the gfx1151 one; a gfx1201 image is
+# the follow-up before real model runs. The jobs here just PULL it via a
+# job-level `container:`.
 #
 #  * default push  -> quick smoke test (`test` job)
 #  * push w/ [models] in the commit msg -> full ALL-MODELS run, ONE JOB PER MODEL
@@ -20,7 +21,7 @@
 # summary; SIGKILL 2 min later if a stuck GPU call ignores it). We deliberately
 # do NOT rely on GitHub's job timeout, which marks the job `cancelled` and hides
 # the logs; `timeout-minutes` here is only a loose outer safety net.
-name: AMD Strix Halo probe
+name: AMD Radeon R9700 probe
 
 on:
   workflow_dispatch:
@@ -31,7 +32,7 @@ on:
         default: false
   push:
     branches:
-      - run_amd_strix_halo*
+      - run_amd_radeon_r9700*
 
 permissions:
   contents: read
@@ -99,7 +100,7 @@ jobs:
   models-ci-0:
     name: "${{ matrix.model }}"
     needs: models-setup
-    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    runs-on: [self-hosted, Linux, devlab-dispatch, radeon-r9700]
     timeout-minutes: 380   # loose outer net; the `timeout` in the step is the real limit
     strategy:
       fail-fast: false
@@ -139,7 +140,7 @@ jobs:
   models-ci-1:
     name: "${{ matrix.model }}"
     needs: models-setup
-    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    runs-on: [self-hosted, Linux, devlab-dispatch, radeon-r9700]
     timeout-minutes: 380
     strategy:
       fail-fast: false
@@ -173,7 +174,7 @@ jobs:
   models-ci-2:
     name: "${{ matrix.model }}"
     needs: models-setup
-    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    runs-on: [self-hosted, Linux, devlab-dispatch, radeon-r9700]
     timeout-minutes: 380
     strategy:
       fail-fast: false
@@ -208,7 +209,7 @@ jobs:
     name: Smoke + tests (prebuilt gfx1151 image)
     # Skip the quick smoke job on an all-models run.
     if: ${{ !contains(github.event.head_commit.message, '[models]') && !inputs.all_models }}
-    runs-on: [self-hosted, Linux, devlab-dispatch, strix-halo]
+    runs-on: [self-hosted, Linux, devlab-dispatch, radeon-r9700]
     timeout-minutes: 120
     container:
       image: ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
