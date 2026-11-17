@@ -463,6 +463,8 @@ class Gr00tDiT(Gr00tPreTrainedModel):
         "layers.*.attention.o_proj": "rowwise",
         "layers.*.mlp.fc1": "colwise",
         "layers.*.mlp.fc2": "rowwise",
+        # Like PI0's `action_out_proj`, the output projection is sharded and its output gathered for the action decoder
+        "proj_out_2": "colwise_gather_output",
     }
     _can_record_outputs = {
         "hidden_states": OutputRecorder(Gr00tDiTLayer),
