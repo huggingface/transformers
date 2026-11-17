@@ -63,18 +63,8 @@ class Ovis2_5VisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        full_attention_indexes = kwargs.get("fullatt_block_indexes")
         if self.layer_types is None:
-            if full_attention_indexes is None:
-                self.layer_types = ["full_attention"] * self.num_hidden_layers
-            else:
-                if isinstance(full_attention_indexes, str):
-                    full_attention_indexes = [int(index) for index in full_attention_indexes.split("|") if index]
-                full_attention_indexes = set(full_attention_indexes)
-                self.layer_types = [
-                    "full_attention" if layer_index in full_attention_indexes else "sliding_attention"
-                    for layer_index in range(self.num_hidden_layers)
-                ]
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
         else:
             self.layer_types = list(self.layer_types)
         super().__post_init__(**kwargs)
