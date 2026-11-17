@@ -18,8 +18,11 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from transformers import (
+    AddedToken,
     AutoProcessor,
     AutoTokenizer,
     DecisionConfig,
@@ -28,6 +31,8 @@ from transformers import (
     pipeline,
 )
 from transformers.decision import DECISION_PROMPT
+from transformers.decision.template_utils import MARK, SPLIT
+from transformers.models.clef.configuration_clef import CLEF_TEMPLATE
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils.chat_template_utils import _compile_jinja_template
 
@@ -268,3 +273,120 @@ class DecisionPipelineTest(unittest.TestCase):
         probabilities = decide(REQUEST)["intent"]["probabilities"]
         self.assertAlmostEqual(probabilities["refund"], 0.9241, places=3)
         self.assertAlmostEqual(probabilities["cancel"], 0.0574, places=3)
+
+
+class DecisionSentinelTokensTest(unittest.TestCase):
+    """`prepare_inputs` adds the sentinels once per tokenizer, and finds out whether it did without `get_vocab()`."""
+
+    NAME = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def fresh(self):
+        return AutoTokenizer.from_pretrained(self.NAME)
+
+    @staticmethod
+    def spy_on_get_vocab(tokenizer):
+        return mock.patch.object(type(tokenizer), "get_vocab", autospec=True, side_effect=type(tokenizer).get_vocab)
+
+    def test_known_sentinels_do_not_rebuild_the_vocabulary(self):
+        tokenizer = self.fresh()
+        with self.spy_on_get_vocab(tokenizer) as spy:
+            render(tokenizer, REQUEST)  # the first call adds the sentinels: it may read the vocabulary
+            spy.reset_mock()
+            render(tokenizer, REQUEST)
+            render(tokenizer, REQUEST)
+            self.assertEqual(spy.call_count, 0)
+
+    def test_fresh_tokenizer_gains_the_two_sentinels_once(self):
+        tokenizer = self.fresh()
+        size = len(tokenizer)
+        self.assertNotIn(MARK, tokenizer.get_vocab())
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size + 2)
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size + 2)
+        self.assertEqual(tokenizer.convert_tokens_to_ids([MARK, SPLIT]), [size, size + 1])
+        added = {token.content: token for token in tokenizer.added_tokens_decoder.values()}
+        for sentinel in (MARK, SPLIT):
+            self.assertTrue(added[sentinel].special)
+            self.assertFalse(added[sentinel].normalized)
+
+    def test_tokenizer_with_the_sentinels_is_left_alone(self):
+        tokenizer = self.fresh()
+        tokenizer.add_tokens([MARK, SPLIT], special_tokens=True)
+        size, ids = len(tokenizer), tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+        before = dict(tokenizer.added_tokens_decoder)
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size)
+        self.assertEqual(tokenizer.convert_tokens_to_ids([MARK, SPLIT]), ids)
+        self.assertEqual(tokenizer.added_tokens_decoder, before)
+
+    def test_same_prompts_as_the_vocabulary_check(self):
+        def reference(request, config):
+            tokenizer = self.fresh()
+            if MARK not in tokenizer.get_vocab():  # the check that `prepare_inputs` used to make
+                tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
+            return [(p.input_ids, p.marks) for p in render(tokenizer, request, config)]
+
+        requests = [
+            {"state": "s", "questions": {"x": {"type": "noul"}}},
+            {"state": "I want a refund", "questions": {"intent": REQUEST["questions"]["intent"]}},
+            {"state": "I want a refund", "questions": {"anger": REQUEST["questions"]["anger"]}},
+            REQUEST,
+        ]
+        for name, config in (("default", DecisionConfig()), ("clef", DecisionConfig(chat_template=CLEF_TEMPLATE))):
+            for request in requests:
+                with self.subTest(template=name, questions=list(request["questions"])):
+                    expected = reference(request, config)
+                    tokenizer = self.fresh()
+                    for _ in range(2):  # sentinels added, then known
+                        self.assertEqual(
+                            [(p.input_ids, p.marks) for p in render(tokenizer, request, config)], expected
+                        )
+
+    def test_tokenizer_without_unknown_token(self):
+        tokenizer = self.fresh()
+        self.assertIsNone(tokenizer.unk_token_id)
+        size = len(tokenizer)
+        render(tokenizer, REQUEST)
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), size + 2)
+
+    def test_tokenizer_with_an_unknown_token_and_sentinels_in_its_base_vocabulary(self):
+        from tokenizers import Tokenizer, models, pre_tokenizers
+
+        from transformers import PreTrainedTokenizerFast
+
+        def build(words):
+            backend = Tokenizer(models.WordLevel({word: i for i, word in enumerate(words)}, unk_token="[UNK]"))
+            backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+            return PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]")
+
+        def prepare(tokenizer):
+            config = DecisionConfig(chat_template="{{ state }}<|mark|>")
+            return config.prepare_inputs({"state": "state", "questions": {"x": {"type": "noul"}}}, tokenizer)
+
+        words = ["[UNK]", "state", "x", "yes", "no"]
+        # an unknown token: an unknown sentinel answers with its id, which is not "known"
+        tokenizer = build(words)
+        self.assertEqual(tokenizer.convert_tokens_to_ids(MARK), tokenizer.unk_token_id)
+        prepare(tokenizer)
+        prepare(tokenizer)
+        self.assertEqual(len(tokenizer), len(words) + 2)
+        # sentinels that are ordinary tokens of the base vocabulary are used as they are
+        tokenizer = build([*words, MARK, SPLIT])
+        ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+        prepare(tokenizer)
+        self.assertEqual((len(tokenizer), tokenizer.convert_tokens_to_ids([MARK, SPLIT])), (len(words) + 2, ids))
+
+    def test_processor_exposing_a_tokenizer(self):
+        tokenizer = self.fresh()
+        size = len(tokenizer)
+        # `getattr(processor, "tokenizer", processor)`: a text-only processor delegates to its tokenizer
+        processor = SimpleNamespace(tokenizer=tokenizer, apply_chat_template=tokenizer.apply_chat_template)
+        with self.spy_on_get_vocab(tokenizer) as spy:
+            first = render(processor, REQUEST)
+            spy.reset_mock()
+            second = render(processor, REQUEST)
+            self.assertEqual(spy.call_count, 0)
+        self.assertEqual(len(tokenizer), size + 2)
+        self.assertEqual([p.input_ids for p in first], [p.input_ids for p in second])

@@ -322,7 +322,11 @@ def prepare_inputs(
     anything [`~image_utils.load_image`] takes.
     """
     tokenizer = getattr(processor, "tokenizer", processor)
-    if MARK not in tokenizer.get_vocab():  # special: they split the text they're in, and requests can't write them
+    # Special: they split the text they're in, and requests can't write them. Known if the O(1) lookup (added and base
+    # vocabulary, fast and slow) finds them: it answers `unk_token_id` (`None` without one) for unknown tokens, and
+    # `get_vocab()` would build the whole vocabulary dictionary on every request
+    mark_id = tokenizer.convert_tokens_to_ids(MARK)
+    if mark_id is None or mark_id == tokenizer.unk_token_id:
         tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
     sentinel_ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
 
