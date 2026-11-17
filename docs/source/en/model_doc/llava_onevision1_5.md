@@ -32,18 +32,30 @@ model_id = "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 
-messages = [{"role": "user", "content": [
-    {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-    {"type": "text", "text": "Describe the image."},
-]}]
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            {"type": "text", "text": "Describe the image."},
+        ],
+    },
+]
 
 inputs = processor.apply_chat_template(
-    messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
 ).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=64)
 
-processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
 ```
 
 ## LlavaOnevision15Config

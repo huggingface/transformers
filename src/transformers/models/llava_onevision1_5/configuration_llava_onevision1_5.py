@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from huggingface_hub.dataclasses import strict
-from packaging import version
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
@@ -51,7 +50,6 @@ class LlavaOnevision15VisionConfig(PreTrainedConfig):
     in_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 14
     spatial_merge_size: int = 2
-    temporal_patch_size: int = 1
     out_hidden_size: int = 4096
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
@@ -65,8 +63,9 @@ class LlavaOnevision15VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        if self.temporal_patch_size != 1:
-            raise ValueError("LLaVA-OneVision-1.5 requires vision_config.temporal_patch_size=1")
+        super().validate_architecture()
+        if self.hidden_size % (4 * self.num_heads) != 0:
+            raise ValueError("hidden_size must be divisible by 4 * num_heads for 2D vision RoPE")
 
 
 @auto_docstring(checkpoint="Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf")
@@ -102,11 +101,7 @@ class LlavaOnevision15Config(PreTrainedConfig):
         if isinstance(self.text_config, dict) and self.text_config.get("model_type") == "LLaVAOneVision1_5_text":
             self.text_config = {**self.text_config, "model_type": "qwen3"}
         super().__post_init__(**kwargs)
-        # Pre-v5 checkpoints could serialize a root tying value different from the text backbone's actual setting.
-        if self.transformers_version is not None and version.parse(self.transformers_version) < version.parse("5.0.0"):
-            self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        else:
-            self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
     def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:

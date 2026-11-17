@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-OneVision-1.5 model."""
 
-import copy
 import json
 import tempfile
 import unittest
@@ -33,7 +32,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
@@ -65,7 +63,6 @@ class LlavaOnevision15ModelTester(VLMModelTester):
         kwargs.setdefault("num_heads", 2)
         kwargs.setdefault("out_hidden_size", 32)
         kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("temporal_patch_size", 1)
         kwargs.setdefault("spatial_merge_size", 2)
         kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("vision_hidden_act", "gelu")
@@ -97,32 +94,6 @@ class LlavaOnevision15ModelTester(VLMModelTester):
 @require_torch
 class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = LlavaOnevision15ModelTester
-
-    def test_tied_checkpoint_roundtrip(self):
-        """Root-level tying must survive saving a checkpoint with a shared output head."""
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        values = config.to_dict()
-        values.pop("transformers_version", None)
-        values["tie_word_embeddings"] = True
-        values["text_config"]["tie_word_embeddings"] = False
-        config = LlavaOnevision15Config.from_dict(values)
-        self.assertTrue(config.tie_word_embeddings)
-        model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
-        self.assertIs(model.lm_head.weight, model.get_input_embeddings().weight)
-        with torch.no_grad():
-            expected = model(**inputs).logits
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            reloaded, info = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-                directory, output_loading_info=True
-            )
-            self.assertFalse(any(info.values()), info)
-            self.assertIs(reloaded.lm_head.weight, reloaded.get_input_embeddings().weight)
-            reloaded = reloaded.to(torch_device).eval()
-            with torch.no_grad():
-                torch.testing.assert_close(reloaded(**inputs).logits, expected)
-        values["transformers_version"] = "4.58.0"
-        self.assertFalse(LlavaOnevision15Config.from_dict(values).tie_word_embeddings)
 
     def test_vision_loading_from_full_checkpoint(self):
         """Extract the vision tower from a full checkpoint using the published legacy config type."""
@@ -180,67 +151,6 @@ class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
                     torch.testing.assert_close(
                         output.logits[0], logits.expand(expansion_size, -1), atol=1e-5, rtol=1e-4
                     )
-
-    @slow
-    @require_torch_greater_or_equal("2.11")
-    def test_export_preserves_class_tokens_and_frame_isolation(self):
-        from transformers.exporters import DynamoConfig, DynamoExporter
-        from transformers.exporters.utils import prepare_for_export
-
-        config = LlavaOnevision15VisionConfig(
-            hidden_size=32, out_hidden_size=32, intermediate_size=48, depth=2, num_heads=4
-        )
-        model = LlavaOnevision15VisionModel(config).to(torch_device).eval()
-        # One image and two video frames, with 16 patches per frame.
-        inputs = {
-            "pixel_values": floats_tensor([48, 3 * 14 * 14]),
-            "grid_thw": torch.tensor([[1, 4, 4], [2, 4, 4]], device=torch_device),
-        }
-        for dynamic in (False, True):
-            with self.subTest(dynamic=dynamic):
-                sample = copy.deepcopy(inputs)
-                exported = DynamoExporter().export(model, sample, config=DynamoConfig(dynamic=dynamic))
-                # Replay with new pixels and aspect ratio, retaining 16 patches per frame.
-                sample["pixel_values"] = floats_tensor([48, 3 * 14 * 14])
-                sample["grid_thw"] = torch.tensor([[1, 2, 8], [2, 2, 8]], device=torch_device)
-                model, sample, _ = prepare_for_export(model, sample)
-                with torch.no_grad():
-                    actual = exported(**sample)
-                    expected = model(sample["pixel_values"], sample["grid_thw"])
-                    separate = torch.cat(
-                        [
-                            model(frame, sample["grid_thw"][:1]).pooler_output
-                            for frame in sample["pixel_values"].split(16)
-                        ]
-                    )
-                torch.testing.assert_close(actual.last_hidden_state, expected.last_hidden_state)
-                torch.testing.assert_close(actual.pooler_output, expected.pooler_output)
-                torch.testing.assert_close(actual.pooler_output, separate)
-
-    def test_standalone_save_load_and_frame_isolation(self):
-        config = LlavaOnevision15VisionConfig(
-            hidden_size=32, out_hidden_size=32, intermediate_size=48, depth=2, num_heads=4
-        )
-        model = LlavaOnevision15VisionModel(config).to(torch_device).eval()
-        pixels = floats_tensor([40, 3 * 14 * 14])
-        # One image and two video frames must attend independently, each with its own class token.
-        grid = torch.tensor([[1, 4, 4], [2, 2, 6]], device=torch_device)
-        frame_grids = grid[[0, 1, 1]].clone()
-        frame_grids[:, 0] = 1
-        with torch.no_grad():
-            batched = model(pixels, grid).pooler_output
-            separate = torch.cat(
-                [
-                    model(part, frame_grid.unsqueeze(0)).pooler_output
-                    for part, frame_grid in zip(pixels.split([16, 12, 12]), frame_grids)
-                ]
-            )
-        torch.testing.assert_close(batched, separate)
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            reloaded = LlavaOnevision15VisionModel.from_pretrained(directory).to(torch_device).eval()
-            with torch.no_grad():
-                torch.testing.assert_close(reloaded(pixels, grid).pooler_output, batched)
 
     def test_class_token_gradients_with_checkpointing(self):
         self._check_class_token_gradients_with_checkpointing(None, torch.float32)

@@ -46,18 +46,21 @@ from .configuration_llava_onevision1_5 import LlavaOnevision15Config, LlavaOnevi
 
 
 class LlavaOnevision15VisionPatchEmbed(nn.Module):
-    def __init__(self, config: LlavaOnevision15VisionConfig):
+    def __init__(self, config: LlavaOnevision15VisionConfig) -> None:
         super().__init__()
         self.patch_size = config.patch_size
-        self.in_channels = config.in_channels * config.temporal_patch_size
+        self.in_channels = config.in_channels
         self.embed_dim = config.hidden_size
+        kernel_size = [self.patch_size, self.patch_size]
         self.proj = nn.Conv2d(
-            self.in_channels, self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, bias=False
+            self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
         hidden_states = hidden_states.view(-1, self.in_channels, self.patch_size, self.patch_size)
-        return self.proj(hidden_states.to(self.proj.weight.dtype)).view(-1, self.embed_dim)
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
 
 
 class LlavaOnevision15VisionPatchMerger(nn.Module):
@@ -336,7 +339,8 @@ class LlavaOnevision15PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False
+
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -357,7 +361,6 @@ def get_vision_frame_lengths(grid_thw: torch.Tensor, kwargs: dict | None = None)
 @auto_docstring
 class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
     config: LlavaOnevision15VisionConfig
-    base_model_prefix = "visual"
     input_modalities = ("image", "video")
     _input_embed_layer = "patch_embed"
     _can_record_outputs = {
@@ -380,7 +383,12 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> BaseModelOutputWithPooling:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        grid_thw: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.Tensor` of shape `(num_patches, num_channels * patch_size * patch_size)`):
             Flattened image or video patches in spatial merge order.
@@ -390,11 +398,15 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         hidden_states = self.patch_embed(pixel_values)
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cos, sin = self.rotary_pos_emb(hidden_states, position_ids)
+
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         frame_lengths = get_vision_frame_lengths(grid_thw, kwargs=kwargs)
+        # Each image/video frame gets one prepended CLS token, increasing its length by one.
+        # Cumulative boundaries shift by the number of preceding frames, and max_seqlen increases by one.
         cu_seqlens = cu_seqlens + torch.arange(cu_seqlens.shape[0], device=cu_seqlens.device, dtype=cu_seqlens.dtype)
         if max_seqlen is not None:
             max_seqlen += 1
+
         cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
         hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
         cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
@@ -403,6 +415,7 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         if self.training and self.is_activation_checkpointing:
             # Reentrant checkpointing only tracks tensors passed as positional inputs, not nested tuples.
             position_embeddings = torch.stack(position_embeddings)
+
         hidden_states = self.pre_layernorm(hidden_states)
         for block in self.blocks:
             hidden_states = block(hidden_states, cu_seqlens, position_embeddings, max_seqlen=max_seqlen, **kwargs)
@@ -643,14 +656,14 @@ class LlavaOnevision15ForConditionalGeneration(LlavaOnevision15PreTrainedModel, 
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        second_per_grid_ts: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        second_per_grid_ts: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
         second_per_grid_ts (`torch.Tensor`, *optional*):
-            Video frame intervals supplied by the processor. Text positions remain one-dimensional.
+            Video timing metadata accepted from the shared processor. Text positions remain one-dimensional.
 
         Example:
 
@@ -660,24 +673,37 @@ class LlavaOnevision15ForConditionalGeneration(LlavaOnevision15PreTrainedModel, 
         >>> model_id = "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LlavaOnevision15ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-        >>> messages = [{"role": "user", "content": [
-        ...     {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-        ...     {"type": "text", "text": "Describe the image."},
-        ... ]}]
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        ...             },
+        ...             {"type": "text", "text": "Describe the image."},
+        ...         ],
+        ...     },
+        ... ]
         >>> inputs = processor.apply_chat_template(
-        ...     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
         ... ).to(model.device)
         >>> output = model.generate(**inputs, max_new_tokens=64)
-        >>> processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        >>> processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         ```
         """
 
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
+            second_per_grid_ts=second_per_grid_ts,
             mm_token_type_ids=mm_token_type_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -688,7 +714,8 @@ class LlavaOnevision15ForConditionalGeneration(LlavaOnevision15PreTrainedModel, 
             **kwargs,
         )
 
-        hidden_states = outputs.last_hidden_state
+        hidden_states = outputs[0]
+
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
