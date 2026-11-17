@@ -663,13 +663,14 @@ ws         = *( SP / TAB / LF / CR )
   implementation returns a rounded value. A float that overflows to infinity (`1e999`) is an error, and a float that
   underflows (`1e-999`) is `0.0`.
 - **Strings.** Both quote styles behave the same. The escapes are JSON's escapes plus `\'`. A `\uXXXX` surrogate
-  pair becomes one character, and a lone surrogate is an error. Any other backslash sequence is an error, including
-  `\d`, `\x41`, and a `\u` that is not followed by four hex digits. A string cannot contain a raw line break, but
-  other raw characters such as a tab are allowed.
+  pair becomes one character, and a lone surrogate, escaped or raw, is an error. Any other backslash sequence is an
+  error, including `\d`, `\x41`, and a `\u` that is not followed by four hex digits. A string cannot contain a raw
+  line break, but other raw characters such as a tab are allowed.
 - **Whitespace.** Only space, tab, LF and CR. Any other whitespace character outside a string is an error.
 - **Commas.** Only between items. A trailing comma is an error.
 - **Duplicates.** A repeated argument name or a repeated dict key is an error.
-- **Nesting.** Lists and dicts nest up to 100 levels deep. Deeper input is an ordinary error.
+- **Nesting.** Lists and dicts nest up to 100 levels deep, not counting the call list itself. A 101st level is an
+  ordinary error, even when it is empty.
 - **Errors.** Anything outside the grammar is an error for the whole region. There are no partial results.
 
 Languages with a single number type cannot tell `1.0` from `1`, so compare numbers by value when testing.

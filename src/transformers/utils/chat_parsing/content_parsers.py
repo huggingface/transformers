@@ -144,6 +144,7 @@ _CALL_LIST_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:[-.][A-Za-z0-9_]+)*")
 _CALL_LIST_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?")
 _CALL_LIST_STRING = re.compile(r"""'((?:[^'\\\n\r]|\\.)*)'|"((?:[^"\\\n\r]|\\.)*)\"""", flags=re.DOTALL)
 _CALL_LIST_UNICODE_ESCAPE = re.compile(r"u([0-9a-fA-F]{4})")
+_CALL_LIST_SURROGATE = re.compile(r"[\ud800-\udfff]")
 _CALL_LIST_LOW_SURROGATE = re.compile(r"\\u([dD][c-fC-F][0-9a-fA-F]{2})")
 _CALL_LIST_ESCAPES = {"\\": "\\", "'": "'", '"': '"', "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
 _CALL_LIST_CONSTANTS = {"True": True, "true": True, "False": False, "false": False, "None": None, "null": None}
@@ -201,6 +202,8 @@ def _python_call_list(text: str, args: dict) -> list[dict]:
         if match is None:
             fail("invalid string")
         body = match[1] if match[1] is not None else match[2]
+        if _CALL_LIST_SURROGATE.search(body) is not None:
+            fail("lone surrogate in the string starting")
         out, start = [], 0
         while (backslash := body.find("\\", start)) != -1:
             out.append(body[start:backslash])
@@ -221,16 +224,16 @@ def _python_call_list(text: str, args: dict) -> list[dict]:
         return "".join(out) + body[start:]
 
     def value(depth: int) -> Any:
+        # `depth` is the number of lists and dicts that enclose this value.
         nonlocal position
-        if depth > _CALL_LIST_MAX_DEPTH:
-            fail("value nested too deeply")
         if at("'") or at('"'):
             return string()
-        if at("["):
+        if at("[") or at("{"):
+            if depth >= _CALL_LIST_MAX_DEPTH:
+                fail(f"lists and dicts nested more than {_CALL_LIST_MAX_DEPTH} levels deep")
             position += 1
-            return items("]", lambda: value(depth + 1))
-        if at("{"):
-            position += 1
+            if text[position - 1] == "[":
+                return items("]", lambda: value(depth + 1))
             return unique(items("}", lambda: pair(depth + 1)))
         if (match := _CALL_LIST_NUMBER.match(text, position)) is not None:
             is_integer = match[1] is None and match[2] is None
@@ -268,7 +271,7 @@ def _python_call_list(text: str, args: dict) -> list[dict]:
         if not at("="):
             fail("expected '=' (positional arguments are not supported)")
         position += 1
-        return key, value(1)
+        return key, value(0)
 
     def call() -> dict:
         function_name = name("a function name")
