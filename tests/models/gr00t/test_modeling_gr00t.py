@@ -18,7 +18,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import Gr00tConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -324,3 +324,58 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
     )
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
+
+
+@slow
+@require_torch_accelerator
+class Gr00tModelIntegrationTest(unittest.TestCase):
+    checkpoint = "nvidia/GR00T-N1.7-3B"
+
+    @staticmethod
+    def get_inputs():
+        # Tokenized inputs built by hand, as the tokenizer of the backbone repository is gated: two 256x256 images
+        # (64 image tokens each) between text tokens
+        generator = torch.Generator().manual_seed(0)
+        image_tokens = [151652] + [151655] * 64 + [151653]
+        input_ids = torch.tensor(
+            [
+                torch.randint(1000, 30000, (4,), generator=generator).tolist()
+                + image_tokens
+                + image_tokens
+                + torch.randint(1000, 30000, (12,), generator=generator).tolist()
+            ]
+        )
+        return {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones_like(input_ids),
+            "mm_token_type_ids": (input_ids == 151655).int(),
+            "pixel_values": torch.randn(2 * 256, 1536, generator=generator),
+            "image_grid_thw": torch.tensor([[1, 16, 16], [1, 16, 16]]),
+            "state": torch.rand(1, 132, generator=generator) * 2 - 1,
+            "embodiment_id": torch.tensor([24]),
+            "noise": torch.randn(1, 40, 132, generator=generator),
+        }
+
+    def test_original_checkpoint_loads_all_weights(self):
+        _, loading_info = Gr00tForConditionalGeneration.from_pretrained(self.checkpoint, output_loading_info=True)
+        for key, values in loading_info.items():
+            self.assertEqual(len(values), 0, f"{key}: {values}")
+
+    def test_sample_actions(self):
+        model = Gr00tForConditionalGeneration.from_pretrained(self.checkpoint, dtype=torch.float32)
+        model = model.to(torch_device).eval()
+        inputs = {key: value.to(torch_device) for key, value in self.get_inputs().items()}
+        with torch.no_grad():
+            actions = model.sample_actions(**inputs)
+
+        self.assertEqual(tuple(actions.shape), (1, 40, 132))
+        expected_first_steps = torch.tensor(
+            [
+                [-0.1292, -0.0473, 0.1391, 0.9806, -0.1003, -0.0310],
+                [-0.0541, 0.1053, 0.0915, 1.0008, 0.0806, 0.0461],
+                [-0.0534, 0.1125, 0.0912, 1.0006, 0.0559, 0.0444],
+            ]
+        )
+        expected_last_step = torch.tensor([0.0054, -0.0755, -0.1167, 0.9673, 0.1616, -0.1279])
+        torch.testing.assert_close(actions[0, :3, :6].cpu(), expected_first_steps, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(actions[0, -1, :6].cpu(), expected_last_step, atol=1e-3, rtol=1e-3)
