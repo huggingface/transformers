@@ -46,6 +46,8 @@ from transformers.cli.serving.utils import (
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
+    split_model_id,
+    split_revision,
 )
 from transformers.testing_utils import (
     require_audio,
@@ -545,6 +547,23 @@ class TestModelManager(unittest.TestCase):
 
     def test_process_model_name_preserves_revision(self):
         self.assertEqual(ModelManager.process_model_name("org/model@dev"), "org/model@dev")
+
+    def test_local_path_with_at_symbol(self):
+        # The `@` of an existing local path is part of the path, not a revision.
+        with tempfile.TemporaryDirectory(prefix="ckpt@1000_") as local_path:
+            self.assertEqual(ModelManager.process_model_name(local_path), local_path)
+            self.assertEqual(split_revision(local_path), (local_path, None))
+
+    def test_split_revision(self):
+        self.assertEqual(split_revision("org/model@main"), ("org/model", "main"))
+        self.assertEqual(split_revision("org/model@refs/pr/12"), ("org/model", "refs/pr/12"))
+
+    def test_split_model_id(self):
+        self.assertEqual(split_model_id("org/model"), ("org/model", None))
+        self.assertEqual(split_model_id("org/model:weights.gguf"), ("org/model", "weights.gguf"))
+        # The colon of a local path is part of the path, not a GGUF file.
+        self.assertEqual(split_model_id("/runs/run:1/ckpt"), ("/runs/run:1/ckpt", None))
+        self.assertEqual(split_model_id("/runs/run:1/ckpt:weights.gguf"), ("/runs/run:1/ckpt", "weights.gguf"))
 
     def test_quantization_config_4bit(self):
         mm = ModelManager(quantization="bnb-4bit")
