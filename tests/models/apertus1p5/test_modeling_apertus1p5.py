@@ -240,6 +240,10 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
         pass
 
+    @unittest.skip("Gated repo `swiss-ai/Apertus-v1.5-8B`")
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
