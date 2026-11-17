@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from collections.abc import Callable
 
@@ -219,15 +218,6 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-# Missing from the hub config
-INKLING2_QUANTIZATION_CONFIG = {
-    "quant_method": "fp8",
-    "weight_block_size": [1, 32],
-    "scale_fmt": "ue8m0",
-    "modules_to_not_convert": ["model.llm.unembed", "model.visual", "model.llm.layers.*.attn.*"],
-}
-
-
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2Config(InklingConfig):
@@ -246,14 +236,6 @@ class Inkling2Config(InklingConfig):
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not needed for Inkling2")
-
-    @classmethod
-    def from_dict(cls, config_dict: dict, **kwargs):
-        # Quantization config is missing from the hub config: only added to an original checkpoint's config, not to
-        # one saved by Transformers (which has its own, or none once dequantized)
-        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
-            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
-        return PreTrainedConfig.from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:
