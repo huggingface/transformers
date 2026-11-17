@@ -598,17 +598,10 @@ class MuseSparkTextModel(MuseGlimmerTextModel):
 
 
 class MuseSparkVisionPatchEmbedder(MuseGlimmerVisionPatchEmbedder):
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
-
+    def get_interpolation_inputs(self, grid_thw: torch.Tensor, kwargs: dict | None = None):
         # Patch (h, w) reads the position table at (w, h): ref code passes
         # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+        return get_vision_interpolation_indices_and_weights(
             grid_thw[:, [0, 2, 1]],
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
@@ -617,8 +610,6 @@ class MuseSparkVisionPatchEmbedder(MuseGlimmerVisionPatchEmbedder):
             padding=self.interpolation_padding,
             kwargs=kwargs,
         )
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseSparkVisionModel(MuseGlimmerVisionModel):

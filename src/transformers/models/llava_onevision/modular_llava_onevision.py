@@ -405,6 +405,24 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         super().__init__(config)
         del self.vision_resampler
 
+    def get_image_num_patches(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_pack_index(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_pack_index_per_image(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_patch_index(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_image_embeddings(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
     def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
@@ -813,6 +831,12 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
+
+    def get_image_embeddings(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("LlavaOnevision packs its image features differently")
 
     @merge_with_config_defaults
     @can_return_tuple

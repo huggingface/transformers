@@ -15,6 +15,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -421,6 +422,36 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the position embedding's `interp_indices` and `interp_weights`, the rotary `position_ids` of the
+        patches, and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the forward, they keep
+        `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are returned as they
+        are; only the config and the tower's constants are read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+                The temporal, height and width dimensions of feature shape for each image.
+        """
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=self.config.spatial_merge_size,
+            kwargs=kwargs,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+        }
 
     @merge_with_config_defaults
     @capture_outputs

@@ -78,6 +78,10 @@ class AriaForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
 
     model_tester_class = AriaVisionText2TextModelTester
 
+    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     @pytest.mark.xfail(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )

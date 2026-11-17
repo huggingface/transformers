@@ -14,6 +14,7 @@
 
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -32,7 +33,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
-    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
@@ -470,6 +470,32 @@ class GlmImageModel(Glm4vModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`, as
+        `get_image_features` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export` free
+        of those operations. Only the config and the tower's constants are read.
+
+        Args:
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of each image's patch grid, the target grids included.
+            images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+                Number of images (including target grids) for each sample in the batch.
+        """
+        if image_grid_thw is None:
+            return {}
+        source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+        if source_grids.shape[0] == 0:
+            return {}
+        tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -669,10 +695,6 @@ class GlmImageModel(Glm4vModel):
     def get_video_embeddings(self):
         raise AttributeError("Not needed for GlmImage")
 
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed for GlmImage")
-
-    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -693,8 +715,7 @@ class GlmImageModel(Glm4vModel):
         ):
             image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
 
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
 
@@ -872,6 +893,23 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each source image's patch grid.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`GlmImageModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(
