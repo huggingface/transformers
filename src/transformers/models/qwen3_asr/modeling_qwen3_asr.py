@@ -21,6 +21,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -37,7 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -279,6 +285,30 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
+def get_valid_indices(
+    chunk_lengths: torch.Tensor, n_window: int, max_len_after_cnn: int | None = None, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
+
+    Args:
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        n_window: half the chunk size (in raw frames).
+        max_len_after_cnn: length of each chunk after the CNN, for chunks padded to a fixed length; the longest
+            chunk's by default.
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
+
+    Returns:
+        `(total_valid,)` flat indices into the `(num_chunks * max_len_after_cnn)` grid.
+    """
+    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
+        return valid_indices
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
+    if max_len_after_cnn is None:
+        max_len_after_cnn = feature_lens_after_cnn.max().item()
+    mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
+    return mask.flatten().nonzero().squeeze(-1)
+
+
 def get_audio_cu_seqlens(
     chunk_lengths: torch.Tensor,
     feature_lens: torch.Tensor,
@@ -370,6 +400,30 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
+    @merge_with_config_defaults
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `input_features_mask` with data-dependent operations (host syncs, loops
+        over the clips): the windowed attention's `cu_seqlens` and `max_seqlen`, and the non-padding frames'
+        `valid_indices`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
+        operations.
+
+        Args:
+            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+                1 for valid mel frames and 0 for padding.
+        """
+        chunk_lengths = input_features_mask.view(input_features_mask.shape[0], -1, self.n_window * 2).sum(-1)
+        chunk_lengths = chunk_lengths.reshape(-1).to(torch.long)
+        feature_lens = input_features_mask.sum(-1).to(torch.long)
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
+            "valid_indices": get_valid_indices(
+                chunk_lengths, self.n_window, int(self._post_cnn_length(torch.tensor(self.n_window * 2)))
+            ),
+        }
+
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -420,11 +474,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
-        chunk_post_cnn_lens = self._post_cnn_length(
-            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
-        )
-        valid_mask = torch.arange(time_steps, device=input_features.device) < chunk_post_cnn_lens.unsqueeze(1)
-        valid_indices = valid_mask.flatten().nonzero().squeeze(-1)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, time_steps, kwargs=kwargs)
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
@@ -484,6 +534,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
         self.multi_modal_projector = Qwen3ASRMultiModalProjector(config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
@@ -580,6 +631,20 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
         )
+
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor | None = None, **kwargs) -> dict[str, Any]:
+        r"""
+        The audio encoder's data-dependent inputs (see [`Qwen3ASREncoder.get_data_dependent_inputs`]), prefixed
+        `audio_`, as `get_audio_features` takes them.
+
+        Args:
+            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`, *optional*):
+                1 for valid mel frames and 0 for padding.
+        """
+        if input_features_mask is None:
+            return {}
+        inputs = self.audio_tower.get_data_dependent_inputs(input_features_mask)
+        return {f"audio_{name}": value for name, value in inputs.items()}
 
 
 @auto_docstring(
@@ -688,6 +753,10 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Qwen3ASRModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 @auto_docstring(

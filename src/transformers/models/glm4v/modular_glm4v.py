@@ -13,6 +13,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from itertools import accumulate
+from typing import Any
 
 import numpy as np
 import torch
@@ -593,6 +594,21 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         self.gradient_checkpointing = False
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
+        images): the rotary `position_ids` and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the
+        forward, they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are
+        returned as they are; only the config and the tower's constants are read.
+
+        Args:
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width patch-grid dimensions for each packed image or video.
+        """
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
 
     @merge_with_config_defaults
     @capture_outputs
