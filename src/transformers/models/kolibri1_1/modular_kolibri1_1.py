@@ -84,6 +84,19 @@ class Kolibri1_1Config(Kolibri1Config):
     """
 
     model_type = "kolibri1_1"
+    # No attention entries: an indexer scores keys with the query heads of key head 0 and must select the same keys
+    # on every rank, so the heads cannot be sharded
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     index_layers: list[int] | None = None
     kv_source_layers: list[int] | None = None

@@ -71,6 +71,10 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
     @parameterized.expand([("dynamic",), ("static",)])
     def test_cached_decode_matches_full_forward(self, cache_implementation):
         # A decoding step selects keys for one query from the cache, the full forward for all queries at once

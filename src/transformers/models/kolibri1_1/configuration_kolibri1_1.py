@@ -71,19 +71,18 @@ class Kolibri1_1Config(PreTrainedConfig):
     attribute_map = {
         "num_experts": "num_local_experts",
     }
+    # No attention entries: an indexer scores keys with the query heads of key head 0 and must select the same keys
+    # on every rank, so the heads cannot be sharded
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     # Token dispatch by default, so `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`)
     base_model_ep_plan = {
