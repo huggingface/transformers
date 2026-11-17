@@ -47,8 +47,95 @@ if is_torch_available():
     from torch import nn
 
     from transformers import AutoModelForDecision, ClefForDecision
+    from transformers.activations import ACT2FN
     from transformers.modeling_layers import GradientCheckpointingLayer
     from transformers.models.clef.modeling_clef import ClefDecisionOutput
+
+
+def upstream_clef_scores(model, input_ids, marks, num_options, question_type_ids):
+    """
+    The scores of the options of one prompt by the arithmetic of upstream's `ClefForDecision.forward` (its
+    `modeling_clef.py` at 4f4570dd2c, Apache-2.0), frozen here with eager attention and the weights of `model` (a joint
+    head): a reference the batched head of today must keep, which the modules of the model cannot change.
+    """
+    config = model.config
+    activation = ACT2FN[config.hidden_act]
+
+    def attention(module, hidden_states, memory=None):
+        memory = hidden_states if memory is None else memory
+        head_dim = config.hidden_size // config.num_attention_heads
+        groups = config.num_attention_heads // config.num_key_value_heads
+        query = module.q_proj(hidden_states).view(*hidden_states.shape[:-1], -1, head_dim).transpose(1, 2)
+        key = module.k_proj(memory).view(*memory.shape[:-1], -1, head_dim).transpose(1, 2)
+        value = module.v_proj(memory).view(*memory.shape[:-1], -1, head_dim).transpose(1, 2)
+        key, value = key.repeat_interleave(groups, dim=1), value.repeat_interleave(groups, dim=1)
+        weights = torch.matmul(query, key.transpose(2, 3)) * head_dim**-0.5
+        weights = nn.functional.softmax(weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        output = torch.matmul(weights, value).transpose(1, 2).contiguous()
+        return module.o_proj(output.reshape(*hidden_states.shape[:-1], -1).contiguous())
+
+    def mlp(module, hidden_states):
+        return module.fc2(activation(module.fc1(hidden_states)))
+
+    marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]
+    hidden_states = model.model(input_ids=input_ids, use_cache=False).last_hidden_state
+    option_question_ids = torch.repeat_interleave(num_options)
+    # Embeddings: each question marks the span of its instruction, then of each of its options
+    embeddings = model.embeddings
+    dtype = hidden_states.dtype
+    spans_per_question = num_options + 1
+    instructions = spans_per_question.cumsum(0) - spans_per_question
+    is_option = torch.ones_like(marks[::2], dtype=torch.bool).index_fill(0, instructions, False)
+    boundaries = torch.cat([marks.new_zeros(1), marks, marks.new_full((1,), input_ids.shape[-1])])
+    segment_sizes = boundaries.diff().tolist()
+    hidden_states = embeddings.hidden_norm(hidden_states)
+    span_states = [segment.float().mean(1) for segment in torch.split(hidden_states, segment_sizes, dim=1)[1::2]]
+    span_lexical = [
+        model.lm_head.weight[segment].float().mean(1) for segment in torch.split(input_ids, segment_sizes, dim=1)[1::2]
+    ]
+    span_states, span_lexical = torch.stack(span_states, dim=1), torch.stack(span_lexical, dim=1)
+    questions, contexts = span_states[:, instructions].to(dtype), span_states[:, is_option].to(dtype)
+    lexical = span_lexical[:, is_option].to(dtype)
+    global_state = hidden_states[:, -1:]
+    options = (
+        embeddings.option_context_projection(contexts)
+        + embeddings.option_lexical_projection(lexical)
+        + embeddings.option_question_projection(questions).repeat_interleave(num_options, dim=1)
+    )
+    anchors = nn.functional.normalize(questions + global_state, dim=-1).repeat_interleave(num_options, dim=1)
+    priors = (nn.functional.normalize(lexical, dim=-1) * anchors).sum(-1)
+    fields = embeddings.question_projection(questions)
+    field_embeddings = embeddings.global_projection(global_state) + embeddings.type_embedding(question_type_ids)
+    memory = embeddings.memory_projection(hidden_states)
+    # Encoder
+    encoder = model.encoder
+    for layer in encoder.evidence_layers:
+        attended = attention(layer.cross_attn, layer.input_layernorm(options), layer.memory_layernorm(memory))
+        options = options + attended
+        options = options + mlp(layer.mlp, layer.post_attention_layernorm(options))
+    routing_logits = (fields[:, :, None] * options[:, None]).sum(-1) / math.sqrt(fields.shape[-1])
+    is_other_option = nn.functional.one_hot(option_question_ids, fields.shape[1]).T == 0
+    routing_logits[:, is_other_option] = torch.finfo(fields.dtype).min
+    summaries = routing_logits.softmax(-1, dtype=torch.float32) @ options.float()
+    fields = fields + encoder.option_summary_norm(summaries.to(fields.dtype)) + field_embeddings
+    for layer in encoder.layers:
+        fields = fields + attention(layer.self_attn, layer.input_layernorm(fields))
+        fields = fields + attention(layer.encoder_attn, layer.post_attention_layernorm(fields), memory)
+        fields = fields + mlp(layer.mlp, layer.final_layernorm(fields))
+    fields = encoder.field_norm(fields)
+    # Scorer
+    scorer = model.scorer
+    fields = fields[:, option_question_ids]
+    prior_scale, joint_scale = (
+        torch.stack([scorer.prior_logit_scale, scorer.joint_logit_scale]).clamp(max=math.log(100.0)).exp()
+    )
+    options = scorer.option_norm(options)
+    features = torch.cat([fields, options, fields * options, (fields - options).abs()], dim=-1)
+    joint = (
+        joint_scale * nn.functional.cosine_similarity(fields, options, dim=-1)
+        + mlp(scorer.residual_scorer, features)[..., 0]
+    )
+    return (prior_scale * priors + torch.sigmoid(scorer.residual_gate) * joint)[0]
 
 
 @require_torch
@@ -409,6 +496,32 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         with mock.patch.object(Qwen2Model, "get_input_embeddings", return_value=nn.Embedding(2, 2)):
             with self.assertRaisesRegex(ValueError, r"input embeddings.*head_type=\"cosine\""):
                 ClefForDecision(self.config)
+
+    def test_batch_of_one_matches_upstream_arithmetic(self):
+        # Upstream's arithmetic, frozen in `upstream_clef_scores`: a batch of one prompt scores as it did, within the
+        # float32 rounding of the span pooling (it sums each span relative to its first token) and bit for bit in
+        # bfloat16, on the joint head and a causal backbone
+        config = copy.deepcopy(self.config)
+        config._attn_implementation = "eager"
+        torch.manual_seed(0)
+        model = ClefForDecision(config).eval()
+        with torch.no_grad():
+            for module in model.modules():  # weights away from their initial values (the scales start at zero)
+                for parameter in module.parameters(recurse=False):
+                    parameter.add_(0.1 * torch.randn_like(parameter))
+        for dtype, tolerance in ((torch.float32, 1e-6), (torch.bfloat16, 0.0)):
+            model.to(dtype)
+            for index, prompt in enumerate(self.prompts):
+                with self.subTest(dtype=str(dtype), prompt=index), torch.no_grad():
+                    inputs = self.model_inputs(prompt)
+                    expected = upstream_clef_scores(model, **inputs)
+                    output = model(**inputs)
+                    self.assertEqual(expected.dtype, dtype)
+                    scores = output.logits[output.option_mask]
+                    self.assertEqual(scores.shape, expected.shape)
+                    difference = (scores - expected.float()).abs().max().item()
+                    self.assertLessEqual(difference, tolerance)
+                    self.assertGreater(expected.abs().max().item(), 0.1)
 
     def test_decide_and_pipeline_unchanged(self):
         torch.manual_seed(0)
