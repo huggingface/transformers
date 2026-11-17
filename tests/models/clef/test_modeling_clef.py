@@ -16,6 +16,8 @@ import copy
 import hashlib
 import json
 import math
+import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -23,7 +25,15 @@ from pathlib import Path
 
 from safetensors.torch import load_file, save_file
 
-from transformers import BertConfig, ClefConfig, ModernBertConfig, is_torch_available, logging, pipeline
+from transformers import (
+    AutoTokenizer,
+    BertConfig,
+    ClefConfig,
+    ModernBertConfig,
+    is_torch_available,
+    logging,
+    pipeline,
+)
 from transformers.decision import Question
 from transformers.models.clef.configuration_clef import CLEF_PLAIN_TEMPLATE, CLEF_TEMPLATE
 from transformers.testing_utils import CaptureLogger, require_torch, require_torch_accelerator, slow
@@ -1250,6 +1260,382 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     def test_pipeline_with_cosine(self):
         model = self.cosine_model()
         decide = pipeline("decision", model=model, tokenizer=self.tokenizer, decision_config=self.decision_config)
+        answers = decide(self.test["request"])
+        self.assertEqual(list(answers), list(self.test["request"]["questions"]))
+        for answer in answers.values():
+            probabilities = answer.get("probabilities")
+            if probabilities is not None:
+                self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
+
+    # Conversion of the checkpoints of clef and of the folders derived from them, each synthesised from tiny models
+
+    uncapped = {"noul": None, "choice": None, "score": None}
+    # The sizes of a new joint head on a backbone of `backbone_hidden_size`
+    joint_sizes = {
+        key: value for key, value in tiny_sizes.items() if key not in ("backbone_hidden_size", "num_key_value_heads")
+    }
+    converter_logger = "transformers.models.clef.convert_clef_weights_to_hf"
+
+    @staticmethod
+    def head_state(model):
+        """The weights of the head of `model`, under the names of the original checkpoints, and all of its weights."""
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            state = load_file(f"{directory}/model.safetensors")
+        return {key: value for key, value in state.items() if not key.startswith(("model.", "lm_head."))}, state
+
+    @staticmethod
+    def joint_head_config(config):
+        """The `joint_head_config.json` of a clef checkpoint with the head of `config`."""
+        return {
+            "hidden_size": config.backbone_hidden_size,
+            "width": config.hidden_size,
+            "routing_layers": config.num_evidence_layers,
+            "layers": config.num_hidden_layers,
+            "heads": config.num_attention_heads,
+            "feedforward": config.intermediate_size,
+            "dropout": 0.0,
+        }
+
+    @staticmethod
+    def write_source(directory, backbone, tokenizer, head=None, head_config=None, unsloth=None, auto_map=None):
+        """A folder of a decision checkpoint: its backbone, tokenizer, and the files of its head when given."""
+        backbone.save_pretrained(directory)
+        tokenizer.save_pretrained(directory)
+        if auto_map is not None:
+            config = json.loads(Path(directory, "config.json").read_text(encoding="utf-8"))
+            Path(directory, "config.json").write_text(json.dumps({**config, "auto_map": auto_map}), encoding="utf-8")
+        if head is not None:
+            save_file(head, f"{directory}/joint_head.safetensors", metadata={"format": "pt"})
+        for name, content in (("joint_head_config.json", head_config), ("unsloth_decision_config.json", unsloth)):
+            if content is not None:
+                Path(directory, name).write_text(json.dumps(content), encoding="utf-8")
+
+    def convert(self, source, cli=False, **kwargs):
+        """Converts `source` to a new folder, removed after the test, and loads it with `AutoModelForDecision`."""
+        from transformers import AutoModelForDecision
+        from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint, main
+
+        output = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, output, ignore_errors=True)
+        if cli:
+            flags = [[f"--{key}", str(value)] for key, value in kwargs.items() if value is not None]
+            main(["--source", str(source), "--output", output, *[item for flag in flags for item in flag]])
+        else:
+            convert_clef_checkpoint(source, output, **kwargs)
+        model, info = AutoModelForDecision.from_pretrained(
+            output, output_loading_info=True, attn_implementation="eager"
+        )
+        self.assertIsInstance(model, ClefForDecision)
+        for key in ("missing_keys", "unexpected_keys", "mismatched_keys"):
+            self.assertEqual(set(info[key]), set(), key)
+        self.assertEqual(json.loads(Path(output, "config.json").read_text(encoding="utf-8"))["model_type"], "clef")
+        self.assertEqual(model.decision_config.labels, self.uncapped)
+        return output, model.eval()
+
+    def test_convert_tern_cosine_roundtrip(self):
+        # A Tern cosine checkpoint: its causal backbone (`save_pretrained`, native names), its tokenizer, the state dict
+        # of its cosine head with the config of that head, its calibration and runtime files
+        model = self.cosine_model(cosine_initial_scale=7.0)
+        with torch.no_grad():
+            model.cosine_head.logit_scale.fill_(1.5)
+        head, state = self.head_state(model)
+        head = {key.removeprefix("cosine_head."): value for key, value in head.items()}
+        self.assertEqual(len(head), 9)
+        backbone = self.backbone_class(model.config.text_config)
+        missing, unexpected = backbone.load_state_dict(
+            {key: value for key, value in state.items() if key.startswith("model.")}, strict=False
+        )
+        self.assertEqual((missing, unexpected), (["lm_head.weight"], []))
+        head_config = {"head_type": "cosine_span_v1", "hidden_size": 24, "width": 8, "initial_scale": 7.0}
+        unsloth = {"layout": "clef", "max_len": 512, "temperature": [1.0, 1.0, 1.0], "base_model": "tiny"}
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(source, backbone, self.tokenizer, head, head_config, {**unsloth, "fine_tuned": True})
+            Path(source, "native_klm_runtime.json").write_text(json.dumps({"weights": "float32"}), encoding="utf-8")
+            with CaptureLogger(logging.get_logger(self.converter_logger)) as captured:
+                _, converted = self.convert(source)
+        # The language modeling head of the backbone, which the cosine head does not read, is dropped
+        self.assertIn("lm_head.weight", captured.out)
+        config = converted.config
+        self.assertEqual((config.head_type, config.cosine_width, config.cosine_initial_scale), ("cosine", 8, 7.0))
+        self.assertEqual((config.global_pooling, config.prompt_style), ("last", "chatml"))
+        self.assertEqual(converted.decision_config.chat_template, CLEF_TEMPLATE)
+        self.assertEqual(converted.decision_config.temperature, {"noul": 1.0, "choice": 1.0, "score": 1.0})
+        for name, parameter in converted.cosine_head.named_parameters():
+            self.assertEqual(parameter.dtype, torch.float32, name)
+            self.assertTrue(torch.equal(parameter, head[name]), name)
+        # The logits of the converted model are those of the head of the source on its backbone, exactly
+        inputs = self.collate(self.ragged_prompts())
+        with torch.no_grad():
+            difference = (converted(**inputs).logits - model(**inputs).logits).abs().max()
+        self.assertEqual(difference.item(), 0)
+
+    def test_convert_joint_with_temperatures(self):
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        head, state = self.head_state(model)
+        backbone = self.backbone_class(self.config.text_config)
+        backbone.load_state_dict({key: value for key, value in state.items() if key not in head}, strict=True)
+        # A head saved in bfloat16: converted to float32, it scores as the head of the model rounded to bfloat16
+        head = {key: value.bfloat16() for key, value in head.items()}
+        with torch.no_grad():
+            for name, parameter in model.named_parameters():
+                if not name.startswith(("model.", "lm_head.")):
+                    parameter.copy_(parameter.bfloat16().float())
+        inputs = self.collate(self.ragged_prompts())
+        temperature, head_temperature = [0.75, 1.25, 2.0], 0.5  # noul, choice, score
+        for unsloth, expected in (
+            (
+                {"layout": "clef", "max_len": 321, "temperature": temperature, "head_temperature": head_temperature},
+                {"noul": 0.75 * 0.5, "choice": 1.25 * 0.5, "score": 2.0 * 0.5},
+            ),
+            (
+                {"layout": "clef", "max_len": 321, "temperature": temperature},
+                {"noul": 0.75, "choice": 1.25, "score": 2.0},
+            ),
+        ):
+            with self.subTest(head_temperature="head_temperature" in unsloth), tempfile.TemporaryDirectory() as source:
+                self.write_source(source, backbone, self.tokenizer, head, self.joint_head_config(self.config), unsloth)
+                output, converted = self.convert(source)
+                saved = json.loads(Path(output, "decision.json").read_text(encoding="utf-8"))
+                self.assertEqual(saved["temperature"], expected)
+                self.assertEqual(saved["labels"], self.uncapped)
+                self.assertEqual(converted.decision_config.temperature, expected)
+                self.assertEqual(Path(output, "decision_template.jinja").read_text(encoding="utf-8"), CLEF_TEMPLATE)
+                self.assertEqual(AutoTokenizer.from_pretrained(output).model_max_length, 321)
+                self.assertEqual(converted.config.head_type, "joint")
+                self.assertEqual((converted.config.global_pooling, converted.config.prompt_style), ("last", "chatml"))
+                # The head is saved in float32, under the names of the original checkpoints
+                weights = load_file(f"{output}/model.safetensors")
+                saved_head = {
+                    key: value for key, value in weights.items() if not key.startswith(("model.", "lm_head."))
+                }
+                self.assertEqual(set(saved_head), set(head))
+                for key, value in saved_head.items():
+                    self.assertEqual(value.dtype, torch.float32, key)
+                    self.assertTrue(torch.equal(value, head[key].float()), key)
+                with torch.no_grad():
+                    difference = (converted(**inputs).logits - model(**inputs).logits).abs().max()
+                self.assertEqual(difference.item(), 0)
+
+    def reranker_package(self, directory, config, state):
+        """
+        A remote-code reranker package like `ericlewis/ultrabert-150m-reranker`: the original config of a native model
+        with the `auto_map` and labels of its remote classes, `state` as its weights, its tokenizer, and Python files that
+        must never be imported.
+        """
+        remote = {
+            "architectures": ["UltrabertForReranking"],
+            "auto_map": {
+                "AutoConfig": "configuration_ultrabert.UltrabertConfig",
+                "AutoModelForSequenceClassification": "modeling_reranker.UltrabertForReranking",
+            },
+            "num_labels": 1,
+            "id2label": {"0": "relevance"},
+            "label2id": {"relevance": 0},
+            "problem_type": "regression",
+        }
+        Path(directory, "config.json").write_text(json.dumps({**config, **remote}), encoding="utf-8")
+        save_file(state, f"{directory}/model.safetensors", metadata={"format": "pt"})
+        for name in ("configuration_ultrabert.py", "modeling_reranker.py"):
+            Path(directory, name).write_text(
+                'raise RuntimeError("the remote code of the package ran")\n', encoding="utf-8"
+            )
+        self.ultrabert_tokenizer().save_pretrained(directory)
+
+    def test_convert_reranker_backbone(self):
+        # The weights of a native UltraBERT under a single `backbone.` prefix next to a task head: the prefix is
+        # stripped, the backbone loaded strictly, the task head dropped, and a new decision head initialized
+        from transformers import AutoConfig, UltrabertModel
+
+        config = {
+            "model_type": "ultrabert",
+            "vocab_size": len(self.ultrabert_tokenizer()),
+            "hidden_size": 24,
+            "intermediate_size": 32,
+            "num_hidden_layers": 3,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "head_dim": 12,
+            "attention_windows": [8, 8, None],  # the original format of the package
+            "rope_theta": [10000.0, 10000.0, 160000.0],
+            "pad_token_id": 0,
+            "bos_token_id": 0,
+            "eos_token_id": 0,
+            "dtype": "float32",
+        }
+        torch.manual_seed(0)
+        backbone = UltrabertModel(AutoConfig.for_model(**config)).eval()
+        self.assertEqual(backbone.config.layer_types, ["sliding_attention", "sliding_attention", "full_attention"])
+        state = {f"backbone.{key}": value.contiguous() for key, value in backbone.state_dict().items()}
+        size = config["hidden_size"]
+        task_head = {
+            "pair_head.0.weight": torch.randn(size, size),
+            "pair_head.2.weight": torch.randn(size),
+            "pair_head.2.bias": torch.randn(size),
+            "pair_head.3.weight": torch.randn(1, size),
+            "pair_head.3.bias": torch.randn(1),
+        }
+        inputs = self.collate(self.ultrabert_prompts())
+        with tempfile.TemporaryDirectory() as source:
+            self.reranker_package(source, config, {**state, **task_head})
+            for head_type, sizes, cli in ((None, self.joint_sizes, False), ("cosine", {"cosine_width": 8}, True)):
+                with self.subTest(head_type=head_type):
+                    with CaptureLogger(logging.get_logger(self.converter_logger)) as captured:
+                        output, converted = self.convert(source, cli=cli, head_type=head_type, **sizes)
+                    for key in task_head:
+                        self.assertIn(key, captured.out)
+                    self.assertEqual(converted.config.head_type, head_type or "joint")
+                    self.assertIsInstance(converted.model, UltrabertModel)
+                    text_config = converted.config.text_config
+                    self.assertEqual(text_config.layer_types, backbone.config.layer_types)
+                    self.assertEqual(text_config.sliding_window, 8)
+                    self.assertEqual(text_config.rope_parameters, backbone.config.rope_parameters)
+                    saved = json.loads(Path(output, "config.json").read_text(encoding="utf-8"))
+                    for key in ("auto_map", "architectures", "id2label"):
+                        self.assertNotIn(key, saved["text_config"])
+                    self.assertNotIn("auto_map", saved)
+                    self.assertFalse(any(Path(output).glob("*.py")))
+                    self.assertEqual(
+                        (converted.config.global_pooling, converted.config.prompt_style), ("first", "plain")
+                    )
+                    self.assertEqual(converted.decision_config.chat_template, CLEF_PLAIN_TEMPLATE)
+                    # Every tensor of the backbone is the one of the source
+                    converted_state = converted.model.state_dict()
+                    self.assertEqual(set(converted_state), set(backbone.state_dict()))
+                    for key, value in backbone.state_dict().items():
+                        self.assertTrue(torch.equal(converted_state[key], value), key)
+                    self.assertFalse(any(key.startswith("lm_head") for key in converted.state_dict()))
+                    if head_type == "cosine":
+                        self.assertEqual(converted.config.cosine_width, 8)
+                        self.assertAlmostEqual(converted.cosine_head.logit_scale.item(), math.log(12.0), places=6)
+                    else:
+                        self.assertEqual(converted.config.hidden_size, self.joint_sizes["hidden_size"])
+                    with torch.no_grad():
+                        logits = converted(**inputs).logits
+                    self.assertTrue(torch.isfinite(logits[logits > torch.finfo(logits.dtype).min]).all())
+        # The repair of the prefix is refused when it is ambiguous or incomplete
+        first_key = next(iter(state))
+        refused = {
+            "ambiguous": (
+                {**state, **{key.replace("backbone.", "encoder.", 1): v.clone() for key, v in state.items()}},
+                "ambiguous",
+            ),
+            "incomplete": (
+                {key: value for key, value in state.items() if key != first_key},
+                first_key.removeprefix("backbone."),
+            ),
+            "unexpected": ({**state, "backbone.extra.weight": torch.zeros(2)}, "extra.weight"),
+        }
+        for case, (weights, message) in refused.items():
+            with self.subTest(refused=case), tempfile.TemporaryDirectory() as source:
+                self.reranker_package(source, config, {**weights, **task_head})
+                with self.assertRaisesRegex(ValueError, re.escape(message)):
+                    self.convert(source)
+
+    def test_convert_sequence_classification_backbone(self):
+        # A joint head next to a backbone whose config registers a (remote) sequence-classification class only: the bare
+        # native model is the backbone, whether saved without prefix or as its native sequence-classification class
+        from transformers import UltrabertForSequenceClassification
+
+        model = self.ultrabert_model("joint")
+        head, state = self.head_state(model)
+        auto_map = {"AutoModelForSequenceClassification": "modeling_reranker.UltrabertForReranking"}
+        inputs = self.collate(self.ultrabert_prompts())
+        for layout in ("bare", "sequence_classification"):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as source:
+                if layout == "bare":
+                    backbone = model.model
+                else:
+                    torch.manual_seed(0)
+                    backbone = UltrabertForSequenceClassification(model.config.text_config)
+                    missing, unexpected = backbone.load_state_dict(
+                        {key: value for key, value in state.items() if key.startswith("model.")}, strict=False
+                    )
+                    self.assertEqual(unexpected, [])
+                    self.assertTrue(missing and not any(key.startswith("model.") for key in missing), missing)
+                head_config = self.joint_head_config(model.config)
+                self.write_source(source, backbone, self.ultrabert_tokenizer(), head, head_config, auto_map=auto_map)
+                with CaptureLogger(logging.get_logger(self.converter_logger)) as captured:
+                    _, converted = self.convert(source)
+                if layout == "sequence_classification":
+                    for key in missing:  # the task head of the source, dropped
+                        self.assertIn(key, captured.out)
+                self.assertEqual((converted.config.global_pooling, converted.config.prompt_style), ("first", "plain"))
+                with torch.no_grad():
+                    difference = (converted(**inputs).logits - model(**inputs).logits).abs().max()
+                self.assertEqual(difference.item(), 0)
+
+    def test_incomplete_source_raises(self):
+        from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint
+
+        model = self.cosine_model()
+        head, state = self.head_state(model)
+        head = {key.removeprefix("cosine_head."): value for key, value in head.items()}
+        backbone = self.backbone_class(model.config.text_config)
+        backbone.load_state_dict({k: v for k, v in state.items() if k.startswith("model.")}, strict=False)
+        head_config = {"head_type": "cosine_span_v1", "hidden_size": 24, "width": 8, "initial_scale": 12.0}
+        # One head file without the other
+        for present, missing in (
+            ("joint_head.safetensors", "joint_head_config.json"),
+            ("joint_head_config.json", None),
+        ):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as source:
+                self.write_source(source, backbone, self.tokenizer, head, head_config)
+                missing = missing or "joint_head.safetensors"
+                Path(source, missing).unlink()
+                with tempfile.TemporaryDirectory() as output:
+                    with self.assertRaisesRegex(ValueError, re.escape(missing)):
+                        convert_clef_checkpoint(source, output)
+                    self.assertEqual(list(Path(output).iterdir()), [])
+        # A head of another type, sizes or a head type that contradict the head of the source, other layouts
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(source, backbone, self.tokenizer, head, head_config)
+            for kwargs, message in (
+                ({"head_type": "joint"}, "cosine"),
+                ({"cosine_width": 16}, "cosine_width"),
+                ({"safe_serialization": False}, "safetensors"),
+            ):
+                with self.subTest(**kwargs), tempfile.TemporaryDirectory() as output:
+                    with self.assertRaisesRegex(ValueError, message):
+                        convert_clef_checkpoint(source, output, **kwargs)
+            Path(source, "joint_head_config.json").write_text(
+                json.dumps({**head_config, "head_type": "bilinear_v9"}), encoding="utf-8"
+            )
+            with tempfile.TemporaryDirectory() as output, self.assertRaisesRegex(ValueError, "bilinear_v9"):
+                convert_clef_checkpoint(source, output)
+            Path(source, "joint_head_config.json").write_text(json.dumps(head_config), encoding="utf-8")
+            Path(source, "unsloth_decision_config.json").write_text(
+                json.dumps({"layout": "per_question"}), encoding="utf-8"
+            )
+            with tempfile.TemporaryDirectory() as output, self.assertRaisesRegex(ValueError, "per_question"):
+                convert_clef_checkpoint(source, output)
+
+    def test_converted_checkpoint_loads_with_auto(self):
+        # Converted with the command line, the checkpoint loads with `AutoModelForDecision` and runs in the pipeline
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        head, state = self.head_state(model)
+        backbone = self.backbone_class(self.config.text_config)
+        backbone.load_state_dict({key: value for key, value in state.items() if key not in head}, strict=True)
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(source, backbone, self.tokenizer, head, self.joint_head_config(self.config))
+            output, converted = self.convert(source, cli=True)
+        names = {path.name for path in Path(output).iterdir()}
+        native = {
+            "config.json",
+            "model.safetensors",
+            "decision.json",
+            "decision_template.jinja",
+            "tokenizer_config.json",
+        }
+        self.assertLessEqual(native, names)
+        self.assertFalse(names & {"joint_head.safetensors", "joint_head_config.json", "unsloth_decision_config.json"})
+        for scores, converted_scores in zip(self.scores(model), self.scores(converted)):
+            torch.testing.assert_close(converted_scores, scores, atol=0, rtol=0)
+        decide = pipeline("decision", model=output, model_kwargs={"attn_implementation": "eager"})
+        self.assertIsInstance(decide.model, ClefForDecision)
+        self.assertEqual(decide.decision_config.labels, self.uncapped)
         answers = decide(self.test["request"])
         self.assertEqual(list(answers), list(self.test["request"]["questions"]))
         for answer in answers.values():

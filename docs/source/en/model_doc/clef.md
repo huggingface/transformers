@@ -88,6 +88,29 @@ The term is random, so [`ClefForDecision`] applies it in training mode only: in 
 
 Cloudflare has not published Clef's training objective; these terms and their defaults are a community recipe, not an official Cloudflare objective.
 
+## Converting checkpoints
+
+`convert_clef_weights_to_hf.py` converts a folder (or repo of the Hub) that ships a backbone with a head in its own format to a native Clef checkpoint: a `config.json` of `model_type: clef`, the weights with the head in float32 and the backbone in its own precision, the tokenizer, `decision.json` and its template. Its decision config takes any number of options of every question type.
+
+- A clef checkpoint, or a folder trained from one, with `joint_head.safetensors` and `joint_head_config.json` next to the weights of its backbone: the joint head, or the cosine head when its `head_type` is `cosine_span_v1`, with their sizes. The temperatures (noul, choice, score) of an `unsloth_decision_config.json`, times its `head_temperature`, become those of the decision config, and its `max_len` the `model_max_length` of the tokenizer. A folder with only one of the two head files is refused.
+- A remote-code package around a native model, such as a reranker, whose weights are those of that model under a single prefix next to a task head: the prefix is stripped, the task head dropped (and named in the log), and a new head of `head_type` (`"joint"` by default, sizes from the arguments) initialized. The conversion is refused when no prefix, or more than one, holds exactly the weights of the native model.
+
+The backbone is the bare model of the `model_type` of the `config.json` of the folder, loaded strictly, whatever classes the folder registers; no code of the folder is imported. A bidirectional backbone gets `global_pooling="first"` and `prompt_style="plain"`, a causal one `"last"` and `"chatml"`.
+
+```bash
+python src/transformers/models/clef/convert_clef_weights_to_hf.py --source path/to/checkpoint --output path/to/clef
+python src/transformers/models/clef/convert_clef_weights_to_hf.py --source ericlewis/ultrabert-150m-reranker \
+    --output path/to/clef --head_type cosine --cosine_width 512
+```
+
+```py
+from transformers import AutoModelForDecision
+from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint
+
+convert_clef_checkpoint("path/to/checkpoint", "path/to/clef")
+model = AutoModelForDecision.from_pretrained("path/to/clef")
+```
+
 ## ClefConfig
 
 [[autodoc]] ClefConfig
