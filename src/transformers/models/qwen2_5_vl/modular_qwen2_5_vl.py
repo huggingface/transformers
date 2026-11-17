@@ -18,7 +18,6 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
-
 import numpy as np
 import torch
 import torch.nn as nn
