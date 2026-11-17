@@ -101,14 +101,5 @@ class Ovis2_5Config(PreTrainedConfig):
     video_end_token_id: int = 151673
     tie_word_embeddings: bool = False
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            # Released configs label this remote-code tower as `siglip2_navit`; the native tower type is fixed here.
-            self.vision_config.pop("model_type", None)
-            self.vision_config.pop("preserve_original_pe", None)
-            self.vision_config.pop("use_rope", None)
-            self.vision_config.pop("num_patches", None)
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["Ovis2_5Config", "Ovis2_5VisionConfig"]
