@@ -205,6 +205,8 @@ IGNORE_NON_TESTED = [
     "Ernie4_5_VL_MoeModel",  # BC alias
     "PeAudioFrameLevelModel",
     "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+    "Gr00tModel",  # special arch, tested through Gr00tForConditionalGeneration
+    "Gr00tDiT",  # building block of Gr00tModel, tested through Gr00tForConditionalGeneration
     "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     "VibeVoiceAcousticTokenizerDecoderModel",
     "VibeVoiceAcousticTokenizerEncoderModel",
@@ -255,6 +257,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
     + [
         # models to ignore for model xxx mapping
         "Aimv2TextModel",
+        "Gr00tDiT",  # building block of Gr00tModel
         "AlignTextModel",
         "AlignVisionModel",
         "ClapTextModel",

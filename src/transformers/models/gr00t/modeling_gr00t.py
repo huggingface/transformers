@@ -143,15 +143,20 @@ def eager_attention_forward(
 
 
 class Gr00tAttention(nn.Module):
-    """Multi-headed (cross-)attention, without positional encoding."""
+    """
+    Multi-headed attention without positional encoding, used by the refiner (self-attention over the backbone
+    features) and the DiT (self-attention over the action tokens, or cross-attention to the backbone features).
+    """
 
-    def __init__(self, config: Gr00tConfig, hidden_size: int, num_heads: int, kv_input_size: int | None = None):
+    def __init__(self, config: Gr00tConfig, is_refiner: bool = False, is_cross_attention: bool = False):
         super().__init__()
         self.config = config
+        hidden_size = config.backbone_hidden_size if is_refiner else config.dit_hidden_size
+        num_heads = config.vl_refiner_num_attention_heads if is_refiner else config.dit_num_attention_heads
+        kv_input_size = config.backbone_hidden_size if is_cross_attention else hidden_size
         self.head_dim = hidden_size // num_heads
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
-        kv_input_size = kv_input_size if kv_input_size is not None else hidden_size
 
         self.q_proj = nn.Linear(hidden_size, hidden_size)
         self.k_proj = nn.Linear(kv_input_size, hidden_size)
@@ -192,8 +197,9 @@ class Gr00tAttention(nn.Module):
 
 
 class Gr00tMLP(nn.Module):
-    def __init__(self, config: Gr00tConfig, hidden_size: int):
+    def __init__(self, config: Gr00tConfig, is_refiner: bool = False):
         super().__init__()
+        hidden_size = config.backbone_hidden_size if is_refiner else config.dit_hidden_size
         self.fc1 = nn.Linear(hidden_size, 4 * hidden_size)
         self.fc2 = nn.Linear(4 * hidden_size, hidden_size)
         self.dropout = nn.Dropout(config.dropout)
@@ -208,11 +214,10 @@ class Gr00tVLRefinerLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: Gr00tConfig):
         super().__init__()
-        hidden_size = config.vlm_config.text_config.hidden_size
-        self.norm1 = nn.LayerNorm(hidden_size, eps=1e-5)
-        self.attention = Gr00tAttention(config, hidden_size, config.vl_refiner_num_attention_heads)
-        self.norm3 = nn.LayerNorm(hidden_size, eps=1e-5)
-        self.mlp = Gr00tMLP(config, hidden_size)
+        self.norm1 = nn.LayerNorm(config.backbone_hidden_size, eps=1e-5)
+        self.attention = Gr00tAttention(config, is_refiner=True)
+        self.norm3 = nn.LayerNorm(config.backbone_hidden_size, eps=1e-5)
+        self.mlp = Gr00tMLP(config, is_refiner=True)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
@@ -228,11 +233,10 @@ class Gr00tDiTLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gr00tConfig, layer_idx: int):
         super().__init__()
         self.is_cross_attention = layer_idx % 2 == 0
-        kv_input_size = config.vlm_config.text_config.hidden_size if self.is_cross_attention else None
         self.norm1 = Gr00tAdaLayerNorm(config.dit_hidden_size)
-        self.attention = Gr00tAttention(config, config.dit_hidden_size, config.dit_num_attention_heads, kv_input_size)
+        self.attention = Gr00tAttention(config, is_cross_attention=self.is_cross_attention)
         self.norm3 = nn.LayerNorm(config.dit_hidden_size, eps=1e-5, elementwise_affine=False)
-        self.mlp = Gr00tMLP(config, config.dit_hidden_size)
+        self.mlp = Gr00tMLP(config)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(
@@ -271,7 +275,7 @@ class Gr00tPreTrainedModel(PreTrainedModel):
     main_input_name = "state"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Gr00tDiTLayer", "Gr00tVLRefinerLayer", "Qwen3VLTextDecoderLayer", "Qwen3VLVisionBlock"]
+    _no_split_modules = ["Gr00tDiTLayer", "Gr00tVLRefinerLayer"]
     _keys_to_ignore_on_load_unexpected = [r"lm_head"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -369,7 +373,7 @@ class Gr00tModel(Gr00tPreTrainedModel):
     def __init__(self, config: Gr00tConfig):
         super().__init__(config)
         self.vlm = AutoModel.from_config(config.vlm_config)
-        self.vl_layer_norm = nn.LayerNorm(config.vlm_config.text_config.hidden_size, eps=1e-5)
+        self.vl_layer_norm = nn.LayerNorm(config.backbone_hidden_size, eps=1e-5)
         self.vl_refiner = Gr00tVLRefiner(config)
         self.dit = Gr00tDiT(config)
         self.post_init()
@@ -453,9 +457,13 @@ class Gr00tModel(Gr00tPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    GR00T N1.7 with the embodiment-specific state and action projections, trained with a flow-matching objective and
+    generating action chunks with `sample_actions`.
+    """
+)
 class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
-    """GR00T N1.7 with the embodiment-specific state/action projections and flow-matching objective."""
-
     def __init__(self, config: Gr00tConfig):
         super().__init__(config)
         self.model = Gr00tModel(config)

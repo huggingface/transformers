@@ -151,6 +151,11 @@ class Gr00tConfig(PreTrainedConfig):
         # The action head consumes the output of the last decoder layer *before* the final norm
         self.vlm_config.text_config.tie_last_hidden_states = False
 
+    @property
+    def backbone_hidden_size(self) -> int:
+        """Hidden size of the backbone features the action head consumes."""
+        return self.vlm_config.text_config.hidden_size
+
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.dit_hidden_size % self.dit_num_attention_heads != 0:
@@ -158,9 +163,9 @@ class Gr00tConfig(PreTrainedConfig):
                 f"`dit_hidden_size` ({self.dit_hidden_size}) must be divisible by `dit_num_attention_heads` "
                 f"({self.dit_num_attention_heads})."
             )
-        if self.vlm_config.text_config.hidden_size % self.vl_refiner_num_attention_heads != 0:
+        if self.backbone_hidden_size % self.vl_refiner_num_attention_heads != 0:
             raise ValueError(
-                f"The backbone hidden size ({self.vlm_config.text_config.hidden_size}) must be divisible by "
+                f"The backbone hidden size ({self.backbone_hidden_size}) must be divisible by "
                 f"`vl_refiner_num_attention_heads` ({self.vl_refiner_num_attention_heads})."
             )
         if self.loss_reduction not in ("mean", "none"):

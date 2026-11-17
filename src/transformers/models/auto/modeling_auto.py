@@ -1198,6 +1198,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("glm_ocr", "GlmOcrForConditionalGeneration"),
         ("glmga", "Glm46VForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
+        ("gr00t", "Gr00tForConditionalGeneration"),
         ("granite4_vision", "Granite4VisionForConditionalGeneration"),
         ("granite_docling", "GraniteDoclingForConditionalGeneration"),
         ("hunyuan_vl", "HunYuanVLForConditionalGeneration"),

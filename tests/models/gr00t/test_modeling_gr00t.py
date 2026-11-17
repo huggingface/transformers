@@ -15,11 +15,18 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import Gr00tConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 
 
 if is_torch_available():
@@ -252,9 +259,68 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
                 noise=inputs_dict["noise"],
                 timestep=torch.zeros(self.model_tester.batch_size, device=torch_device),
             ).logits
-        self.assertEqual(
-            actions.shape, (self.model_tester.batch_size, config.action_horizon, config.max_action_dim)
-        )
+        self.assertEqual(actions.shape, (self.model_tester.batch_size, config.action_horizon, config.max_action_dim))
         self.assertTrue(torch.isfinite(actions).all())
         torch.testing.assert_close(actions, actions_again)
         torch.testing.assert_close(single_step, inputs_dict["noise"] + velocity)
+
+    def test_eager_matches_sdpa_sample_actions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for key in ("actions", "timestep"):
+            inputs_dict.pop(key)
+        model_sdpa = Gr00tForConditionalGeneration._from_config(config, attn_implementation="sdpa")
+        model_sdpa = model_sdpa.eval().to(torch_device)
+        model_eager = Gr00tForConditionalGeneration._from_config(config, attn_implementation="eager")
+        model_eager.load_state_dict(model_sdpa.state_dict())
+        model_eager = model_eager.eval().to(torch_device)
+        with torch.no_grad():
+            torch.testing.assert_close(
+                model_eager.sample_actions(**inputs_dict),
+                model_sdpa.sample_actions(**inputs_dict),
+                atol=1e-5,
+                rtol=1e-5,
+            )
+
+    def test_training_gradients_reach_used_parameters(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gr00tForConditionalGeneration(config).to(torch_device)
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        model.train()
+        model(**inputs_dict).loss.backward()
+        # The final norm of the backbone is unused: the action head reads the last decoder layer before it
+        unused = {"model.vlm.language_model.norm.weight"}
+        for name, param in model.named_parameters():
+            if name in unused:
+                self.assertIsNone(param.grad, name)
+            else:
+                self.assertIsNotNone(param.grad, f"{name} has no gradient")
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(
+        "The common test builds MAE-style `noise` from `image_size`; covered by `test_eager_matches_sdpa_sample_actions`"
+    )
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
+
+    @unittest.skip(
+        "The backbone's final norm is unused by design and gets no gradient; "
+        "covered by `test_training_gradients_reach_used_parameters`"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        "The backbone's final norm is unused by design and gets no gradient; "
+        "covered by `test_training_gradients_reach_used_parameters`"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        "The backbone's final norm is unused by design and gets no gradient; "
+        "covered by `test_training_gradients_reach_used_parameters`"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
