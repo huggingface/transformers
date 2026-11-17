@@ -1774,7 +1774,9 @@ def convert_and_load_state_dict_in_model(
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
+            # The `keep_in_fp32` plan only applies to floating-point weights, not e.g. BatchNorm's `num_batches_tracked`
+            is_floating = empty_param is None or empty_param.is_floating_point()
+            if dtype_plan != {} and is_floating and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]

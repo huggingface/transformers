@@ -1045,10 +1045,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     for dtype in (torch.float16, torch.bfloat16):
                         loaded = model_class.from_pretrained(tmpdirname, dtype=dtype)
                         built = model_class._from_config(copy.deepcopy(config), dtype=dtype)
-                        # integer buffers (e.g. step counters) are never cast
-                        built_dtypes = {n: p.dtype for n, p in built.state_dict().items() if p.is_floating_point()}
-                        loaded_dtypes = {n: p.dtype for n, p in loaded.state_dict().items() if n in built_dtypes}
-                        self.assertEqual(built_dtypes, loaded_dtypes)
+                        self.assertEqual(
+                            {name: param.dtype for name, param in built.state_dict().items()},
+                            {name: param.dtype for name, param in loaded.state_dict().items()},
+                        )
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
