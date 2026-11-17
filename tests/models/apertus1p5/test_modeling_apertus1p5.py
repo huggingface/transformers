@@ -258,11 +258,10 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class Apertus1p5IntegrationTest(unittest.TestCase):
     checkpoint = "swiss-ai/Apertus-v1.5-8B"
-    revision = "refs/pr/5"  # TODO: drop once https://huggingface.co/swiss-ai/Apertus-v1.5-8B/discussions/5 is merged
 
     @classmethod
     def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
         image_url = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         )
@@ -311,9 +310,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _load_model(self):
-        return Apertus1p5ForConditionalGeneration.from_pretrained(
-            self.checkpoint, revision=self.revision, device_map=torch_device
-        )
+        return Apertus1p5ForConditionalGeneration.from_pretrained(self.checkpoint, device_map=torch_device)
 
     def _generate(self, model, conversations, max_new_tokens=20):
         inputs = self.processor.apply_chat_template(

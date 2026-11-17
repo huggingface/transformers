@@ -17,6 +17,7 @@ import math
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import Apertus1p5Processor, AutoProcessor
 from transformers.testing_utils import require_librosa, require_torchvision, slow
@@ -27,38 +28,27 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_torchvision
 class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Apertus1p5Processor
+    tiny_model_id = "hf-internal-testing/tiny-processor-apertus1p5"
     audio_input_name = "input_values"
 
     @classmethod
-    def _setup_image_processor(cls):
-        image_processor_class = cls._get_component_class_from_processor("image_processor")
+    def _setup_from_pretrained(cls, model_id, **kwargs):
         # small pixel budget so test images stay tiny; grids stay >= 2x2
-        return image_processor_class(size={"min_pixels": 32 * 32, "max_pixels": 64 * 64})
+        return super()._setup_from_pretrained(model_id, size={"min_pixels": 32 * 32, "max_pixels": 64 * 64}, **kwargs)
 
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        extra_special_tokens = {
-            "image_token": "<|image|>",
-            "audio_token": "<|audio|>",
-            "boi_token": "<|img_start|>",
-            "eoi_token": "<|img_end|>",
-            "image_wrapper_token": "<|img_token_start|>",
-            "eol_token": "<|img_end_of_row|>",
-            "boa_token": "<|audio_start|>",
-            "eoa_token": "<|audio_end|>",
-        }
-        tokenizer = tokenizer_class.from_pretrained("openai-community/gpt2", extra_special_tokens=extra_special_tokens)
-        tokenizer.pad_token_id = 0
-        tokenizer.sep_token_id = 1
-        return tokenizer
+    @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
+    @unittest.skip("The Apertus 1.5 chat template takes the system message as a string, not as content blocks")
+    def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
+        pass
 
-    @staticmethod
-    def prepare_processor_dict():
-        # a simple list-of-content-blocks chat template; the real checkpoint ships its own
-        return {
-            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<|image|>' }}{% endfor %}{% for content in message['content'] | selectattr('type', 'equalto', 'audio') %}{{ '<|audio|>' }}{% endfor %}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
-        }  # fmt: skip
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("The Apertus 1.5 chat template takes the system message as a string, not as content blocks")
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
+        pass
+
+    @unittest.skip("The Apertus 1.5 chat template requires assistant content and non-empty tool call arguments")
+    def test_apply_chat_template_tool_calls_no_content(self):
+        pass
 
     @staticmethod
     def _image(height, width):
@@ -74,7 +64,7 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         out = processor(text="<|image|> describe", images=[self._image(32, 64)], return_tensors="pt")
         expected = (
-            "<|img_start|>2*4<|img_token_start|>"
+            "<s><|img_start|>2*4<|img_token_start|>"
             + "<|img_end_of_row|>".join(["<|image|>" * 4] * 2)
             + "<|img_end|> describe"
         )
@@ -105,7 +95,7 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out = processor(text="<|audio|>a<|audio|>b<|audio|>", audio=clips, return_tensors="pt")
         decoded = processor.tokenizer.decode(out["input_ids"][0])
         expected = (
-            "<|audio_start|><|audio|><|audio_end|>a"
+            "<s><|audio_start|><|audio|><|audio_end|>a"
             "<|audio_start|><|audio|><|audio|><|audio_end|>b"
             "<|audio_start|><|audio|><|audio|><|audio_end|>"
         )
@@ -145,7 +135,6 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
     """
 
     checkpoint = "swiss-ai/Apertus-v1.5-8B"
-    revision = "refs/pr/5"  # TODO: drop once https://huggingface.co/swiss-ai/Apertus-v1.5-8B/discussions/5 is merged
     # the 640x480 image fits the default pixel budget: a 30x40 grid of 16-pixel patches, one code each
     image_expansion = (
         "<|img_start|>30*40<|img_token_start|>" + "<|img_end_of_row|>".join(["<|image|>" * 40] * 30) + "<|img_end|>"
@@ -155,7 +144,7 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
         cls.image_url = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         )
