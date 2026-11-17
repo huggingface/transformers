@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -25,7 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import get_max_seqlen
+from ...utils.generic import accepts_precomputed_kwargs, get_max_seqlen
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration, AudioFlamingo3Model
 from ..auto import AutoConfig
@@ -141,6 +143,26 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
         super().__init__(config)
 
 
+def get_audio_valid_indices(chunk_lengths: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
+    """
+    The flat indices of the chunks' non-padding frames after the encoder's three stride-2 convolutions, or pop
+    `"valid_indices"` from `kwargs` if precomputed.
+
+    Args:
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        n_window: half the chunk size (in raw frames).
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
+    """
+    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
+        return valid_indices
+    time_steps = Qwen3ASREncoder._post_cnn_length(torch.tensor(n_window * 2))
+    valid_mask = (
+        torch.arange(time_steps, device=chunk_lengths.device)
+        < Qwen3ASREncoder._post_cnn_length(chunk_lengths)[:, None]
+    )
+    return valid_mask.flatten().nonzero().squeeze(-1)
+
+
 @auto_docstring(
     custom_intro="""
     The audio model for Qwen3 ASR without any head or projection on top.
@@ -167,6 +189,27 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         for _ in range(3):
             lengths = torch.where(lengths > 0, (lengths - 1) // 2 + 1, torch.zeros_like(lengths))
         return lengths
+
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor, **kwargs) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `input_features_mask` with data-dependent operations (host syncs, loops
+        over the clips): the windowed attention's `cu_seqlens` and `max_seqlen`, and the non-padding frames'
+        `valid_indices`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
+        operations.
+
+        Args:
+            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+                1 for valid mel frames and 0 for padding.
+        """
+        chunk_lengths = input_features_mask.view(input_features_mask.shape[0], -1, self.n_window * 2).sum(-1)
+        chunk_lengths = chunk_lengths.reshape(-1).to(torch.long)
+        feature_lens = input_features_mask.sum(-1).to(torch.long)
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
+            "valid_indices": get_audio_valid_indices(chunk_lengths, self.n_window),
+        }
 
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -218,11 +261,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
-        chunk_post_cnn_lens = self._post_cnn_length(
-            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
-        )
-        valid_mask = torch.arange(time_steps, device=input_features.device) < chunk_post_cnn_lens.unsqueeze(1)
-        valid_indices = valid_mask.flatten().nonzero().squeeze(-1)
+        valid_indices = get_audio_valid_indices(chunk_lengths, self.n_window, kwargs=kwargs)
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:
@@ -242,6 +281,21 @@ class Qwen3ASRMultiModalProjector(VoxtralMultiModalProjector):
 
 
 class Qwen3ASRModel(AudioFlamingo3Model):
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor | None = None, **kwargs) -> dict[str, Any]:
+        r"""
+        The audio encoder's data-dependent inputs (see [`Qwen3ASREncoder.get_data_dependent_inputs`]), prefixed
+        `audio_`, as `get_audio_features` takes them.
+
+        Args:
+            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`, *optional*):
+                1 for valid mel frames and 0 for padding.
+        """
+        if input_features_mask is None:
+            return {}
+        inputs = self.audio_tower.get_data_dependent_inputs(input_features_mask)
+        return {f"audio_{name}": value for name, value in inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
@@ -291,6 +345,10 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         >>> model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
         return super().forward(**super_kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Qwen3ASRModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 @auto_docstring(
