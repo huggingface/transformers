@@ -103,7 +103,7 @@ class BenchmarkResult:
     def accumulate(
         self,
         e2e_latency: float,
-        timestamps: list[float],
+        timestamps: list[list[float]],
         shape_and_decoded_output: str,
         gpu_metrics: GPURawMetrics | None,
     ) -> None:
@@ -113,10 +113,15 @@ class BenchmarkResult:
         self.shape_and_decoded_outputs.append(shape_and_decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
-    def _accumulate_ttft_and_itl(self, timestamps: list[float]) -> None:
+    def _accumulate_ttft_and_itl(self, timestamps: list[list[float]]) -> None:
         timestamps = np.array(timestamps)
         tftt = np.min(timestamps[:, 0])
-        itl = np.mean(timestamps[:, -1] - timestamps[:, 0]) / (timestamps.shape[1] - 1)
+        # A single generated token has no inter-token interval.
+        itl = (
+            np.mean(timestamps[:, -1] - timestamps[:, 0]) / (timestamps.shape[1] - 1)
+            if timestamps.shape[1] > 1
+            else 0.0
+        )
         self.time_to_first_token.append(tftt)
         self.inter_token_latency.append(itl)
 
