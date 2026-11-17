@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Inkling2Loop model."""
 
+import copy
 import unittest
 
 from parameterized import parameterized
@@ -21,7 +22,7 @@ from transformers import (
     AutoProcessor,
     Inkling2LoopConfig,
     Inkling2LoopTextConfig,
-    Inkling2LoopVisionConfig,
+    Inkling2VisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -61,6 +62,29 @@ if is_torch_available():
 # reads the messages of the second pass, not of the first.
 LAYER_TYPES = ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"]
 LOOP_CONFIG = {"core_start": 1, "core_end": 3, "num_passes": 3, "gate_rank": 8}
+# hidden states are recorded at every layer visit: the 4 layers and 2 more passes through the 2 core layers
+NUM_LAYER_VISITS = len(LAYER_TYPES) + 2 * 2
+
+
+def check_loop_cache(test, batch_size, cache, seq_length, config, check_cache):
+    """The cache has the layers of the physical decoder layers, then one per layer of every extra core pass, shaped like
+    the cache layer of the same core layer."""
+    text_config = config.get_text_config(decoder=True)
+    loop_config = text_config.loop_config
+    core = range(loop_config["core_start"], loop_config["core_end"])
+    pass_layers = [layer_idx for _ in range(loop_config["num_passes"] - 1) for layer_idx in core]
+    test.assertEqual(len(cache), text_config.num_hidden_layers + len(pass_layers))
+
+    physical_cache = copy.copy(cache)
+    physical_cache.layers = cache.layers[: text_config.num_hidden_layers]
+    check_cache(batch_size, physical_cache, seq_length, config)
+    for pass_layer, layer_idx in zip(cache.layers[text_config.num_hidden_layers :], pass_layers):
+        test.assertIs(type(pass_layer), type(cache.layers[layer_idx]))
+        test.assertEqual(pass_layer.keys.shape, cache.layers[layer_idx].keys.shape)
+        test.assertEqual(
+            [state.shape for state in pass_layer.conv_states.values()],
+            [state.shape for state in cache.layers[layer_idx].conv_states.values()],
+        )
 
 
 class Inkling2LoopTextModelTester(CausalLMModelTester):
@@ -75,6 +99,7 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
         self.layer_types = LAYER_TYPES
         self.n_layers_per_attn_res_block = 1
         self.loop_config = LOOP_CONFIG
+        self.expected_num_hidden_layers = NUM_LAYER_VISITS + 1
         self.swa_num_attention_heads = self.num_attention_heads
         self.swa_num_key_value_heads = self.num_key_value_heads
         self.swa_head_dim = self.head_dim
@@ -84,6 +109,13 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
 @require_torch
 class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2LoopTextModelTester
+
+    @unittest.skip("Attentions are returned per layer visit: the loop core runs several times per forward")
+    def test_attention_outputs(self):
+        pass
+
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        check_loop_cache(self, batch_size, cache, seq_length, config, super()._check_cache_for_generate)
 
     def _get_conv_state_shape(self, batch_size: int, config):
         # key and value convolutions, then the attention output and MLP output convolutions
@@ -108,7 +140,7 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
     base_model_class = Inkling2LoopModel
     config_class = Inkling2LoopConfig
     text_config_class = Inkling2LoopTextConfig
-    vision_config_class = Inkling2LoopVisionConfig
+    vision_config_class = Inkling2VisionConfig
     conditional_generation_class = Inkling2LoopForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -118,8 +150,8 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("posemb_grid_size", 4)
         kwargs.setdefault("projection_hidden_dim", 32)
-        kwargs.setdefault("num_hidden_layers", len(LAYER_TYPES))
-        kwargs.setdefault("vision_num_hidden_layers", 2)
+        kwargs.setdefault("text_num_hidden_layers", len(LAYER_TYPES))
+        kwargs.setdefault("expected_num_hidden_layers", NUM_LAYER_VISITS + 1)
         kwargs.setdefault("layer_types", LAYER_TYPES)
         kwargs.setdefault("n_layers_per_attn_res_block", 1)
         kwargs.setdefault("loop_config", LOOP_CONFIG)
@@ -144,8 +176,19 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2LoopVisionText2TextModelTester
+
+    @unittest.skip("Attentions are returned per layer visit: the loop core runs several times per forward")
+    def test_attention_outputs(self):
+        pass
+
     # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
     skip_test_image_features_output_shape = True
+
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        check_loop_cache(self, batch_size, cache, seq_length, config, super()._check_cache_for_generate)
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        return self.model_tester.num_hidden_layers
 
     def _get_conv_state_shape(self, batch_size: int, config):
         # key and value convolutions, then the attention output and MLP output convolutions

@@ -246,6 +246,7 @@ if TYPE_CHECKING:
     from .informer import *
     from .inkling import *
     from .inkling2 import *
+    from .inkling2_loop import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internlm3 import *
