@@ -605,7 +605,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # NOTE (joao): this function is substantially different from the original, the attention has different
         # *number* of shapes in certain conditions
@@ -616,7 +616,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         for generated_length, iter_attentions in enumerate(attentions):
-            use_cache = decoder_past_key_values is not None and generated_length > 0
+            use_cache = decoder_cache is not None and generated_length > 0
 
             model_input_length = prompt_length + generated_length if not use_cache else 1
             num_chunks = model_input_length // config.local_attn_chunk_length + (
@@ -677,8 +677,8 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, ReformerDynamicCache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, ReformerDynamicCache)
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
@@ -689,12 +689,12 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         expected_shape = (batch_size, seq_length, num_heads * head_dim)
 
         # Check the size is coherent
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
 
         # Check each layer has the correct shape
-        for idx in range(len(past_key_values)):
-            self.assertEqual(past_key_values.states_cache[idx].shape, expected_shape)
-            self.assertEqual(past_key_values.buckets_cache[idx].shape, (0,))
+        for idx in range(len(cache)):
+            self.assertEqual(cache.states_cache[idx].shape, expected_shape)
+            self.assertEqual(cache.buckets_cache[idx].shape, (0,))
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
@@ -805,7 +805,7 @@ class ReformerLSHAttnModelTest(
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=32)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # NOTE (joao): this function is substantially different from the original, the attention has different
         # *number* of shapes in certain conditions
@@ -816,7 +816,7 @@ class ReformerLSHAttnModelTest(
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         for generated_length, iter_attentions in enumerate(attentions):
-            use_cache = decoder_past_key_values is not None and generated_length > 0
+            use_cache = decoder_cache is not None and generated_length > 0
             model_input_len = prompt_length + generated_length if not use_cache else 1
             num_chunks = model_input_len // config.lsh_attn_chunk_length + (
                 model_input_len % config.lsh_attn_chunk_length != 0
@@ -877,8 +877,8 @@ class ReformerLSHAttnModelTest(
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, ReformerDynamicCache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, ReformerDynamicCache)
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
@@ -889,18 +889,18 @@ class ReformerLSHAttnModelTest(
         expected_shape = (batch_size, seq_length, num_heads * head_dim)
 
         # Check the size is coherent
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
 
         # Check each layer has the correct shape
-        for idx in range(len(past_key_values)):
-            self.assertEqual(past_key_values.states_cache[idx].shape, expected_shape)
+        for idx in range(len(cache)):
+            self.assertEqual(cache.states_cache[idx].shape, expected_shape)
 
     @unittest.skip(reason="Fails because the sequence length is not a multiple of 4")
     def test_problem_types(self):
         pass
 
     @unittest.skip(reason="Fails because the sequence length is not a multiple of 4")
-    def test_past_key_values_format(self):
+    def test_cache_format(self):
         pass
 
     @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)

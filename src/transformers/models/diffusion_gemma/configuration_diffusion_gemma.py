@@ -45,7 +45,7 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
     """
 
     model_type = "diffusion_gemma_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -65,10 +65,9 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.router": "ep_router",
         "layers.*.experts.gate_up_proj": "grouped_gemm",
         "layers.*.experts.down_proj": "grouped_gemm",
-        "layers.*.experts": "moe_tp_experts",
+        "layers.*.experts": "ep_dispatch_experts",
     }
 
     base_model_pp_plan = {

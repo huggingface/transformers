@@ -410,7 +410,6 @@ class ViTMAEPreTrainedModel(ViTPreTrainedModel):
     base_model_prefix = "vit"
     _no_split_modules = ["ViTMAEEmbeddings", "ViTMAELayer", "ViTMAEDecoder"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

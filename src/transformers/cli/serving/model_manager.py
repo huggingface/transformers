@@ -18,6 +18,7 @@ Model loading, caching, and lifecycle management.
 import asyncio
 import gc
 import json
+import os
 import threading
 from collections.abc import Callable
 from functools import lru_cache
@@ -30,7 +31,7 @@ import transformers
 from transformers import BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .utils import Modality, make_progress_tqdm_class, reset_torch_cache, split_model_id
+from .utils import Modality, make_progress_tqdm_class, reset_torch_cache, split_model_id, split_revision
 
 
 if TYPE_CHECKING:
@@ -211,9 +212,18 @@ class ModelManager:
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
-        """Canonicalize to `'model_id@revision'` format. Defaults to `@main`."""
-        if "@" in model_id:
+        """Canonical name of a model, the one it is cached under.
+
+        - A Hub repo is named `'model_id@revision'`: `"org/model"` -> `"org/model@main"`, `"org/model@dev"` is kept.
+        - An existing local path is kept as it is: it has no revision, and an `@` in it is part of the path.
+        """
+        if os.path.exists(model_id):
+            # A local path has no revision, and an `@` in it is part of the path.
             return model_id
+        if "@" in model_id:
+            # A Hub repo that already names its revision, e.g. `"org/model@dev"`.
+            return model_id
+        # A Hub repo with no revision: default to `main`.
         return f"{model_id}@main"
 
     def get_quantization_config(self) -> BitsAndBytesConfig | None:
@@ -238,7 +248,7 @@ class ModelManager:
         """
         from transformers import AutoProcessor, AutoTokenizer
 
-        model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = split_revision(model_id_and_revision)
         if gguf_file is not None:
             # A GGUF repo ships no tokenizer files: the vocabulary is read out of the file's metadata.
             return AutoTokenizer.from_pretrained(
@@ -265,7 +275,7 @@ class ModelManager:
         """
         from transformers import AutoConfig
 
-        model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = split_revision(model_id_and_revision)
 
         model_kwargs = {
             "revision": revision,

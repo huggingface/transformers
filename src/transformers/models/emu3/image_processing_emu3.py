@@ -408,9 +408,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 )
                 pixel_values.extend(image)
 
-        image_sizes = [get_image_size(image, input_data_format) for image in pixel_values]
+        image_sizes = [get_image_size(image, data_format) for image in pixel_values]
         if do_pad:
-            pixel_values = self._pad_for_batching(pixel_values, image_sizes)
+            pixel_values = self._pad_for_batching(pixel_values, image_sizes, input_data_format=data_format)
             pixel_values = np.array(pixel_values)
 
         return BatchFeature(

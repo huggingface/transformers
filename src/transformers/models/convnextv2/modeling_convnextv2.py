@@ -218,7 +218,6 @@ class ConvNextV2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["ConvNextV2Layer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

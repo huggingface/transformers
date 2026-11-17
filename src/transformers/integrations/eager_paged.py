@@ -1,8 +1,6 @@
 import torch
 from torch import nn
 
-from ..generation.continuous_batching.cache import PagedAttentionCache
-
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -16,9 +14,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
-# functionalization handles by making a copy of the full cache for every layer.
-@torch.compiler.disable
 def eager_paged_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -28,22 +23,6 @@ def eager_paged_attention_forward(
     scaling: float,
     **kwargs,
 ):
-    # Add KV cache to the key and value tensors
-    cache: PagedAttentionCache | None = kwargs.pop("cache", None)
-    if cache is None:
-        raise ValueError(
-            "`paged|eager` was called without a paged attention cache. This implementation expects the packed "
-            "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
-            "bidirectionally. Use `eager` for a standard forward."
-        )
-    # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
-    key, value = cache.update(
-        key_states=key,
-        value_states=value,
-        layer_idx=module.layer_idx,
-        kwargs=kwargs,
-    )
-
     # Repeat the key and value tensors for each group of key-value heads
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)

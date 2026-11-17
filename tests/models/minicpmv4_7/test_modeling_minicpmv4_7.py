@@ -426,16 +426,14 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         model = self.model_tester._mrope_model()
         model.rope_deltas = torch.tensor([[-3]], device=torch_device)
 
-        past_key_values = DynamicCache()
+        cache = DynamicCache()
         num_kv_heads = model.config.text_config.num_key_value_heads
         head_dim = model.config.text_config.head_dim
         prefilled = torch.zeros(1, num_kv_heads, 8, head_dim, device=torch_device)
-        past_key_values.update(prefilled, prefilled, 0)
+        cache.update(prefilled, prefilled, 0)
 
         inputs_embeds = torch.zeros(1, 1, model.config.text_config.hidden_size, device=torch_device)
-        position_ids = model.compute_3d_position_ids(
-            input_ids=None, inputs_embeds=inputs_embeds, past_key_values=past_key_values
-        )
+        position_ids = model.compute_3d_position_ids(input_ids=None, inputs_embeds=inputs_embeds, cache=cache)
 
         self.assertIsNotNone(position_ids)
         self.assertEqual(tuple(position_ids.shape), (3, 1, 1))
