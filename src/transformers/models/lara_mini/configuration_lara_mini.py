@@ -39,10 +39,6 @@ class LaraMiniConfig(PreTrainedConfig):
     linear_num_value_heads (`int`, *optional*, defaults to 16):
         Number of value heads in the gated delta net layers. Each query and key head serves
         `linear_num_value_heads // linear_num_key_heads` consecutive value heads.
-    full_attention_uses_rope (`bool`, *optional*, defaults to `False`):
-        Whether the `"full_attention"` layers apply rotary position embeddings. By default only the
-        `"sliding_attention"` layers do; the global layers get position information from the sliding-window and gated
-        delta net layers.
 
     ```python
     >>> from transformers import LaraMiniModel, LaraMiniConfig
@@ -122,7 +118,6 @@ class LaraMiniConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = 151643
     sliding_window: int = 512
-    full_attention_uses_rope: bool = False
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:

@@ -209,8 +209,7 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class LaraMiniAttention(nn.Module):
-    """Qwen3 attention (per-head query/key RMSNorm, sliding window on `"sliding_attention"` layers) where the global
-    layers skip the rotary embeddings unless `config.full_attention_uses_rope` is set."""
+    """Qwen3 attention that applies rotary embeddings only when it gets them: the `"full_attention"` layers get none."""
 
     def __init__(self, config: LaraMiniConfig, layer_idx: int):
         super().__init__()
@@ -238,14 +237,12 @@ class LaraMiniAttention(nn.Module):
         self.q_norm = LaraMiniRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = LaraMiniRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        # CODEPATH: the released checkpoints use RoPE in "sliding_attention" layers only (`full_attention_uses_rope=False`)
-        self.use_rope = self.layer_type == "sliding_attention" or config.full_attention_uses_rope
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None,
         cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -257,7 +254,7 @@ class LaraMiniAttention(nn.Module):
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if self.use_rope:
+        if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -836,7 +833,7 @@ class LaraMiniDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -972,10 +969,12 @@ class LaraMiniModel(LaraMiniPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i]
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                # The global layers use no positional encoding
+                position_embeddings=position_embeddings if layer_type == "sliding_attention" else None,
+                attention_mask=causal_mask_mapping[layer_type],
                 position_ids=position_ids,
                 cache=cache,
                 use_cache=use_cache,

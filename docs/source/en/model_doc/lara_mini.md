@@ -43,7 +43,7 @@ attention over its 34 layers.
 - `"sliding_attention"` layers attend to the last `sliding_window` tokens (the current one included) with rotary
   position embeddings.
 - `"full_attention"` layers attend to the whole sequence without position embeddings. The sliding-window and GDN
-  layers carry position information. Set `full_attention_uses_rope=True` to apply rotary embeddings in these layers too.
+  layers carry position information.
 - Both attention kinds use grouped-query attention with an RMSNorm on each query and key head.
 - The mixture of experts routes each token to 4 of 128 experts with a float32 softmax router and adds an ungated shared
   expert.

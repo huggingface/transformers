@@ -212,29 +212,6 @@ class LaraMiniModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertFalse(torch.allclose(last, altered_last, rtol=1e-4, atol=1e-4), layer_types)
             torch.testing.assert_close(cached, last, rtol=1e-4, atol=1e-4)
 
-    def test_full_attention_uses_rope_only_when_configured(self):
-        """Global layers ignore positions unless `full_attention_uses_rope` is set."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.layer_types = ["full_attention"] * config.num_hidden_layers
-        input_ids = inputs_dict["input_ids"][:1]
-        position_ids = torch.arange(input_ids.shape[1], device=torch_device)[None]
-        mask = torch.ones_like(input_ids)
-
-        for full_attention_uses_rope in (False, True):
-            config.full_attention_uses_rope = full_attention_uses_rope
-            model = LaraMiniModel(config).to(torch_device).eval()
-            with torch.no_grad():
-                # An explicit mask, so that the spread positions aren't read as packed sequences
-                out = model(input_ids=input_ids, attention_mask=mask, position_ids=position_ids).last_hidden_state
-                spread_out = model(
-                    input_ids=input_ids, attention_mask=mask, position_ids=3 * position_ids
-                ).last_hidden_state
-            self.assertEqual(
-                torch.allclose(out, spread_out, rtol=1e-5, atol=1e-5),
-                not full_attention_uses_rope,
-                f"full_attention_uses_rope={full_attention_uses_rope}",
-            )
-
     def test_static_cache_generation_matches_dynamic_for_any_layer_order(self):
         """Static-cache masks are sized by layer type, also for left-padded rows."""
         for layer_types in (
