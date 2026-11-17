@@ -55,6 +55,10 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         "num_key_value_heads": 2,
     }
 
+    # A prompt scores the same alone, in a batch and padded on either side: the spans pool their own tokens only, so
+    # what is left is the float32 rounding of the backbone, which batches and pads its matmuls differently
+    batch_tolerance = {"atol": 2e-6, "rtol": 0}
+
     def model_inputs(self, prompt):
         """The inputs of `forward` for a prompt, with a batch of one prompt."""
         questions = prompt.questions
@@ -131,7 +135,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         for single in singles:
             for question in single:
                 width = int((question > torch.finfo(question.dtype).min).sum())
-                torch.testing.assert_close(output.logits[row, :width], question[:width], atol=1e-5, rtol=0)
+                torch.testing.assert_close(output.logits[row, :width], question[:width], **self.batch_tolerance)
                 self.assertEqual(output.option_mask[row].sum().item(), width)
                 row += 1
         self.assertEqual(row, output.logits.shape[0])
@@ -144,7 +148,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         with torch.no_grad():
             right = model(**self.collate(prompts, padding_side="right", pad_token_id=0)).logits
             left = model(**self.collate(prompts, padding_side="left", pad_token_id=7)).logits
-        torch.testing.assert_close(left, right, atol=1e-5, rtol=0)
+        torch.testing.assert_close(left, right, **self.batch_tolerance)
 
     def test_batched_loss_equals_mean_over_questions(self):
         torch.manual_seed(0)
@@ -176,7 +180,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         with torch.no_grad():
             batched = model(**self.collate([self.synthetic_prompt(70, [2, 5, 1], seed=1), prompt]))
         self.assertEqual(batched.logits.shape, (4, 5))
-        torch.testing.assert_close(batched.logits[3, :3], single.logits[0], atol=1e-5, rtol=0)
+        torch.testing.assert_close(batched.logits[3, :3], single.logits[0], **self.batch_tolerance)
         self.assertEqual(batched.option_mask[3].tolist(), [True, True, True, False, False])
 
     def test_batched_backward_and_bf16(self):
@@ -202,8 +206,8 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         head = [name for name, _ in model.named_parameters() if not name.startswith(("model.", "lm_head."))]
         self.assertGreater(len(head), 0)
 
-    def test_span_pooling_memory_is_linear(self):
-        # The means of the spans are differences of prefix sums: no `[spans, length, dim]` tensor
+    def test_span_pooling(self):
+        # The mean of each span over its own tokens, in float32; an empty (padded) span pools to exactly zero
         from transformers.models.clef.modeling_clef import pool_spans
 
         hidden_states = torch.randn(2, 30, 8)
@@ -214,26 +218,69 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         for b in range(2):
             for s in range(2):
                 expected = hidden_states[b, starts[b, s] : ends[b, s]].mean(0)
-                torch.testing.assert_close(pooled[b, s], expected, atol=1e-5, rtol=0)
-            self.assertTrue((pooled[b, 2] == 0).all())  # an empty (padded) span pools to zero
+                torch.testing.assert_close(pooled[b, s], expected, atol=1e-6, rtol=0)
+            self.assertTrue((pooled[b, 2] == 0).all())
+        # Half precision states pool in float32
+        self.assertEqual(pool_spans(hidden_states.bfloat16(), starts, ends).dtype, torch.float32)
+        # The lexical pooling reads the rows of the table of embeddings of the tokens of the spans
+        table, input_ids = torch.randn(50, 8), torch.randint(50, (2, 30))
+        torch.testing.assert_close(
+            pool_spans(table, starts, ends, input_ids=input_ids), pool_spans(table[input_ids], starts, ends)
+        )
+        # Its gradients reach the states (and the table) of the tokens of the spans only
+        hidden_states.requires_grad_(True)
+        pool_spans(hidden_states, starts, ends).sum().backward()
+        in_a_span = torch.zeros(2, 30, dtype=torch.bool)
+        for b in range(2):
+            for s in range(2):
+                in_a_span[b, starts[b, s] : ends[b, s]] = True
+        self.assertTrue((hidden_states.grad[~in_a_span] == 0).all())
+        self.assertTrue((hidden_states.grad[in_a_span] != 0).all())
+
+    def test_span_pooling_precision(self):
+        # Short spans at the end of a long sequence of large states: the mean of their own tokens, not the difference
+        # of two running sums over the whole sequence (which float32 rounds to ~1e-2 here)
+        from transformers.models.clef.modeling_clef import pool_spans
+
+        generator = torch.Generator().manual_seed(0)
+        hidden_states = 100 + torch.randn(1, 4096, 64, generator=generator)
+        starts = torch.tensor([[4090, 4000, 4093, 4095, 0, 2048]])
+        ends = torch.tensor([[4091, 4003, 4096, 4096, 1, 2050]])
+        pooled = pool_spans(hidden_states, starts, ends)
+        reference = torch.stack(
+            [hidden_states[0, start:end].double().mean(0) for start, end in zip(starts[0], ends[0])]
+        )
+        self.assertLess((pooled[0].double() - reference).abs().max().item(), 1e-5)
+
+    def test_span_pooling_memory_is_linear(self):
+        # Many short spans that tile a long sequence, as the marks of a prompt do: memory linear in their tokens, no
+        # `[spans, length, dim]` tensor (2 GB here)
+        from transformers.models.clef.modeling_clef import pool_spans
 
         try:
             import resource
         except ImportError:
             self.skipTest("resource is not available on this platform")
-        length, dim, num_spans = 4096, 64, 5000
+        length, dim = 4096, 64
         generator = torch.Generator().manual_seed(0)
         hidden_states = torch.randn(1, length, dim, generator=generator)
-        starts = torch.randint(length - 1, (1, num_spans), generator=generator)
-        ends = starts + 1 + torch.randint(length, (1, num_spans), generator=generator) % (length - starts)
+        sizes = 1 + torch.randint(3, (length,), generator=generator)
+        ends = sizes.cumsum(0)
+        ends = torch.cat([ends[ends < length], torch.tensor([length])])
+        starts = torch.cat([torch.zeros(1, dtype=torch.long), ends[:-1]])
+        starts, ends = starts[None], ends[None]
+        num_spans = starts.shape[-1]
+        self.assertGreater(num_spans, 1500)
+        self.assertEqual(int((ends - starts).sum()), length)  # they do not overlap and cover every token
         self.assertEqual(pool_spans(hidden_states, starts[:, :1], ends[:, :1]).shape, (1, 1, dim))
-        # `ru_maxrss` is in bytes on macOS and in kilobytes elsewhere; a `[spans, length, dim]` float tensor is ~5 GB
+        # `ru_maxrss` is in bytes on macOS and in kilobytes elsewhere
         unit = 1 if sys.platform == "darwin" else 1024
         before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit
         pooled = pool_spans(hidden_states, starts, ends)
         growth = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit - before
         self.assertEqual(pooled.shape, (1, num_spans, dim))
-        self.assertLess(growth, 512 * 1024**2)
+        torch.testing.assert_close(pooled[0, -1], hidden_states[0, starts[0, -1] :].mean(0), atol=1e-6, rtol=0)
+        self.assertLess(growth, 256 * 1024**2)
 
     def test_forward_with_labels_returns_loss(self):
         torch.manual_seed(0)
@@ -595,8 +642,8 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 changed_unread[batch, unread] += torch.randn(len(batch), self.config.backbone_hidden_size)
                 with torch.no_grad():
                     reference = global_inputs(model, hidden_states)
-                    # Up to the rounding of the prefix sums of the spans, which every token goes through
-                    self.assertLess((global_inputs(model, changed_unread) - reference).abs().max().item(), 1e-5)
+                    # Exactly: the spans pool their own tokens only, and the token is in none
+                    self.assertEqual((global_inputs(model, changed_unread) - reference).abs().max().item(), 0)
                     self.assertGreater((global_inputs(model, changed_read) - reference).abs().max().item(), 1e-2)
         # Without an attention mask: the first and the last token of the sequence
         model = self.encoder_model("modernbert", global_pooling="first")
@@ -605,7 +652,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         changed[:, -1] += torch.randn(len(batch), self.config.backbone_hidden_size)
         with torch.no_grad():
             reference = global_inputs(model, hidden_states, None)
-            self.assertLess((global_inputs(model, changed, None) - reference).abs().max().item(), 1e-5)
+            self.assertEqual((global_inputs(model, changed, None) - reference).abs().max().item(), 0)
             changed[:, 0] += torch.randn(len(batch), self.config.backbone_hidden_size)
             self.assertGreater((global_inputs(model, changed, None) - reference).abs().max().item(), 1e-2)
 
@@ -729,9 +776,9 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                     counting = torch.arange(left_inputs["input_ids"].shape[-1]).expand_as(left_inputs["input_ids"])
                     shifted = model(**left_inputs, position_ids=counting).logits
                 self.assertGreater((shifted - right).abs().max().item(), 1e-3)
-                torch.testing.assert_close(left, right, atol=1e-5, rtol=0)
+                torch.testing.assert_close(left, right, **self.batch_tolerance)
                 # And a padded prompt scores as it does alone
-                torch.testing.assert_close(right[3:4, :4], single, atol=1e-5, rtol=0)
+                torch.testing.assert_close(right[3:4, :4], single, **self.batch_tolerance)
 
     def checkpointing_models(self):
         """Pairs of the same tiny model in train mode, for each head and a causal and a bidirectional backbone."""
@@ -863,19 +910,15 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             prompt["input_ids"][:, 0] = 0
         return prompts
 
-    # The cosine head multiplies by its temperature (12 at first) the float32 rounding of the prefix sums that pool
-    # its spans: about 1e-6 of logits near 10, while the hidden states of the backbone are exactly the same
-    ultrabert_tolerance = {"atol": 1e-5, "rtol": 2e-6}
-
-    def assert_batch_equals_singles(self, model, prompts, padding_side="right"):
+    def assert_batch_equals_singles(self, model, prompts, padding_side="right", pad_token_id=0):
         with torch.no_grad():
             singles = [model(**prompt).logits for prompt in prompts]
-            output = model(**self.collate(prompts, padding_side=padding_side, pad_token_id=0))
+            output = model(**self.collate(prompts, padding_side=padding_side, pad_token_id=pad_token_id))
         row = 0
         for single in singles:
             for question in single:
                 width = int((question > torch.finfo(question.dtype).min).sum())
-                torch.testing.assert_close(output.logits[row, :width], question[:width], **self.ultrabert_tolerance)
+                torch.testing.assert_close(output.logits[row, :width], question[:width], **self.batch_tolerance)
                 self.assertEqual(output.option_mask[row].sum().item(), width)
                 row += 1
         self.assertEqual(row, output.logits.shape[0])
@@ -934,9 +977,29 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                         hidden[side] = [states[b][mask[b].bool()] for b in range(len(prompts))]
                 for b in range(len(prompts)):
                     torch.testing.assert_close(hidden["left"][b], hidden["right"][b], atol=1e-6, rtol=0)
-                torch.testing.assert_close(left, right, **self.ultrabert_tolerance)
-                torch.testing.assert_close(right[3:4, :4], single, **self.ultrabert_tolerance)
+                torch.testing.assert_close(left, right, **self.batch_tolerance)
+                torch.testing.assert_close(right[3:4, :4], single, **self.batch_tolerance)
                 self.assert_batch_equals_singles(model, prompts, padding_side="left")
+
+    def test_every_backbone_batch_and_padding_side_agree(self):
+        # Causal, BERT-style and UltraBERT backbones, both heads: a prompt scores the same alone and in a batch padded
+        # on either side, up to the float32 rounding of the backbone only
+        for backbone in ("qwen2", "bert", "modernbert", "ultrabert"):
+            for head_type in ("joint", "cosine"):
+                with self.subTest(backbone=backbone, head_type=head_type):
+                    if backbone == "qwen2":
+                        model = ClefForDecision(self.config).eval() if head_type == "joint" else self.cosine_model()
+                    elif backbone == "ultrabert":
+                        model = self.ultrabert_model(head_type)
+                    else:
+                        model = self.encoder_model(backbone, head_type)
+                    prompts = self.ultrabert_prompts() if backbone == "ultrabert" else self.ragged_prompts()
+                    for padding_side in ("right", "left"):
+                        self.assert_batch_equals_singles(model, prompts, padding_side)
+                    with torch.no_grad():
+                        right = model(**self.collate(prompts, padding_side="right", pad_token_id=0)).logits
+                        left = model(**self.collate(prompts, padding_side="left", pad_token_id=0)).logits
+                    torch.testing.assert_close(left, right, **self.batch_tolerance)
 
     def test_ultrabert_prompt_longer_than_local_window(self):
         # Prompts several times longer than the attention radius of the local layers
@@ -1100,8 +1163,8 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         for single in singles:
             for question in single:
                 width = int((question > torch.finfo(question.dtype).min).sum())
-                torch.testing.assert_close(output.logits[row, :width], question[:width], atol=1e-5, rtol=0)
-                torch.testing.assert_close(left.logits[row, :width], question[:width], atol=1e-5, rtol=0)
+                torch.testing.assert_close(output.logits[row, :width], question[:width], **self.batch_tolerance)
+                torch.testing.assert_close(left.logits[row, :width], question[:width], **self.batch_tolerance)
                 row += 1
         self.assertEqual(row, output.logits.shape[0])
 

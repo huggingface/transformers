@@ -206,16 +206,37 @@ class ClefConfig(PreTrainedConfig):
         self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
 
-def pool_spans(hidden_states: torch.Tensor, starts: torch.LongTensor, ends: torch.LongTensor) -> torch.Tensor:
+def pool_spans(
+    hidden_states: torch.Tensor,
+    starts: torch.LongTensor,
+    ends: torch.LongTensor,
+    input_ids: torch.LongTensor | None = None,
+) -> torch.Tensor:
     """
     The mean of `hidden_states` (`(batch_size, length, dim)`) over each span `[starts, ends)` (`(batch_size, num_spans)`),
-    in float32: the difference of two prefix sums divided by the length of the span, without any tensor of
-    `num_spans * length` elements. An empty span gives zeros.
+    in float32, summed over the tokens of the span only: it does not depend on the other tokens, the padding nor the
+    length of the sequence. Memory is linear in the number of tokens of the spans. An empty span gives zeros.
+
+    With `input_ids` (`(batch_size, length)`), `hidden_states` is a table of embeddings (`(vocab_size, dim)`) and each
+    span pools the rows of its tokens.
     """
-    prefix_sums = nn.functional.pad(hidden_states.float().cumsum(1), (0, 0, 1, 0))
-    batch = torch.arange(hidden_states.shape[0], device=hidden_states.device)[:, None]
-    lengths = (ends - starts).clamp(min=1)[..., None]
-    return (prefix_sums[batch, ends] - prefix_sums[batch, starts]) / lengths
+    batch_size, num_spans = starts.shape
+    lengths = (ends - starts).clamp(min=0).flatten()
+    # The span of every token of every span, and its position in the sequence
+    span_ids = torch.repeat_interleave(torch.arange(len(lengths), device=starts.device), lengths)
+    first_tokens = lengths.cumsum(0) - lengths
+    offsets = torch.arange(len(span_ids), device=starts.device) - first_tokens[span_ids]
+    positions = starts.flatten()[span_ids] + offsets
+    batch_ids = torch.div(span_ids, num_spans, rounding_mode="floor")
+    if input_ids is None:
+        tokens = hidden_states[batch_ids, positions].float()
+    else:
+        tokens = hidden_states[input_ids[batch_ids, positions]].float()
+    # Summed relative to the first token of their span, which keeps the sums small when the states share a large offset
+    zeros = torch.zeros(len(lengths), tokens.shape[-1], dtype=torch.float32, device=tokens.device)
+    firsts = zeros.index_add(0, span_ids, tokens * (offsets == 0)[:, None])
+    sums = zeros.index_add(0, span_ids, tokens - firsts[span_ids])
+    return (firsts + sums / lengths.clamp(min=1)[:, None]).view(batch_size, num_spans, hidden_states.shape[-1])
 
 
 def span_indices(
@@ -389,7 +410,7 @@ class ClefEmbeddings(nn.Module):
 
         hidden_states = self.hidden_norm(hidden_states)
         span_states = pool_spans(hidden_states, starts, ends)
-        span_lexical = pool_spans(output_embeddings[input_ids], starts, ends)
+        span_lexical = pool_spans(output_embeddings, starts, ends, input_ids=input_ids)
         questions = span_states[batch, instructions].to(dtype)
         contexts, lexical = span_states[batch, option_spans].to(dtype), span_lexical[batch, option_spans].to(dtype)
         # The global state is the first or the last token each prompt attends to
