@@ -14,8 +14,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import Ovis2_5Processor
 from transformers.testing_utils import require_torch, require_torchcodec, require_torchvision, require_vision
 from transformers.utils import is_torchcodec_available
@@ -82,37 +80,22 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         else:
             super()._test_unstructured_kwargs_batched(modality)
 
-    def test_get_num_multimodal_tokens_matches_processor_call(self):
-        # Image/video atoms share an ID, so shared mm_token_type_ids cannot distinguish them.
-        processor = self.get_processor()
-        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
-        images = [np.zeros((height, width, 3), dtype=np.uint8) for height, width in image_sizes]
-        inputs = processor(
-            text=[f"{processor.image_token} lower newer"] * len(images),
-            images=images,
-            padding=True,
-            return_tensors="pt",
-        )
-
-        visual_atom_counts = (inputs.input_ids == processor.image_token_id).sum(-1).tolist()
-        helper_counts = processor._get_num_multimodal_tokens(image_sizes=image_sizes)["num_image_tokens"]
-        self.assertListEqual(visual_atom_counts, helper_counts)
-
     def test_get_num_multimodal_tokens_matches_processor_call_video(self):
         # The shared test supplies multiple videos; check the supported single-video path.
         processor = self.get_processor()
         video = self.prepare_videos_inputs()[:7]
         inputs = processor(
-            text="<video> lower newer",
+            text=f"{processor.video_token} lower newer",
             videos=video,
             do_sample_frames=False,
+            return_mm_token_type_ids=True,
             return_tensors="pt",
         )
 
-        visual_atom_counts = (inputs.input_ids == processor.video_token_id).sum(-1).tolist()
+        video_token_counts = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
         video_sizes = [(len(video), *video.shape[-2:])]
         helper_counts = processor._get_num_multimodal_tokens(video_sizes=video_sizes)["num_video_tokens"]
-        self.assertListEqual(visual_atom_counts, helper_counts)
+        self.assertListEqual(video_token_counts, helper_counts)
 
     @unittest.skip("Ovis2.5 processes images and videos separately")
     def test_replacement_offsets(self):
@@ -127,7 +110,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image = self.prepare_images_inputs()
         inputs = processor(
-            text=["lower newer", "<image> lower newer", "<image> lower newer"],
+            text=["lower newer", f"{processor.image_token} lower newer", f"{processor.image_token} lower newer"],
             images=[[], [image], [image.copy()]],
             padding=True,
             return_tensors="pt",

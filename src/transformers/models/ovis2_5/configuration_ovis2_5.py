@@ -93,8 +93,8 @@ class Ovis2_5Config(PreTrainedConfig):
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: PreTrainedConfig | dict | None = None
-    image_token_id: int = 151669
-    video_token_id: int = 151669
+    image_token_id: int = 151655
+    video_token_id: int = 151656
     image_start_token_id: int = 151670
     image_end_token_id: int = 151671
     video_start_token_id: int = 151672

@@ -63,7 +63,7 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
             (kwargs["image_size"] // kwargs["patch_size"] // 2) ** 2,
         )
         kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("video_token_id", 9)
         kwargs.setdefault("image_start_token_id", 5)
         kwargs.setdefault("image_end_token_id", 6)
         kwargs.setdefault("video_start_token_id", 7)
@@ -129,6 +129,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         if modality == "video":
             inputs["pixel_values_videos"] = inputs.pop("pixel_values")
             inputs["video_grid_thw"] = inputs.pop("image_grid_thw")
+            inputs["input_ids"][inputs["input_ids"] == config.image_token_id] = config.video_token_id
             inputs["input_ids"][inputs["input_ids"] == config.image_start_token_id] = config.video_start_token_id
             inputs["input_ids"][inputs["input_ids"] == config.image_end_token_id] = config.video_end_token_id
 

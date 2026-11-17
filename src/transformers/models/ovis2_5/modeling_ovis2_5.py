@@ -153,10 +153,10 @@ class Ovis2_5VisionEmbeddings(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+            pixel_values (`torch.FloatTensor` of shape `(total_patches, num_channels * temporal_patch_size * patch_size**2)`):
+                Packed flattened image or video patches.
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                Temporal, height, and width patch-grid dimensions for each packed image or video.
         """
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
@@ -168,17 +168,12 @@ class Ovis2_5VisionEmbeddings(nn.Module):
         )
         pixel_values = pixel_values.view(
             -1,
-            1,
             self.config.num_channels * self.config.temporal_patch_size,
             self.patch_size,
             self.patch_size,
         )
-        batch_size, sequence_len, channel, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
-        pixel_values = pixel_values.reshape(batch_size * sequence_len, channel, height, width)
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size * sequence_len, -1)
+        embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype)).flatten(1)
 
         interp_weights = interp_weights.to(self.position_embedding.weight.dtype)
         pos_embeds = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
