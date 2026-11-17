@@ -17,6 +17,7 @@ import copy
 import json
 import os
 import tempfile
+import types
 import unittest
 
 from transformers.testing_utils import require_torch
@@ -87,9 +88,22 @@ class Gr00tConversionTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from transformers.models.gr00t import convert_gr00t_to_hf
+        # Imported from the module path, as the tests fetcher leaves conversion scripts out of its dependency graph
+        from transformers.models.gr00t.convert_gr00t_to_hf import (
+            convert_embodiment_id_mapping,
+            find_processor_dir,
+            processor_kwarg,
+            validate_original_config,
+            validate_original_processor,
+        )
 
-        cls.convert = convert_gr00t_to_hf
+        cls.convert = types.SimpleNamespace(
+            convert_embodiment_id_mapping=convert_embodiment_id_mapping,
+            find_processor_dir=find_processor_dir,
+            processor_kwarg=processor_kwarg,
+            validate_original_config=validate_original_config,
+            validate_original_processor=validate_original_processor,
+        )
 
     def assert_rejected(self, function, *args, message):
         with self.assertRaises(ValueError) as context:
