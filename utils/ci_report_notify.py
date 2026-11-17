@@ -131,11 +131,8 @@ def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failur
         lines = ["*Top errors:*"] + [f"• ({cat['count']}) `{error[:200]}`" for error, cat in top]
         blocks.append(_section("\n".join(lines)))
 
-    buttons = [_button("All results (Hub)", hub_url)]
-    if num_new:
-        buttons.append(_button("New failures (Hub)", new_failures_url))
-    if job_results["previous_run"]:
-        buttons.append(_button("Previous run", job_results["previous_run"]["url"]))
+    buttons = [_button("New failures (Hub)", new_failures_url)] if num_new else []
+    buttons.append(_button("All results (Hub)", hub_url))
     blocks.append({"type": "actions", "elements": buttons})
 
     return title, blocks
