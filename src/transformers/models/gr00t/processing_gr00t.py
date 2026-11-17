@@ -51,7 +51,6 @@ class Gr00tProcessor(ProcessorMixin):
         "padding_side": "left",
         "return_token_type_ids": False,
     }
-    videos_kwargs = {"return_metadata": True}
 
     def __init__(
         self,
@@ -103,10 +102,8 @@ class Gr00tProcessor(ProcessorMixin):
         self.image_token_id = getattr(tokenizer, "image_token_id", None) or tokenizer.convert_tokens_to_ids(
             self.image_token
         )
-        self.video_token = getattr(tokenizer, "video_token", "<|video_pad|>")
-        self.video_token_id = getattr(tokenizer, "video_token_id", None) or tokenizer.convert_tokens_to_ids(
-            self.video_token
-        )
+        self.vision_start_token = getattr(tokenizer, "vision_start_token", "<|vision_start|>")
+        self.vision_end_token = getattr(tokenizer, "vision_end_token", "<|vision_end|>")
         # GR00T has no video inputs, so the Qwen3-VL processor init (which expects a video processor) is skipped
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
@@ -211,7 +208,7 @@ class Gr00tProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["state", "embodiment_id"]
+        return super().model_input_names + ["mm_token_type_ids"]
 
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):
@@ -327,13 +324,14 @@ class Gr00tProcessor(ProcessorMixin):
         """
         if isinstance(text, str):
             text = [text]
-        batched_images = make_nested_list_of_images(images) if images is not None else None
-        if text is not None and batched_images is not None:
+        # Plain instructions are formatted into the GR00T prompt. Prompts that already contain image placeholders,
+        # e.g. from `apply_chat_template`, are processed as they are
+        if text is not None and images is not None and not any(self.image_token in sample for sample in text):
+            batched_images = make_nested_list_of_images(images)
             if len(batched_images) != len(text):
                 raise ValueError(f"Got {len(batched_images)} samples of images for {len(text)} instructions.")
             text = [
-                sample if self.image_token in sample else self._format_prompt(sample, len(sample_images))
-                for sample, sample_images in zip(text, batched_images)
+                self._format_prompt(sample, len(sample_images)) for sample, sample_images in zip(text, batched_images)
             ]
             images = [image for sample_images in batched_images for image in sample_images]
 
@@ -341,7 +339,7 @@ class Gr00tProcessor(ProcessorMixin):
         inputs = super().__call__(images=images, text=text, **kwargs)
         if embodiment_tag is not None:
             self._check_embodiment(embodiment_tag)
-            batch_size = len(text) if text is not None else len(batched_images)
+            batch_size = len(inputs["input_ids"]) if "input_ids" in inputs else len(images)
             inputs["embodiment_id"] = torch.full((batch_size,), self.embodiment_id_mapping[embodiment_tag])
         if state is not None:
             if embodiment_tag is None:

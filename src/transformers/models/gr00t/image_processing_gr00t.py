@@ -304,10 +304,15 @@ class Gr00tImageProcessor(TorchvisionBackend):
         crop_fraction: float = 0.95,
         **kwargs,
     ) -> BatchFeature:
+        # The crop is computed on `uint8` pixels, like the original OpenCV transform. Float images (in [0, 1]) are
+        # converted back afterwards
         images = [
             self.crop_and_resize(image[None], image_resolution, crop_fraction)[0]
             if image.dtype == torch.uint8
-            else self.crop_and_resize((image * 255).round().to(torch.uint8)[None], image_resolution, crop_fraction)[0]
+            else self.crop_and_resize((image * 255).round().to(torch.uint8)[None], image_resolution, crop_fraction)[
+                0
+            ].to(image.dtype)
+            / 255
             for image in images
         ]
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -351,33 +356,21 @@ class Gr00tImageProcessor(TorchvisionBackend):
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
         """
-        A utility that returns number of image patches for a given image size.
-
-        Note: Do not remove this method! It is used by vLLM to infer the number of patches and placeholders
-        without an image input.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of image patches per image.
+        Returns the number of patches of an image. Every image is cropped and resized to `image_resolution`, whatever
+        its `height` and `width`.
         """
         images_kwargs = images_kwargs or {}
-        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
-        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        image_resolution = images_kwargs.get("image_resolution") or self.image_resolution
         patch_size = images_kwargs.get("patch_size", self.patch_size)
         merge_size = images_kwargs.get("merge_size", self.merge_size)
-
-        factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            image_resolution,
+            image_resolution,
+            factor=patch_size * merge_size,
+            min_pixels=images_kwargs.get("min_pixels", self.size["shortest_edge"]),
+            max_pixels=images_kwargs.get("max_pixels", self.size["longest_edge"]),
         )
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        return grid_h * grid_w
+        return (resized_height // patch_size) * (resized_width // patch_size)
 
     def crop_and_resize(self, images: torch.Tensor, image_resolution: int, crop_fraction: float) -> torch.Tensor:
         """

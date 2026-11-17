@@ -38,7 +38,7 @@ from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_
 from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig, AutoModel
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.modeling_siglip import eager_attention_forward
 
@@ -878,6 +878,24 @@ class Gr00tImageProcessor(Qwen2VLImageProcessor):
     crop_fraction = 0.95
     valid_kwargs = Gr00tImageProcessorKwargs
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        Returns the number of patches of an image. Every image is cropped and resized to `image_resolution`, whatever
+        its `height` and `width`.
+        """
+        images_kwargs = images_kwargs or {}
+        image_resolution = images_kwargs.get("image_resolution") or self.image_resolution
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+        resized_height, resized_width = smart_resize(
+            image_resolution,
+            image_resolution,
+            factor=patch_size * merge_size,
+            min_pixels=images_kwargs.get("min_pixels", self.size["shortest_edge"]),
+            max_pixels=images_kwargs.get("max_pixels", self.size["longest_edge"]),
+        )
+        return (resized_height // patch_size) * (resized_width // patch_size)
+
     def crop_and_resize(self, images: torch.Tensor, image_resolution: int, crop_fraction: float) -> torch.Tensor:
         """
         Pads the images to a square, resizes them to `image_resolution`, center-crops `crop_fraction` of each side and
@@ -915,10 +933,15 @@ class Gr00tImageProcessor(Qwen2VLImageProcessor):
         crop_fraction: float = 0.95,
         **kwargs,
     ) -> BatchFeature:
+        # The crop is computed on `uint8` pixels, like the original OpenCV transform. Float images (in [0, 1]) are
+        # converted back afterwards
         images = [
             self.crop_and_resize(image[None], image_resolution, crop_fraction)[0]
             if image.dtype == torch.uint8
-            else self.crop_and_resize((image * 255).round().to(torch.uint8)[None], image_resolution, crop_fraction)[0]
+            else self.crop_and_resize((image * 255).round().to(torch.uint8)[None], image_resolution, crop_fraction)[
+                0
+            ].to(image.dtype)
+            / 255
             for image in images
         ]
         return super()._preprocess(
@@ -956,6 +979,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
         "padding_side": "left",
         "return_token_type_ids": False,
     }
+    videos_kwargs = AttributeError()
 
     def __init__(
         self,
@@ -1007,10 +1031,8 @@ class Gr00tProcessor(Qwen3VLProcessor):
         self.image_token_id = getattr(tokenizer, "image_token_id", None) or tokenizer.convert_tokens_to_ids(
             self.image_token
         )
-        self.video_token = getattr(tokenizer, "video_token", "<|video_pad|>")
-        self.video_token_id = getattr(tokenizer, "video_token_id", None) or tokenizer.convert_tokens_to_ids(
-            self.video_token
-        )
+        self.vision_start_token = getattr(tokenizer, "vision_start_token", "<|vision_start|>")
+        self.vision_end_token = getattr(tokenizer, "vision_end_token", "<|vision_end|>")
         # GR00T has no video inputs, so the Qwen3-VL processor init (which expects a video processor) is skipped
         ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
@@ -1115,13 +1137,14 @@ class Gr00tProcessor(Qwen3VLProcessor):
         """
         if isinstance(text, str):
             text = [text]
-        batched_images = make_nested_list_of_images(images) if images is not None else None
-        if text is not None and batched_images is not None:
+        # Plain instructions are formatted into the GR00T prompt. Prompts that already contain image placeholders,
+        # e.g. from `apply_chat_template`, are processed as they are
+        if text is not None and images is not None and not any(self.image_token in sample for sample in text):
+            batched_images = make_nested_list_of_images(images)
             if len(batched_images) != len(text):
                 raise ValueError(f"Got {len(batched_images)} samples of images for {len(text)} instructions.")
             text = [
-                sample if self.image_token in sample else self._format_prompt(sample, len(sample_images))
-                for sample, sample_images in zip(text, batched_images)
+                self._format_prompt(sample, len(sample_images)) for sample, sample_images in zip(text, batched_images)
             ]
             images = [image for sample_images in batched_images for image in sample_images]
 
@@ -1129,7 +1152,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
         inputs = super().__call__(images=images, text=text, **kwargs)
         if embodiment_tag is not None:
             self._check_embodiment(embodiment_tag)
-            batch_size = len(text) if text is not None else len(batched_images)
+            batch_size = len(inputs["input_ids"]) if "input_ids" in inputs else len(images)
             inputs["embodiment_id"] = torch.full((batch_size,), self.embodiment_id_mapping[embodiment_tag])
         if state is not None:
             if embodiment_tag is None:
@@ -1202,7 +1225,7 @@ class Gr00tProcessor(Qwen3VLProcessor):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["state", "embodiment_id"]
+        return super().model_input_names + ["mm_token_type_ids"]
 
 
 __all__ = [

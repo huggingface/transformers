@@ -41,26 +41,58 @@ The original code can be found [here](https://github.com/NVIDIA/Isaac-GR00T), an
 
 ## Usage example
 
-The model expects the robot state and the actions to be normalized and zero-padded to `max_state_dim` and `max_action_dim`, and the embodiment to be given as an index into the embodiment-specific projections. The predicted actions are normalized, and must be mapped back to the robot's action space with the statistics of the embodiment.
+The original checkpoints store their processor settings in the Isaac-GR00T format, and load the tokenizer from the gated [Cosmos-Reason2-2B](https://huggingface.co/nvidia/Cosmos-Reason2-2B) repository. Convert a checkpoint once, after accepting the terms of that repository and logging in:
+
+```bash
+python src/transformers/models/gr00t/convert_gr00t_to_hf.py --checkpoint nvidia/GR00T-N1.7-3B --output_dir gr00t-n1.7-3b
+```
+
+The processor formats the instruction, preprocesses the camera images and normalizes the robot state with the statistics of the embodiment. The model generates a normalized action chunk, which the processor maps back to the action space of the embodiment.
 
 ```python
+import numpy as np
 import torch
+from PIL import Image
 
-from transformers import Gr00tForConditionalGeneration
+from transformers import Gr00tForConditionalGeneration, Gr00tProcessor
 
-model = Gr00tForConditionalGeneration.from_pretrained("nvidia/GR00T-N1.7-3B", device_map="auto")
+processor = Gr00tProcessor.from_pretrained("gr00t-n1.7-3b")
+model = Gr00tForConditionalGeneration.from_pretrained("gr00t-n1.7-3b", dtype=torch.bfloat16, device_map="auto")
 
-# `inputs` holds the Qwen3-VL inputs for the camera images and the instruction:
-# `input_ids`, `attention_mask`, `pixel_values`, `image_grid_thw` and `mm_token_type_ids`
-state = torch.zeros(1, model.config.max_state_dim, device=model.device)  # normalized, zero-padded robot state
-embodiment_id = torch.tensor([0], device=model.device)
-actions = model.sample_actions(state=state, embodiment_id=embodiment_id, **inputs)
-print(actions.shape)  # (1, 40, 132)
+embodiment = "oxe_droid_relative_eef_relative_joint"
+print(processor.modality_configs[embodiment]["video"]["modality_keys"])  # the camera views, in order
+images = [Image.new("RGB", (320, 240)), Image.new("RGB", (320, 240))]  # replace with the camera images
+state = {  # replace with the robot state of each joint group
+    "eef_9d": np.zeros((1, 9)),
+    "gripper_position": np.zeros((1, 1)),
+    "joint_position": np.zeros((1, 7)),
+}
+
+inputs = processor(
+    images=[images], text="pick up the bowl", state=state, embodiment_tag=embodiment, return_tensors="pt"
+).to(model.device)
+inputs["state"] = inputs["state"].to(model.dtype)
+normalized_actions = model.sample_actions(**inputs)
+actions = processor.post_process_actions(normalized_actions, embodiment, state=state)
+print({key: value.shape for key, value in actions.items()})  # (1, 40, dim) for each joint group
 ```
 
 ## Gr00tConfig
 
 [[autodoc]] Gr00tConfig
+
+## Gr00tImageProcessor
+
+[[autodoc]] Gr00tImageProcessor
+    - preprocess
+    - crop_and_resize
+
+## Gr00tProcessor
+
+[[autodoc]] Gr00tProcessor
+    - __call__
+    - normalize_state
+    - post_process_actions
 
 ## Gr00tDiT
 
