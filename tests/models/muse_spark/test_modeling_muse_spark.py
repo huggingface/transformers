@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch MuseSpark model."""
 
-import copy
 import os
 import unittest
 
@@ -44,7 +43,6 @@ from transformers.testing_utils import (
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
-from ...test_tensor_parallel_mixin import _get_expert_weight_names, _get_parameter_plan
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
