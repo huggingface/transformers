@@ -1544,7 +1544,7 @@ class GenerationMixin(ContinuousMixin):
             processors.append(
                 PrefixConstrainedLogitsProcessor(
                     prefix_allowed_tokens_fn,
-                    generation_config.num_beams,
+                    max(generation_config.num_beams, generation_config.num_return_sequences),
                 )
             )
         if generation_config.forced_bos_token_id is not None:
