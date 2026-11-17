@@ -20,6 +20,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...decision import DecisionConfig
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -53,6 +54,12 @@ class ClefConfig(PreTrainedConfig):
         Number of layers in which the options attend to the prompt.
     text_config (`dict` or `PreTrainedConfig`, *optional*):
         Config of the model the head reads, the `config.json` of its repo.
+    label_smoothing (`float`, *optional*, defaults to 0.0):
+        Weight of the uniform distribution over the options in the target of the cross entropy of the loss.
+    brier_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the Brier score in the loss.
+    ordinal_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the ordinal term of the loss, the expected distance of the options to the right one on score questions.
 
     Example:
     ```python
@@ -77,6 +84,9 @@ class ClefConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     text_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
+    label_smoothing: float = 0.0
+    brier_weight: float = 0.0
+    ordinal_weight: float = 0.0
 
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
@@ -85,7 +95,6 @@ class ClefConfig(PreTrainedConfig):
     @staticmethod
     def decision_config(head_configs: dict, text_config: dict):
         """The decision config of a clef checkpoint, from its config files, or `None` for any other checkpoint."""
-        from ...decision import DecisionConfig
 
         if "joint_head_config" not in head_configs:
             return None

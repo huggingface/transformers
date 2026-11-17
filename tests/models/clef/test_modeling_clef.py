@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import tempfile
 import unittest
@@ -20,6 +21,7 @@ from pathlib import Path
 from safetensors.torch import load_file, save_file
 
 from transformers import is_torch_available, pipeline
+from transformers.decision import Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
@@ -29,6 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import ClefForDecision
+    from transformers.models.clef.modeling_clef import ClefDecisionOutput
 
 
 @require_torch
@@ -45,6 +48,112 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         "num_attention_heads": 2,
         "num_key_value_heads": 2,
     }
+
+    def model_inputs(self, prompt):
+        """The inputs of `forward` for a prompt, with a batch of one prompt."""
+        questions = prompt.questions
+        return {
+            "input_ids": prompt.inputs["input_ids"],
+            "marks": prompt.inputs["marks"][None],
+            "num_options": torch.tensor([[len(question.options) for question in questions]]),
+            "question_type_ids": torch.tensor([[Question.questions_types.index(q.type) for q in questions]]),
+        }
+
+    def labels(self, prompt):
+        """The first option of every question as the right one."""
+        return torch.zeros(len(prompt.questions), dtype=torch.long)
+
+    def test_forward_with_labels_returns_loss(self):
+        torch.manual_seed(0)
+        config = copy.deepcopy(self.config)
+        config.brier_weight, config.ordinal_weight = 0.5, 0.5
+        model = ClefForDecision(config)
+        prompt = self.prompts[0]
+        output = model(**self.model_inputs(prompt), labels=self.labels(prompt))
+        self.assertIsInstance(output, ClefDecisionOutput)
+        self.assertTrue(torch.isfinite(output.loss))
+        widths = [len(question.options) for question in prompt.questions]
+        self.assertEqual(output.logits.shape, (len(widths), max(widths)))
+        self.assertEqual(output.option_mask.sum(-1).tolist(), widths)
+        output.loss.backward()
+        # Every parameter the loss depends on has a gradient (the lm head only reads its weight through the lexical prior)
+        missing = [name for name, parameter in model.named_parameters() if parameter.grad is None]
+        self.assertEqual(missing, [])
+
+    def test_forward_with_ragged_options_gives_finite_loss(self):
+        # Questions of 1, 4 and 2 options: five padded cells, all at the minimum of the dtype
+        torch.manual_seed(0)
+        config = copy.deepcopy(self.config)
+        config.brier_weight, config.ordinal_weight, config.label_smoothing = 0.5, 0.5, 0.1
+        model = ClefForDecision(config)
+        input_ids = self.prompts[0].inputs["input_ids"]
+        widths, marks = [1, 4, 2], torch.arange(1, 2 * (3 + 7) + 1)
+        self.assertLess(int(marks[-1]), input_ids.shape[-1])
+        output = model(
+            input_ids=input_ids,
+            marks=marks[None],
+            num_options=torch.tensor([widths]),
+            question_type_ids=torch.tensor([[0, 2, 1]]),
+            labels=torch.tensor([0, 3, 1]),
+        )
+        self.assertEqual(output.logits.shape, (3, 4))
+        self.assertEqual((~output.option_mask).sum().item(), 5)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        for name, parameter in model.named_parameters():
+            self.assertIsNotNone(parameter.grad, name)
+            self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+
+    def test_forward_without_labels_unchanged(self):
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        prompt = self.prompts[0]
+        inputs = self.model_inputs(prompt)
+        with torch.no_grad():
+            # The scores of the head modules, as `forward` produced them before it returned an output
+            hidden_states = model.model(input_ids=inputs["input_ids"], use_cache=False).last_hidden_state
+            num_options, question_type_ids = inputs["num_options"][0], inputs["question_type_ids"][0]
+            option_question_ids = torch.repeat_interleave(num_options)
+            memory, options, fields, field_embeddings, priors = model.embeddings(
+                hidden_states,
+                inputs["input_ids"],
+                inputs["marks"][0],
+                num_options,
+                question_type_ids,
+                model.lm_head.weight,
+            )
+            options, fields = model.encoder(memory, options, fields, field_embeddings, option_question_ids)
+            expected = model.scorer(fields[:, option_question_ids], options, priors)[0]
+            output = model(**inputs)
+        self.assertIsNone(output.loss)
+        torch.testing.assert_close(output.logits[output.option_mask], expected)
+        padded = output.logits[~output.option_mask]
+        self.assertTrue((padded == torch.finfo(output.logits.dtype).min).all())
+
+    def test_decide_and_pipeline_unchanged(self):
+        torch.manual_seed(0)
+        model = ClefForDecision(self.config).eval()
+        for prompt, scores in zip(self.prompts, self.scores(model)):
+            self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
+        decide = pipeline("decision", model=model, tokenizer=self.tokenizer, decision_config=self.decision_config)
+        answers = decide(self.test["request"])
+        self.assertEqual(list(answers), list(self.test["request"]["questions"]))
+        for answer in answers.values():
+            probabilities = answer.get("probabilities")
+            if probabilities is not None:
+                self.assertAlmostEqual(sum(probabilities.values()), 1.0, places=5)
+
+    def test_loss_weights_come_from_config(self):
+        prompt = self.prompts[0]
+        losses = []
+        for brier_weight in (0.0, 0.5):
+            torch.manual_seed(0)
+            config = copy.deepcopy(self.config)
+            config.brier_weight = brier_weight
+            model = ClefForDecision(config).eval()
+            with torch.no_grad():
+                losses.append(model(**self.model_inputs(prompt), labels=self.labels(prompt)).loss)
+        self.assertGreater(losses[1].item(), losses[0].item())
 
     def test_from_a_clef_checkpoint(self):
         # A clef checkpoint ships its head (`joint_head.safetensors`, original names) and its config

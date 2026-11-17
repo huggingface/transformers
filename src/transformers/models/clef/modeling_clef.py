@@ -19,6 +19,7 @@
 # limitations under the License.
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -26,11 +27,11 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...decision import DecisionMixin, Question
+from ...decision import DecisionConfig, DecisionMixin, Question, process_scores
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_clef import ClefConfig
@@ -382,6 +383,28 @@ class ClefPreTrainedModel(PreTrainedModel):
             init.zeros_(module.residual_gate)
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    The output of [`ClefForDecision`] for one prompt, with `num_questions` questions of at most `max_options` options.
+    """
+)
+class ClefDecisionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+        The loss of the questions, see [`ClefForDecision`].
+    logits (`torch.FloatTensor` of shape `(num_questions, max_options)`):
+        The scores of the options of each question. The cells of the options a question does not have hold the minimum
+        of the dtype.
+    option_mask (`torch.BoolTensor` of shape `(num_questions, max_options)`):
+        Whether each cell of `logits` is an option of its question.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    option_mask: torch.BoolTensor | None = None
+
+
 @auto_docstring(
     custom_intro="""
     Clef (Cloudflare/clef): the model of its repo, its language modeling head and a decision head that scores all the
@@ -393,6 +416,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     """
 )
 class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
+    accepts_loss_kwargs = False  # the loss is a mean over the questions of the prompt, not over tokens
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: ClefConfig):
@@ -404,6 +428,7 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         self.scorer = ClefScorer(config)
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -411,8 +436,17 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
+        labels: torch.Tensor | None = None,
+        option_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> ClefDecisionOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(num_questions,)` or `torch.FloatTensor` of shape `(num_questions, max_options)`, *optional*):
+            The index of the right option of each question, `-100` for a question to ignore, or the distribution of
+            the right answer over its options.
+        option_mask (`torch.BoolTensor` of shape `(num_questions, max_options)`, *optional*):
+            The options each question has, from `num_options` by default.
+        """
         marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]  # a batch of one prompt
         hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state
         option_question_ids = torch.repeat_interleave(num_options)
@@ -421,8 +455,50 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
             hidden_states, input_ids, marks, num_options, question_type_ids, self.lm_head.weight
         )
         options, fields = self.encoder(memory, options, fields, field_embeddings, option_question_ids, **kwargs)
-        scores = self.scorer(fields[:, option_question_ids], options, priors)
-        return scores[0]
+        scores = self.scorer(fields[:, option_question_ids], options, priors)[0]
+
+        # The scores of the options of each question, padded to the widest question
+        if option_mask is None:
+            option_mask = torch.arange(int(num_options.max()), device=num_options.device) < num_options[:, None]
+        logits = scores.new_full(option_mask.shape, torch.finfo(scores.dtype).min).masked_scatter(option_mask, scores)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits,
+                labels,
+                option_mask,
+                is_score=question_type_ids == Question.questions_types.index("score"),
+                label_smoothing=self.config.label_smoothing,
+                brier_weight=self.config.brier_weight,
+                ordinal_weight=self.config.ordinal_weight,
+            )
+        return ClefDecisionOutput(loss=loss, logits=logits, option_mask=option_mask)
+
+    @torch.no_grad()
+    def decide(
+        self,
+        input_ids: torch.LongTensor,
+        marks: torch.LongTensor,
+        decision_questions: list[Question],
+        decision_config: DecisionConfig | None = None,
+        **kwargs,
+    ) -> list[torch.Tensor]:
+        """The `decide` of [`DecisionMixin`], from the padded logits of the output: the scores of each question."""
+        decision_config = decision_config or self.decision_config
+        num_options = torch.tensor([[len(question.options) for question in decision_questions]])
+        question_types = [Question.questions_types.index(question.type) for question in decision_questions]
+        inputs = {"input_ids": input_ids, **kwargs}
+        output = self(
+            marks=marks[None].to(self.device),
+            num_options=num_options.to(self.device),
+            question_type_ids=torch.tensor([question_types], device=self.device),
+            **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
+        )
+        scores = output.logits[output.option_mask]
+        return process_scores(
+            decision_config, input_ids, marks, decision_questions, scores.split(num_options[0].tolist())
+        )
 
 
-__all__ = ["ClefForDecision", "ClefPreTrainedModel"]
+__all__ = ["ClefDecisionOutput", "ClefForDecision", "ClefPreTrainedModel"]

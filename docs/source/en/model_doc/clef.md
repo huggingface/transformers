@@ -37,6 +37,18 @@ decide(
 )
 ```
 
+## Training
+
+[`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms, whose weights are fields of [`ClefConfig`]:
+
+- the cross entropy of the softmax over the options of each question, averaged over the questions. `label_smoothing` (default 0.0) mixes the uniform distribution over the options into its target.
+- `brier_weight` (default 0.0) times the squared distance of the probabilities to the target, summed over the options and averaged over the questions.
+- `ordinal_weight` (default 0.0) times, on score questions only, the expected distance `|i - j|` between the options and the right one, divided by the number of options minus one and averaged over the score questions.
+
+Hard and soft labels give the same loss for the same target. Pass `num_items_in_batch` to the loss to divide the summed cross entropy and Brier terms by it instead of by the number of questions.
+
+Cloudflare has not published Clef's training objective; these terms and their defaults are a community recipe.
+
 ## ClefConfig
 
 [[autodoc]] ClefConfig
@@ -45,3 +57,7 @@ decide(
 
 [[autodoc]] ClefForDecision
     - forward
+
+## ClefDecisionOutput
+
+[[autodoc]] models.clef.modeling_clef.ClefDecisionOutput

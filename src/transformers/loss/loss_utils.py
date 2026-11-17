@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
+from .loss_clef import ClefForDecisionLoss
 from .loss_ctc import ForCTCLoss
 from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
@@ -203,4 +204,5 @@ LOSS_MAPPING = {
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
+    "ClefForDecision": ClefForDecisionLoss,
 }
