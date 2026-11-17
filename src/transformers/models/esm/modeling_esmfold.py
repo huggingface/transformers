@@ -886,7 +886,6 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     config: EsmFoldConfig
 
     # Subclass `EsMPreTrainedModel` to deal with special init
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, EsmFoldLinear):
@@ -1964,6 +1963,8 @@ class EsmFoldingTrunk(nn.Module):
     """
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
+    config: EsmConfig
+
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
     _supports_flash_attn = False
     _supports_sdpa = False

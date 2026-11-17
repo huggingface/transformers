@@ -37,7 +37,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
@@ -126,7 +126,7 @@ class Glm4vTextConfig(PreTrainedConfig):
 
     model_type = "glm4v_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `Glm4v`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -196,7 +196,7 @@ class Glm4vConfig(PreTrainedConfig):
         "vision_config": Glm4vVisionConfig,
         "text_config": Glm4vTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -454,12 +454,13 @@ class Glm4vTextAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
@@ -475,8 +476,8 @@ class Glm4vTextAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -514,13 +515,14 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
@@ -534,7 +536,7 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -667,12 +669,13 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -681,15 +684,15 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         # torch.jit.trace() doesn't support cache objects in the output
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None and not torch.jit.is_tracing():
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
@@ -717,7 +720,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=text_position_ids,
         )
 
@@ -729,7 +732,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=text_position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -739,7 +742,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -850,12 +853,13 @@ class Glm4vModel(Qwen2VLModel):
 
         return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
@@ -906,7 +910,7 @@ class Glm4vModel(Qwen2VLModel):
                 video_grid_thw=video_grid_thw,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 mm_token_type_ids=mm_token_type_ids,
             )
 
@@ -914,7 +918,7 @@ class Glm4vModel(Qwen2VLModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
@@ -923,12 +927,13 @@ class Glm4vModel(Qwen2VLModel):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -982,7 +987,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             mm_token_type_ids=mm_token_type_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
@@ -1002,7 +1007,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

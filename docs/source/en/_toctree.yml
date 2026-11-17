@@ -743,8 +743,14 @@
         title: HYV3
       - local: model_doc/hy_v4
         title: HYV4
+      - local: model_doc/hy_v4_vl
+        title: HYV4VL
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/internlm3
+        title: InternLM3
+      - local: model_doc/iquestcoder
+        title: IQuestCoder
       - local: model_doc/jais2
         title: Jais2
       - local: model_doc/jamba
@@ -1223,6 +1229,10 @@
         title: Nemotron ASR Streaming
       - local: model_doc/neucodec
         title: NeuCodec
+      - local: model_doc/omniasr
+        title: Omnilingual ASR
+      - local: model_doc/omniasr_ctc
+        title: Omnilingual ASR CTC
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
@@ -1271,6 +1281,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/wavtokenizer
+        title: WavTokenizer
       - local: model_doc/whisper
         title: Whisper
       - local: model_doc/xcodec
@@ -1305,6 +1317,8 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/apertus1p5
+        title: Apertus 1.5
       - local: model_doc/aria
         title: Aria
       - local: model_doc/audioflamingo3
@@ -1357,6 +1371,8 @@
         title: DiffusionGemma
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/dots3_note
+        title: Dots 3 Note Preview
       - local: model_doc/edgetam
         title: EdgeTAM
       - local: model_doc/edgetam_video
@@ -1405,6 +1421,8 @@
         title: GOT-OCR2
       - local: model_doc/granite4_vision
         title: Granite4Vision
+      - local: model_doc/granite_docling
+        title: GraniteDocling
       - local: model_doc/granitevision
         title: GraniteVision
       - local: model_doc/grounding-dino
@@ -1421,6 +1439,8 @@
         title: Idefics3
       - local: model_doc/inkling
         title: Inkling
+      - local: model_doc/inkling2
+        title: Inkling2
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo

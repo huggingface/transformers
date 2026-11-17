@@ -34,6 +34,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -104,7 +105,6 @@ class LasrEncoderRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -212,6 +212,7 @@ class LasrEncoderAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -561,25 +562,23 @@ class LasrEncoder(LasrPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
 class LasrCTCGenerateOutput(ModelOutput):
-    """
-    Outputs of Lasr CTC model generation.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
-            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
+    r"""
+    sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+        if all batches finished early due to the `eos_token_id`.
+    logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
+        Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+        at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
+        each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+    attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
+        Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+        `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+    hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
+        Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+        `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor

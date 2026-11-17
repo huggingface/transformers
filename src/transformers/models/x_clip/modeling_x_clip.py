@@ -432,7 +432,6 @@ class XCLIPPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -597,7 +596,7 @@ class XCLIPTextModel(XCLIPPreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         kwargs.pop("is_causal", None)

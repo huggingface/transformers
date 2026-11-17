@@ -64,7 +64,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen2_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
     # Default tensor parallel plan for base model `Qwen2VL`
     base_model_tp_plan = {
@@ -158,7 +158,7 @@ class Qwen2VLConfig(PreTrainedConfig):
         "vision_config": Qwen2VLVisionConfig,
         "text_config": Qwen2VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

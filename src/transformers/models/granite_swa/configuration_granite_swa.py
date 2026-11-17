@@ -54,7 +54,7 @@ class GraniteSWAConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_swa"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     # Extends Granite's plan with the learnable per-head `sinks`, sharded across heads (colwise)
     # to match the q/k/v head-sharding so TP keeps each rank's sink slice aligned with its heads.
     base_model_tp_plan = {

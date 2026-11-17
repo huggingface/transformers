@@ -21,6 +21,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..glm.modeling_glm import GlmAttention, GlmForCausalLM, GlmForSequenceClassification, GlmForTokenClassification
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm4 import Glm4Config
@@ -48,12 +49,13 @@ class Glm4DecoderLayer(GradientCheckpointingLayer):
         self.post_self_attn_layernorm = Glm4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Glm4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -65,7 +67,7 @@ class Glm4DecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
