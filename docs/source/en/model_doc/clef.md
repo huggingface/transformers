@@ -68,7 +68,7 @@ decide = pipeline("decision", model=model, tokenizer=AutoTokenizer.from_pretrain
 
 ## Training
 
-[`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose float32 `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms, whose weights are fields of [`ClefConfig`]:
+[`ClefForDecision`] computes a loss when it is given `labels`, one per question of the prompt: the index of the right option, `-100` to ignore the question, or a distribution over its options (shape `(num_questions, max_options)`). The output is a [`~models.clef.modeling_clef.ClefDecisionOutput`] whose float32 `logits` have the shape `(num_questions, max_options)`, padded with the minimum of their dtype where a question has fewer options, and whose `option_mask` marks the options that exist. The loss is the sum of three terms and of the RLCD term below, whose weights are fields of [`ClefConfig`]:
 
 - the cross entropy of the softmax over the options of each question, averaged over the questions. `label_smoothing` (default 0.0) mixes the uniform distribution over the options into its target.
 - `brier_weight` (default 0.0) times the squared distance of the probabilities to the target, summed over the options and averaged over the questions.
@@ -78,7 +78,13 @@ decide = pipeline("decision", model=model, tokenizer=AutoTokenizer.from_pretrain
 
 Hard and soft labels give the same loss for the same target. Pass `num_items_in_batch` to the loss to divide the summed cross entropy and Brier terms by it instead of by the number of questions.
 
-Cloudflare has not published Clef's training objective; these terms and their defaults are a community recipe.
+### RLCD
+
+`rlcd_weight` (default 0.0) adds a policy term adapted from RLCD, the "Reinforcement Learning for Calibrated Decisions" objective of [Laya](https://github.com/NandhaKishorM/laya) (Apache-2.0). Zero-mean Gaussian noise of standard deviation `rlcd_sigma` (default 0.4) over the options of each question is added to the detached logits, `rlcd_samples` (default 32) times. Each noisy sample is rewarded by a strictly proper scoring rule against the target: the log score, plus `rlcd_spherical_weight` (default 0.75) times the spherical score, minus, on score questions, `rlcd_rps_weight` (default 1.0) times the ranked probability score. The advantage of each sample over the mean reward of the samples of its question weights the Gaussian log density of the sample, through which alone the gradient reaches the logits, and the term is averaged over the questions like the others. Ignored questions and padded options contribute nothing.
+
+The term is random, so [`ClefForDecision`] applies it in training mode only: in eval mode the loss is the supervised loss, the same at every call. The defaults are a revised variant of Laya's objective, with more samples and advantages that are not divided by their standard deviation; `rlcd_normalize_advantage=True, rlcd_samples=4` reproduces the objective of Laya's notebook.
+
+Cloudflare has not published Clef's training objective; these terms and their defaults are a community recipe, not an official Cloudflare objective.
 
 ## ClefConfig
 

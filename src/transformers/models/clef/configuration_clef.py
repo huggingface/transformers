@@ -76,6 +76,19 @@ class ClefConfig(PreTrainedConfig):
         Weight of the Brier score in the loss.
     ordinal_weight (`float`, *optional*, defaults to 0.0):
         Weight of the ordinal term of the loss, the expected distance of the options to the right one on score questions.
+    rlcd_weight (`float`, *optional*, defaults to 0.0):
+        Weight of the RLCD policy term of the loss (Reinforcement Learning for Calibrated Decisions, from Laya), applied
+        in training mode only.
+    rlcd_sigma (`float`, *optional*, defaults to 0.4):
+        Standard deviation of the noise added to the logits by the RLCD term.
+    rlcd_samples (`int`, *optional*, defaults to 32):
+        Number of noisy samples of the logits of each question in the RLCD term.
+    rlcd_spherical_weight (`float`, *optional*, defaults to 0.75):
+        Weight of the spherical score in the reward of the RLCD term.
+    rlcd_rps_weight (`float`, *optional*, defaults to 1.0):
+        Weight of the ranked probability score in the reward of the RLCD term, on score questions.
+    rlcd_normalize_advantage (`bool`, *optional*, defaults to `False`):
+        Whether the RLCD term divides its advantages by their standard deviation, as Laya's original objective does.
     head_type (`str`, *optional*, defaults to `"joint"`):
         The decision head: `"joint"` for the joint head of the checkpoints of clef, or `"cosine"` for a much smaller head
         that scores each option by the cosine of the projections of its span and of the span of its question.
@@ -116,6 +129,12 @@ class ClefConfig(PreTrainedConfig):
     label_smoothing: float = 0.0
     brier_weight: float = 0.0
     ordinal_weight: float = 0.0
+    rlcd_weight: float = 0.0
+    rlcd_sigma: float = 0.4
+    rlcd_samples: int = 32
+    rlcd_spherical_weight: float = 0.75
+    rlcd_rps_weight: float = 1.0
+    rlcd_normalize_advantage: bool = False
     head_type: str = "joint"
     cosine_width: int = 512
     cosine_initial_scale: float = 12.0
@@ -166,6 +185,12 @@ class ClefConfig(PreTrainedConfig):
             raise ValueError(f"`cosine_width` must be positive, got {self.cosine_width}.")
         if self.cosine_initial_scale <= 0:
             raise ValueError(f"`cosine_initial_scale` must be positive, got {self.cosine_initial_scale}.")
+        if self.rlcd_weight < 0:
+            raise ValueError(f"`rlcd_weight` must be non-negative, got {self.rlcd_weight}.")
+        if self.rlcd_sigma <= 0:
+            raise ValueError(f"`rlcd_sigma` must be positive, got {self.rlcd_sigma}.")
+        if self.rlcd_samples < 2:
+            raise ValueError(f"`rlcd_samples` must be at least 2, got {self.rlcd_samples}.")
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)

@@ -332,6 +332,62 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 losses.append(model(**self.model_inputs(prompt), labels=self.labels(prompt)).loss)
         self.assertGreater(losses[1].item(), losses[0].item())
 
+    def test_rlcd_only_in_training_mode(self):
+        torch.manual_seed(0)
+        config = copy.deepcopy(self.config)
+        config.brier_weight = 0.2
+        model = ClefForDecision(config)
+        inputs = self.collate(self.ragged_prompts())
+        labels = torch.tensor([1, 4, 0, 3, 2, 0])
+
+        def loss(rlcd_weight, seed=0):
+            model.config.rlcd_weight = rlcd_weight
+            torch.manual_seed(seed)
+            with torch.no_grad():
+                return model(**inputs, labels=labels).loss
+
+        model.eval()
+        supervised = loss(0.0)
+        self.assertTrue(torch.equal(loss(0.25), supervised))
+        self.assertTrue(torch.equal(loss(0.25, seed=1), supervised))
+        model.train()
+        # The backbone and the head have no dropout: in training mode only the policy term is random
+        self.assertTrue(torch.equal(loss(0.0, seed=1), supervised))
+        trained = loss(0.25)
+        self.assertTrue(torch.isfinite(trained))
+        self.assertNotEqual(trained.item(), supervised.item())
+        self.assertTrue(torch.equal(loss(0.25), trained))
+        self.assertNotEqual(loss(0.25, seed=1).item(), trained.item())
+
+    def test_rlcd_config_validation(self):
+        config = ClefConfig()
+        self.assertEqual(
+            (
+                config.rlcd_weight,
+                config.rlcd_sigma,
+                config.rlcd_samples,
+                config.rlcd_spherical_weight,
+                config.rlcd_rps_weight,
+                config.rlcd_normalize_advantage,
+            ),
+            (0.0, 0.4, 32, 0.75, 1.0, False),
+        )
+        for kwargs in ({"rlcd_sigma": 0.0}, {"rlcd_samples": 1}, {"rlcd_weight": -1.0}):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                ClefConfig(**kwargs)
+
+    def test_rlcd_backward_reaches_every_parameter(self):
+        torch.manual_seed(0)
+        config = copy.deepcopy(self.config)
+        config.rlcd_weight, config.rlcd_samples, config.rlcd_normalize_advantage = 0.25, 8, True
+        model = ClefForDecision(config).train()
+        output = model(**self.collate(self.ragged_prompts()), labels=torch.tensor([1, 4, 0, 3, 2, 0]))
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        for name, parameter in model.named_parameters():
+            self.assertIsNotNone(parameter.grad, name)
+            self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+
     def test_from_a_clef_checkpoint(self):
         # A clef checkpoint ships its head (`joint_head.safetensors`, original names) and its config
         # (`joint_head_config.json`) next to the weights of its model: read as they are, without any file of ours

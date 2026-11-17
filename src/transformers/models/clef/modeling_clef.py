@@ -673,6 +673,13 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 label_smoothing=self.config.label_smoothing,
                 brier_weight=self.config.brier_weight,
                 ordinal_weight=self.config.ordinal_weight,
+                # The policy term is random: out of training the loss is the supervised one, the same at every call
+                rlcd_weight=self.config.rlcd_weight if self.training else 0.0,
+                rlcd_sigma=self.config.rlcd_sigma,
+                rlcd_samples=self.config.rlcd_samples,
+                rlcd_spherical_weight=self.config.rlcd_spherical_weight,
+                rlcd_rps_weight=self.config.rlcd_rps_weight,
+                rlcd_normalize_advantage=self.config.rlcd_normalize_advantage,
             )
         return ClefDecisionOutput(loss=loss, logits=logits, option_mask=option_mask)
 
