@@ -79,6 +79,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 self.assertEqual(len(result), 1)
                 self.assertIsNone(result[0]["input_text"])
                 self.assertIsInstance(result[0]["generated_text"], str)
+
     def test_return_tensors_with_chat_input(self):
         pipe = pipeline(
             "any-to-any",
