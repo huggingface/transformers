@@ -4486,6 +4486,112 @@ class ModelTesterMixin(ExportTesterMixin):
             for layer_attention in attentions_not_sliding:
                 self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
 
+    @require_flash_attn
+    @require_torch_accelerator
+    @mark.flash_attn_test
+    @pytest.mark.torch_compile_test
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        """Given the inputs `get_data_dependent_inputs` computes, each modality's encoder (`get_image_embeddings`,
+        `get_video_embeddings`, `get_audio_embeddings`) traces into one graph, with no graph break, and returns what
+        eager does. Under varlen flash attention, which takes the packed patches' or frames' lengths as tensors, so
+        nothing is split or read back on the host."""
+
+        def encoders(model_class):
+            """Each modality's getter: the flat one (`get_<modality>_embeddings`), else `get_<modality>_features`
+            where a model has only that, already flat."""
+            found = []
+            for modality in ("image", "video", "audio"):
+                for getter in (f"get_{modality}_embeddings", f"get_{modality}_features"):
+                    if hasattr(model_class, getter):
+                        found.append(getter)
+                        break
+            return found
+
+        model_classes = [cls for cls in self.all_model_classes if encoders(cls)]
+        if not model_classes:
+            self.skipTest(reason="The model has no modality encoder")
+        for model_class in model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(reason=f"{model_class.__name__} does not support flash attention")
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            # Flash attention for every sub-model that supports it: one without (a timm backbone, say) keeps its
+            # default. Which ones do is read off a first build, then requested per sub-config at the real one
+            probe = model_class._from_config(copy.deepcopy(config))
+            supported = {
+                id(module.config)
+                for module in probe.modules()
+                if isinstance(module, PreTrainedModel) and module._supports_flash_attn
+            }
+
+            def implementations(sub_config):
+                plan = {"": "flash_attention_2"} if id(sub_config) in supported else {}
+                for key in sub_config.sub_configs:
+                    if getattr(sub_config, key, None) is not None:
+                        plan[key] = implementations(getattr(sub_config, key))
+                return plan
+
+            plan = implementations(probe.config)
+            del probe
+            model = model_class._from_config(config, attn_implementation=plan, dtype=torch.bfloat16)
+            model = model.to(torch_device).eval()
+            # Flash attention's attention sinks need a Hopper GPU
+            has_sinks = any(name.endswith("sinks") for name, _ in model.named_parameters())
+            if has_sinks and torch.cuda.get_device_capability()[0] < 9:
+                self.skipTest(reason="Flash attention's attention sinks need a Hopper GPU")
+            inputs = self._prepare_for_class(inputs, model_class)
+            inputs = {
+                name: value.to(torch.bfloat16)
+                if isinstance(value, torch.Tensor) and value.is_floating_point()
+                else value
+                for name, value in inputs.items()
+            }
+            data_dependent_inputs = model.get_data_dependent_inputs(**inputs)
+
+            # The arguments each encoder gets in the forward, recorded on the module that defines it
+            getters = encoders(model_class)
+            calls = {}
+            owners = {}
+            for module in model.modules():
+                for getter in getters:
+                    if getter in type(module).__dict__ and getter not in owners:
+                        owners[getter] = module
+
+            def recorder(getter, original):
+                def record(*args, **kwargs):
+                    calls.setdefault(getter, (args, kwargs))
+                    return original(*args, **kwargs)
+
+                return record
+
+            for getter, owner in owners.items():
+                setattr(owner, getter, recorder(getter, getattr(owner, getter)))
+            try:
+                with torch.no_grad():
+                    model(**copy.deepcopy(inputs))
+            finally:
+                for getter, owner in owners.items():
+                    delattr(owner, getter)
+
+            for getter, (args, kwargs) in calls.items():
+                prefix = getter.removeprefix("get_").split("_")[0] + "_"
+                derived = {name: value for name, value in data_dependent_inputs.items() if name.startswith(prefix)}
+                encoder = getattr(owners[getter], getter)
+                torch._dynamo.reset()
+                compiled = torch.compile(encoder, fullgraph=True, backend="eager")
+                with torch.no_grad():
+                    expected = encoder(*copy.deepcopy(args), **copy.deepcopy(kwargs), **derived)
+                    actual = compiled(*copy.deepcopy(args), **copy.deepcopy(kwargs), **derived)
+                tensors = [
+                    [
+                        leaf
+                        for leaf in torch.utils._pytree.tree_leaves(out.to_tuple())
+                        if isinstance(leaf, torch.Tensor)
+                    ]
+                    for out in (actual, expected)
+                ]
+                for output, reference in zip(*tensors):
+                    torch.testing.assert_close(output, reference)
+
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test

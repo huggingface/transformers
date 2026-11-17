@@ -237,6 +237,7 @@ def get_vision_interpolation_indices_and_weights(
     align_corners: bool = False,
     spatial_merge_size: int = 1,
     padding: str = "border",
+    resize_to_longest_side: bool = False,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-patch gather indices/weights that resample a square learned `(num_grid_per_side,
@@ -257,6 +258,8 @@ def get_vision_interpolation_indices_and_weights(
         mode: `"bilinear"` or `"bicubic"`.
         align_corners: matches the corresponding `F.interpolate` flag.
         spatial_merge_size: merge block size; `1` keeps raster patch order.
+        resize_to_longest_side: resize the table to a square of each image's longest side and crop it to the
+            image's grid (RADIO's cropped position embedding), instead of resizing it to the grid.
         kwargs: optional caller kwargs — if it contains both `"interp_indices"` and `"interp_weights"`
             they are popped and returned.
 
@@ -290,8 +293,11 @@ def get_vision_interpolation_indices_and_weights(
     row = block_row * merge + in_row
     col = block_col * merge + in_col
 
-    h_taps, h_weights = _interpolation_axis_taps_weights(row, heights, side, mode, align_corners, padding)
-    w_taps, w_weights = _interpolation_axis_taps_weights(col, widths, side, mode, align_corners, padding)
+    target_heights, target_widths = heights, widths
+    if resize_to_longest_side:
+        target_heights = target_widths = torch.maximum(heights, widths)
+    h_taps, h_weights = _interpolation_axis_taps_weights(row, target_heights, side, mode, align_corners, padding)
+    w_taps, w_weights = _interpolation_axis_taps_weights(col, target_widths, side, mode, align_corners, padding)
     n = h_taps.shape[1]  # taps per axis
     # 2D separable: outer product of the per-axis taps/weights → n*n taps per patch.
     indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, n * n)
@@ -356,6 +362,31 @@ def get_vision_nearest_position_ids(
         bucket_w = torch.bucketize(w_coords, boundaries, right=True)
         pos_ids_list.append((bucket_h[:, None] * num_patches_per_side + bucket_w).flatten())
     return torch.cat(pos_ids_list)
+
+
+def get_vision_pixel_shuffle_index(
+    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
+    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
+    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
+    """
+    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
+        return index
+    indices = []
+    offset = 0
+    for frames, height, width in grid_thw.tolist():
+        frames, height, width = int(frames), int(height), int(width)
+        permutation = torch.arange(height * width, device=grid_thw.device)
+        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
+        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
+        if frames > 1:
+            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
+            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
+            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
+        indices.append(permutation + offset)
+        offset += frames * height * width
+    return torch.cat(indices, dim=0)
 
 
 def get_vision_merged_shape(

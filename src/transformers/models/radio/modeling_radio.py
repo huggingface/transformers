@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -34,6 +35,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_interpolation_indices_and_weights
 from .configuration_radio import RadioConfig
 
 
@@ -119,17 +121,30 @@ class RadioPatchEmbeddings(nn.Module):
             pos = F.interpolate(pos.float(), size=tuple(input_dims), mode="bilinear", align_corners=False).to(dtype)
         return pos.flatten(2).permute(0, 2, 1)
 
-    def forward(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor | None = None) -> torch.Tensor:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_hw: torch.LongTensor | None = None,
+        interpolation: tuple[torch.Tensor, torch.Tensor] | None = None,
+        patch_index: torch.LongTensor | None = None,
+    ) -> torch.Tensor:
         # temporally-packed video stacks `video_temporal_patch_size` frames along the channel dim
         if image_grid_hw is None and pixel_values.shape[1] != self.num_channels:
             return self.embed_video(pixel_values)
-        return self.embed_image(pixel_values, image_grid_hw)
+        return self.embed_image(pixel_values, image_grid_hw, interpolation, patch_index)
 
-    def embed_image(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor | None = None) -> torch.Tensor:
+    def embed_image(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_hw: torch.LongTensor | None = None,
+        interpolation: tuple[torch.Tensor, torch.Tensor] | None = None,
+        patch_index: torch.LongTensor | None = None,
+    ) -> torch.Tensor:
         """Embed images, given either as a dense `(batch, channels, height, width)` batch or, when
-        `image_grid_hw` is set, as the concatenated patches of images with differing grids."""
+        `image_grid_hw` is set, as the concatenated patches of images with differing grids, whose position
+        embeddings are read with `interpolation`'s indices and weights and which are placed at `patch_index`."""
         if image_grid_hw is not None:
-            return self._embed_packed_patches(pixel_values, image_grid_hw)
+            return self._embed_packed_patches(pixel_values, image_grid_hw, interpolation, patch_index)
         return self._embed_dense_patches(pixel_values, self.patch_projection)
 
     def embed_video(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -148,16 +163,31 @@ class RadioPatchEmbeddings(nn.Module):
         prefix = self.cls_register_token.unsqueeze(0).expand(patches.shape[0], -1, -1)
         return torch.cat([prefix, patches], dim=1)
 
-    def _embed_packed_patches(self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor) -> torch.Tensor:
-        """Embeds the concatenated patches of images with differing grids into one `(1, total_length, hidden)` sequence."""
+    def _embed_packed_patches(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_hw: torch.LongTensor,
+        interpolation: tuple[torch.Tensor, torch.Tensor],
+        patch_index: torch.LongTensor,
+    ) -> torch.Tensor:
+        """
+        Embeds the concatenated patches of images with differing grids into one `(1, total_length, hidden)` sequence:
+        each image's cls and register tokens, then its patches.
+        """
         patches = self.patch_projection(pixel_values)
-        embeddings = []
-        for (grid_height, grid_width), image_patches in zip(
-            image_grid_hw.tolist(), patches.split(image_grid_hw.prod(-1).tolist())
-        ):
-            position_embedding = self._interpolate_position_embedding((grid_height, grid_width), patches.dtype)
-            embeddings.extend([self.cls_register_token, image_patches + position_embedding[0]])
-        return torch.cat(embeddings).unsqueeze(0)
+        # `_interpolate_position_embedding` at each patch, as a weighted gather from the table
+        indices, weights = interpolation
+        table = self.position_embedding.reshape(-1, self.position_embedding.shape[-1]).float()
+        position_embedding = (table[indices] * weights[..., None]).sum(1)
+        patches = patches + position_embedding.to(patches.dtype)
+
+        num_images, num_prefix_tokens = image_grid_hw.shape[0], self.cls_register_token.shape[0]
+        image_starts = F.pad((image_grid_hw.prod(-1) + num_prefix_tokens).cumsum(0), (1, 0))[:-1]
+        prefix_index = image_starts[:, None] + torch.arange(num_prefix_tokens, device=patches.device)
+        embeddings = patches.new_zeros(patches.shape[0] + num_images * num_prefix_tokens, patches.shape[-1])
+        embeddings = embeddings.index_copy(0, patch_index, patches)
+        embeddings = embeddings.index_copy(0, prefix_index.flatten(), self.cls_register_token.repeat(num_images, 1))
+        return embeddings.unsqueeze(0)
 
 
 class RadioMLP(nn.Module):
@@ -451,6 +481,30 @@ class RadioModel(RadioPreTrainedModel):
         self.input_conditioner = nn.Identity()
         return conditioner
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_grid_hw: torch.LongTensor | None = None, **kwargs
+    ) -> dict[str, Any]:
+        r"""
+        The inputs the forward computes from `image_grid_hw` with data-dependent operations: with flash attention and
+        several packed images, the longest image sequence's `max_seqlen`. Passed back to the forward, it keeps
+        `torch.compile` and `torch.export` free of that host sync.
+
+        Args:
+            pixel_values (`torch.Tensor`, *optional*):
+                Unused, the images are read from `image_grid_hw`.
+            image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+                Patch grid `(height, width)` of each image in packed `pixel_values`.
+        """
+        if image_grid_hw is None:
+            return {}
+        indices, weights = get_vision_interpolation_indices_and_weights(
+            F.pad(image_grid_hw, (1, 0), value=1), self.embeddings.max_rows, resize_to_longest_side=True
+        )
+        inputs = {"interp_indices": indices, "interp_weights": weights}
+        if image_grid_hw.shape[0] > 1 and is_flash_attention_requested(self.config):
+            inputs["max_seqlen"] = int((image_grid_hw.prod(-1) + self.config.num_summary_tokens).max())
+        return inputs
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -492,10 +546,18 @@ class RadioModel(RadioPreTrainedModel):
     ) -> RadioModelOutput:
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         pixel_values = self.input_conditioner(pixel_values.view(-1, num_channels, patch_size, patch_size))
-        hidden_states = self.embeddings(pixel_values.flatten(1), image_grid_hw)
-
+        # The table bilinearly resized to a square of each image's longest grid side, cropped to the grid
+        interpolation = get_vision_interpolation_indices_and_weights(
+            F.pad(image_grid_hw, (1, 0), value=1), self.embeddings.max_rows, resize_to_longest_side=True, kwargs=kwargs
+        )
+        # Each patch's place in the packed sequence: after its own image's prefix tokens and those of the images before
         num_prefix_tokens = self.config.num_summary_tokens
-        sequence_lengths = image_grid_hw.prod(-1) + num_prefix_tokens
+        num_patches, sizes = pixel_values.shape[0], image_grid_hw.prod(-1)
+        image_index = torch.arange(len(sizes), device=sizes.device).repeat_interleave(sizes, output_size=num_patches)
+        patch_index = torch.arange(num_patches, device=sizes.device) + num_prefix_tokens * (image_index + 1)
+        hidden_states = self.embeddings(pixel_values.flatten(1), image_grid_hw, interpolation, patch_index)
+
+        sequence_lengths = sizes + num_prefix_tokens
         cu_seqlens = F.pad(sequence_lengths.cumsum(0), (1, 0)).to(torch.int32)
         # a single image is a plain dense sequence and needs no packed attention
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -505,9 +567,7 @@ class RadioModel(RadioPreTrainedModel):
 
         starts = cu_seqlens[:-1].long()
         summary = last_hidden_state[starts[:, None] + self.summary_idxs[None, :]].flatten(1)
-        positions = torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device)
-        positions_in_image = positions - starts.repeat_interleave(sequence_lengths)
-        features = last_hidden_state[positions_in_image >= num_prefix_tokens]
+        features = last_hidden_state[patch_index]
 
         return RadioModelOutput(
             summary=summary,
