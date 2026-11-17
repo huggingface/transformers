@@ -45,7 +45,6 @@ class BambaConfig(PreTrainedConfig):
     model_type = "bamba"
     base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     attribute_map = {"layer_types": "layers_block_type"}
-    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 128000
     tie_word_embeddings: bool = False

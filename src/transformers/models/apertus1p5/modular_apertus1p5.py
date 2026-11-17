@@ -308,7 +308,6 @@ class Apertus1p5Config(PreTrainedConfig):
     ```"""
 
     model_type = "apertus1p5"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
