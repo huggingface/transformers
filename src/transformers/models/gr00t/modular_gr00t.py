@@ -437,7 +437,9 @@ class Gr00tPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gr00tDiTLayer", "Gr00tVLRefinerLayer"]
     _keys_to_ignore_on_load_unexpected = [r"lm_head"]
-    _supports_flash_attn = True
+    # Flash Attention drops the text/image cross-attention masks: they mask keys only, which its unpadding mistakes for
+    # query padding when the query and key lengths differ. It gives wrong actions on the original checkpoint, as in PI0
+    _supports_flash_attn = False
     _supports_sdpa = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
