@@ -390,3 +390,79 @@ class DecisionSentinelTokensTest(unittest.TestCase):
             self.assertEqual(spy.call_count, 0)
         self.assertEqual(len(tokenizer), size + 2)
         self.assertEqual([p.input_ids for p in first], [p.input_ids for p in second])
+
+    def test_tokenizer_whose_unknown_tokens_get_a_fallback_id_without_an_unknown_token(self):
+        # Like a slow sentencepiece tokenizer built with `unk_token=None`: `piece_to_id` answers the model's own unknown
+        # id (0) for unknown pieces, while `unk_token_id` is None. A toy slow tokenizer, no sentencepiece model needed
+        from transformers.tokenization_python import PythonBackend
+
+        class FallbackIdTokenizer(PythonBackend):
+            def __init__(self):
+                self.vocab = {"<piece0>": 0, "state": 1, "x": 2}
+                super().__init__(unk_token=None)
+
+            @property
+            def vocab_size(self):
+                return len(self.vocab)
+
+            def get_vocab(self):
+                return {**self.vocab, **self.added_tokens_encoder}
+
+            def _tokenize(self, text):
+                return text.split()
+
+            def _convert_token_to_id(self, token):
+                return self.vocab.get(token, 0)  # not `unk_token_id`
+
+            def _convert_id_to_token(self, index):
+                return {i: t for t, i in self.vocab.items()}.get(index)
+
+        tokenizer = FallbackIdTokenizer()
+        self.assertIsNone(tokenizer.unk_token_id)
+        self.assertEqual(tokenizer.convert_tokens_to_ids(MARK), 0)  # the fallback, for a token it does not know
+        size = len(tokenizer)
+        config = DecisionConfig(chat_template="{{ state }}<|mark|>")
+        request = {"state": "state", "questions": {"x": {"type": "noul"}}}
+        with self.spy_on_get_vocab(tokenizer) as spy:
+            config.prepare_inputs(request, tokenizer)
+            spy.reset_mock()
+            config.prepare_inputs(request, tokenizer)
+            self.assertEqual(spy.call_count, 0)
+        self.assertEqual(len(tokenizer), size + 2)  # added once
+        mark, split = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+        self.assertEqual(len({mark, split, 0}), 3)
+        self.assertEqual(tokenizer.convert_ids_to_tokens([mark, split]), [MARK, SPLIT])
+
+    def test_tokenizer_with_only_the_split_sentinel(self):
+        # The old check only looked at `<|mark|>`: with just `<|split|>` present it adds both. `<|split|>` is already
+        # there, so that is a no-op for it, and `<|mark|>` is new: two tokens are added and the ids resolve
+        tokenizer = self.fresh()
+        tokenizer.add_tokens([SPLIT], special_tokens=True)
+        split_id, size = tokenizer.convert_tokens_to_ids(SPLIT), len(tokenizer)
+        reference = self.fresh()
+        reference.add_tokens([SPLIT], special_tokens=True)
+        if MARK not in reference.get_vocab():  # the old check
+            reference.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
+        render(tokenizer, REQUEST)
+        self.assertEqual(len(tokenizer), len(reference))
+        self.assertEqual(len(tokenizer), size + 1)
+        self.assertEqual(tokenizer.convert_tokens_to_ids(SPLIT), split_id)
+        self.assertEqual(
+            tokenizer.convert_tokens_to_ids([MARK, SPLIT]), reference.convert_tokens_to_ids([MARK, SPLIT])
+        )
+
+    def test_unknown_token_that_is_the_mark_is_known_like_the_vocabulary_check_says(self):
+        from tokenizers import Tokenizer, models, pre_tokenizers
+
+        from transformers import PreTrainedTokenizerFast
+
+        backend = Tokenizer(models.WordLevel({MARK: 0, "state": 1, "x": 2}, unk_token=MARK))
+        backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend, unk_token=MARK)
+        self.assertIn(MARK, tokenizer.get_vocab())  # old check: known, nothing added
+        tokenizer.get_vocab()
+        size = len(tokenizer)
+        DecisionConfig(chat_template="{{ state }}<|mark|>").prepare_inputs(
+            {"state": "state", "questions": {"x": {"type": "noul"}}}, tokenizer
+        )
+        self.assertEqual(len(tokenizer), size)
