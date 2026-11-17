@@ -892,7 +892,9 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             cls._ultrabert_tokenizer = tokenizer
         return cls._ultrabert_tokenizer
 
-    def ultrabert_model(self, head_type="joint", sliding_window=16, **text_config_kwargs):
+    def ultrabert_model(
+        self, head_type="joint", sliding_window=16, global_pooling="first", prompt_style="plain", **text_config_kwargs
+    ):
         """
         A tiny Clef on a tiny UltraBERT: rotary positions, two local layers of radius `sliding_window` (with their own
         RoPE base) and one global layer, padding, beginning and end of sequence all id 0.
@@ -913,7 +915,10 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         config = ClefConfig(
             text_config=text_config,
             head_type=head_type,
-            **{"cosine_width": 8, "global_pooling": "first", "prompt_style": "plain", **self.tiny_sizes},
+            cosine_width=8,
+            global_pooling=global_pooling,
+            prompt_style=prompt_style,
+            **self.tiny_sizes,
         )
         config._attn_implementation, config.dtype = "eager", torch.float32
         torch.manual_seed(0)
@@ -1585,8 +1590,9 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                     self.assertTrue(missing and not any(key.startswith("model.") for key in missing), missing)
                 head_config = self.joint_head_config(model.config)
                 self.write_source(source, backbone, self.ultrabert_tokenizer(), head, head_config, auto_map=auto_map)
+                # A trained head on a bidirectional backbone: how it was trained is given, the folder does not record it
                 with CaptureLogger(logging.get_logger(self.converter_logger)) as captured:
-                    _, converted = self.convert(source)
+                    _, converted = self.convert(source, global_pooling="first", prompt_style="plain")
                 if layout == "sequence_classification":
                     for key in missing:  # the task head of the source, dropped
                         self.assertIn(key, captured.out)
@@ -1594,6 +1600,98 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 with torch.no_grad():
                     difference = (converted(**inputs).logits - model(**inputs).logits).abs().max()
                 self.assertEqual(difference.item(), 0)
+
+    def test_convert_trained_head_on_bidirectional_backbone_needs_its_pooling_and_prompt(self):
+        # A joint head trained with "last" pooling and the ChatML prompt on an UltraBERT: guessing "first" and "plain"
+        # from the backbone changed every logit (by up to 0.70) and the template. The folder does not record how the
+        # head was trained, so both are required
+        from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint
+
+        model = self.ultrabert_model("joint", global_pooling="last", prompt_style="chatml")
+        head, _ = self.head_state(model)
+        inputs = self.collate(self.ultrabert_prompts())
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(
+                source, model.model, self.ultrabert_tokenizer(), head, self.joint_head_config(model.config)
+            )
+            for kwargs in ({}, {"global_pooling": "last"}, {"prompt_style": "chatml"}):
+                with self.subTest(**kwargs), tempfile.TemporaryDirectory() as output:
+                    with self.assertRaisesRegex(ValueError, r"does not record how.*--global_pooling.*--prompt_style"):
+                        convert_clef_checkpoint(source, output, **kwargs)
+                    self.assertEqual(list(Path(output).iterdir()), [])
+            _, converted = self.convert(source, cli=True, global_pooling="last", prompt_style="chatml")
+        self.assertEqual((converted.config.global_pooling, converted.config.prompt_style), ("last", "chatml"))
+        self.assertEqual(converted.decision_config.chat_template, CLEF_TEMPLATE)
+        with torch.no_grad():
+            difference = (converted(**inputs).logits - model(**inputs).logits).abs().max()
+        self.assertEqual(difference.item(), 0)
+
+    def test_direct_load_errors_name_the_converter(self):
+        # Folders in the layout of clef that `from_pretrained` cannot read as they are: a bidirectional backbone (its
+        # bare keys collide with the renaming of the joint head, and nothing records the pooling and prompt of the head)
+        # and a cosine head. Both point at the converter
+        model = self.ultrabert_model("joint")
+        head, _ = self.head_state(model)
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(
+                source, model.model, self.ultrabert_tokenizer(), head, self.joint_head_config(model.config)
+            )
+            message = r"convert_clef_weights_to_hf\.py.*--global_pooling.*--prompt_style"
+            with self.assertRaisesRegex(ValueError, message):
+                ClefForDecision.from_pretrained(source)
+        model = self.cosine_model()
+        head, state = self.head_state(model)
+        head = {key.removeprefix("cosine_head."): value for key, value in head.items()}
+        backbone = self.backbone_class(model.config.text_config)
+        backbone.load_state_dict({k: v for k, v in state.items() if k.startswith("model.")}, strict=False)
+        head_config = {"head_type": "cosine_span_v1", "hidden_size": 24, "width": 8, "initial_scale": 12.0}
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(source, backbone, self.tokenizer, head, head_config)
+            with self.assertRaisesRegex(ValueError, r"cosine_span_v1.*convert_clef_weights_to_hf\.py"):
+                ClefForDecision.from_pretrained(source)
+        # A folder that is already a native Clef checkpoint is not converted again
+        from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint
+
+        with tempfile.TemporaryDirectory() as native, tempfile.TemporaryDirectory() as output:
+            model.save_pretrained(native)
+            self.tokenizer.save_pretrained(native)
+            with self.assertRaisesRegex(ValueError, "already a native Clef checkpoint"):
+                convert_clef_checkpoint(native, output)
+
+    def test_convert_refuses_float64_coerces_the_scale_and_stages_next_to_the_output(self):
+        from unittest import mock
+
+        from transformers.models.clef import convert_clef_weights_to_hf as converter
+
+        model = self.cosine_model()
+        head, state = self.head_state(model)
+        head = {key.removeprefix("cosine_head."): value for key, value in head.items()}
+        backbone = self.backbone_class(copy.deepcopy(model.config.text_config))
+        backbone.load_state_dict({k: v for k, v in state.items() if k.startswith("model.")}, strict=False)
+        # An integer scale, as a hand-written config may have it
+        head_config = {"head_type": "cosine_span_v1", "hidden_size": 24, "width": 8, "initial_scale": 12}
+        with tempfile.TemporaryDirectory() as source:
+            self.write_source(source, backbone, self.tokenizer, head, head_config)
+            staged = []
+            temporary_directory = tempfile.TemporaryDirectory
+
+            def recording(*args, **kwargs):
+                directory = temporary_directory(*args, **kwargs)
+                staged.append(Path(directory.name))
+                return directory
+
+            with mock.patch.object(converter.tempfile, "TemporaryDirectory", recording):
+                output, converted = self.convert(source)
+            self.assertEqual(converted.config.cosine_initial_scale, 12.0)
+            self.assertIsInstance(converted.config.cosine_initial_scale, float)
+            # Staged on the disk of the output, next to it, and removed
+            self.assertEqual(len(staged), 1)
+            self.assertEqual(staged[0].parent, Path(output).parent)
+            self.assertFalse(staged[0].exists())
+            # Float64 would be rounded by the float32 staging (by 2.7e-9 here): refused, rather than changed
+            backbone.double().save_pretrained(source)
+            with tempfile.TemporaryDirectory() as output, self.assertRaisesRegex(ValueError, r"F64.*float64"):
+                converter.convert_clef_checkpoint(source, output)
 
     def test_incomplete_source_raises(self):
         from transformers.models.clef.convert_clef_weights_to_hf import convert_clef_checkpoint

@@ -22,7 +22,12 @@ of `model_type: clef`, its weights with the head in float32, its tokenizer, `dec
   prefix next to a task head: the prefix is stripped, the task head dropped, and a new head of `head_type` initialized.
 
 The backbone is the bare model of the `model_type` of the `config.json` of the folder, loaded strictly. No code of the
-folder is ever imported.
+folder is ever imported. A folder that ships a trained head on a bidirectional backbone does not record how the head was
+trained: give its `--global_pooling` and `--prompt_style`.
+
+The converted weights are staged in a temporary folder next to the output folder (on the disk of the output, about the
+size of the source in its precision) and loaded back in float32 to be checked: the conversion needs up to about three
+times the size of a half-precision source in RAM, and a disk with room for twice its size.
 
 Example:
     python src/transformers/models/clef/convert_clef_weights_to_hf.py --source path/to/checkpoint --output path/to/clef
@@ -57,7 +62,8 @@ COSINE_HEAD_TYPE = "cosine_span_v1"
 QUESTION_TYPES = ("noul", "choice", "score")  # the order of the temperatures of the calibration file
 # Settings of the config of the folder that describe its remote or task classes, not the backbone
 TASK_CONFIG_KEYS = ("auto_map", "architectures", "id2label", "label2id", "num_labels", "problem_type")
-SAFETENSORS_DTYPES = {"F64": torch.float64, "F32": torch.float32, "BF16": torch.bfloat16, "F16": torch.float16}
+# The precisions of the backbones that are converted: the model is staged in float32, which holds each of them exactly
+SAFETENSORS_DTYPES = {"F32": torch.float32, "BF16": torch.bfloat16, "F16": torch.float16}
 JOINT_SIZES = ("hidden_size", "intermediate_size", "num_hidden_layers", "num_evidence_layers", "num_attention_heads")
 COSINE_SIZES = ("cosine_width", "cosine_initial_scale")
 # The keys of the `joint_head_config.json` of each head
@@ -164,6 +170,13 @@ def clef_config(
 ) -> ClefConfig:
     """The config of the converted model: the head of the folder, or a new one of `head_type` and `sizes`."""
     bidirectional = text_config["model_type"] in MODEL_FOR_MASKED_LM_MAPPING_NAMES
+    if head_config is not None and bidirectional and (global_pooling is None or prompt_style is None):
+        raise ValueError(
+            f"{folder} ships a trained decision head on a bidirectional backbone ({text_config['model_type']}), and "
+            "the folder does not record how that head was trained: a wrong guess of its pooling or of its prompt "
+            "silently changes every logit. Give both, as they were in training, e.g. `--global_pooling first "
+            "--prompt_style plain` (or `--global_pooling last --prompt_style chatml`)."
+        )
     kwargs = {
         "global_pooling": global_pooling or ("first" if bidirectional else "last"),
         "prompt_style": prompt_style or ("plain" if bidirectional else "chatml"),
@@ -192,7 +205,7 @@ def clef_config(
                 head_type="cosine",
                 backbone_hidden_size=head_config["hidden_size"],
                 cosine_width=head_config["width"],
-                cosine_initial_scale=head_config["initial_scale"],
+                cosine_initial_scale=float(head_config["initial_scale"]),
             )
         else:
             kwargs.update(head_type="joint", joint_head_config=head_config)
@@ -219,8 +232,9 @@ def convert_clef_checkpoint(
         safe_serialization (`bool`, defaults to `True`): Transformers saves safetensors only, `False` is refused.
         head_type (`str`, *optional*): `"joint"` (the default) or `"cosine"`, the head of a folder without one. A folder
             with a head keeps it, and refuses another type.
-        global_pooling, prompt_style (`str`, *optional*): see [`ClefConfig`]. By default `"first"` and `"plain"` for a
-            bidirectional backbone (one of a masked language model), `"last"` and `"chatml"` otherwise.
+        global_pooling, prompt_style (`str`, *optional*): see [`ClefConfig`]. For a new head, by default `"first"` and
+            `"plain"` on a bidirectional backbone (one of a masked language model), `"last"` and `"chatml"` otherwise.
+            Required, both, for a trained head on a bidirectional backbone: the folder does not record them.
         seed (`int`, defaults to 0): the seed of the initialization of a new head.
         head_sizes: the sizes of a new head (`hidden_size`, `intermediate_size`, `num_hidden_layers`,
             `num_evidence_layers` and `num_attention_heads` of a joint head, `cosine_width` and `cosine_initial_scale`
@@ -237,9 +251,13 @@ def convert_clef_checkpoint(
     folder, output = source_folder(source), Path(output)
     if output.resolve() == folder.resolve():
         raise ValueError(f"The output folder {output} is the folder of the source: convert to another one.")
-    head_config = read_head_config(folder)
-
     text_config = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+    if text_config.get("model_type") == ClefConfig.model_type:
+        raise ValueError(
+            f"{folder} is already a native Clef checkpoint (`model_type: clef`): it needs no conversion, load it with "
+            "`AutoModelForDecision.from_pretrained`."
+        )
+    head_config = read_head_config(folder)
     text_config = {key: value for key, value in text_config.items() if key not in TASK_CONFIG_KEYS}
     config = clef_config(folder, text_config, head_config, head_type, global_pooling, prompt_style, sizes)
     decision_config, max_len = calibrated_decision_config(folder, config.prompt_style)
@@ -258,7 +276,8 @@ def convert_clef_checkpoint(
         if len(floating) != 1 or not floating <= set(SAFETENSORS_DTYPES):
             raise ValueError(
                 f"The weights of the backbone of {folder} have the floating-point dtypes {sorted(floating)}: only a "
-                f"backbone in one of {sorted(SAFETENSORS_DTYPES)} is converted, without changing its weights."
+                f"backbone in one of {sorted(SAFETENSORS_DTYPES)} is converted, without changing its weights (it is "
+                "staged in float32, which would round float64). Save the backbone in one of them first."
             )
         backbone_dtype = SAFETENSORS_DTYPES[floating.pop()]
         state = {f"model.{key[len(prefix) :]}": (weights[key], key) for key in backbone_keys}
@@ -283,8 +302,12 @@ def convert_clef_checkpoint(
                 {(f"cosine_head.{k}" if config.head_type == "cosine" else k): (v, k) for k, v in head.items()}
             )
 
-        # Staged as a checkpoint of Clef, which `from_pretrained` loads (renaming the joint head) and checks
-        staging = stack.enter_context(tempfile.TemporaryDirectory())
+        # Staged as a checkpoint of Clef, which `from_pretrained` loads (renaming the joint head) and checks: next to the
+        # output, on its disk, rather than in the temporary directory of the system, which may be too small for it
+        output.parent.mkdir(parents=True, exist_ok=True)
+        staging = stack.enter_context(
+            tempfile.TemporaryDirectory(dir=output.parent, prefix=f".{output.name}-staging-")
+        )
         config.save_pretrained(staging)
         save_file(
             {key: handle.get_tensor(name) for key, (handle, name) in state.items()},

@@ -150,6 +150,16 @@ class ClefConfig(PreTrainedConfig):
         """The decision config of a clef checkpoint, from its config files, or `None` for any other checkpoint."""
         if "joint_head_config" not in head_configs:
             return None
+        from ..auto.modeling_auto import MODEL_FOR_MASKED_LM_MAPPING_NAMES
+
+        model_type = text_config.get("model_type")
+        if model_type in MODEL_FOR_MASKED_LM_MAPPING_NAMES and model_type != ClefConfig.model_type:
+            raise ValueError(
+                f"This folder ships a decision head in the layout of clef on a bidirectional backbone ({model_type}), "
+                "which does not load as is: nothing records the pooling and prompt the head was trained with. Convert "
+                "it with `src/transformers/models/clef/convert_clef_weights_to_hf.py --source <folder> --output "
+                "<new folder> --global_pooling <first|last> --prompt_style <plain|chatml>`, then load the new folder."
+            )
         return ClefConfig.prompt_decision_config("chatml")
 
     @staticmethod
@@ -168,6 +178,13 @@ class ClefConfig(PreTrainedConfig):
 
     def __post_init__(self, joint_head_config: dict | None = None, **kwargs):
         if joint_head_config:  # the config of the head of a clef checkpoint, whose config is `text_config`
+            if joint_head_config.get("head_type") is not None:  # none for the joint head of clef
+                raise ValueError(
+                    f"`joint_head_config.json` declares a {joint_head_config['head_type']!r} head, which does not load "
+                    "as is: convert the folder with `src/transformers/models/clef/convert_clef_weights_to_hf.py "
+                    "--source <folder> --output <new folder>` (it reads `cosine_span_v1` cosine heads), then load the "
+                    "new folder."
+                )
             self.backbone_hidden_size, self.hidden_size = joint_head_config["hidden_size"], joint_head_config["width"]
             self.num_evidence_layers, self.num_hidden_layers = (
                 joint_head_config["routing_layers"],
