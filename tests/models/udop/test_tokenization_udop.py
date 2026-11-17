@@ -857,7 +857,10 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         for parameter_name, parameter in signature.parameters.items():
-            if parameter.default != inspect.Parameter.empty:
+            if (
+                parameter.default != inspect.Parameter.empty
+                and parameter_name != "_spm_precompiled_charsmap"  # intentionally excluded, see TokenizersBackend
+            ):
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_special_tokens_mask_input_pairs(self):
@@ -1318,6 +1321,15 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         if tokenizer.backend_tokenizer.normalizer is not None:
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
+
+    def test_precompiled_charsmap_normalizer(self):
+        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
+        # precompiled_charsmap (Unicode compatibility folding, e.g. fullwidth -> ASCII) must be
+        # wired into the fast tokenizer's normalizer instead of being dropped on the floor.
+        tokenizer = UdopTokenizer.from_pretrained(SAMPLE_VOCAB)
+        self.assertIsNotNone(tokenizer._spm_precompiled_charsmap)
+        normalized = tokenizer.backend_tokenizer.normalizer.normalize_str("ｆｕｌｌｗｉｄｔｈ")
+        self.assertEqual(normalized, "fullwidth")
 
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

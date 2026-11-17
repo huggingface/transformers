@@ -15,9 +15,12 @@
 import unittest
 
 from transformers import BarthezTokenizer
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
+
+
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_sentencepiece
@@ -40,3 +43,16 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = BarthezTokenizer.from_pretrained(from_pretrained_id)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(cls.tmpdirname)
+
+
+@require_sentencepiece
+@require_tokenizers
+class BarthezPrecompiledCharsmapTest(unittest.TestCase):
+    def test_precompiled_charsmap_normalizer(self):
+        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
+        # precompiled_charsmap (Unicode compatibility folding, e.g. fullwidth -> ASCII) must be
+        # wired into the fast tokenizer's normalizer instead of being dropped on the floor.
+        tokenizer = BarthezTokenizer.from_pretrained(SAMPLE_VOCAB)
+        self.assertIsNotNone(tokenizer._spm_precompiled_charsmap)
+        normalized = tokenizer.backend_tokenizer.normalizer.normalize_str("ｆｕｌｌｗｉｄｔｈ")
+        self.assertEqual(normalized, "fullwidth")

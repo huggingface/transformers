@@ -48,6 +48,15 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '😊', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '▁', '生活的', '真', '谛', '是', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '<s>', '▁hi', '<s>', '▁there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁en', 'code', 'd', ':', '▁Hello', '.', '▁But', '▁ir', 'd', '▁and', '▁ปี', '▁ir', 'd', '▁ด', '▁Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
     integration_expected_decoded_text = "This is a test 😊 I was born in 92000, and this is falsé. 生活的真谛是 Hi Hello Hi Hello Hello<s> hi<s> there The following string should be properly encoded: Hello. But ird and ปี ird ด Hey how are you doing"
 
+    def test_precompiled_charsmap_normalizer(self):
+        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
+        # precompiled_charsmap (Unicode compatibility folding, e.g. fullwidth -> ASCII) must be
+        # wired into the fast tokenizer's normalizer instead of being dropped on the floor.
+        tokenizer = self.tokenizer_class.from_pretrained(SAMPLE_VOCAB)
+        self.assertIsNotNone(tokenizer._spm_precompiled_charsmap)
+        normalized = tokenizer.backend_tokenizer.normalizer.normalize_str("ｆｕｌｌｗｉｄｔｈ")
+        self.assertEqual(normalized, "fullwidth")
+
 
 @require_torch
 @require_sentencepiece

@@ -98,6 +98,7 @@ class BarthezTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
+        _spm_precompiled_charsmap: str | None = None,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -117,13 +118,16 @@ class BarthezTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.NFC(),
-                normalizers.Strip(left=False, right=True),
-            ]
-        )
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
+        list_normalizers = [normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " ")]
+        # The real SentencePiece model normalizes with its own precompiled charsmap (nmt_nfkc for most
+        # checkpoints); NFC() is only a fallback approximation for when no charsmap is available at all.
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+        else:
+            list_normalizers.append(normalizers.NFC())
+        list_normalizers.append(normalizers.Strip(left=False, right=True))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
@@ -137,6 +141,7 @@ class BarthezTokenizer(TokenizersBackend):
             pad_token=pad_token,
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             **kwargs,
         )
 

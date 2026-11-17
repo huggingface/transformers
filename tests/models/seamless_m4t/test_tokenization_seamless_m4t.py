@@ -436,3 +436,15 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [3, 1, 285, 2, 157, 3])
         tokens = self.tokenizer.tokenize("No <s> ▁He")
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
+
+    def test_precompiled_charsmap_normalizer(self):
+        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
+        # precompiled_charsmap must be wired into the fast tokenizer's normalizer. The zero-width
+        # space below is the documented regression case: the charsmap folds it to a plain space
+        # (which later becomes a word boundary), instead of it surviving and tokenizing as <unk>.
+        self.assertIsNotNone(self.tokenizer._spm_precompiled_charsmap)
+        normalized = self.tokenizer.backend_tokenizer.normalizer.normalize_str("a​b")
+        self.assertEqual(normalized, "a b")
+
+        tokens = self.tokenizer.tokenize("a​b")
+        self.assertNotIn(self.tokenizer.unk_token, tokens)
