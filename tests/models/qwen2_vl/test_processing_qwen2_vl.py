@@ -14,19 +14,15 @@
 
 import unittest
 
+from transformers.processing_utils import create_mrope_position_ids
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
     from transformers import Qwen2VLProcessor
-
-if is_torch_available():
-    import torch
-
-    from transformers import Qwen2VLConfig, Qwen2VLModel
 
 
 @require_vision
@@ -99,24 +95,32 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 max_length=20,
             )
 
-    def test_position_ids_match_model_rope_index(self):
-        """The processor's 3D RoPE `position_ids` are the ones the model computes with `get_rope_index`."""
+    def test_mrope_position_ids(self):
+        """Text advances all axes; an image or video sits on its (t, h, w) grid and advances by max(h, w)."""
+        # an image of 4 x 3 tokens between two text tokens
+        position_ids = create_mrope_position_ids([[0] + [1] * 12 + [0]], None, {1: [(1, 4, 3, 1)]})
+        expected = [
+            [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
+            [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
+            [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
+        ]
+        self.assertListEqual(position_ids.tolist(), expected)
+
+        # a video of 2 frames of 4 x 3 tokens
+        position_ids = create_mrope_position_ids([[0] + [2] * 24 + [0]], None, {2: [(2, 4, 3, 1)]})
+        expected = [
+            [[0] + [1] * 12 + [2] * 12 + [5]],
+            [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
+            [[0] + [1, 2, 3] * 8 + [5]],
+        ]
+        self.assertListEqual(position_ids.tolist(), expected)
+
+    def test_processor_returns_position_ids(self):
         processor = self.get_processor()
-        processor.tokenizer.padding_side = "left"
         inputs = processor(
             text=self.prepare_text_inputs(batch_size=2, modalities="image"),
             images=self.prepare_images_inputs(batch_size=2),
             padding=True,
             return_tensors="pt",
         )
-        config = Qwen2VLConfig(
-            text_config={"hidden_size": 16, "intermediate_size": 32, "num_hidden_layers": 1, "num_attention_heads": 2},
-            vision_config={"depth": 1, "embed_dim": 16, "hidden_size": 16, "num_heads": 2},
-        )
-        expected, _ = Qwen2VLModel(config).get_rope_index(
-            inputs["input_ids"],
-            inputs["mm_token_type_ids"],
-            image_grid_thw=inputs["image_grid_thw"],
-            attention_mask=inputs["attention_mask"],
-        )
-        torch.testing.assert_close(inputs["position_ids"], expected)
+        self.assertListEqual(list(inputs["position_ids"].shape), [3, *inputs["input_ids"].shape])

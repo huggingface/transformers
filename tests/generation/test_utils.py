@@ -1390,6 +1390,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                         mode="constant",
                         value=1,
                     )
+                if (position_ids := inputs.get("position_ids")) is not None and position_ids.ndim == 3:
+                    # 3D RoPE positions come from the processor: extend them like `generate` does
+                    steps = torch.arange(1, new_attention_len - position_ids.shape[-1] + 1, device=position_ids.device)
+                    inputs["position_ids"] = torch.cat([position_ids, position_ids[..., -1:] + steps], dim=-1)
             # Pop multimodal data since they are already cached and we'll raise an error
             # if there are multimodal data which don't belong anywhere inside `text_tokens`
             keys_to_pop = []
@@ -1575,11 +1579,12 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             first_outputs = model.generate(**inputs_dict, **generation_kwargs)
 
             # Let's generate again, but passing `mm_encoder_outputs`. The generated texts should be identical
-            position_ids = model._prepare_position_ids_for_generation(inputs_dict["input_ids"], inputs_dict)
+            if "position_ids" not in inputs_dict:  # 3D RoPE models already get theirs from the processor
+                inputs_dict["position_ids"] = model._prepare_position_ids_for_generation(
+                    inputs_dict["input_ids"], inputs_dict
+                )
             inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
-            second_output = model.generate(
-                **inputs_dict_with_encoded_outputs, position_ids=position_ids, **generation_kwargs
-            )
+            second_output = model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
             self.assertListEqual(first_outputs.tolist(), second_output.tolist())
 
     @pytest.mark.generate
@@ -2562,7 +2567,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             model = model_class(config).to(torch_device).eval()
             model_forward_args = inspect.signature(model.forward).parameters
 
-            has_3d_rope_positions = any(
+            has_3d_rope_positions = getattr(inputs_dict.get("position_ids"), "ndim", 2) == 3 or any(
                 hasattr(module, "get_rope_index")
                 for module in (
                     model,
@@ -2611,7 +2616,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         if not ran_any_model:
             self.skipTest(
-                "All model classes in this test use 3D RoPE positions (`get_rope_index`), for which 2D custom "
+                "All model classes in this test use 3D RoPE positions, for which 2D custom "
                 "`position_ids` may be accepted but are expected to produce invalid outputs."
             )
 
