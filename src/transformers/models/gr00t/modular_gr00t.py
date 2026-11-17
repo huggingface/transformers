@@ -14,23 +14,32 @@
 """GR00T N1.7 model: Qwen3-VL backbone + flow-matching DiT action head for robot action prediction."""
 
 import math
+import re
 from collections.abc import Callable
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, make_nested_list_of_images
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import TextInput
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig, AutoModel
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
+from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..siglip.modeling_siglip import eager_attention_forward
 
 
@@ -764,4 +773,444 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         return actions
 
 
-__all__ = ["Gr00tConfig", "Gr00tPreTrainedModel", "Gr00tDiT", "Gr00tModel", "Gr00tForConditionalGeneration"]
+def _area_downscale_weights(in_size: int, out_size: int) -> torch.Tensor:
+    """Weights, of shape `(out_size, in_size)`, of the fractional pixel areas averaged by `cv2.INTER_AREA`."""
+    weights = torch.zeros(out_size, in_size, dtype=torch.float32)
+    scale = in_size / out_size
+    for dst in range(out_size):
+        start, end = dst * scale, dst * scale + scale
+        cell_width = min(scale, in_size - start)
+        first, last = math.ceil(start), min(math.floor(end), in_size - 1)
+        first = min(first, last)
+        if first - start > 1e-3:
+            weights[dst, first - 1] = (first - start) / cell_width
+        weights[dst, first:last] = 1.0 / cell_width
+        if end - last > 1e-3:
+            weights[dst, last] = min(min(end - last, 1.0), cell_width) / cell_width
+    return weights
+
+
+def _area_upscale_coefficients(in_size: int, out_size: int) -> tuple[torch.Tensor, ...]:
+    """
+    Source indices and fixed-point (11 bits) weights of the linear interpolation `cv2.INTER_AREA` uses to upscale.
+    """
+    scale, inv_scale = in_size / out_size, out_size / in_size
+    sources, fractions = [], []
+    for dst in range(out_size):
+        src = math.floor(dst * scale)
+        fraction = (dst + 1) - (src + 1) * inv_scale
+        fraction = 0.0 if fraction <= 0 else fraction - math.floor(fraction)
+        if src >= in_size - 1:
+            src, fraction = in_size - 1, 0.0
+        sources.append(src)
+        fractions.append(fraction)
+    first = torch.tensor(sources)
+    fractions = torch.tensor(fractions, dtype=torch.float32)
+    return (
+        first,
+        (first + 1).clamp(max=in_size - 1),
+        ((1 - fractions) * 2048).round().long(),
+        (fractions * 2048).round().long(),
+    )
+
+
+def _area_resize(images: torch.Tensor, size: int) -> torch.Tensor:
+    """
+    Resizes a batch of square `uint8` images of shape `(batch_size, channels, height, width)` to `size` exactly like
+    OpenCV's `cv2.resize(..., interpolation=cv2.INTER_AREA)`, including its integer rounding.
+    """
+    in_size = images.shape[-1]
+    if in_size == size:
+        return images
+    if in_size == 2 * size:
+        summed = images.long().reshape(*images.shape[:2], size, 2, size, 2).sum(dim=(3, 5))
+        return ((summed + 2) // 4).to(torch.uint8)
+    if in_size > size:
+        weights = _area_downscale_weights(in_size, size).to(images.device)
+        resized = torch.einsum("bchw,ow->bcho", images.float(), weights)
+        resized = torch.einsum("bcho,ph->bcpo", resized, weights)
+        return resized.round().clamp(0, 255).to(torch.uint8)
+    first, second, first_weight, second_weight = (
+        t.to(images.device) for t in _area_upscale_coefficients(in_size, size)
+    )
+    pixels = images.long()
+    rows = pixels[..., first] * first_weight + pixels[..., second] * second_weight
+    resized = (
+        ((first_weight[:, None] * (rows[..., first, :] >> 4)) >> 16)
+        + ((second_weight[:, None] * (rows[..., second, :] >> 4)) >> 16)
+        + 2
+    ) >> 2
+    return resized.clamp(0, 255).to(torch.uint8)
+
+
+class Gr00tImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `256 * 256`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `4096 * 4096`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 16):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    image_resolution (`int`, *optional*, defaults to `self.image_resolution`):
+        Size of the square images before and after the center crop. Non-square images are first padded to a square
+        with black bars.
+    crop_fraction (`float`, *optional*, defaults to `self.crop_fraction`):
+        Fraction of each side of the image kept by the center crop.
+    """
+
+    image_resolution: int
+    crop_fraction: float
+
+
+@auto_docstring
+class Gr00tImageProcessor(Qwen2VLImageProcessor):
+    size = {"shortest_edge": 256 * 256, "longest_edge": 4096 * 4096}
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    patch_size = 16
+    temporal_patch_size = 2
+    merge_size = 2
+    image_resolution = 256
+    crop_fraction = 0.95
+    valid_kwargs = Gr00tImageProcessorKwargs
+
+    def crop_and_resize(self, images: torch.Tensor, image_resolution: int, crop_fraction: float) -> torch.Tensor:
+        """
+        Pads the images to a square, resizes them to `image_resolution`, center-crops `crop_fraction` of each side and
+        resizes them back to `image_resolution`, all with area interpolation, as the original GR00T evaluation
+        transform does.
+        """
+        height, width = images.shape[-2:]
+        if height != width:
+            size = max(height, width)
+            pad_top, pad_left = (size - height) // 2, (size - width) // 2
+            images = F.pad(images, (pad_left, size - width - pad_left, pad_top, size - height - pad_top))
+        images = _area_resize(images, image_resolution)
+        crop_size = max(1, int(image_resolution * crop_fraction))
+        offset = (image_resolution - crop_size) // 2
+        images = images[..., offset : offset + crop_size, offset : offset + crop_size]
+        return _area_resize(images, image_resolution)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        image_resolution: int = 256,
+        crop_fraction: float = 0.95,
+        **kwargs,
+    ) -> BatchFeature:
+        images = [
+            self.crop_and_resize(image[None], image_resolution, crop_fraction)[0]
+            if image.dtype == torch.uint8
+            else self.crop_and_resize((image * 255).round().to(torch.uint8)[None], image_resolution, crop_fraction)[0]
+            for image in images
+        ]
+        return super()._preprocess(
+            images,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            patch_size=patch_size,
+            temporal_patch_size=temporal_patch_size,
+            merge_size=merge_size,
+            disable_grouping=disable_grouping,
+            return_tensors=return_tensors,
+            **kwargs,
+        )
+
+
+def _rot6d_to_matrix(rot6d: torch.Tensor) -> torch.Tensor:
+    """Converts 6D rotations (the first two rows of the rotation matrix) to rotation matrices with Gram-Schmidt."""
+    row1 = rot6d[..., :3] / torch.linalg.norm(rot6d[..., :3], dim=-1, keepdim=True)
+    row2 = rot6d[..., 3:6] - (row1 * rot6d[..., 3:6]).sum(-1, keepdim=True) * row1
+    row2 = row2 / torch.linalg.norm(row2, dim=-1, keepdim=True)
+    return torch.stack([row1, row2, torch.linalg.cross(row1, row2, dim=-1)], dim=-2)
+
+
+@auto_docstring
+@requires(backends=("vision", "torch"))
+class Gr00tProcessor(Qwen3VLProcessor):
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_token_type_ids": False,
+    }
+
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        modality_configs: dict | None = None,
+        statistics: dict | None = None,
+        embodiment_id_mapping: dict[str, int] | None = None,
+        max_state_dim: int = 132,
+        max_action_horizon: int = 40,
+        formalize_language: bool = True,
+        use_percentiles: bool = True,
+        clip_outliers: bool = True,
+        use_relative_action: bool = True,
+        **kwargs,
+    ):
+        r"""
+        modality_configs (`dict`, *optional*):
+            Per-embodiment description of the inputs and outputs: the camera views, the state and action joint groups,
+            the action horizon (`delta_indices`) and how each action group is represented (`action_configs`).
+        statistics (`dict`, *optional*):
+            Per-embodiment dataset statistics of the state and action joint groups, used to normalize them.
+        embodiment_id_mapping (`dict[str, int]`, *optional*):
+            Index of the embodiment-specific projections of the model for each embodiment tag.
+        max_state_dim (`int`, *optional*, defaults to 132):
+            Size the normalized state is zero-padded to.
+        max_action_horizon (`int`, *optional*, defaults to 40):
+            Number of action steps predicted by the model.
+        formalize_language (`bool`, *optional*, defaults to `True`):
+            Whether to lowercase the instruction and remove its punctuation.
+        use_percentiles (`bool`, *optional*, defaults to `True`):
+            Whether the state and absolute actions are scaled with their 1st/99th percentiles instead of min/max.
+        clip_outliers (`bool`, *optional*, defaults to `True`):
+            Whether to clip the normalized state to `[-1, 1]`.
+        use_relative_action (`bool`, *optional*, defaults to `True`):
+            Whether the action groups declared as relative are predicted relative to the current state.
+        """
+        self.modality_configs = modality_configs or {}
+        self.statistics = statistics or {}
+        self.embodiment_id_mapping = embodiment_id_mapping or {}
+        self.max_state_dim = max_state_dim
+        self.max_action_horizon = max_action_horizon
+        self.formalize_language = formalize_language
+        self.use_percentiles = use_percentiles
+        self.clip_outliers = clip_outliers
+        self.use_relative_action = use_relative_action
+        self.image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
+        self.image_token_id = getattr(tokenizer, "image_token_id", None) or tokenizer.convert_tokens_to_ids(
+            self.image_token
+        )
+        self.video_token = getattr(tokenizer, "video_token", "<|video_pad|>")
+        self.video_token_id = getattr(tokenizer, "video_token_id", None) or tokenizer.convert_tokens_to_ids(
+            self.video_token
+        )
+        # GR00T has no video inputs, so the Qwen3-VL processor init (which expects a video processor) is skipped
+        ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template, **kwargs)
+
+    def _check_embodiment(self, embodiment_tag: str):
+        if embodiment_tag not in self.modality_configs or embodiment_tag not in self.statistics:
+            raise ValueError(
+                f"Unknown embodiment tag {embodiment_tag!r}. Embodiments with statistics: {sorted(self.statistics)}."
+            )
+
+    def _format_prompt(self, instruction: str, num_images: int) -> str:
+        if self.formalize_language:
+            instruction = re.sub(r"[^\w\s]", "", instruction.lower())
+        conversation = [
+            {"role": "user", "content": [{"type": "image"}] * num_images + [{"type": "text", "text": instruction}]}
+        ]
+        return self.apply_chat_template(conversation, tokenize=False, add_generation_prompt=False)
+
+    def _normalization_params(self, embodiment_tag: str, modality: str, key: str) -> tuple[torch.Tensor, torch.Tensor]:
+        """The `(low, high)` bounds a joint group is scaled to `[-1, 1]` with."""
+        stats = self.statistics[embodiment_tag][modality][key]
+        if modality == "action" and self._is_relative(embodiment_tag, key):
+            # The relative-action statistics replace the action ones as a whole, so their min/max are used
+            stats = self.statistics[embodiment_tag]["relative_action"][key]
+            return torch.tensor(stats["min"], dtype=torch.float64), torch.tensor(stats["max"], dtype=torch.float64)
+        low, high = ("q01", "q99") if self.use_percentiles else ("min", "max")
+        return torch.tensor(stats[low], dtype=torch.float64), torch.tensor(stats[high], dtype=torch.float64)
+
+    def _uses_mean_std(self, embodiment_tag: str, modality: str, key: str) -> bool:
+        return key in (self.modality_configs[embodiment_tag][modality].get("mean_std_embedding_keys") or [])
+
+    def _action_configs(self, embodiment_tag: str) -> dict[str, dict]:
+        action_config = self.modality_configs[embodiment_tag]["action"]
+        return dict(zip(action_config["modality_keys"], action_config.get("action_configs") or []))
+
+    def _is_relative(self, embodiment_tag: str, key: str) -> bool:
+        config = self._action_configs(embodiment_tag).get(key)
+        return self.use_relative_action and config is not None and config["rep"] == "RELATIVE"
+
+    def normalize_state(self, state: dict, embodiment_tag: str) -> torch.Tensor:
+        """
+        Normalizes each joint group of the raw `state` with the statistics of `embodiment_tag`, concatenates them in
+        the order of the embodiment's modality config and zero-pads the result to `max_state_dim`.
+
+        Args:
+            state (`dict[str, np.ndarray | torch.Tensor]`):
+                Raw state of each joint group, of shape `(batch_size, dim)` or `(batch_size, 1, dim)`.
+            embodiment_tag (`str`):
+                The embodiment the state comes from.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, max_state_dim)`.
+        """
+        self._check_embodiment(embodiment_tag)
+        normalized = []
+        for key in self.modality_configs[embodiment_tag]["state"]["modality_keys"]:
+            values = torch.as_tensor(np.asarray(state[key]), dtype=torch.float64)
+            values = values.reshape(values.shape[0], -1)
+            stats = self.statistics[embodiment_tag]["state"][key]
+            if self._uses_mean_std(embodiment_tag, "state", key):
+                mean, std = (
+                    torch.tensor(stats["mean"], dtype=torch.float64),
+                    torch.tensor(stats["std"], dtype=torch.float64),
+                )
+                values = (values - mean) / torch.where(std > 0, std, torch.ones_like(std))
+            else:
+                low, high = self._normalization_params(embodiment_tag, "state", key)
+                varying = ~torch.isclose(high, low)
+                scaled = torch.zeros_like(values)
+                scaled[..., varying] = 2 * (values[..., varying] - low[varying]) / (high[varying] - low[varying]) - 1
+                values = scaled.clamp(-1.0, 1.0) if self.clip_outliers else scaled
+            normalized.append(values)
+        normalized = torch.cat(normalized, dim=-1)
+        if normalized.shape[-1] > self.max_state_dim:
+            raise ValueError(f"State dimension {normalized.shape[-1]} exceeds `max_state_dim` ({self.max_state_dim}).")
+        return F.pad(normalized, (0, self.max_state_dim - normalized.shape[-1])).float()
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        state: dict | None = None,
+        embodiment_tag: str | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        r"""
+        images (`ImageInput`, `list[ImageInput]` or `list[list[ImageInput]]`):
+            The camera images of each sample, ordered by frame then by camera view as in the embodiment's modality
+            config.
+        text (`str` or `list[str]`):
+            The language instruction of each sample. Unless it already contains image placeholders, it is formatted
+            into the GR00T prompt with one image placeholder per image of the sample.
+        state (`dict[str, np.ndarray | torch.Tensor]`, *optional*):
+            Raw state of each joint group of the embodiment, of shape `(batch_size, dim)`. It is normalized and padded
+            with [`~Gr00tProcessor.normalize_state`].
+        embodiment_tag (`str`, *optional*):
+            The embodiment of the batch. Required to process `state` and to return `embodiment_id`.
+
+        Returns:
+            [`BatchFeature`]: The Qwen3-VL inputs (`input_ids`, `attention_mask`, `pixel_values`, `image_grid_thw` and
+            `mm_token_type_ids`), plus `state` and `embodiment_id` when `state` and `embodiment_tag` are given.
+        """
+        if isinstance(text, str):
+            text = [text]
+        batched_images = make_nested_list_of_images(images) if images is not None else None
+        if text is not None and batched_images is not None:
+            if len(batched_images) != len(text):
+                raise ValueError(f"Got {len(batched_images)} samples of images for {len(text)} instructions.")
+            text = [
+                sample if self.image_token in sample else self._format_prompt(sample, len(sample_images))
+                for sample, sample_images in zip(text, batched_images)
+            ]
+            images = [image for sample_images in batched_images for image in sample_images]
+
+        return_tensors = kwargs.pop("return_tensors", None)
+        inputs = super().__call__(images=images, text=text, **kwargs)
+        if embodiment_tag is not None:
+            self._check_embodiment(embodiment_tag)
+            batch_size = len(text) if text is not None else len(batched_images)
+            inputs["embodiment_id"] = torch.full((batch_size,), self.embodiment_id_mapping[embodiment_tag])
+        if state is not None:
+            if embodiment_tag is None:
+                raise ValueError("`embodiment_tag` is required to normalize `state`.")
+            inputs["state"] = self.normalize_state(state, embodiment_tag)
+        return BatchFeature(data=dict(inputs), tensor_type=return_tensors)
+
+    def post_process_actions(
+        self, actions: torch.Tensor, embodiment_tag: str, state: dict | None = None
+    ) -> dict[str, torch.Tensor]:
+        """
+        Converts the normalized action chunks generated by [`Gr00tForConditionalGeneration.sample_actions`] to the
+        action space of the embodiment: keeps its action horizon and dimensions, splits them into joint groups,
+        un-normalizes them and converts the relative ones to absolute actions with the current state.
+
+        Args:
+            actions (`torch.Tensor` of shape `(batch_size, action_horizon, max_action_dim)`):
+                The normalized action chunks.
+            embodiment_tag (`str`):
+                The embodiment the actions are generated for.
+            state (`dict[str, np.ndarray | torch.Tensor]`, *optional*):
+                The raw state of each joint group passed to the processor. Required when the embodiment has relative
+                action groups.
+
+        Returns:
+            `dict[str, torch.Tensor]`: The actions of each joint group, of shape `(batch_size, horizon, dim)`.
+        """
+        self._check_embodiment(embodiment_tag)
+        action_config = self.modality_configs[embodiment_tag]["action"]
+        horizon = len(action_config["delta_indices"])
+        actions = actions.detach().to("cpu", torch.float64)[:, :horizon]
+        configs = self._action_configs(embodiment_tag)
+
+        outputs, start = {}, 0
+        for key in action_config["modality_keys"]:
+            stats = self.statistics[embodiment_tag]["action"][key]
+            dim = len(stats["min"])
+            values = actions[..., start : start + dim]
+            start += dim
+            if self._uses_mean_std(embodiment_tag, "action", key):
+                mean, std = (
+                    torch.tensor(stats["mean"], dtype=torch.float64),
+                    torch.tensor(stats["std"], dtype=torch.float64),
+                )
+                values = values * std + mean
+            else:
+                low, high = self._normalization_params(embodiment_tag, "action", key)
+                values = (values.clamp(-1.0, 1.0) + 1.0) / 2.0 * (high - low) + low
+
+            if self._is_relative(embodiment_tag, key):
+                config = configs[key]
+                if state is None:
+                    raise ValueError(f"`state` is required to convert the relative action group {key!r} to absolute.")
+                reference = torch.as_tensor(np.asarray(state[config.get("state_key") or key]), dtype=torch.float64)
+                reference = reference.reshape(reference.shape[0], -1, reference.shape[-1])[:, -1]
+                values = self._relative_to_absolute(values, reference, config)
+            outputs[key] = values
+        return outputs
+
+    @staticmethod
+    def _relative_to_absolute(actions: torch.Tensor, reference: torch.Tensor, config: dict) -> torch.Tensor:
+        if config["type"] == "NON_EEF":
+            return actions + reference[:, None]
+        if config["type"] == "EEF" and config["format"] == "XYZ_ROT6D":
+            reference_rotation = _rot6d_to_matrix(reference[:, 3:9])
+            rotation = reference_rotation[:, None] @ _rot6d_to_matrix(actions[..., 3:9])
+            translation = (reference_rotation[:, None] @ actions[..., :3, None])[..., 0] + reference[:, None, :3]
+            return torch.cat([translation, rotation[..., 0, :], rotation[..., 1, :]], dim=-1)
+        raise NotImplementedError(f"Relative actions of type {config['type']} and format {config['format']}.")
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["state", "embodiment_id"]
+
+
+__all__ = [
+    "Gr00tConfig",
+    "Gr00tPreTrainedModel",
+    "Gr00tDiT",
+    "Gr00tModel",
+    "Gr00tForConditionalGeneration",
+    "Gr00tImageProcessor",
+    "Gr00tProcessor",
+]

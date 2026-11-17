@@ -25,7 +25,9 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_gr00t import *
+    from .image_processing_gr00t import *
     from .modeling_gr00t import *
+    from .processing_gr00t import *
 else:
     import sys
 
