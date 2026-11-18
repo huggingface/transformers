@@ -1178,7 +1178,6 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

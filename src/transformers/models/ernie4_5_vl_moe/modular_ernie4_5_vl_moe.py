@@ -264,7 +264,6 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
 
         return inv_freq_3d, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)

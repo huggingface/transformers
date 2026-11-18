@@ -333,6 +333,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    # Consumed by cache_utils to select indexed-attention cache layers.
+    "HYV4VLTextConfig": ["layer_types"],
     # Geometry metadata, variables used by channel-layout properties, and loss settings read by `loss_weathernext2`.
     "WeatherNext2Config": [
         "attention_k_hop",

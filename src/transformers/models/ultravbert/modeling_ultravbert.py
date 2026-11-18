@@ -145,7 +145,6 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -357,6 +356,7 @@ class UltraVBertPredictionHead(nn.Module):
 @auto_docstring
 class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
