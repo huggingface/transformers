@@ -80,20 +80,22 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     def test_packed_sequences_do_not_attend_across_documents(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = FalconForCausalLM(config).to(torch_device).eval()
-        seq_a = torch.randint(0, config.vocab_size, (1, 5), device=torch_device)
-        seq_b = torch.randint(0, config.vocab_size, (1, 7), device=torch_device)
-        packed_ids = torch.cat([seq_a, seq_b], dim=1)
-        packed_position_ids = torch.cat([torch.arange(5), torch.arange(7)]).unsqueeze(0).to(torch_device)
+        # Pack two documents cut from the prepared input ids into a single row.
+        packed_ids = inputs_dict["input_ids"][:1]
+        split = packed_ids.shape[1] // 2
+        seq_a, seq_b = packed_ids[:, :split], packed_ids[:, split:]
+        packed_position_ids = torch.cat([torch.arange(split), torch.arange(packed_ids.shape[1] - split)])
+        packed_position_ids = packed_position_ids.unsqueeze(0).to(torch_device)
 
         with torch.no_grad():
             packed_logits = model(packed_ids, position_ids=packed_position_ids, use_cache=False).logits
             logits_a = model(seq_a, use_cache=False).logits
             logits_b = model(seq_b, use_cache=False).logits
 
-        torch.testing.assert_close(packed_logits[:, :5], logits_a, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(packed_logits[:, 5:], logits_b, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(packed_logits[:, :split], logits_a, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(packed_logits[:, split:], logits_b, rtol=1e-4, atol=1e-4)
 
 
 @require_torch
