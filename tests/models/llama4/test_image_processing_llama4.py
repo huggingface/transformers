@@ -37,12 +37,9 @@ class Llama4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_split_tiles(self):
         for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
+            image_processor = image_processing_class(**{**self.image_processor_dict, "max_patches": 16})
             image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)[0]
-            processed_images = image_processor(
-                image,
-                max_patches=16,
-            )
+            processed_images = image_processor(image)
             self.assertEqual(len(processed_images.pixel_values), 1)
             self.assertEqual(processed_images.pixel_values[0].shape[0], 17)
             self.assertEqual(processed_images.pixel_values[0].shape[-2:], (20, 20))
