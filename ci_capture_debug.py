@@ -436,7 +436,86 @@ def _install_cuda_logs_callback(out_dir):
     log(f"cuLogsRegisterCallback -> {result} (0 = CUDA_SUCCESS); Python stacks of capture conflicts -> {STACKS_PATH}")
 
 
+_C_CALLBACK_SOURCE = r"""
+#include <signal.h>
+#include <stddef.h>
+#include <string.h>
+
+static volatile int capdbg_hits = 0;
+
+/* CUlogsCallback: called by the CUDA driver, on the thread making the failing call, for every logged error.
+   Pure C: noise messages return immediately (no Python, no GIL, no allocation). On a capture conflict, raise SIGUSR1
+   in this same thread: Python's faulthandler (registered for SIGUSR1) dumps the Python stack from its C signal handler,
+   without running Python code or allocating objects, so it cannot trigger or shift a garbage collection. */
+void capdbg_cb(void *data, int level, char *message, size_t length) {
+    (void)data; (void)level; (void)length;
+    if (message == NULL || capdbg_hits >= 40) return;
+    if (strstr(message, "stream capture") || strstr(message, "STREAM_CAPTURE") || strstr(message, "nvalidated")) {
+        capdbg_hits++;
+        raise(SIGUSR1);
+    }
+}
+
+int capdbg_get_hits(void) { return capdbg_hits; }
+"""
+
+
+def _install_cuda_logs_c_callback(out_dir):
+    """Zero-perturbation variant of `_install_cuda_logs_callback` (Python stack of calls that conflict with a capture).
+
+    The Python ctypes callback ran Python for each of the ~1600 noise messages and shifted GC timing (it hid the bug).
+    Here the callback is compiled C (Triton needs a C compiler at runtime, so one is available) and only raises SIGUSR1
+    on capture-conflict messages; faulthandler prints the Python stack of that thread from its C signal handler.
+    """
+    global STACKS_PATH, _stacks_file
+    import signal
+    import subprocess as sp
+
+    src = os.path.join(out_dir, "capdbg_cb.c")
+    lib_path = os.path.join(out_dir, "capdbg_cb.so")
+    with open(src, "w", encoding="utf-8") as f:
+        f.write(_C_CALLBACK_SOURCE)
+    cc = os.environ.get("CC", "cc")
+    proc = sp.run([cc, "-shared", "-fPIC", "-O2", "-o", lib_path, src], capture_output=True, text=True)
+    if proc.returncode != 0:
+        log(f"C callback: compilation failed ({cc}): {proc.stderr[-2000:]}")
+        return
+    STACKS_PATH = os.path.join(out_dir, f"cuda_capture_conflict_stacks_{os.getpid()}.log")
+    _stacks_file = open(STACKS_PATH, "w", encoding="utf-8")  # noqa: SIM115  (kept open for faulthandler)
+    faulthandler.register(signal.SIGUSR1, file=_stacks_file, all_threads=False, chain=False)
+    cb_lib = ctypes.CDLL(lib_path)
+    _cb_state["c_lib"] = cb_lib  # keep loaded
+    try:
+        libcuda = ctypes.CDLL("libcuda.so.1")
+    except OSError as e:
+        log(f"C callback: cannot load libcuda: {e!r}")
+        return
+    if not hasattr(libcuda, "cuLogsRegisterCallback"):
+        log("C callback: cuLogsRegisterCallback not available in this driver")
+        return
+    libcuda.cuLogsRegisterCallback.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    libcuda.cuLogsRegisterCallback.restype = ctypes.c_int
+    handle = ctypes.c_void_p()
+    fn_ptr = ctypes.cast(cb_lib.capdbg_cb, ctypes.c_void_p)
+    result = libcuda.cuLogsRegisterCallback(fn_ptr, None, ctypes.byref(handle))
+    log(
+        f"C cuLogsRegisterCallback -> {result} (0 = CUDA_SUCCESS); faulthandler SIGUSR1 stacks of capture conflicts -> "
+        f"{STACKS_PATH}"
+    )
+
+
+def _c_callback_hits():
+    lib = _cb_state.get("c_lib")
+    if lib is None:
+        return None
+    lib.capdbg_get_hits.restype = ctypes.c_int
+    return lib.capdbg_get_hits()
+
+
 def _dump_capture_conflict_stacks(title):
+    if _cb_state.get("c_lib") is not None:
+        _stacks_file.flush()
+        log(f"{title}: C callback hits (capture-conflict messages) = {_c_callback_hits()}")
     if not STACKS_PATH or not os.path.exists(STACKS_PATH):
         log(f"===== {title}: no stacks file =====")
         return
@@ -958,7 +1037,14 @@ class CaptureDebugPlugin:
         os.environ.setdefault("CUDA_LOG_FILE", CUDA_LOG_PATH)
         CUDA_LOG_PATH = os.environ["CUDA_LOG_FILE"]
         if sys.platform == "linux":
-            _install_cuda_logs_callback(out_dir)
+            # The Python ctypes callback runs Python on every driver log message (~1600 noise messages from other
+            # threads) and shifts GC timing, which hides the bug: only use it with a deterministic (forced-GC) trigger.
+            # It was installed unconditionally from e425643137 to 2b9d495269, so repeat_only runs in that range are not
+            # clean natural runs.
+            if PLUGIN_MODE.startswith("force_gc_in_capture"):
+                _install_cuda_logs_callback(out_dir)
+            elif PLUGIN_MODE == "repeat_only_c_stacks":
+                _install_cuda_logs_c_callback(out_dir)
         try:
             import torch
 
@@ -985,9 +1071,10 @@ class CaptureDebugPlugin:
             except Exception as e:
                 log(f"imports_only: import failed: {e!r}")
             return
-        if PLUGIN_MODE == "repeat_only":
+        if PLUGIN_MODE in ("repeat_only", "repeat_only_c_stacks"):
             # Bisect step: no patch, no GC callback, no faulthandler, no ctypes — only duplicate the targets and dump on
             # failure. Even the MINIMAL (pure-Python) patches seemed to hide the whisper failure.
+            # (`repeat_only_c_stacks` additionally has the C driver-log callback + faulthandler SIGUSR1, see above.)
             return
         if PLUGIN_MODE == "triton_wrapper_only":
             # Bisect step: imports_only did NOT hide deepseek (FAILED). Only the pass-through Python wrapper around
