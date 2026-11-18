@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_linear_attn_utils import causal_conv1d_forward
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -39,6 +38,7 @@ from ..falcon_mamba.modeling_falcon_mamba import FalconMambaMixer
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
 from ..mamba.modeling_mamba import (
     apply_mask_to_padding_states,
+    causal_conv1d_forward,
     mamba_selective_scan,
     mamba_selective_state_update,
 )

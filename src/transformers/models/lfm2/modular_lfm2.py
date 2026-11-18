@@ -22,7 +22,6 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -38,6 +37,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..qwen3_next.modeling_qwen3_next import (
     apply_mask_to_padding_states,
 )

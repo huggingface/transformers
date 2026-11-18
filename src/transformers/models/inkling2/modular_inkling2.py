@@ -32,7 +32,6 @@ from ...integrations import use_experts_implementation, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
@@ -59,6 +58,7 @@ from ..inkling.modeling_inkling import (
 )
 from ..llama.modeling_llama import repeat_kv
 from ..llava.modeling_llava import LlavaMultiModalProjector
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from ..qwen3_next.modeling_qwen3_next import (

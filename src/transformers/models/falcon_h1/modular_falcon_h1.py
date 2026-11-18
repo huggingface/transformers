@@ -30,7 +30,6 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_linear_attn_utils import causal_conv1d_forward, ssd_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -48,9 +47,11 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mamba.modeling_mamba import causal_conv1d_forward
 from ..mamba2.modeling_mamba2 import (
     apply_mask_to_padding_states,
     mamba2_split_conv1d_scan_combined,
+    ssd_forward,
 )
 from .configuration_falcon_h1 import FalconH1Config
 

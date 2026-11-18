@@ -28,7 +28,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,6 +37,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,

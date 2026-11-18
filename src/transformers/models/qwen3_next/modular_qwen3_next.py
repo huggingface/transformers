@@ -26,7 +26,6 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -42,6 +41,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
 )
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..mixtral.modeling_mixtral import MixtralForCausalLM
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import (

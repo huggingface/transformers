@@ -19,7 +19,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...modeling_linear_attn_utils import causal_conv1d_forward
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -33,6 +32,7 @@ from ..mamba.modeling_mamba import (
     MambaOutput,
     MambaPreTrainedModel,
     apply_mask_to_padding_states,
+    causal_conv1d_forward,
     mamba_inner_fn,
     mamba_selective_scan,
     mamba_selective_state_update,
