@@ -514,7 +514,6 @@ class InstructBlipQFormerMultiHeadAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->InstructBlipQFormer
 class InstructBlipQFormerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -555,7 +554,6 @@ class InstructBlipQFormerAttention(nn.Module):
         return attention_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->InstructBlipQFormer
 class InstructBlipQFormerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -571,7 +569,6 @@ class InstructBlipQFormerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->InstructBlipQFormer
 class InstructBlipQFormerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

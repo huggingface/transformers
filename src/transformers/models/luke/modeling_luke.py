@@ -509,7 +509,6 @@ class LukeSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class LukeSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -565,7 +564,6 @@ class LukeAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class LukeIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -581,7 +579,6 @@ class LukeIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
 class LukeOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

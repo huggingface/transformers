@@ -200,7 +200,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->RoCBert
 class RoCBertSelfAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -269,7 +268,6 @@ class RoCBertSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertCrossAttention with Bert->RoCBert
 class RoCBertCrossAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -345,7 +343,6 @@ class RoCBertCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->RoCBert
 class RoCBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -360,7 +357,6 @@ class RoCBertSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->RoCBert,BERT->ROC_BERT
 class RoCBertAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
@@ -391,7 +387,6 @@ class RoCBertAttention(nn.Module):
         return attention_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->RoCBert
 class RoCBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -407,7 +402,6 @@ class RoCBertIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->RoCBert
 class RoCBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -422,7 +416,6 @@ class RoCBertOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->RoCBert
 class RoCBertLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
