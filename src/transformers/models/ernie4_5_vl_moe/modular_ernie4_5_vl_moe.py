@@ -23,7 +23,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -943,21 +942,10 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_outputs.pooler_output = video_embeds
         return video_outputs
 
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        video_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-        video_embeds = video_outputs.pooler_output
-        split_sizes = (
-            video_grid_thw.prod(-1)
-            // self.vision_tower.spatial_merge_size**2
-            // self.resampler_model.temporal_merge_size
-        ).tolist()
-        video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
-        return video_outputs
+    def get_video_split_sizes(self, pixel_values_videos=None, video_grid_thw=None, **kwargs) -> list[int]:
+        """The number of features of each video: its patches, merged spatially then temporally."""
+        merge_size = self.config.vision_config.spatial_merge_size
+        return (video_grid_thw.prod(-1) // merge_size**2 // self.resampler_model.temporal_merge_size).tolist()
 
     def get_image_embeddings(
         self,
@@ -971,18 +959,6 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         image_outputs.pooler_output = image_embeds
-        return image_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = image_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -1080,7 +1056,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         )
 
 
-class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
+class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 

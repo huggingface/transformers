@@ -1178,20 +1178,6 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         return vision_outputs
 
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        vision_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
-        return vision_outputs
-
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -1203,20 +1189,6 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        return vision_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
@@ -1404,16 +1376,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
     @auto_docstring
-    def get_image_embeddings(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_image_embeddings(**super_kwargs)
-
-    @auto_docstring
     def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_embeddings(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_video_embeddings(**super_kwargs)
 
     @auto_docstring
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:

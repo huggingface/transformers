@@ -692,9 +692,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLModel does not support video.")
-
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -709,19 +706,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
-        return vision_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = vision_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
-
         return vision_outputs
 
     def get_placeholder_mask(
@@ -809,9 +793,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -897,6 +878,9 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def get_video_features(self):
+        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
 
 __getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})

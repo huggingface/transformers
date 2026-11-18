@@ -663,12 +663,6 @@ class GlmImageModel(Glm4vModel):
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
-    def get_video_features(self):
-        raise AttributeError("Not needed for GlmImage")
-
-    def get_video_embeddings(self):
-        raise AttributeError("Not needed for GlmImage")
-
     def get_image_embeddings(self):
         raise AttributeError("Not needed for GlmImage")
 
@@ -855,6 +849,9 @@ class GlmImageModel(Glm4vModel):
         )
 
         return outputs
+
+    def get_video_embeddings(self):
+        raise AttributeError("Not needed for GlmImage")
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):

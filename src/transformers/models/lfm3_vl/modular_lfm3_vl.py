@@ -409,18 +409,6 @@ class Lfm3VlModel(Qwen2VLModel):
         image_outputs.pooler_output = image_features
         return image_outputs
 
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_features = image_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_outputs.pooler_output = torch.split(image_features, split_sizes)
-        return image_outputs
-
     def get_video_embeddings(
         self,
         pixel_values_videos: torch.FloatTensor,

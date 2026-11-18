@@ -1099,17 +1099,9 @@ class MuseGlimmerModel(Kimi_K25Model):
         vision_outputs.pooler_output = vision_features
         return vision_outputs
 
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        vision_features = vision_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
-        return vision_outputs
+    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
+        """The number of features of each image: its patches, merged by `merge_size`."""
+        return (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):

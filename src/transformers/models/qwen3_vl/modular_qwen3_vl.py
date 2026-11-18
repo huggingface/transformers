@@ -654,20 +654,6 @@ class Qwen3VLModel(Qwen2VLModel):
         )
         return vision_output
 
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        vision_output = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_output.pooler_output = torch.split(vision_output.pooler_output, split_sizes)
-        vision_output.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
-        ]
-        return vision_output
-
     def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,

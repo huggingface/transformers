@@ -1032,9 +1032,11 @@ class GenerationMixin(ContinuousMixin):
                 modality in self.input_modalities
                 and (encoder_fn := getattr(self.base_model, f"get_{modality}_features", None)) is not None
             ):
+                # The flat getter declares the inputs; `ModalityFeaturesMixin`'s split one takes them as `*args`
+                signature_fn = getattr(self.base_model, f"get_{modality}_embeddings", encoder_fn)
                 encoder_kwargs = {
                     key: model_kwargs[key]
-                    for key in inspect.signature(encoder_fn).parameters
+                    for key in inspect.signature(signature_fn).parameters
                     if key != "kwargs" and key in model_kwargs
                 }
                 keys_to_pop.update(encoder_kwargs.keys())

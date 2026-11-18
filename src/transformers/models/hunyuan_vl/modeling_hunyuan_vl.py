@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -827,7 +827,7 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
     The HunYuanVL model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class HunYuanVLModel(HunYuanVLPreTrainedModel):
+class HunYuanVLModel(ModalityFeaturesMixin, HunYuanVLPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1001,21 +1001,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         image_outputs.pooler_output = image_outputs.pooler_output[0]
         return image_outputs
 
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        # Include row separators and image boundary tokens in each split.
-        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
-        return image_outputs
-
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None,
@@ -1139,9 +1124,14 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
             image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
 
+    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
+        """The number of features of each image: its merged rows, each with a newline, and its begin and end tokens."""
+        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
+        return (merged_h * (merged_w + 1) + 2).tolist()
+
 
 @auto_docstring
-class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixin):
+class HunYuanVLForConditionalGeneration(ModalityFeaturesMixin, HunYuanVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -1153,19 +1143,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.vocab_size = config.text_config.vocab_size
         self.post_init()
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor`):
-            Flat per-patch pixel features produced by the image processor.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(

@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
@@ -474,7 +474,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
 
 
 @auto_docstring
-class Kimi_K25Model(Kimi_K25PreTrainedModel):
+class Kimi_K25Model(ModalityFeaturesMixin, Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
         self.vision_tower = Kimi_K25VisionModel._from_config(config.vision_config)
@@ -504,20 +504,10 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         vision_outputs.pooler_output = image_embeds
         return vision_outputs
 
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = vision_outputs.pooler_output
-        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
-        split_sizes = (image_grid_thw[:, 1:].prod(-1) // merge_kernel_size).tolist()
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
-        return vision_outputs
+    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
+        """The number of features of each image or video: its patches pooled over time, merged by the kernel."""
+        kernel_height, kernel_width = self.vision_tower.merge_kernel_size
+        return (image_grid_thw[:, 1:].prod(-1) // (kernel_height * kernel_width)).tolist()
 
     @auto_docstring
     def get_video_embeddings(

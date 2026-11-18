@@ -106,6 +106,7 @@ from .utils import (
     KernelConfig,
     PushToHubMixin,
     cached_file,
+    can_return_tuple,
     check_torch_load_is_safe,
     copy_func,
     get_current_accelerator,
@@ -954,6 +955,68 @@ class ModuleUtilsMixin:
                     total_params += param.numel()
 
         return total_params
+
+
+class ModalityFeaturesMixin:
+    """
+    `get_image_features` and `get_video_features` from a model's flat `get_image_embeddings` and `get_video_embeddings`,
+    split per image or video by `get_image_split_sizes` and `get_video_split_sizes`. A model with a head reaches its
+    base model's.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # A model without a modality has none of its getters
+        modalities = (
+            cls.input_modalities if isinstance(cls.input_modalities, (tuple, list)) else (cls.input_modalities,)
+        )
+        for modality in ("image", "video"):
+            if modality in modalities:
+                continue
+            for name in (f"get_{modality}_embeddings", f"get_{modality}_features", f"get_{modality}_split_sizes"):
+                owner = next(klass for klass in cls.__mro__ if name in klass.__dict__)
+                if owner is ModalityFeaturesMixin:
+                    setattr(cls, name, _MissingModality())
+
+    def get_image_embeddings(self, *args, **kwargs):
+        return self.model.get_image_embeddings(*args, **kwargs)
+
+    def get_video_embeddings(self, *args, **kwargs):
+        return self.model.get_video_embeddings(*args, **kwargs)
+
+    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
+        """The number of features of each image: its patches, merged by `spatial_merge_size`."""
+        return (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
+
+    def get_video_split_sizes(self, pixel_values_videos=None, video_grid_thw=None, **kwargs) -> list[int]:
+        """The number of features of each video: its patches, merged by `spatial_merge_size`."""
+        return (video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
+
+    @can_return_tuple
+    def get_image_features(self, *args, **kwargs):
+        """Each image's features, from `get_image_embeddings`."""
+        outputs = self.get_image_embeddings(*args, return_dict=True, **kwargs)
+        return _split_modality_outputs(outputs, self.get_image_split_sizes(*args, **kwargs))
+
+    @can_return_tuple
+    def get_video_features(self, *args, **kwargs):
+        """Each video's features, from `get_video_embeddings`."""
+        outputs = self.get_video_embeddings(*args, return_dict=True, **kwargs)
+        return _split_modality_outputs(outputs, self.get_video_split_sizes(*args, **kwargs))
+
+
+class _MissingModality:
+    """Hides a `ModalityFeaturesMixin` getter: `hasattr` is false on the class and on its instances."""
+
+    def __get__(self, instance, owner=None):
+        raise AttributeError
+
+
+def _split_modality_outputs(outputs, split_sizes: list[int]):
+    outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
+    if getattr(outputs, "deepstack_features", None) is not None:
+        outputs.deepstack_features = [torch.split(features, split_sizes) for features in outputs.deepstack_features]
+    return outputs
 
 
 class EmbeddingAccessMixin:

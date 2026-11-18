@@ -530,24 +530,11 @@ class VideoLlama3Model(Qwen2VLModel):
         vision_outputs.pooler_output = image_embeds
         return vision_outputs
 
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-            The spatial downsampling ratio of each image feature.
-        """
-        vision_outputs = self.get_image_embeddings(
-            pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
-        )
-        image_embeds = vision_outputs.pooler_output
-        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
-        return vision_outputs
+    def get_image_split_sizes(
+        self, pixel_values=None, image_grid_thw=None, image_merge_sizes=None, **kwargs
+    ) -> list[int]:
+        """The number of features of each image: its patches, merged by its own merge size."""
+        return (image_grid_thw.prod(-1) // image_merge_sizes**2).tolist()
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
