@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1030,7 +1030,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
 
 @auto_docstring
-class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
+class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

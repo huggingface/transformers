@@ -1348,7 +1348,7 @@ class Florence2Model(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1358,6 +1358,10 @@ class Florence2Model(LlavaModel):
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
+        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
+            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
@@ -1385,7 +1389,7 @@ class Florence2Model(LlavaModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values).pooler_output
+                image_features = self.get_image_embeddings(pixel_values).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1439,12 +1443,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     # The Bart language model has no TP plan, so its shared embedding is never sharded: a head rule would gather
     # full-vocab logits from every rank
     _tp_plan = AttributeError()
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

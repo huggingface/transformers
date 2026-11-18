@@ -515,9 +515,6 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_placeholder_mask(self):
         raise AttributeError("The PPFormulaNet does not need placeholder mask.")
 
-    def get_image_features(self):
-        raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
-
     def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 

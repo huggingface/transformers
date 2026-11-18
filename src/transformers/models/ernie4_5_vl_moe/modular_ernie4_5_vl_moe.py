@@ -24,7 +24,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -199,7 +198,6 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "vision_config": Ernie4_5_VLMoeVisionConfig,
         "text_config": Ernie4_5_VLMoeTextConfig,
@@ -913,28 +911,14 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw, **kwargs)
         video_outputs.pooler_output = video_embeds
-        return video_outputs
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        video_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-        video_embeds = video_outputs.pooler_output
-        split_sizes = (
+        video_outputs.split_sizes = (
             video_grid_thw.prod(-1)
-            // self.vision_tower.spatial_merge_size**2
+            // self.config.vision_config.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
-        ).tolist()
-        video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
+        )
         return video_outputs
 
     def get_image_embeddings(
@@ -943,24 +927,10 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_embeds
-        return image_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = image_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -1058,21 +1028,13 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         )
 
 
-class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
+class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs):
-        return super().get_video_features(**super_kwargs)
-
-    @auto_docstring
-    def get_image_features(self, **super_kwargs):
-        return super().get_image_features(**super_kwargs)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(

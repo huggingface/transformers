@@ -82,7 +82,6 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
 
     model_type = "qwen3_vl_moe_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 500000.0
     # Default tensor parallel plan for base model `Qwen3VLMoe`
     base_model_tp_plan = {

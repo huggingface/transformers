@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
@@ -497,7 +497,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
 
 
 @auto_docstring
-class Kimi_K25Model(Kimi_K25PreTrainedModel):
+class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
         self.vision_tower = Kimi_K25VisionModel._from_config(config.vision_config)
@@ -536,30 +536,14 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = vision_outputs.pooler_output
-        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
-        split_sizes = (image_grid_thw[:, 1:].prod(-1) // merge_kernel_size).tolist()
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
+        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
     @auto_docstring
     def get_video_embeddings(
         self,
@@ -571,20 +555,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(
         self,

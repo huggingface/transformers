@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
@@ -1024,7 +1024,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
     the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
     """
 )
-class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, GenerationMixin):
+class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, MultimodalMixin, GenerationMixin):
     config: InstructBlipConfig
     main_input_name = "pixel_values"
 
@@ -1089,7 +1089,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         qformer_input_ids: torch.LongTensor,
@@ -1153,6 +1153,10 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         image_features = self.language_projection(query_output)
         vision_outputs.pooler_output = image_features
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):
@@ -1254,7 +1258,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_embeddings(
                 pixel_values,
                 qformer_input_ids=qformer_input_ids,
                 qformer_attention_mask=qformer_attention_mask,
@@ -1262,6 +1266,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 return_dict=True,
             )
         language_model_inputs = mm_encoder_outputs["image"].pooler_output
+        if not isinstance(language_model_inputs, torch.Tensor):
+            language_model_inputs = torch.cat(language_model_inputs, dim=0)
         qformer_outputs = mm_encoder_outputs["image"].qformer_outputs
         vision_outputs = mm_encoder_outputs["image"].vision_outputs
 
@@ -1348,7 +1354,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_embeddings(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,

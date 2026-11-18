@@ -175,7 +175,6 @@ class RadioPatchEmbeddings(nn.Module):
     ) -> torch.Tensor:
         """Embeds the concatenated patches of images with differing grids into one `(1, total_length, hidden)` sequence."""
         patches = self.patch_projection(pixel_values)
-        # The table resized to a square of each image's longest side, cropped to its grid
         indices, weights = get_vision_interpolation_indices_and_weights(
             F.pad(image_grid_hw, (1, 0), value=1), self.max_rows, resize_to_longest_side=True, kwargs=kwargs
         )
@@ -407,7 +406,6 @@ class RadioModel(RadioPreTrainedModel):
     ) -> RadioModelOutput:
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         pixel_values = self.input_conditioner(pixel_values.view(-1, num_channels, patch_size, patch_size))
-        # Each patch's place in the packed sequence: after its own image's prefix tokens and those of the images before
         num_prefix_tokens = self.config.num_summary_tokens
         num_patches, sizes = pixel_values.shape[0], image_grid_hw.prod(-1)
         image_index = torch.arange(len(sizes), device=sizes.device).repeat_interleave(sizes, output_size=num_patches)

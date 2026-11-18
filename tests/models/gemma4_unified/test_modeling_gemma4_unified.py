@@ -244,6 +244,7 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
             "test_get_video_features_output",
+            "test_get_video_features_pooler_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
             # no last-hidden-states returned, only pooler output
@@ -399,6 +400,7 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
             "test_get_video_features_output",
+            "test_get_video_features_pooler_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
             "test_get_audio_features_output",
@@ -583,9 +585,6 @@ class Gemma4UnifiedIntegrationTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_model_text_only_multigpu(self):
-        """Accelerate destroys the input dict `shared_kv_states` if it's not passed as kwarg and part of
-        `_skip_keys_device_placement`, so test this to avoid regresions.
-        """
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
         inputs = tokenizer.apply_chat_template(

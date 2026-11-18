@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -73,7 +73,6 @@ def get_merge_index(
     block = torch.arange(merge_size, device=device)
     merge_index, offset = [], 0
     for height, width in (torch.as_tensor(image_sizes) // patch_size).tolist():
-        # Each block's top-left patch, plus the offsets of the patches within a block
         rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
         columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
         within = (block[:, None] * width + block[None, :]).flatten()
@@ -190,7 +189,6 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -205,7 +203,7 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     The Mistral3 model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class Mistral3Model(Mistral3PreTrainedModel):
+class Mistral3Model(Mistral3PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -214,27 +212,41 @@ class Mistral3Model(Mistral3PreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
+    @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(
-            pixel_values, image_sizes, vision_feature_layer=vision_feature_layer, return_dict=True, **kwargs
+        image_outputs = self.vision_tower(
+            pixel_values,
+            image_sizes=image_sizes,
+            return_dict=True,
+            **kwargs,
+        )
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
+        image_outputs.pooler_output = self.multi_modal_projector(
+            selected_image_feature.squeeze(0), image_sizes, **kwargs
         )
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        split_sizes = (
-            (torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio)
-            .prod(dim=-1)
-            .tolist()
-        )
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        image_outputs.split_sizes = (
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+        ).prod(dim=-1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -290,7 +302,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
@@ -298,9 +310,10 @@ class Mistral3Model(Mistral3PreTrainedModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -337,47 +350,13 @@ class Mistral3Model(Mistral3PreTrainedModel):
         )
         return {f"image_{name}": value for name, value in inputs.items()}
 
-    @accepts_precomputed_kwargs(modality="image")
-    @merge_with_config_defaults
-    @can_return_tuple
-    @select_hidden_states("vision_feature_layer")
-    @auto_docstring(
-        custom_intro="All images' last hidden states from the vision tower, projected, as one tensor; "
-        "`get_image_features` splits them per image."
-    )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.vision_tower(
-            pixel_values,
-            image_sizes=image_sizes,
-            return_dict=True,
-            **kwargs,
-        )
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        image_outputs.pooler_output = self.multi_modal_projector(
-            selected_image_feature.squeeze(0), image_sizes, **kwargs
-        )
-        return image_outputs
-
 
 @auto_docstring(
     custom_intro="""
     The MISTRAL3 model which consists of a vision backbone and a language model.
     """
 )
-class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin):
+class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -389,23 +368,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            **kwargs,
-        )
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -480,18 +442,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
-        )
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_embeddings(
-            pixel_values=pixel_values, image_sizes=image_sizes, vision_feature_layer=vision_feature_layer, **kwargs
         )
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:

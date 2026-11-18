@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -686,7 +686,6 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HYV4VLDecoderLayer", "HYV4VLVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     # Combination of sinks and DSA disable anything but eager atm
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -1244,7 +1243,7 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
 
 
 @auto_docstring
-class HYV4VLModel(HYV4VLPreTrainedModel):
+class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1416,54 +1415,28 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
         return position_ids, mrope_position_deltas
 
     @can_return_tuple
+    @auto_docstring
     def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
-        # Same implementation as for images
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @can_return_tuple
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @can_return_tuple
+    @auto_docstring
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
-        return vision_outputs
-
-    @can_return_tuple
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        # Each merged row carries one extra newline token
-        merge = self.config.vision_config.spatial_merge_size
-        split_sizes = image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes.tolist())
+        merge_size = self.config.vision_config.spatial_merge_size
+        frames, height, width = image_grid_thw.unbind(-1)
+        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1675,7 +1648,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
 
 
 @auto_docstring
-class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
+class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -1688,61 +1661,9 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`HYV4VLModel.get_data_dependent_inputs`]."""
         return self.model.get_data_dependent_inputs(*args, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

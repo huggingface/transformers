@@ -97,7 +97,7 @@ class Cohere2VisionModel(AyaVisionModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
@@ -107,6 +107,10 @@ class Cohere2VisionModel(AyaVisionModel):
             selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
         )
 
+        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
+            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -133,10 +137,12 @@ class Cohere2VisionModel(AyaVisionModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -162,12 +168,6 @@ class Cohere2VisionModel(AyaVisionModel):
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
