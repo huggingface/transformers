@@ -295,6 +295,7 @@ if TYPE_CHECKING:
     from .m2m_100 import *
     from .mamba import *
     from .mamba2 import *
+    from .mamba3 import *
     from .marian import *
     from .markuplm import *
     from .mask2former import *

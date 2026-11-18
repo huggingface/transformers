@@ -194,6 +194,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
         ("mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mamba2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("mamba3", "TokenizersBackend" if is_tokenizers_available() else None),
         ("marian", "MarianTokenizer" if is_sentencepiece_available() else None),
         ("markuplm", "MarkupLMTokenizer" if is_tokenizers_available() else None),
         ("mbart", "MBartTokenizer" if is_tokenizers_available() else None),
