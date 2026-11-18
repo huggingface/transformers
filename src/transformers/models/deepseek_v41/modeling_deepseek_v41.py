@@ -594,8 +594,12 @@ class DeepseekV41Attention(nn.Module):
         shared_states: dict[str, torch.Tensor] | None = None,
         compressed_position_embeddings: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, dict[str, torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
+        # We return what we publish in a new dict, and leave the one we were given alone. With gradient
+        # checkpointing this layer runs again in the backward pass, long after the layers after it, and it has
+        # to read the same states as the first time.
+        shared_states = dict(shared_states or {})
         hidden_shape = (*input_shape, -1, self.head_dim)
         # The model computes RoPE for both bases, and each layer picks the one that matches its attention type
         cos, sin = position_embeddings[self.rope_layer_type]
@@ -626,25 +630,21 @@ class DeepseekV41Attention(nn.Module):
 
         if self.layer_type in ("compressed_attention", "kv_shared_indexed_attention"):
             # This layer selects which compressed entries each query attends to, and the
-            # `"kv_shared_attention"` layers after it reuse the selection. With a device map, the layers that
-            # made the index keys and the candidates may sit on another device.
-            candidates = shared_states.get("candidates")
+            # `"kv_shared_attention"` layers after it reuse the selection
             shared_states["selected"], shared_states["candidates"] = self.indexer(
                 hidden_states,
                 q_residual,
-                shared_states["index_keys"].to(hidden_states.device),
+                shared_states["index_keys"],
                 kwargs.get("position_ids"),
                 (cos, sin),
-                candidates.to(hidden_states.device) if candidates is not None else None,
+                shared_states.get("candidates"),
             )
 
         if self.layer_type != "sliding_attention":
             # The compressed entries go after the window on the KV axis. The model built the mask for the
-            # window only, so we extend it with the entries that each query selected. With a device map, the
-            # layer that made the compressed KV may sit on another device.
-            compressed_kv = shared_states["compressed_kv"].to(kv.device, kv.dtype)
-            selected = shared_states["selected"].to(kv.device)
-            kv = torch.cat([kv, compressed_kv.unsqueeze(1)], dim=2)
+            # window only, so we extend it with the entries that each query selected.
+            compressed_kv, selected = shared_states["compressed_kv"], shared_states["selected"]
+            kv = torch.cat([kv, compressed_kv.unsqueeze(1).to(kv.dtype)], dim=2)
             compressed_mask = torch.zeros_like(selected, dtype=attention_mask.dtype)
             compressed_mask = compressed_mask.masked_fill(~selected, torch.finfo(attention_mask.dtype).min)
             attention_mask = torch.cat([attention_mask, compressed_mask.unsqueeze(1)], dim=-1)
@@ -672,7 +672,7 @@ class DeepseekV41Attention(nn.Module):
         grouped = attn_output.reshape(*input_shape, self.config.o_groups, -1)
         grouped = self.o_a_proj(grouped).flatten(2)
         output = self.o_b_proj(grouped)
-        return output, attn_weights
+        return output, attn_weights, shared_states
 
 
 class DeepseekV41HyperConnection(nn.Module):
@@ -1025,8 +1025,9 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         engram_hash_ids: torch.Tensor | None = None,
         engram_mask: torch.Tensor | None = None,
         image_mask: torch.Tensor | None = None,
+        shared_states: dict[str, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
         # hidden_states throughout: [B, S, hc_mult, hidden]. The hyper-connection weights are float32, and
         # comb is used transposed: sum_j comb[j, k] * residual[j], which is comb.T @ residual.
         dtype = hidden_states.dtype
@@ -1035,7 +1036,9 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
 
         attn_pre, post, comb = self.attn_hc(hidden_states)
         collapsed = (pre.unsqueeze(-1) * hidden_states.float()).sum(dim=2).to(dtype)
-        attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
+        attn_output, _, shared_states = self.self_attn(
+            self.input_layernorm(collapsed), shared_states=shared_states, **kwargs
+        )
         hidden_states = post.unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
             comb.transpose(-1, -2), hidden_states.float()
         )
@@ -1047,7 +1050,7 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         hidden_states = post.unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
             comb.transpose(-1, -2), hidden_states.float()
         )
-        return hidden_states.to(dtype), mlp_pre
+        return hidden_states.to(dtype), mlp_pre, shared_states
 
 
 def vision_eager_attention_forward(
@@ -1227,9 +1230,6 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV41DecoderLayer", "DeepseekV41VisionLayer"]
-    # The layers write into `shared_states` for the layers after them, so the device hooks must hand every
-    # layer the same dict rather than a copy of it moved to the layer's device
-    _skip_keys_device_placement = ["cache", "shared_states"]
     # Eager only, for the same reasons as DeepSeek-V4: the head dim of 512 is above what FlashAttention
     # supports, SDPA has no attention sink, and the compressed entries are added to the KV axis inside the
     # attention, after the mask was built.
@@ -1293,6 +1293,27 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
                 curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+
+    def activation_checkpointing_enable(
+        self, activation_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
+    ):
+        """
+        Same as [`PreTrainedModel.activation_checkpointing_enable`], except that `use_reentrant=True` is refused.
+
+        Reentrant checkpointing only tracks the gradient of the tensors that a layer gets as positional arguments.
+        The compressed KV reaches the KV-sharing layers in a dict, so the layer that compressed it would silently
+        lose the gradient that comes back through them.
+        """
+        if activation_checkpointing_kwargs is not None and activation_checkpointing_kwargs.get("use_reentrant"):
+            raise ValueError(
+                "DeepSeek-V4.1 does not support activation checkpointing with `use_reentrant=True`, because the "
+                "gradient of the compressed KV that its layers share would be lost. Use `use_reentrant=False`, "
+                "which is the default.\n"
+                f"activation_checkpointing_kwargs: {activation_checkpointing_kwargs}"
+            )
+        super().activation_checkpointing_enable(
+            activation_checkpointing_kwargs, every_n_layers=every_n_layers, offload=offload
+        )
 
     # The structure linter reads any `set_*` method as a hyperparameter that should live on the config. This one
     # fills a buffer that is saved and loaded with the weights, and it only exists because the original
@@ -1491,11 +1512,12 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                     inputs_embeds, position_ids=(entry_ids * ratio).unsqueeze(0), layer_type="compress"
                 )
         # What the attention layers hand down the stack instead of recomputing: the compressed KV, the index
-        # keys, the selection and the candidate blocks. Every source writes before the layers after it read.
+        # keys, the selection and the candidate blocks. Each layer returns them with its own on top, so every
+        # source has published before the layers after it read.
         shared_states = {}
 
         for layer_idx, layer in enumerate(self.layers):
-            hidden_states, pre = layer(
+            hidden_states, pre, shared_states = layer(
                 hidden_states,
                 pre,
                 engram_hash_ids=(
