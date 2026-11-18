@@ -98,7 +98,7 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
         The looped core of the decoder, with keys `core_start`, `core_end`, `num_passes` and `gate_rank`. Layers
         `core_start` to `core_end - 1` run `num_passes` times with the same weights. Each pass after the first
         starts again from the output of the layers before the core and reads the residual blocks of the previous
-        pass through message controllers of rank `gate_rank`. The core boundaries must be multiples of
+        pass through message gates of rank `gate_rank`. The core boundaries must be multiples of
         `n_layers_per_attn_res_block`. Defaults to `{"core_start": 6, "core_end": 18, "num_passes": 3,
         "gate_rank": 64}`.
     """
@@ -181,28 +181,24 @@ class Inkling2LoopUnweightedRMSNorm(Inkling2UnweightedRMSNorm):
     pass
 
 
-class Inkling2LoopMessageController(nn.Module):
-    """
-    Mixes a message from the previous pass into one input of a core layer, per token and channel:
-    `(1 - forget) * hidden_states + gain * message`, where `gain` and `forget` are `tanh` of low-rank projections of
-    the normalized input and message.
-    """
+class Inkling2LoopMessageGate(nn.Module):
+    """Mixes hidden states and message as  `(1 - forget_gate) * hidden_states + message_gate * message`"""
 
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
         self.norm = Inkling2LoopUnweightedRMSNorm()
         self.down_proj = nn.Linear(2 * config.hidden_size, config.loop_config["gate_rank"], bias=False)
-        # TODO: find better names?
-        self.gain_proj = nn.Linear(config.loop_config["gate_rank"], config.hidden_size, bias=False)
-        self.forget_proj = nn.Linear(config.loop_config["gate_rank"], config.hidden_size, bias=False)
+        self.forget_gate_proj = nn.Linear(config.loop_config["gate_rank"], config.hidden_size, bias=False)
+        self.message_gate_proj = nn.Linear(config.loop_config["gate_rank"], config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
         hidden_states, message = hidden_states.float(), message.float()
-        controls = torch.cat([self.norm(hidden_states), self.norm(message)], dim=-1)
-        controls = self.down_proj(controls.to(self.down_proj.weight.dtype)).float()
-        gain = torch.tanh(self.gain_proj(controls))
-        forget = torch.tanh(self.forget_proj(controls))
-        return (1 - forget) * hidden_states + gain * message
+        gate_hidden_states = torch.cat([self.norm(hidden_states), self.norm(message)], dim=-1)
+        gate_hidden_states = self.down_proj(gate_hidden_states.to(self.down_proj.weight.dtype)).float()
+
+        forget_gate = torch.tanh(self.forget_gate_proj(gate_hidden_states))
+        message_gate = torch.tanh(self.message_gate_proj(gate_hidden_states))
+        return (1 - forget_gate) * hidden_states + message_gate * message
 
 
 class Inkling2LoopCrossPassMessages(nn.Module):
@@ -212,7 +208,9 @@ class Inkling2LoopCrossPassMessages(nn.Module):
         super().__init__()
         # 4 * num_loop_layers queries, shape is (2 * num_loop_layers, 2 * hidden_dim) because of original checkpoint shapes.
         self.queries = nn.Parameter(
-            torch.zeros(2 * config.loop_config["core_end"] - config.loop_config["core_start"], 2 * config.hidden_size)
+            torch.zeros(
+                2 * (config.loop_config["core_end"] - config.loop_config["core_start"]), 2 * config.hidden_size
+            )
         )
         self.norm = Inkling2LoopUnweightedRMSNorm()
 
@@ -530,10 +528,10 @@ class Inkling2LoopSlidingDecoderLayer(Inkling2SlidingDecoderLayer):
 class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_controller = Inkling2LoopMessageController(config)
-        self.k_controller = Inkling2LoopMessageController(config)
-        self.v_controller = Inkling2LoopMessageController(config)
-        self.mlp_controller = Inkling2LoopMessageController(config)
+        self.q_message_gate = Inkling2LoopMessageGate(config)
+        self.k_message_gate = Inkling2LoopMessageGate(config)
+        self.v_message_gate = Inkling2LoopMessageGate(config)
+        self.mlp_message_gate = Inkling2LoopMessageGate(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -564,9 +562,9 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
             query_hidden_states = key_hidden_states = value_hidden_states = self.input_layernorm(hidden_states)
         else:
             query_message, key_message, mlp_message, value_message = messages.unbind(-2)
-            query_hidden_states = self.input_layernorm(self.q_controller(hidden_states, query_message))
-            key_hidden_states = self.input_layernorm(self.k_controller(hidden_states, key_message))
-            value_hidden_states = self.input_layernorm(self.v_controller(hidden_states, value_message))
+            query_hidden_states = self.input_layernorm(self.q_message_gate(hidden_states, query_message))
+            key_hidden_states = self.input_layernorm(self.k_message_gate(hidden_states, key_message))
+            value_hidden_states = self.input_layernorm(self.v_message_gate(hidden_states, value_message))
 
         hidden_states, _ = self.self_attn(
             hidden_states=query_hidden_states.to(dtype),
@@ -590,7 +588,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         if messages is not None:
-            hidden_states = self.mlp_controller(hidden_states, mlp_message)
+            hidden_states = self.mlp_message_gate(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
             hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
@@ -605,10 +603,10 @@ class Inkling2LoopFullDecoderLayer(Inkling2FullDecoderLayer):
 class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_controller = Inkling2LoopMessageController(config)
-        self.k_controller = Inkling2LoopMessageController(config)
-        self.v_controller = Inkling2LoopMessageController(config)
-        self.mlp_controller = Inkling2LoopMessageController(config)
+        self.q_message_gate = Inkling2LoopMessageGate(config)
+        self.k_message_gate = Inkling2LoopMessageGate(config)
+        self.v_message_gate = Inkling2LoopMessageGate(config)
+        self.mlp_message_gate = Inkling2LoopMessageGate(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -641,9 +639,9 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
 
         if messages is not None:
             query_message, key_message, _, value_message = messages.unbind(-2)
-            query_hidden_states = self.q_controller(query_hidden_states, query_message)
-            key_hidden_states = self.k_controller(key_hidden_states, key_message)
-            value_hidden_states = self.v_controller(value_hidden_states, value_message)
+            query_hidden_states = self.q_message_gate(query_hidden_states, query_message)
+            key_hidden_states = self.k_message_gate(key_hidden_states, key_message)
+            value_hidden_states = self.v_message_gate(value_hidden_states, value_message)
 
         hidden_states, _ = self.self_attn(
             hidden_states=self.q_input_layernorm(query_hidden_states).to(dtype),
@@ -667,7 +665,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         if messages is not None:
-            hidden_states = self.mlp_controller(hidden_states, messages[..., 2, :])
+            hidden_states = self.mlp_message_gate(hidden_states, messages[..., 2, :])
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
             hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
@@ -698,8 +696,8 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
         "mlp_input",
         "final_input",
         "cross_pass_messages",
-        "gain_proj",
-        "forget_proj",
+        "message_gate_proj",
+        "forget_gate_proj",
     ]
     _can_record_outputs = {
         "hidden_states": OutputRecorder(

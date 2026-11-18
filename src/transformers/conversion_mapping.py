@@ -2576,18 +2576,22 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    # Looped Inkling2: the Inkling2 layout plus the loop core's message controllers and message queries. Renamed
+    # Looped Inkling2: the Inkling2 layout plus the loop core's message gates and message queries. Renamed
     # first, before Inkling2's `.attn.` -> `.self_attn.` would also catch `controllers.attn.`
     mapping["inkling2_loop"] = mapping["inkling2"].copy()
     mapping["inkling2_loop_text"] = [
-        WeightRenaming(source_patterns=r"controllers\.attn\.", target_patterns=r"q_controller."),
-        WeightRenaming(source_patterns=r"controllers\.k\.", target_patterns=r"k_controller."),
-        WeightRenaming(source_patterns=r"controllers\.v\.", target_patterns=r"v_controller."),
-        WeightRenaming(source_patterns=r"controllers\.mlp\.", target_patterns=r"mlp_controller."),
-        WeightRenaming(source_patterns=r"_controller\.down_weight", target_patterns=r"_controller.down_proj.weight"),
-        WeightRenaming(source_patterns=r"_controller\.gain_weight", target_patterns=r"_controller.gain_proj.weight"),
+        WeightRenaming(source_patterns=r"controllers\.attn\.", target_patterns=r"q_message_gate."),
+        WeightRenaming(source_patterns=r"controllers\.k\.", target_patterns=r"k_message_gate."),
+        WeightRenaming(source_patterns=r"controllers\.v\.", target_patterns=r"v_message_gate."),
+        WeightRenaming(source_patterns=r"controllers\.mlp\.", target_patterns=r"mlp_message_gate."),
         WeightRenaming(
-            source_patterns=r"_controller\.forget_weight", target_patterns=r"_controller.forget_proj.weight"
+            source_patterns=r"_message_gate\.down_weight", target_patterns=r"_message_gate.down_proj.weight"
+        ),
+        WeightRenaming(
+            source_patterns=r"_message_gate\.gain_weight", target_patterns=r"_message_gate.message_gate_proj.weight"
+        ),
+        WeightRenaming(
+            source_patterns=r"_message_gate\.forget_weight", target_patterns=r"_message_gate.forget_gate_proj.weight"
         ),
         # (2 * num_looped_layers, hidden_size) each, rows `2 * i` and `2 * i + 1` of core layer `i` hold its query and
         # MLP queries in the first and its key and value queries in the second. Side by side, core layer `i` holds

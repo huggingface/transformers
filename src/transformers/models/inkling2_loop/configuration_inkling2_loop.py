@@ -65,7 +65,7 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
         The looped core of the decoder, with keys `core_start`, `core_end`, `num_passes` and `gate_rank`. Layers
         `core_start` to `core_end - 1` run `num_passes` times with the same weights. Each pass after the first
         starts again from the output of the layers before the core and reads the residual blocks of the previous
-        pass through message controllers of rank `gate_rank`. The core boundaries must be multiples of
+        pass through message gates of rank `gate_rank`. The core boundaries must be multiples of
         `n_layers_per_attn_res_block`. Defaults to `{"core_start": 6, "core_end": 18, "num_passes": 3,
         "gate_rank": 64}`.
     """
