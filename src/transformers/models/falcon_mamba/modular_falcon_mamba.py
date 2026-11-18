@@ -34,7 +34,7 @@ from ..mamba.modeling_mamba import (
     apply_mask_to_padding_states,
     causal_conv1d_forward,
     mamba_inner_fn,
-    selective_scan_forward,
+    mamba_scan_forward,
 )
 from ..nanochat.modeling_nanochat import NanoChatRMSNorm
 
@@ -199,7 +199,7 @@ class FalconMambaMixer(MambaMixer):
             time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
         else:
             time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-        scan_output = selective_scan_forward(
+        scan_output = mamba_scan_forward(
             self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, recurrent_state, cache, **kwargs
         )
 

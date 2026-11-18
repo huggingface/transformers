@@ -22,17 +22,20 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import slice_logits_to_keep
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..mamba.modeling_mamba import (
+    MambaBlock,
     MambaCausalLMOutput,
+    MambaForCausalLM,
+    MambaModel,
     MambaOutput,
+    MambaPreTrainedModel,
+    MambaRMSNorm,
     causal_conv1d_fn,
     causal_conv1d_forward,
     causal_conv1d_update,
@@ -107,7 +110,7 @@ def segment_sum(input_tensor):
 
 
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
-def ssd_selective_state_update(
+def mamba2_selective_state_update(
     state: torch.Tensor,
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
@@ -169,7 +172,7 @@ def ssd_selective_state_update(
 
 
 @use_kernel_func_from_hub_with_fallback("mamba_chunk_scan_combined", "mamba_ssm")
-def ssd_chunk_scan(
+def mamba2_chunk_scan(
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
     A: torch.Tensor,
@@ -276,8 +279,8 @@ def ssd_chunk_scan(
     return output
 
 
-@use_kernel_forward_from_hub("ssd_forward")
-def ssd_forward(
+@use_kernel_forward_from_hub("mamba2_scan_forward")
+def mamba2_scan_forward(
     module: nn.Module,
     hidden_states: torch.Tensor,
     B: torch.Tensor,
@@ -326,13 +329,13 @@ def ssd_forward(
         C = C.view(batch_size, module.n_groups, module.ssm_state_size)
         D = module.D[:, None].expand(-1, module.head_dim)
         dt_bias = module.dt_bias[:, None].expand(-1, module.head_dim)
-        scan_output = ssd_selective_state_update(
+        scan_output = mamba2_selective_state_update(
             recurrent_state, hidden_states, dt, A, B, C, D, z=None, dt_bias=dt_bias, dt_softplus=True, **kwargs
         )
         return scan_output.view(batch_size, 1, -1)
 
     output_final_state = cache is not None
-    scan_result = ssd_chunk_scan(
+    scan_result = mamba2_chunk_scan(
         hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
         dt,
         A,
@@ -408,9 +411,9 @@ def mamba2_split_conv1d_scan_combined(
         causal_conv1d_fn,
         causal_conv1d_update,
         mamba2_split_conv1d_scan_combined,
-        ssd_forward,
-        ssd_selective_state_update,
-        ssd_chunk_scan,
+        mamba2_scan_forward,
+        mamba2_selective_state_update,
+        mamba2_chunk_scan,
     ]
 )
 class Mamba2Mixer(nn.Module):
@@ -569,7 +572,7 @@ class Mamba2Mixer(nn.Module):
             dim=-1,
         )
 
-        scan_output = ssd_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
 
         scan_output = self.norm(scan_output, gate)
 
@@ -578,32 +581,11 @@ class Mamba2Mixer(nn.Module):
         return contextualized_states
 
 
-class Mamba2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Mamba2RMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+class Mamba2RMSNorm(MambaRMSNorm):
+    pass
 
 
-class Mamba2Block(GradientCheckpointingLayer):
-    def __init__(self, config, layer_idx):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.residual_in_fp32 = config.residual_in_fp32
-        self.norm = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = Mamba2Mixer(config, layer_idx=layer_idx, initialize_mixer_weights=False)
-
+class Mamba2Block(MambaBlock):
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -623,32 +605,10 @@ class Mamba2Block(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class Mamba2PreTrainedModel(PreTrainedModel):
+class Mamba2PreTrainedModel(MambaPreTrainedModel):
     config: Mamba2Config
-    base_model_prefix = "backbone"
     _no_split_modules = ["Mamba2Block"]
-    supports_gradient_checkpointing = True
     _can_compile_fullgraph = True
-    _is_stateful = True
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        super()._init_weights(module)
-        if isinstance(module, Mamba2Mixer):
-            # S4D real initialization. These are not discretized!
-            # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
-            module.init_mamba2_weights()
-
-            init.kaiming_uniform_(module.conv1d.weight, a=math.sqrt(5))
-            if module.conv1d.bias is not None:
-                init.zeros_(module.conv1d.bias)
-            init.kaiming_uniform_(module.out_proj.weight, a=math.sqrt(5))
-
-            if self.config.rescale_prenorm_residual:
-                # Scale the residual output projection by 1/sqrt(num_layers), as in GPT-2:
-                # https://openai.com/blog/better-language-models/
-                p = module.out_proj.weight
-                p /= math.sqrt(self.config.num_hidden_layers)
 
 
 class Mamba2Output(MambaOutput):
@@ -660,31 +620,7 @@ class Mamba2CausalLMOutput(MambaCausalLMOutput):
 
 
 @auto_docstring
-class Mamba2Model(Mamba2PreTrainedModel):
-    def __init__(self, config: Mamba2Config):
-        super().__init__(config)
-
-        self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([Mamba2Block(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
-
-        self.gradient_checkpointing = False
-        self.norm_f = Mamba2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        # Initialize weights and apply final processing
-        self._register_load_state_dict_pre_hook(self.load_hook)
-        self.post_init()
-
-    def load_hook(self, state_dict, prefix, *args):
-        for k in state_dict:
-            if "embedding." in k:
-                state_dict[k.replace("embedding.", "embeddings.")] = state_dict.pop(k)
-                break
-
-    def get_input_embeddings(self):
-        return self.embeddings
-
-    def set_input_embeddings(self, new_embeddings):
-        self.embeddings = new_embeddings
-
+class Mamba2Model(MambaModel):
     @auto_docstring
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
@@ -764,48 +700,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
     embeddings).
     """
 )
-class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
-
-    def __init__(self, config: Mamba2Config):
-        super().__init__(config)
-        self.backbone = Mamba2Model(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.backbone.get_input_embeddings()
-
-    def set_input_embeddings(self, new_embeddings):
-        return self.backbone.set_input_embeddings(new_embeddings)
-
-    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        inputs_embeds=None,
-        use_cache=None,
-        cache: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        is_first_iteration: bool | None = False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            cache=cache,
-            attention_mask=attention_mask,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if use_cache and not is_first_iteration:
-            model_inputs["attention_mask"] = None
-
-        return model_inputs
-
+class Mamba2ForCausalLM(MambaForCausalLM):
     @auto_docstring
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(

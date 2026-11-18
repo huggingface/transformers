@@ -332,8 +332,8 @@ def mamba_selective_scan(
     return scan_output
 
 
-@use_kernel_forward_from_hub("selective_scan_forward")
-def selective_scan_forward(
+@use_kernel_forward_from_hub("mamba_scan_forward")
+def mamba_scan_forward(
     module: nn.Module,
     hidden_states: torch.Tensor,
     time_step: torch.Tensor,
@@ -415,7 +415,7 @@ def selective_scan_forward(
         mamba_inner_fn,
         mamba_selective_scan,
         mamba_selective_state_update,
-        selective_scan_forward,
+        mamba_scan_forward,
         causal_conv1d_forward,
         causal_conv1d_fn,
         causal_conv1d_update,
@@ -557,7 +557,7 @@ class MambaMixer(nn.Module):
         )
 
         time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-        scan_output = selective_scan_forward(
+        scan_output = mamba_scan_forward(
             self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, recurrent_state, cache, **kwargs
         )
 

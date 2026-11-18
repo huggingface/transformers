@@ -50,8 +50,8 @@ from ..llama.modeling_llama import (
 from ..mamba.modeling_mamba import causal_conv1d_forward
 from ..mamba2.modeling_mamba2 import (
     apply_mask_to_padding_states,
+    mamba2_scan_forward,
     mamba2_split_conv1d_scan_combined,
-    ssd_forward,
 )
 from .configuration_falcon_h1 import FalconH1Config
 
@@ -249,7 +249,7 @@ class FalconH1Mixer(BambaMixer):
             dim=-1,
         )
 
-        scan_output = ssd_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
         # Key difference 3: Norm based handling as optional between z and norm
         if self.mamba_rms_norm:
             scan_output = self.norm(scan_output, gate)
