@@ -261,6 +261,31 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
+    @require_torch_non_multi_accelerator
+    def test_can_resume_training_without_checkpoint_model(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/29740
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {"output_dir": tmp_dir, "train_len": 128, "save_steps": 5, "learning_rate": 0.1}
+        trainer = get_regression_trainer(**kwargs)
+        trainer.train()
+        (a, b) = trainer.model.a.item(), trainer.model.b.item()
+        state = dataclasses.asdict(trainer.state)
+
+        # Move the weights out of the checkpoint, so that the Trainer can't load the model from it
+        checkpoint = os.path.join(tmp_dir, "checkpoint-5")
+        weights = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
+        os.remove(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
+
+        # The model passed to the Trainer is used as is, the rest of the training state comes from the checkpoint
+        trainer = get_regression_trainer(**kwargs)
+        trainer.model.load_state_dict(weights)
+        trainer.train(resume_from_checkpoint=checkpoint, without_checkpoint_model=True)
+        (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+        state1 = dataclasses.asdict(trainer.state)
+        self.assertEqual(a, a1)
+        self.assertEqual(b, b1)
+        self.check_trainer_state_are_the_same(state, state1)
+
     # require_torch_non_multi_accelerator is necessary because this worker blocks runs when using multiple GPUs, making
     # the test slower.
     @require_torch_non_multi_accelerator

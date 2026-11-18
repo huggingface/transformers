@@ -1452,6 +1452,7 @@ class Trainer:
         resume_from_checkpoint: str | bool | None = None,
         trial: "optuna.Trial | dict[str, Any] | None" = None,
         ignore_keys_for_eval: list[str] | None = None,
+        without_checkpoint_model: bool = False,
     ) -> TrainOutput:
         """
         Main training entry point.
@@ -1466,6 +1467,12 @@ class Trainer:
             ignore_keys_for_eval (`list[str]`, *optional*)
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions for evaluation during the training.
+            without_checkpoint_model (`bool`, *optional*, defaults to `False`):
+                Whether to skip loading the model weights from the checkpoint when resuming. The model passed to
+                [`Trainer`] is used as is, and only the rest of the training state (optimizer, scheduler, RNG and
+                trainer state) is restored. Useful when you restore the model yourself, for example because
+                [`Trainer`] can't load it from the checkpoint. Has no effect with DeepSpeed, which restores the model
+                together with its own state.
 
         Returns:
             [`~trainer_utils.TrainOutput`]: Object containing the global step count, training loss, and metrics.
@@ -1560,7 +1567,8 @@ class Trainer:
             # Load model checkpoint before accelerator.prepare() for regular models,
             # so that buffers and parameters are on the right device after prepare.
             # Deepspeed/FSDP models are loaded after prepare in _prepare_for_training.
-            if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
+            load_model = not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled
+            if load_model and not without_checkpoint_model:
                 self._load_from_checkpoint(resume_from_checkpoint)
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None and args.auto_find_batch_size:
@@ -1578,6 +1586,7 @@ class Trainer:
                 resume_from_checkpoint=resume_from_checkpoint,
                 trial=trial,
                 ignore_keys_for_eval=ignore_keys_for_eval,
+                without_checkpoint_model=without_checkpoint_model,
             )
 
     def _inner_training_loop(
@@ -1587,6 +1596,7 @@ class Trainer:
         resume_from_checkpoint: str | None = None,
         trial: "optuna.Trial | dict[str, Any] | None" = None,
         ignore_keys_for_eval: list[str] | None = None,
+        without_checkpoint_model: bool = False,
     ) -> TrainOutput:
         """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
         # reset everything
@@ -1612,7 +1622,9 @@ class Trainer:
         epochs_trained, steps_trained_in_current_epoch = self._init_training_state(
             max_steps, num_update_steps_per_epoch, num_train_epochs, resume_from_checkpoint, trial
         )
-        model, train_dataloader = self._prepare_for_training(max_steps, train_dataloader, resume_from_checkpoint)
+        model, train_dataloader = self._prepare_for_training(
+            max_steps, train_dataloader, resume_from_checkpoint, without_checkpoint_model
+        )
 
         # Train!
         logger.info("***** Running training *****")
@@ -1712,7 +1724,9 @@ class Trainer:
 
         return epochs_trained, steps_trained_in_current_epoch
 
-    def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
+    def _prepare_for_training(
+        self, max_steps, train_dataloader, resume_from_checkpoint, without_checkpoint_model=False
+    ):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
@@ -1803,7 +1817,7 @@ class Trainer:
                 deepspeed_load_checkpoint(
                     self.model_wrapped, resume_from_checkpoint, load_module_strict=not _is_peft_model(self.model)
                 )
-            elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
+            elif (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and not without_checkpoint_model:
                 self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
             self._load_optimizer_and_scheduler(resume_from_checkpoint)

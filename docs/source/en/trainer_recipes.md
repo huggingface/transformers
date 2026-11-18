@@ -299,6 +299,12 @@ When resuming, [`Trainer`] restores the optimizer state, scheduler state, and RN
 
 Checkpoint resuming requires optimizer and scheduler state files in the checkpoint directory. If those files are missing (for example, when `save_only_model=True`), the optimizer restarts from scratch.
 
+[`Trainer`] also reloads the model weights from the checkpoint. If you restore the model yourself, for example because [`Trainer`] can't load it from the checkpoint, pass `without_checkpoint_model=True` to keep the model you gave to [`Trainer`] and only restore the rest of the training state.
+
+```py
+trainer.train(resume_from_checkpoint="out/checkpoint-1000", without_checkpoint_model=True)
+```
+
 ### JIT checkpointing
 
 With periodic checkpointing (save_strategy="steps" or "epoch"), you lose any training progress between the last saved checkpoint and an interruption. On shared clusters with preemptible workloads such as [Kueue](https://kueue.sigs.k8s.io/), jobs can be terminated at any time, so that gap can mean hours of wasted compute.
