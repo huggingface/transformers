@@ -268,7 +268,9 @@ class CompletionHandler(BaseHandler):
         if body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_config.repetition_penalty = self._frequency_penalty_to_repetition_penalty(
+                float(body["frequency_penalty"])
+            )
         if body.get("stop") is not None:
             generation_config.stop_strings = body["stop"]
 
