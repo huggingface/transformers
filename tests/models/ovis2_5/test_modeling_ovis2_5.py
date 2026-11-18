@@ -47,33 +47,36 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
     config_class = Ovis2_5Config
     conditional_generation_class = Ovis2_5ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("vocab_size", 32)
-        kwargs.setdefault("hidden_size", 16)
-        kwargs.setdefault("num_hidden_layers", 1)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("max_position_embeddings", 32)
-        kwargs.setdefault("attention_dropout", 0.0)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault(
-            "num_image_tokens",
-            (kwargs["image_size"] // kwargs["patch_size"] // 2) ** 2,
-        )
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("video_token_id", 9)
-        kwargs.setdefault("image_start_token_id", 5)
-        kwargs.setdefault("image_end_token_id", 6)
-        kwargs.setdefault("video_start_token_id", 7)
-        kwargs.setdefault("video_end_token_id", 8)
-        kwargs.setdefault("vision_vocab_size", 12)
-        kwargs.setdefault("vision_window_size", kwargs["image_size"])
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("vision_max_position_embeddings", 1024)
-        super().__init__(parent, **kwargs)
-        self.num_image_patches = (self.image_size // self.patch_size) ** 2
+    small_config_overrides = {
+        "batch_size": 2,
+        "vocab_size": 32,
+        "hidden_size": 16,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 4,
+        "max_position_embeddings": 32,
+        "attention_dropout": 0.0,
+        "hidden_act": "silu",
+        "image_size": 8,
+        "patch_size": 2,
+        "image_token_id": 4,
+        "video_token_id": 9,
+        "image_start_token_id": 5,
+        "image_end_token_id": 6,
+        "video_start_token_id": 7,
+        "video_end_token_id": 8,
+        "vision_vocab_size": 12,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "vision_max_position_embeddings": 1024,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        overrides = {**cls.small_config_overrides, **kwargs}
+        patches_per_side = overrides["image_size"] // overrides["patch_size"]
+        overrides.setdefault("num_image_tokens", (patches_per_side // 2) ** 2)
+        overrides.setdefault("vision_window_size", overrides["image_size"])
+        overrides["num_image_patches"] = patches_per_side**2
+        return super().get_small_config_defaults(**overrides)
 
     @property
     def _special_token_ids(self):
