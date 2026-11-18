@@ -115,6 +115,7 @@ if is_torch_available():
         AssistedCandidateGenerator,
         AssistedCandidateGeneratorDifferentTokenizers,
         DFlashTokenCandidateGenerator,
+        MTPCandidateGenerator,
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
@@ -4351,6 +4352,27 @@ class GenerationIntegrationTests(unittest.TestCase):
                 mtp_cache=MtpCache(config=mtp_model.config),
             )
         self.assertEqual(rotary_layer_types, ["full_attention", "sliding_attention"])
+
+    def test_mtp_candidate_generator_short_prompt(self):
+        """Test that MTPCandidateGenerator handles prompts with fewer tokens than num_mtp_layers (#50906)"""
+        config = AutoConfig.for_model(
+            "gemma3_text",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=16,
+        )
+        config.num_mtp_layers = 2
+        main_model = AutoModelForCausalLM.from_config(config).eval()
+        generator = MTPCandidateGenerator(
+            input_ids=torch.tensor([[1]]),
+            main_model=main_model,
+        )
+        self.assertEqual(generator.num_mtp_layers, 2)
 
     @require_torch_multi_accelerator
     def test_mtp_use_correct_device_when_drafting(self):

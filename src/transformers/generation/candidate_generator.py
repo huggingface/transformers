@@ -1448,17 +1448,21 @@ class MTPCandidateGenerator(CandidateGenerator):
             # Invalidate the full chains of layers before recomputing with the validated tokens, even if the first layers may
             # have a valid cache, because we need to have the same sequence length for all MTP layers due to the cat of tokens
             # and prev hidden_states
-            self.mtp_cache.crop(-self.num_mtp_layers)
+            # A prompt shorter than `num_mtp_layers` leaves fewer than `num_mtp_layers` positions before the new ones
+            num_recomputed = min(
+                self.num_mtp_layers, self.full_seq_last_hidden_states.shape[1] - num_last_main_model_tokens
+            )
+            self.mtp_cache.crop(-num_recomputed)
 
-            # We need the last invalidated tokens, as well as the new one in a single passcfor efficiency
-            mtp_input_ids = input_ids[:, -num_last_main_model_tokens - self.num_mtp_layers :]
-            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - self.num_mtp_layers :]
+            # We need the last invalidated tokens, as well as the new one in a single pass for efficiency
+            mtp_input_ids = input_ids[:, -num_last_main_model_tokens - num_recomputed :]
+            mtp_position_ids = model_kwargs["position_ids"][:, -num_last_main_model_tokens - num_recomputed :]
             if model_kwargs.get("attention_mask") is not None:
                 mtp_attention_mask = model_kwargs["attention_mask"][
-                    :, -num_last_main_model_tokens - self.num_mtp_layers :
+                    :, -num_last_main_model_tokens - num_recomputed :
                 ]
             last_hidden_states = self.full_seq_last_hidden_states[
-                :, -num_last_main_model_tokens - self.num_mtp_layers :, :
+                :, -num_last_main_model_tokens - num_recomputed :, :
             ]
         # If we have a single layer, or validated enough, we can simply pass the new tokens
         else:
