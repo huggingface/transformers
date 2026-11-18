@@ -438,6 +438,8 @@ class ModelManager:
             if model is not None and model != self.force_model:
                 raise ModelNotServedError(f"Server is pinned to '{self.force_model}'; requested '{model}'.")
             model = self.force_model
+        if model is None:
+            raise ModelNotServedError("The request names no model, and the server wasn't started with one.")
         model_id = process_model_name(model)
         if model_id not in self.engines:
             self.engines[model_id] = EngineClient(

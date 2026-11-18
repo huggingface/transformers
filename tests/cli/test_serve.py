@@ -617,6 +617,93 @@ class TestModelLoader(unittest.TestCase):
             self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
 
 
+@slow
+@require_serve
+@require_torch_accelerator
+class TestProcessLifecycle(unittest.TestCase):
+    """What happens to a server when one of its processes stops. Each test starts a server of its own."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def _start_serve(self, **kwargs) -> tuple[multiprocessing.process.BaseProcess, str]:
+        server, port = _start_serve(device=f"{torch_device}:0", **kwargs)
+        self.addCleanup(_stop_serve, server)
+        return server, f"http://localhost:{port}"
+
+    def _chat(self, base_url: str) -> str:
+        body = {"model": self.MODEL, "messages": [{"role": "user", "content": "Say hi"}], "max_tokens": 5}
+        response = httpx.post(f"{base_url}/v1/chat/completions", json=body, timeout=120)
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["choices"][0]["message"]["content"]
+
+    @staticmethod
+    def _child_processes(server: multiprocessing.process.BaseProcess) -> list:
+        """The processes a server started, oldest first: the engine, then the API servers if it has several."""
+        import psutil
+
+        children = psutil.Process(server.pid).children(recursive=True)
+        children = [child for child in children if "resource_tracker" not in " ".join(child.cmdline())]
+        return sorted(children, key=lambda child: child.create_time())
+
+    def _assert_all_stopped(self, processes: list) -> None:
+        import psutil
+
+        _, alive = psutil.wait_procs(processes, timeout=30)
+        self.assertEqual(alive, [])
+
+    def test_engine_killed_fails_its_requests_and_stops_the_server(self):
+        server, base_url = self._start_serve(force_model=self.MODEL)
+        (engine,) = self._child_processes(server)
+        body = {
+            "model": self.MODEL,
+            "messages": [{"role": "user", "content": "Count from 1 to 1000."}],
+            "max_tokens": 2000,
+            "stream": True,
+        }
+        with httpx.stream("POST", f"{base_url}/v1/chat/completions", json=body, timeout=30) as response:
+            lines = response.iter_lines()
+            received = [next(lines)]  # it's generating
+            engine.kill()
+            received.extend(lines)  # ends, without waiting for the timeout
+        self.assertIn("crashed", received[-1] or received[-2])
+        server.join(30)
+        self.assertEqual(server.exitcode, 1)
+
+    def test_api_server_killed_stops_everything(self):
+        server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        processes[-1].kill()
+        server.join(30)
+        self.assertEqual(server.exitcode, 1)
+        self._assert_all_stopped(processes)
+
+    def test_server_killed_leaves_no_process(self):
+        server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        server.kill()
+        self._assert_all_stopped(processes)
+
+    def test_server_stopped_leaves_no_process(self):
+        server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        server.terminate()
+        server.join(60)
+        self.assertEqual(server.exitcode, 0)
+        self._assert_all_stopped(processes)
+
+    def test_idle_engine_stops_and_starts_again(self):
+        server, base_url = self._start_serve(model_timeout=3)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        self.assertEqual(len(processes), 1)
+        self._assert_all_stopped(processes)
+        self._chat(base_url)
+        self.assertEqual(len(self._child_processes(server)), 1)
+
+
 class TestChunkSSE(unittest.TestCase):
     def _make_handler(self):
         return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
@@ -3034,3 +3121,14 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
             max_output_tokens=10,
         )
         self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestSeveralApiServers(TestContinuousBatchingChatCompletion):
+    """The continuous batching chat tests again, through two API servers sharing one engine."""
+
+    @classmethod
+    def serve_kwargs(cls) -> dict:
+        return {**super().serve_kwargs(), "api_server_count": 2}
