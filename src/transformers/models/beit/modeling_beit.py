@@ -464,7 +464,6 @@ class BeitPreTrainedModel(PreTrainedModel):
     _input_embed_layer = "patch_embeddings"
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

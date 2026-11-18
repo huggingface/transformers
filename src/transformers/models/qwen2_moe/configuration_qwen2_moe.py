@@ -50,7 +50,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `Qwen2Moe`
     base_model_tp_plan = {

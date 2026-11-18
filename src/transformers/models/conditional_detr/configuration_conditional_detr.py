@@ -58,7 +58,7 @@ class ConditionalDetrConfig(PreTrainedConfig):
             init_kwargs={"out_features": ["stage4"]},
         ),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",

@@ -343,7 +343,7 @@ class TrainingArguments:
         > Additional Optimizations
 
         use_cache (`bool`, *optional*, defaults to `False`):
-            Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`.
+            Whether or not to enable cache for the model. For training, this is usually not needed apart from some PEFT methods that uses `cache`.
         neftune_noise_alpha (`Optional[float]`):
             If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
             for instruction fine-tuning. Check out the [original paper](https://huggingface.co/papers/2310.05914) and the
@@ -971,7 +971,7 @@ class TrainingArguments:
     use_cache: bool = field(
         default=False,
         metadata={
-            "help": "Whether or not to use cache for the model For training, this is usually not needed apart from some PEFT methods that uses `past_key_values`."
+            "help": "Whether or not to use cache for the model For training, this is usually not needed apart from some PEFT methods that uses `cache`."
         },
     )
     neftune_noise_alpha: float | None = field(

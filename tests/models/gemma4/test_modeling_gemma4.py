@@ -808,7 +808,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             config=config.text_config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
             block_sequence_ids=block_sequence_ids,
         )
@@ -852,7 +852,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
         model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
         batch_size, prompt_length = inputs_dict["input_ids"].shape
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=config.get_text_config(),
             max_batch_size=batch_size,
             max_cache_len=prompt_length + 8,  # longer than the sliding window
@@ -861,7 +861,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         )
 
         with torch.no_grad():
-            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+            model(**inputs_dict, cache=cache, use_cache=True)
 
 
 @slow
@@ -1002,9 +1002,6 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_model_text_only_multigpu(self):
-        """Accelerate destroys the input dict `shared_kv_states` if it's not passed as kwarg and part of
-        `_skip_keys_device_placement`, so test this to avoid regresions.
-        """
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
         inputs = tokenizer.apply_chat_template(

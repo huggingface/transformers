@@ -18,6 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -63,7 +64,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "exaone_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

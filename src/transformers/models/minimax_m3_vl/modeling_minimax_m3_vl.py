@@ -42,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -302,7 +303,6 @@ class MiniMaxM3VLRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -417,12 +417,13 @@ class MiniMaxM3VLAttention(nn.Module):
             MiniMaxM3VLIndexer(config, layer_idx) if config.layer_types[layer_idx] == "minimax_m3_sparse" else None
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -435,8 +436,8 @@ class MiniMaxM3VLAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -451,7 +452,7 @@ class MiniMaxM3VLAttention(nn.Module):
             position_ids = (position_ids if position_ids.ndim > 1 else position_ids.unsqueeze(0)).expand(
                 query_states.shape[0], -1
             )
-            block_indices = self.indexer(hidden_states, position_embeddings, past_key_values, position_ids)
+            block_indices = self.indexer(hidden_states, position_embeddings, cache, position_ids)
             if self.config._attn_implementation in ("eager", "sdpa"):
                 attention_mask = self.indexer.build_block_mask(
                     block_indices,
@@ -537,11 +538,12 @@ class MiniMaxM3VLIndexer(nn.Module):
         self.q_norm = MiniMaxM3VLRMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(config.index_head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        past_key_values: Cache | None,
+        cache: Cache | None,
         position_ids: torch.Tensor,
     ) -> torch.Tensor:
         batch, q_len, _ = hidden_states.shape
@@ -552,8 +554,8 @@ class MiniMaxM3VLIndexer(nn.Module):
         cos, sin = position_embeddings
         idx_q, idx_k = apply_rotary_pos_emb(idx_q, idx_k, cos[..., : self.head_dim], sin[..., : self.head_dim])
 
-        if past_key_values is not None:
-            idx_k = past_key_values.layers[self.layer_idx].update_index(idx_k)
+        if cache is not None:
+            idx_k = cache.layers[self.layer_idx].update_index(idx_k)
 
         k_len = idx_k.shape[2]
         num_key_blocks = -(-k_len // self.block_size)  # ceil-div
@@ -638,13 +640,14 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -654,7 +657,7 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -671,7 +674,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -686,7 +688,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)
@@ -721,12 +722,13 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -734,14 +736,14 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -752,7 +754,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
             )
 
@@ -766,7 +768,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -776,7 +778,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -815,6 +817,9 @@ def load_balancing_loss_func(
     # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
     # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
     compute_device = gate_logits[0].device
+    # Use histc to avoid bincount's device-to-host sync.
+    # GPU requires integers for determinism; CPU and MPS require floats for support and determinism.
+    histc_dtype = torch.float32 if compute_device.type in ("cpu", "mps") else torch.int32
     tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
     total_rows = 0.0
@@ -827,9 +832,9 @@ def load_balancing_loss_func(
         routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
         _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
         if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            # Count top-k assignments with fixed bounds to avoid a device-to-host sync.
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.histc(
+                selected_experts.reshape(-1).to(histc_dtype), bins=num_experts, min=0, max=num_experts
             )
             # Sum of routing probabilities per expert
             router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
@@ -871,12 +876,13 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -911,7 +917,7 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
@@ -941,7 +947,7 @@ class MiniMaxM3VLForCausalLM(MiniMaxM3VLPreTrainedModel, GenerationMixin):
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
@@ -1012,7 +1018,6 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (3, N) - with direct THW order
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1278,11 +1283,11 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
 @dataclass
 class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(num_image_patches, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -1311,11 +1316,11 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
+        `cache` input) to speed up sequential decoding.
     image_hidden_states (`torch.Tensor`, *optional*):
         A `torch.Tensor` of size `(num_image_patches, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
@@ -1330,7 +1335,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
 
     loss: torch.Tensor | None = None
     logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
     image_hidden_states: torch.Tensor | None = None
@@ -1414,6 +1419,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1423,7 +1429,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1471,14 +1477,14 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
 
         return MiniMaxM3VLModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=getattr(outputs, "hidden_states", None),
             attentions=getattr(outputs, "attentions", None),
             image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
@@ -1523,6 +1529,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1532,7 +1539,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
         video_grid_thw: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
@@ -1576,7 +1583,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             output_router_logits=output_router_logits,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1608,7 +1615,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             aux_loss=aux_loss,
             logits=logits,
             router_logits=outputs.router_logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,

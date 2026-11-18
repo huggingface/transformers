@@ -34,7 +34,7 @@ from ...utils import (
 )
 from ..auto import AutoBackbone, AutoConfig
 from ..detr.configuration_detr import DetrConfig
-from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrSinePositionEmbedding
+from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrPreTrainedModel, DetrSinePositionEmbedding
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -459,6 +459,11 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
     loss = torch.matmul(focal_pos, labels.T) + torch.matmul(focal_neg, (1 - labels).T)
 
     return loss / height_and_width
+
+
+class MaskFormerDetrPreTrainedModel(DetrPreTrainedModel):
+    # Only the decoder is used: the encoder classes listed by DETR do not exist here
+    _no_split_modules = [r"MaskFormerDetrDecoderLayer"]
 
 
 class MaskFormerDetrDecoder(DetrDecoder):
@@ -1090,7 +1095,6 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         xavier_std = self.config.init_xavier_std

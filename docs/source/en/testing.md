@@ -49,6 +49,8 @@ Then run:
 
 ```bash
 make run-mic MODEL=bert  # only the contracts for this model directory under src/transformers/models/
+make run-mic MODEL=Wav2Vec2  # a model name works too (case and punctuation are ignored)
+make run-mic MODEL=qwen+    # every matching model directory: + stands for any characters
 make run-mic             # contracts affected by local changes
 make run-mic ALL=1       # all fixtures in the fleet
 make run-mic BASE=main   # use a different Git comparison base
@@ -368,9 +370,13 @@ Mixin tests use tiny configs with random weights to verify model behavior quickl
 Place integration tests in a separate test class, mark them with `@slow`, and mix in `MemoryCleanupMixin`. Each test downloads real weights, runs inference, and checks outputs against expected values. The mixin frees the memory each test takes and runs the test methods under `torch.no_grad()` — see [Releasing memory between tests](#releasing-memory-between-tests) for what it does and how to opt out.
 
 ```py
+import unittest
+
 import torch
 from transformers import AutoTokenizer
-from transformers.testing_utils import MemoryCleanupMixin, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
+
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 class MyModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
