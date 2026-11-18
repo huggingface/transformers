@@ -28,6 +28,8 @@ the compiled request and returns one score per candidate.
 
 | Model | Checkpoint |
 |---|---|
+| GS1-0.8B | [bigai/GS1-0.8B](https://huggingface.co/bigai/GS1-0.8B) |
+| GS1-2B | [bigai/GS1-2B](https://huggingface.co/bigai/GS1-2B) |
 | GS1-4B | [bigai/GS1-4B](https://huggingface.co/bigai/GS1-4B) |
 | GS1-9B | [bigai/GS1-9B](https://huggingface.co/bigai/GS1-9B) |
 
