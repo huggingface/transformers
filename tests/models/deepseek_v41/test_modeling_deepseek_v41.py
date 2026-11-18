@@ -13,8 +13,10 @@
 # limitations under the License.
 import copy
 import unittest
+import unittest.mock
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_accelerate, require_torch, torch_device
@@ -34,29 +36,29 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
 
 
+INPUTS_EMBEDS_SKIP_REASON = (
+    "The Engram layers hash n-grams of token ids, so the model needs `input_ids` and cannot run on `inputs_embeds` "
+    "alone."
+)
+
+
 class DeepseekV41ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV41Model
         config_class = DeepseekV41Config
         causal_lm_class = DeepseekV41ForCausalLM
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.hidden_size = 64
-        self.num_attention_heads = 4
-        self.num_hidden_layers = 5
-        self.seq_length = 11
-        self.batch_size = 3
-        # The inputs are text only, so the image token must not show up in the random ids
-        self.image_token_id = self.vocab_size
-        self.text_config = {
-            "vocab_size": self.vocab_size + 1,
-            "hidden_size": self.hidden_size,
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 11,
+        "hidden_size": 64,
+        "num_hidden_layers": 5,
+        "num_attention_heads": 4,
+        "text_config": {
             "moe_intermediate_size": 32,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
             "head_dim": 32,
-            "partial_rotary_factor": 8 / 32,
+            # RoPE on 8 of the 32 head dims
+            "partial_rotary_factor": 0.25,
             "q_lora_rank": 32,
             "o_groups": 2,
             "o_lora_rank": 16,
@@ -85,24 +87,41 @@ class DeepseekV41ModelTester(CausalLMModelTester):
             "engram_n_heads": 2,
             "engram_head_dim": 8,
             "engram_pad_token_id": 2,
-            # As large as the vocab, so that no tokens are merged and the model works without a tokenizer
-            "engram_compressed_vocab_size": self.vocab_size + 1,
             "engram_num_embeddings": None,
             "num_nextn_predict_layers": 0,
             "dspark_noise_token_id": 3,
             "rms_norm_eps": 1e-6,
-            "pad_token_id": self.pad_token_id,
-            "bos_token_id": self.bos_token_id,
-            "eos_token_id": self.eos_token_id,
-        }
-        self.vision_config = {
+        },
+        "vision_config": {
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "intermediate_size": 48,
             "patch_size": 2,
             "downsample_ratio": 3,
+        },
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # The inputs are text only, so the image token must not show up in the random ids
+        values["image_token_id"] = values["vocab_size"]
+        # The text config takes its sizes and special tokens from the tester, so that the common tests can
+        # read them there. Its vocab has one more id than the tester's, for the image token.
+        values["text_config"] = {
+            **values["text_config"],
+            "vocab_size": values["vocab_size"] + 1,
+            "hidden_size": values["hidden_size"],
+            "num_hidden_layers": values["num_hidden_layers"],
+            "num_attention_heads": values["num_attention_heads"],
+            # As large as the vocab, so that no tokens are merged and the model works without a tokenizer
+            "engram_compressed_vocab_size": values["vocab_size"] + 1,
+            "pad_token_id": values["pad_token_id"],
+            "bos_token_id": values["bos_token_id"],
+            "eos_token_id": values["eos_token_id"],
         }
+        return values
 
     def get_config(self):
         return DeepseekV41Config(
@@ -224,6 +243,70 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     )
     def test_left_padding_compatibility(self):
         pass
+
+    def test_reverse_loading_mapping(self):
+        # The checkpoint is flat and has the LM head, so the renames that nest it under `model.` only apply to
+        # the model with a head. The base model on its own is saved without that prefix.
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
+    @unittest.skip(reason=INPUTS_EMBEDS_SKIP_REASON)
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason=INPUTS_EMBEDS_SKIP_REASON)
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(reason=INPUTS_EMBEDS_SKIP_REASON)
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        pass
+
+    @unittest.skip(reason=INPUTS_EMBEDS_SKIP_REASON)
+    def test_generate_from_random_inputs_embeds(self):
+        pass
+
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
+        # The common check watches the first checkpointing layer of the model, which is a vision layer. The
+        # common inputs are text only, so we put an image at the start of the first row to make that layer run.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # 4 x 5 patches are merged 3 x 3 into 2 x 2 tokens, so the image takes 1 + 2 * (2 + 1) + 1 positions
+        height, width, num_image_tokens = 4, 5, 8
+        inputs_dict["input_ids"][0, :num_image_tokens] = config.image_token_id
+        inputs_dict["pixel_values"] = torch.randn(
+            height * width, 3 * config.vision_config.patch_size**2, device=torch_device
+        )
+        inputs_dict["image_grid_hw"] = torch.tensor([[height, width]], device=torch_device)
+        with unittest.mock.patch.object(
+            self.model_tester, "prepare_config_and_inputs_for_common", return_value=(config, inputs_dict)
+        ):
+            super().check_training_gradient_checkpointing(gradient_checkpointing_kwargs)
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        # Reentrant checkpointing only tracks the gradient of positional tensor arguments, so the compressed KV
+        # that the layers share would silently lose theirs. The model refuses it instead.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DeepseekV41ForCausalLM(config)
+        with self.assertRaisesRegex(ValueError, "use_reentrant=True"):
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": True})
+
+    def test_checkpointing_keeps_the_gradients(self):
+        """
+        The KV-sharing layers read the compressed KV of an earlier layer, and checkpointing must not change the
+        gradient that flows back through it. The common tests only check which parameters get a gradient.
+        """
+        config, model = self._get_model()
+        model.train()
+        input_ids = torch.randint(0, self.model_tester.vocab_size, (2, 23), device=torch_device)
+        model(input_ids, labels=input_ids).loss.backward()
+        expected = {name: param.grad.clone() for name, param in model.named_parameters() if param.grad is not None}
+        self.assertTrue(any(".compressor." in name for name in expected))
+
+        model.zero_grad()
+        model.activation_checkpointing_enable()
+        model(input_ids, labels=input_ids).loss.backward()
+        for name, expected_grad in expected.items():
+            torch.testing.assert_close(model.get_parameter(name).grad, expected_grad, msg=lambda msg: f"{name}: {msg}")
 
     def _get_model(self):
         config = self.model_tester.get_config()
