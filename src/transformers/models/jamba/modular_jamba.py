@@ -39,8 +39,7 @@ from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention
 from ..mamba.modeling_mamba import (
     apply_mask_to_padding_states,
     causal_conv1d_forward,
-    mamba_selective_scan,
-    mamba_selective_state_update,
+    selective_scan_forward,
 )
 from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM
@@ -171,7 +170,6 @@ class JambaMambaMixer(FalconMambaMixer):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
         # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
@@ -185,8 +183,6 @@ class JambaMambaMixer(FalconMambaMixer):
 
         # Key difference to falcon mamba: mamba inner fn applies its dt norm at a different time
         # leading to incompatible implementations
-        A = -torch.exp(self.A_log.float())
-
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -218,46 +214,9 @@ class JambaMambaMixer(FalconMambaMixer):
             time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
         else:
             time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-        time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
-
-        # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            scan_output = mamba_selective_state_update(
-                recurrent_state,
-                hidden_states_B_C.transpose(1, 2)[..., 0],
-                time_step[..., 0],
-                A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                z=gate[..., 0],
-                dt_bias=time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
-
-        # Full sequence form
-        else:
-            output_final_state = cache is not None
-            scan_result = mamba_selective_scan(
-                hidden_states_B_C.transpose(1, 2),
-                time_step,
-                A,
-                B.transpose(1, 2),
-                C.transpose(1, 2),
-                D=self.D.float(),
-                z=gate,
-                delta_bias=time_proj_bias,
-                delta_softplus=True,
-                return_last_state=output_final_state,
-                use_mambapy=self.use_mambapy,
-                use_associative_scan=self.use_associative_scan,
-            )
-
-            if output_final_state:
-                scan_output, final_state = scan_result
-                cache.update_recurrent_state(final_state, self.layer_idx)
-            else:
-                scan_output = scan_result
+        scan_output = selective_scan_forward(
+            self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, recurrent_state, cache, **kwargs
+        )
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2).to(dtype))
