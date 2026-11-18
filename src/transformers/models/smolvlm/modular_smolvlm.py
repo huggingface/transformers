@@ -181,33 +181,7 @@ class SmolVLMModel(Idefics3Model):
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        return image_outputs
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
-        # Padding images are all zeros (one is kept when all are)
-        real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
-        real_images.view(-1)[0] |= ~torch.any(real_images)
-        num_real_images_per_batch = real_images.sum(dim=1)
-        tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)
-        split_sizes = (num_real_images_per_batch * tokens_per_image).tolist()
-        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, split_sizes))
-
+        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
         return image_outputs
 
     @merge_with_config_defaults
@@ -303,23 +277,6 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         self.model.text_model.generation_config = GenerationConfig.from_model_config(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        return self.model.get_image_embeddings(
-            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
-        )
 
     def forward(self, **super_kwargs):
         r"""

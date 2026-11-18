@@ -195,7 +195,6 @@ class Qwen3VLConfig(PreTrainedConfig):
         "vision_config": Qwen3VLVisionConfig,
         "text_config": Qwen3VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -715,12 +714,12 @@ class Qwen3VLModel(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
@@ -799,14 +798,6 @@ class Qwen3VLModel(Qwen2VLModel):
 
 
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
-    @auto_docstring
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_video_features(**super_kwargs)
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

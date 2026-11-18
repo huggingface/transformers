@@ -361,7 +361,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         self.block_type = config.layer_types[layer_idx]
         if self.block_type == "linear_attention":
             self.linear_attn = Qwen3_5GatedDeltaNet(config, layer_idx)
-        elif self.block_type == "full_attention":
+        else:
             self.self_attn = Qwen3_5Attention(config, layer_idx)
         self.mlp = Qwen3_5MLP(config, config.intermediate_size)
         self.input_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -389,7 +389,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif self.block_type == "full_attention":
+        else:
             # Self Attention
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
@@ -631,12 +631,6 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     input_modalities = ("image", "video", "text")
-
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        return super().get_video_features(**super_kwargs)
-
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        return super().get_image_features(**super_kwargs)
 
 
 class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):

@@ -243,7 +243,6 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
     ```"""
 
     model_type = "moss_transcribe_diarize"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "audio_config": MossTranscribeDiarizeAudioConfig,
         "text_config": SubConfigSpec(

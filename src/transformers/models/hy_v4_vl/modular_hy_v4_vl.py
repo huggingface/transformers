@@ -155,7 +155,6 @@ class HYV4VLConfig(PreTrainedConfig):
         "vision_config": HYV4VLVisionConfig,
         "text_config": HYV4VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

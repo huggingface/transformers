@@ -1529,6 +1529,9 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
             `batch_id`.
+        num_beams (`int`):
+            Number of expanded rows per original prompt. When constructing this processor directly for
+            multi-return sampling, pass `max(num_beams, num_return_sequences)`.
 
     Examples:
 

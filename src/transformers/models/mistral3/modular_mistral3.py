@@ -149,8 +149,7 @@ class Mistral3Model(LlavaModel):
     @can_return_tuple
     @select_hidden_states("vision_feature_layer")
     @auto_docstring(
-        custom_intro="All images' last hidden states from the vision tower, projected, as one tensor; "
-        "`get_image_features` splits them per image."
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_embeddings(
         self,
@@ -176,29 +175,10 @@ class Mistral3Model(LlavaModel):
         image_outputs.pooler_output = self.multi_modal_projector(
             selected_image_feature.squeeze(0), image_sizes, **kwargs
         )
-        return image_outputs
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(
-            pixel_values, image_sizes, vision_feature_layer=vision_feature_layer, return_dict=True, **kwargs
-        )
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        split_sizes = (
-            (torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio)
-            .prod(dim=-1)
-            .tolist()
-        )
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        image_outputs.split_sizes = (
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+        ).prod(dim=-1)
         return image_outputs
 
     @merge_with_config_defaults
@@ -230,7 +210,7 @@ class Mistral3Model(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
@@ -238,9 +218,10 @@ class Mistral3Model(LlavaModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -265,38 +246,9 @@ class Mistral3Model(LlavaModel):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_embeddings(
-            pixel_values=pixel_values, image_sizes=image_sizes, vision_feature_layer=vision_feature_layer, **kwargs
-        )
-
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`Mistral3Model.get_data_dependent_inputs`]."""
         return self.model.get_data_dependent_inputs(*args, **kwargs)
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            **kwargs,
-        )
 
     @merge_with_config_defaults
     @can_return_tuple

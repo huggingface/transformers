@@ -715,7 +715,6 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -801,7 +800,7 @@ class AriaModel(LlavaModel):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_mask: torch.Tensor | None = None,
@@ -823,6 +822,10 @@ class AriaModel(LlavaModel):
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
 
+        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
+            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -848,7 +851,7 @@ class AriaModel(LlavaModel):
         # 2. Merge text and images
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
@@ -857,6 +860,8 @@ class AriaModel(LlavaModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -892,21 +897,6 @@ class AriaModel(LlavaModel):
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_mask: torch.Tensor | None = None,
-        vision_feature_layer: int | list[int] = -1,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            pixel_mask=pixel_mask,
-            vision_feature_layer=vision_feature_layer,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

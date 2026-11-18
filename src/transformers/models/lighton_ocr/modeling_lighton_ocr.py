@@ -28,7 +28,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -147,7 +147,6 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -162,7 +161,7 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     The LightOnOcr model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class LightOnOcrModel(LightOnOcrPreTrainedModel):
+class LightOnOcrModel(LightOnOcrPreTrainedModel, MultimodalMixin):
     base_model_prefix = ""
 
     def __init__(self, config: LightOnOcrConfig):
@@ -172,16 +171,23 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor | list,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_sizes, return_dict=True, **kwargs)
-        # Split features per image based on the effective patch size
+        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
+        image_outputs.pooler_output = self.vision_projection(
+            image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
+        )
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
-        split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        image_outputs.split_sizes = (
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+        ).prod(dim=-1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -235,14 +241,15 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -278,24 +285,6 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
         )
         return {f"image_{name}": value for name, value in inputs.items()}
-
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor | list,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
-        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
-        image_outputs.pooler_output = self.vision_projection(
-            image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
-        )
-        return image_outputs
 
 
 @auto_docstring(
@@ -333,7 +322,7 @@ class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     The LIGHTON_OCR model which consists of a vision backbone and a language model.
     """
 )
-class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
+class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -345,12 +334,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -426,12 +409,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    @auto_docstring
-    def get_image_embeddings(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_embeddings(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`LightOnOcrModel.get_data_dependent_inputs`]."""

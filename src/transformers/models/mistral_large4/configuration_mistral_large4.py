@@ -69,7 +69,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mistral_large4_text"
-    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",

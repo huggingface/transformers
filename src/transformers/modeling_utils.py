@@ -964,6 +964,7 @@ class MultimodalMixin:
     """
 
     model: "MultimodalMixin"
+    base_model: "MultimodalMixin"
 
     def get_image_embeddings(self, *args, **kwargs):
         return self.model.get_image_embeddings(*args, **kwargs)
@@ -971,23 +972,28 @@ class MultimodalMixin:
     def get_video_embeddings(self, *args, **kwargs):
         return self.model.get_video_embeddings(*args, **kwargs)
 
+    @staticmethod
+    def split_modality_outputs(outputs):
+        """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
+        split_sizes = outputs.split_sizes.tolist()
+        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
+        if getattr(outputs, "deepstack_features", None) is not None:
+            outputs.deepstack_features = [
+                torch.split(features, split_sizes) for features in outputs.deepstack_features
+            ]
+        return outputs
+
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
         """Each image's features, from `get_image_embeddings`."""
-        return _split_modality_outputs(self.get_image_embeddings(*args, return_dict=True, **kwargs))
+        outputs = self.get_image_embeddings(*args, return_dict=True, **kwargs)
+        return getattr(self.base_model, "split_modality_outputs", self.split_modality_outputs)(outputs)
 
     @can_return_tuple
     def get_video_features(self, *args, **kwargs):
         """Each video's features, from `get_video_embeddings`."""
-        return _split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
-
-
-def _split_modality_outputs(outputs):
-    split_sizes = outputs.split_sizes.tolist()
-    outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
-    if getattr(outputs, "deepstack_features", None) is not None:
-        outputs.deepstack_features = [torch.split(features, split_sizes) for features in outputs.deepstack_features]
-    return outputs
+        outputs = self.get_video_embeddings(*args, return_dict=True, **kwargs)
+        return getattr(self.base_model, "split_modality_outputs", self.split_modality_outputs)(outputs)
 
 
 class EmbeddingAccessMixin:
@@ -1137,7 +1143,7 @@ class PreTrainedModel(
 
     # Device-map related properties
     _no_split_modules: set[str] | list[str] | None = None
-    _skip_keys_device_placement: set[str] | list[str] | None = None
+    _skip_keys_device_placement: set[str] | list[str] | None = ["cache"]
 
     # Specific dtype upcasting
     # `_keep_in_fp32_modules` will upcast to fp32 only if the requested dtype is fp16

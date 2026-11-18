@@ -198,7 +198,6 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "vision_config": Ernie4_5_VLMoeVisionConfig,
         "text_config": Ernie4_5_VLMoeTextConfig,
@@ -1036,14 +1035,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs):
-        return super().get_video_features(**super_kwargs)
-
-    @auto_docstring
-    def get_image_features(self, **super_kwargs):
-        return super().get_image_features(**super_kwargs)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(

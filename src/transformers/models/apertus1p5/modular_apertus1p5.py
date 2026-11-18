@@ -30,7 +30,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     IMAGENET_STANDARD_MEAN,
@@ -308,7 +308,6 @@ class Apertus1p5Config(PreTrainedConfig):
     ```"""
 
     model_type = "apertus1p5"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
@@ -365,15 +364,15 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`tuple[torch.Tensor]`):
-        One `(num_tokens, hidden_size)` tensor of embedded image tokens per input image.
+    pooler_output (`torch.Tensor` or `tuple[torch.Tensor]`):
+        The embedded image tokens of every input image, split per image by `get_image_features`.
     image_tokens (`list[torch.LongTensor]`):
         One flat tensor of shared-vocabulary token ids per input image: its `(height // factor) * (width // factor)`
         codes in row-major order, offset by `config.image_token_offset`, where `factor` is the vision tokenizer's
         `spatial_scale_factor` (16 by default).
     """
 
-    pooler_output: tuple[torch.Tensor] | None = None
+    pooler_output: torch.Tensor | tuple[torch.Tensor] | None = None
     image_tokens: list[torch.LongTensor] | None = None
 
 
@@ -561,7 +560,6 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
@@ -647,7 +645,7 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
 
 
 @auto_docstring
-class Apertus1p5Model(Apertus1p5PreTrainedModel):
+class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
@@ -678,15 +676,18 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Tokenizes images and embeds their token ids with the text embedding layer.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         image_tokens = self.get_image_tokens(pixel_values, image_sizes)
-        image_features = tuple(self.get_input_embeddings()(tokens) for tokens in image_tokens)
-        return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
+        return Apertus1p5VisionTokenizerModelOutput(
+            image_tokens=image_tokens,
+            pooler_output=self.get_input_embeddings()(torch.cat(image_tokens)),
+            split_sizes=torch.tensor([len(tokens) for tokens in image_tokens], device=image_tokens[0].device),
+        )
 
     def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> list[torch.LongTensor]:
         """
@@ -810,13 +811,14 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_sizes, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_sizes, return_dict=True)
 
         image_features = None
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
         audio_features = None
         if input_values is not None:
             audio_features = self.get_audio_features(input_values, padding_mask, return_dict=True).pooler_output
@@ -843,7 +845,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 
 
 @auto_docstring
-class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
+class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -857,15 +859,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         )
 
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
-        return self.model.get_image_features(pixel_values, image_sizes, **kwargs)
 
     @auto_docstring
     def get_audio_features(

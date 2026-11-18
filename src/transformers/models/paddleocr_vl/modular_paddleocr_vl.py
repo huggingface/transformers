@@ -395,7 +395,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaddleOCRDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -903,9 +902,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
 
 __getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
