@@ -664,6 +664,14 @@ class AutoImageProcessor:
                 # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
                 pass
 
+        # Legacy Hub checkpoints may only record the model type in the image processor config
+        if image_processor_type is None and image_processor_auto_map is None:
+            model_type = config_dict.get("model_type")
+            if model_type in IMAGE_PROCESSOR_MAPPING_NAMES:
+                image_processor_type = next(
+                    (name for name in IMAGE_PROCESSOR_MAPPING_NAMES[model_type].values() if name is not None), None
+                )
+
         # Derive base_class_name from image_processor_type
         is_legacy_fast = False
         base_class_name = None
