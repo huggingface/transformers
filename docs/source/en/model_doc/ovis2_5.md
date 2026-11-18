@@ -89,8 +89,8 @@ they should appear in the prompt.
 
 ### Video inference
 
-The official example uniformly samples eight frames. Pass the video URL directly in the conversation and let the
-processor load and sample it. The processor prepares the inputs needed for generation.
+The processor uniformly samples eight frames by default. Pass the video URL directly in the conversation and let the
+processor load and sample it using the preprocessing settings saved with the checkpoint.
 
 ```python
 messages = [
@@ -113,10 +113,6 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     enable_thinking=False,
-    processor_kwargs={
-        "num_frames": 8,
-        "size": {"shortest_edge": 448 * 448, "longest_edge": 896 * 896},
-    },
 ).to(model.device, dtype=model.dtype)
 
 generated_ids = model.generate(**inputs, max_new_tokens=256)
