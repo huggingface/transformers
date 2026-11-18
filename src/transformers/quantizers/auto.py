@@ -490,7 +490,9 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
         # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
         names = []
-        for quantizer in self.all_quantizers:
+        # A format kept serialized (`load_serialized`, an engine's own kernels) converts nothing
+        converting = [quantizer for quantizer in self.all_quantizers if not quantizer.load_serialized]
+        for quantizer in converting:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
             if getattr(quantizer.quantization_config, "dequantize", False):
                 names += [*quantizer.serialized_names["weight"], *quantizer.checkpoint_renames.values()]
@@ -503,7 +505,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
                     sources, converter._original_target_patterns, operations=converter.operations
                 )
 
-        general = [converter for quantizer in self.all_quantizers for converter in quantizer.get_weight_conversions()]
+        general = [converter for quantizer in converting for converter in quantizer.get_weight_conversions()]
         return [*weight_conversions, *general]
 
     def rename_layer(self, key):
