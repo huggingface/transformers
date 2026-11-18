@@ -26,6 +26,7 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
+from .cache_allocators import LINEAR_ATTENTION
 from .utils import WorkloadHints, get_accelerator_graph_name, logger
 
 
@@ -84,6 +85,10 @@ def resolve_continuous_batching_config(
     decide_use_cuda_graphs(
         cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, cuda_graph_requested=cuda_graph_requested
     )
+    # The chunked kernel of the linear attention layers reads the sequence lengths on the host, which a graph cannot
+    # capture: only the decode path, which runs the recurrent kernel, can use graphs on a model with such layers
+    if LINEAR_ATTENTION in group_layers_by_attn_type(config):
+        cb_config.use_cuda_graph = (False, cb_config.cuda_graph_booleans[1])
 
     # Decide if asynchronous batching should be used. Should happen after CUDA graphs are decided.
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
