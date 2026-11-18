@@ -277,7 +277,13 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         reference_backend = backend_names[0]
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
-            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
             self._assert_tensors_equivalence(
-                reference_encoding.codebook_pixel_values, encodings[backend_name].codebook_pixel_values
+                reference_encoding.pixel_values,
+                encodings[backend_name].pixel_values,
+                atol=self.backend_equivalence_atol,
+            )
+            self._assert_tensors_equivalence(
+                reference_encoding.codebook_pixel_values,
+                encodings[backend_name].codebook_pixel_values,
+                atol=self.backend_equivalence_atol,
             )

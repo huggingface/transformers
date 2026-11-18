@@ -19,6 +19,7 @@ import unittest
 import unittest.mock
 from functools import cached_property
 
+import pytest
 import timeout_decorator  # noqa
 
 from transformers import BartConfig, is_torch_available
@@ -160,7 +161,7 @@ class BartModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -171,9 +172,7 @@ class BartModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -184,6 +183,27 @@ class BartModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_training_compile_fullgraph(self, config, inputs_dict):
+        # Explicitly check with layerdrop=0.0 (fullgraph compiles without graph breaks)
+        config.encoder_layerdrop = 0.0
+        config.decoder_layerdrop = 0.0
+        model = BartForConditionalGeneration(config).to(torch_device).train()
+        compiled = torch.compile(model, fullgraph=True, backend="eager")
+        outputs = compiled(**inputs_dict)
+        loss = outputs.logits.sum()
+        loss.backward()
+        self.parent.assertIsNotNone(loss)
+
+        # Explicitly check with layerdrop > 0.0 (compile succeeds with graph break)
+        config.encoder_layerdrop = 0.5
+        config.decoder_layerdrop = 0.5
+        model_layerdrop = BartForConditionalGeneration(config).to(torch_device).train()
+        compiled_layerdrop = torch.compile(model_layerdrop, fullgraph=False, backend="eager")
+        outputs_layerdrop = compiled_layerdrop(**inputs_dict)
+        loss_layerdrop = outputs_layerdrop.logits.sum()
+        loss_layerdrop.backward()
+        self.parent.assertIsNotNone(loss_layerdrop)
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = BartModel(config=config).to(torch_device).eval()
@@ -395,6 +415,11 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @pytest.mark.torch_compile_test
+    def test_training_compile_fullgraph(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_training_compile_fullgraph(*config_and_inputs)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -1358,7 +1383,7 @@ class BartStandaloneDecoderModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past_key_values = outputs["past_key_values"]
+        cache = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -1367,7 +1392,7 @@ class BartStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -1393,7 +1418,7 @@ class BartStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        cache = model(input_ids, attention_mask=attn_mask, use_cache=True)["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -1412,9 +1437,9 @@ class BartStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values, use_cache=True
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=attn_mask, cache=cache, use_cache=True)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

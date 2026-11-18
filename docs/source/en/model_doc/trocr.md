@@ -67,12 +67,12 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 # pip install bitsandbytes accelerate
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel, BitsandBytesConfig
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel, BitsAndBytesConfig
 import requests
 from PIL import Image
 
 # Set up the quantization configuration
-quantization_config = BitsandBytesConfig(load_in_8bit=True)
+quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 # Use a large checkpoint for a more noticeable impact
 processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")

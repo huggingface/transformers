@@ -46,7 +46,7 @@ class GPTNeoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gpt_neo"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     vocab_size: int = 50257

@@ -316,7 +316,6 @@ class GraniteSpeech5PreTrainedModel(ParakeetPreTrainedModel):
         "hidden_states": GraniteSpeech5EncoderBlock,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GraniteSpeech5Encoder):

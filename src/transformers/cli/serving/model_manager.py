@@ -18,19 +18,26 @@ Model loading, caching, and lifecycle management.
 import asyncio
 import gc
 import json
+import os
 import threading
 from collections.abc import Callable
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from huggingface_hub import scan_cache_dir
-from tqdm import tqdm
+from huggingface_hub import CacheNotFound
 
 import transformers
 from transformers import BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .utils import Modality, make_progress_tqdm_class, reset_torch_cache, split_model_id
+from .utils import (
+    Modality,
+    get_gen_models,
+    make_progress_tqdm_class,
+    model_owner,
+    reset_torch_cache,
+    split_model_id,
+    split_revision,
+)
 
 
 if TYPE_CHECKING:
@@ -211,9 +218,18 @@ class ModelManager:
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
-        """Canonicalize to `'model_id@revision'` format. Defaults to `@main`."""
-        if "@" in model_id:
+        """Canonical name of a model, the one it is cached under.
+
+        - A Hub repo is named `'model_id@revision'`: `"org/model"` -> `"org/model@main"`, `"org/model@dev"` is kept.
+        - An existing local path is kept as it is: it has no revision, and an `@` in it is part of the path.
+        """
+        if os.path.exists(model_id):
+            # A local path has no revision, and an `@` in it is part of the path.
             return model_id
+        if "@" in model_id:
+            # A Hub repo that already names its revision, e.g. `"org/model@dev"`.
+            return model_id
+        # A Hub repo with no revision: default to `main`.
         return f"{model_id}@main"
 
     def get_quantization_config(self) -> BitsAndBytesConfig | None:
@@ -238,7 +254,7 @@ class ModelManager:
         """
         from transformers import AutoProcessor, AutoTokenizer
 
-        model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = split_revision(model_id_and_revision)
         if gguf_file is not None:
             # A GGUF repo ships no tokenizer files: the vocabulary is read out of the file's metadata.
             return AutoTokenizer.from_pretrained(
@@ -265,7 +281,7 @@ class ModelManager:
         """
         from transformers import AutoConfig
 
-        model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = split_revision(model_id_and_revision)
 
         model_kwargs = {
             "revision": revision,
@@ -286,7 +302,14 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
+        from transformers import AutoModelForDecision
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        # A decision model, or a checkpoint shipping a decision head next to its weights: loaded like the pipeline does
+        try:
+            return AutoModelForDecision.from_pretrained(model_id, **model_kwargs)
+        except ValueError:  # not a decision model, nor a checkpoint with a decision head: as the pipeline does
+            pass
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM
@@ -472,68 +495,58 @@ class ModelManager:
         else:
             raise ValueError(f"Unknown modality for: {model_classname}")
 
-    @staticmethod
-    @lru_cache
-    def get_gen_models(cache_dir: str | None = None) -> list[dict]:
-        """List generative models (LLMs and VLMs) available in the HuggingFace cache.
+    def list_models(self, cache_dir: str | None = None) -> list[dict]:
+        """List the models to show in `/v1/models`: the generative models of the HuggingFace cache, then the
+        loaded models that are not in it, such as a model loaded from a local path. A server pinned to one
+        model (`force_model`) lists that model alone.
 
         Args:
             cache_dir (`str`, *optional*): Path to the HuggingFace cache directory.
                 Defaults to the standard cache location.
 
         Returns:
-            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc.
+            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc., and a ``status``
+            telling whether the model is loaded.
         """
-        from transformers.models.auto.modeling_auto import (
-            MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
-            MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
-            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
-        )
+        if self.force_model is not None:
+            # A pinned server only answers for its model, under the name it was given: list it alone.
+            repo, gguf_file = split_model_id(self.force_model)
+            name = self.process_model_name(repo)
+            is_loaded = (name if gguf_file is None else f"{name}:{gguf_file}") in self.loaded_models
+            return [
+                {
+                    "owned_by": model_owner(repo),
+                    "id": self.force_model,
+                    "object": "model",
+                    "created": 0,
+                    "status": {"value": "loaded" if is_loaded else "unloaded"},
+                }
+            ]
 
-        generative_models = []
-        logger.warning("Scanning the cache directory for LLMs and VLMs.")
+        try:
+            models = list(get_gen_models(cache_dir))
+        except CacheNotFound:
+            # Nothing was downloaded yet, as in a fresh container.
+            models = []
 
-        for repo in tqdm(scan_cache_dir(cache_dir).repos):
-            if repo.repo_type != "model":
-                continue
+        loaded_models = {}
+        for name in list(self.loaded_models):
+            name, gguf_file = split_model_id(name)
+            model_id, revision = split_revision(name)
+            owned_by = model_owner(model_id)
+            # Named as the cache names them: `main` is left out, a GGUF file comes after a colon.
+            if revision not in (None, "main"):
+                model_id = f"{model_id}@{revision}"
+            if gguf_file is not None:
+                model_id = f"{model_id}:{gguf_file}"
+            # `created` is the date of a checkpoint, which is only known for the ones of the cache.
+            loaded_models[model_id] = {"owned_by": owned_by, "id": model_id, "object": "model", "created": 0}
 
-            for ref, revision_info in repo.refs.items():
-                author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
+        listed = {model["id"] for model in models}
+        models += [model for model_id, model in loaded_models.items() if model_id not in listed]
 
-                # One quantization per file, each a separate model, so list files rather than the repo.
-                gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
-                for gguf_file in gguf_files:
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": f"{repo.repo_id}:{gguf_file}",
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
-
-                config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
-                if not config_path:
-                    continue
-
-                config = json.loads(config_path.open().read())
-                if not isinstance(config, dict):
-                    continue
-
-                architectures = config.get("architectures") or []
-                llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
-                vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
-                multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
-
-                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": repo_handle,
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
-
-        return generative_models
+        # `status` is not an OpenAI field: it tells which of the listed models are in memory.
+        for index, model in enumerate(models):
+            status = "loaded" if model["id"] in loaded_models else "unloaded"
+            models[index] = {**model, "status": {"value": status}}
+        return models

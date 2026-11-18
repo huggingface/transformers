@@ -260,12 +260,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         kwargs.setdefault("attention_context_left", 5)
         kwargs.setdefault("attention_context_right", 0)
         kwargs.setdefault("output_proj_dims", 32)
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
         # comparison logic (inf - inf = NaN). Disable for testing.
         kwargs.setdefault("use_clipped_linears", False)
         super().__init__(parent, **kwargs)
         self.head_dim = self.hidden_size // self.num_attention_heads
-        self.per_layer_config = {
+        self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
             if layer_type == "full_attention"
@@ -418,8 +419,9 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("top_k_experts", 2)
         kwargs.setdefault("use_bidirectional_attention", "vision")
         kwargs.setdefault("tie_word_embeddings", True)
+        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
         super().__init__(parent, **kwargs)
-        self.per_layer_config = {
+        self.text_per_layer_config = {
             layer_idx: {"head_dim": 2 * self.head_dim}
             for layer_idx, layer_type in enumerate(self.layer_types)
             if layer_type == "full_attention"
@@ -806,7 +808,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             config=config.text_config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
             block_sequence_ids=block_sequence_ids,
         )
@@ -850,7 +852,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
         model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
         batch_size, prompt_length = inputs_dict["input_ids"].shape
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=config.get_text_config(),
             max_batch_size=batch_size,
             max_cache_len=prompt_length + 8,  # longer than the sliding window
@@ -859,7 +861,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         )
 
         with torch.no_grad():
-            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+            model(**inputs_dict, cache=cache, use_cache=True)
 
 
 @slow

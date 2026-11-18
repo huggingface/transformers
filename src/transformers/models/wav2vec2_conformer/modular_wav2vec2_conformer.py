@@ -516,9 +516,10 @@ class Wav2Vec2ConformerEncoder(nn.Module):
 
         for layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            skip_the_layer = False
+            if self.training and self.config.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 hidden_states = layer(
@@ -560,7 +561,6 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(Wav2Vec2ConformerSelfAttention, index=1, layer_name="encoder"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

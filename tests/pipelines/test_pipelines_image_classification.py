@@ -173,6 +173,13 @@ class ImageClassificationPipelineTests(unittest.TestCase):
             ],
         )
 
+        image_classifier.model.config.problem_type = "regression"
+        outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"label": "LABEL_1", "score": 0.1426}, {"label": "LABEL_0", "score": -0.1557}],
+        )
+
     def test_custom_tokenizer(self):
         tokenizer = PreTrainedTokenizerBase()
 
