@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextvars
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -150,6 +152,29 @@ class ClefConfig(PreTrainedConfig):
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
     extra_config_files = ("joint_head_config.json",)
+    # Whether the `ClefForDecision.from_pretrained` running in this context was given `trust_remote_code=True`, and what
+    # it loads (`None` outside of it): the code of a checkpoint (its config class included) runs only then, whatever is
+    # registered in the process
+    _trusts_remote_code_context = contextvars.ContextVar("clef_trusts_remote_code", default=None)
+
+    @staticmethod
+    def registered_checkpoint_config(text_config: dict | PreTrainedConfig | None) -> type | None:
+        """
+        The config class of `text_config` when it is the code of a checkpoint (a class of a dynamic module,
+        `transformers_modules.…`, that a load with `trust_remote_code=True` imported and registered), else `None`. For a
+        dict, the class registered for its `model_type`. Runs nothing.
+        """
+        from ..auto.configuration_auto import CONFIG_MAPPING
+
+        if isinstance(text_config, dict):
+            model_type = text_config.get("model_type")
+            # `CONFIG_MAPPING.get` is the `dict`'s, which misses the lazy entries
+            config_class = CONFIG_MAPPING[model_type] if model_type in CONFIG_MAPPING else None  # noqa: SIM401
+        else:
+            config_class = None if text_config is None else type(text_config)
+        if config_class is not None and config_class.__module__.startswith("transformers_modules."):
+            return config_class
+        return None
 
     @staticmethod
     def backbone_code(text_config: dict | PreTrainedConfig | None) -> dict | None:
@@ -268,16 +293,20 @@ class ClefConfig(PreTrainedConfig):
                     if isinstance(subconfig := getattr(backbone_config, key, None), PreTrainedConfig)
                 ]
         backbone_attention = [backbone_config._attn_implementation for backbone_config in backbone_configs]
-        # The config of a backbone defined by its checkpoint's code, whose classes are not registered, stays the dict it
-        # is: its config class is that code, which runs only in `ClefForDecision.from_pretrained` with
-        # `trust_remote_code=True`. A placeholder stands in for it while the sub-configs are built
+        # The config of a backbone defined by its checkpoint's code stays the dict it is: its config class is that code,
+        # which runs only in `ClefForDecision.from_pretrained` with `trust_remote_code=True`. So when its classes are
+        # not registered, and when the registered class is a checkpoint's code outside of such a call (even with no
+        # `auto_map`). A placeholder stands in for it while the sub-configs are built
         from ..auto.configuration_auto import CONFIG_MAPPING
 
+        loading = self._trusts_remote_code_context.get()
         deferred_text_config = None
-        if (
-            isinstance(self.text_config, dict)
-            and self.backbone_code(self.text_config) is not None
-            and self.text_config.get("model_type") not in CONFIG_MAPPING
+        if isinstance(self.text_config, dict) and (
+            (
+                self.backbone_code(self.text_config) is not None
+                and self.text_config.get("model_type") not in CONFIG_MAPPING
+            )
+            or (self.registered_checkpoint_config(self.text_config) is not None and not (loading and loading[0]))
         ):
             deferred_text_config, self.text_config = self.text_config, PreTrainedConfig()
         super().__post_init__(**kwargs)

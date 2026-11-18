@@ -273,7 +273,7 @@ CAUSAL_HIDDEN_STATES_MODELING = """
 """
 
 
-def write_package(directory, kind, vocab_size, model_type=None, variant=False):
+def write_package(directory, kind, vocab_size, model_type=None, variant=False, sentinel=None):
     """
     The code and `config.json` of a synthetic package in `directory`, without weights: `kind` is `causal`, `encoder` or
     `causal_hidden_states`, of `model_type` (the package's own by default), and its code computes otherwise when
@@ -289,6 +289,12 @@ def write_package(directory, kind, vocab_size, model_type=None, variant=False):
         code = textwrap.dedent(code).lstrip().replace(f'model_type = "{default_type}"', f'model_type = "{model_type}"')
         if variant:
             code = code.replace("torch.tanh(layer(", "torch.sin(layer(")
+        if sentinel is not None and name.startswith("configuration_"):  # a line per `__init__` of the config class
+            code = code.replace(
+                "        self.vocab_size = vocab_size\n",
+                f"        open({str(sentinel)!r}, 'a').write('init\\n')\n        self.vocab_size = vocab_size\n",
+                1,
+            )
         Path(directory, name).write_text(code, encoding="utf-8")
     sizes = {"dim": 24, "n_layers": 2} if causal else {"hidden_size": 24, "num_hidden_layers": 2}
     if kind == "causal_hidden_states":
@@ -330,11 +336,11 @@ class ClefRemoteBackboneTest(unittest.TestCase):
     def folder(self, name):
         return tempfile.mkdtemp(prefix=f"{name}-", dir=self.root)  # a new module name for its dynamic module
 
-    def package(self, kind, model_type=None, variant=False, source=None):
+    def package(self, kind, model_type=None, variant=False, source=None, sentinel=None):
         """A synthetic package with random weights in a new folder, and its backbone loaded from it."""
         tokenizer = self.encoder_tokenizer if kind == "encoder" else self.tokenizer
         source = source or self.folder(f"{kind}-package")
-        write_package(source, kind, len(tokenizer), model_type, variant)
+        write_package(source, kind, len(tokenizer), model_type, variant, sentinel)
         auto_class = AutoModel if kind == "encoder" else AutoModelForCausalLM
         config = AutoConfig.from_pretrained(source, trust_remote_code=True)
         torch.manual_seed(0)
@@ -921,3 +927,145 @@ class ClefRemoteBackboneTest(unittest.TestCase):
                     self.assertIs(type(loaded.model), modeling.TinyEncModel)
                     with torch.no_grad():
                         torch.testing.assert_close(loaded(**inputs).logits, logits, rtol=0, atol=0)
+
+    # Fix round 3
+
+    def test_registered_config_class_never_runs_without_the_flag(self):
+        # R1: once an earlier load with the flag has registered the classes of a checkpoint, a load without the flag
+        # runs none of its code, the `__init__` of its config class included: for a folder with its `auto_map` and for
+        # one without, through the three loaders, unset and `False`
+        sentinel = self.root / "config-inits.txt"
+        _, model = self.model("encoder", "cosine", model_type=unique_model_type("tinyenc"), sentinel=sentinel)
+        model.eval()
+        inputs, _ = self.inputs(model, "encoder")
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        with_auto_map = self.save(model, "encoder")
+        without_auto_map = self.save(model, "encoder")
+        config = json.loads(Path(without_auto_map, "config.json").read_text(encoding="utf-8"))
+        del config["text_config"]["auto_map"]
+        Path(without_auto_map, "config.json").write_text(json.dumps(config), encoding="utf-8")
+        for code in Path(without_auto_map).glob("*.py"):
+            code.unlink()
+        ClefForDecision.from_pretrained(with_auto_map, trust_remote_code=True)  # registers the classes
+
+        def inits():
+            return len(sentinel.read_text(encoding="utf-8").splitlines())
+
+        self.assertGreater(inits(), 0)  # the sentinel counts
+        for folder in (with_auto_map, without_auto_map):
+            for name, load in self.loaders().items():
+                for flag in ({}, {"trust_remote_code": False}):
+                    with self.subTest(auto_map=folder == with_auto_map, loader=name, flag=flag):
+                        before = inits()
+                        with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
+                            load(folder, **flag)
+                        self.assertEqual(inits(), before, "the config class of the checkpoint ran")
+                        # The config alone reads without running it: the config of the backbone stays a dict
+                        self.assertIsInstance(AutoConfig.from_pretrained(folder).text_config, dict)
+                        self.assertEqual(inits(), before)
+        # With the flag both load, as before
+        for folder in (with_auto_map, without_auto_map):
+            for name, load in self.loaders().items():
+                with self.subTest(auto_map=folder == with_auto_map, loader=name, flag=True):
+                    loaded = load(folder, trust_remote_code=True).eval()
+                    with torch.no_grad():
+                        torch.testing.assert_close(loaded(**inputs).logits, logits, rtol=0, atol=0)
+
+    def importable_package(self, model_type):
+        """The encoder package as an importable package of its own (on `sys.path` until the test ends)."""
+        package = f"clef_user_package_{uuid.uuid4().hex[:8]}"
+        directory = Path(self.folder("importable"), package)
+        directory.mkdir()
+        Path(directory, "__init__.py").write_text("", encoding="utf-8")
+        for name, code in ENCODER_PACKAGE.items():
+            code = textwrap.dedent(code).lstrip().replace('model_type = "tinyenc"', f'model_type = "{model_type}"')
+            Path(directory, name).write_text(code, encoding="utf-8")
+        sys.path.insert(0, str(directory.parent))
+        self.addCleanup(sys.path.remove, str(directory.parent))
+        configuration = importlib.import_module(f"{package}.configuration_tinyenc")
+        modeling = importlib.import_module(f"{package}.modeling_tinyenc")
+        return package, configuration, modeling
+
+    def dynamic_class(self, files, reference):
+        """A class of a checkpoint's code: `files` in a new folder, imported as a dynamic module, as a flagged load does."""
+        from transformers.dynamic_module_utils import get_class_from_dynamic_module
+
+        folder = self.folder("checkpoint-code")
+        for name, code in files.items():
+            Path(folder, name).write_text(textwrap.dedent(code).lstrip(), encoding="utf-8")
+        return get_class_from_dynamic_module(reference, folder)
+
+    def saved_on_importable(self, configuration, modeling):
+        """A Clef model on a backbone of the importable classes, saved (its `text_config` without an `auto_map`)."""
+        torch.manual_seed(0)
+        backbone = modeling.TinyEncModel(
+            configuration.TinyEncConfig(vocab_size=len(self.encoder_tokenizer), hidden_size=24)
+        ).eval()
+        model = ClefForDecision(self.clef_config(backbone, "encoder", "cosine"), model=backbone).eval()
+        folder = self.save(model, "encoder")
+        self.assertNotIn(
+            "auto_map", json.loads(Path(folder, "config.json").read_text(encoding="utf-8"))["text_config"]
+        )
+        return folder
+
+    def test_registered_checkpoint_model_class_needs_the_flag(self):
+        # N4, the model class: the config class is an importable module's, the `AutoModel` class registered for it is a
+        # checkpoint's code (a checkpoint whose config re-exports an installed class)
+        model_type = unique_model_type("tinyenc")
+        package, configuration, modeling = self.importable_package(model_type)
+        AutoConfig.register(model_type, configuration.TinyEncConfig)
+        folder = self.saved_on_importable(configuration, modeling)
+        code = ENCODER_PACKAGE["modeling_tinyenc.py"].replace(
+            "from .configuration_tinyenc import", f"from {package}.configuration_tinyenc import"
+        )
+        checkpoint_model = self.dynamic_class({"modeling_tinyenc.py": code}, "modeling_tinyenc.TinyEncModel")
+        self.assertTrue(checkpoint_model.__module__.startswith("transformers_modules."))
+        AutoModel.register(configuration.TinyEncConfig, checkpoint_model, exist_ok=True)
+        for name, load in self.loaders().items():
+            for flag in ({}, {"trust_remote_code": False}):
+                with self.subTest(loader=name, flag=flag):
+                    with self.assertRaisesRegex(
+                        ValueError, "(?s)modeling_tinyenc.TinyEncModel.*trust_remote_code=True"
+                    ):
+                        load(folder, **flag)
+            with self.subTest(loader=name, flag=True):
+                self.assertIs(type(load(folder, trust_remote_code=True).model), checkpoint_model)
+
+    def test_registered_checkpoint_config_class_needs_the_flag(self):
+        # N4, the config class: the config class registered for the type is a checkpoint's code, the `AutoModel` class
+        # an importable module's
+        model_type = unique_model_type("tinyenc")
+        _, configuration, modeling = self.importable_package(model_type)
+        AutoConfig.register(model_type, configuration.TinyEncConfig)
+        AutoModel.register(configuration.TinyEncConfig, modeling.TinyEncModel)
+        folder = self.saved_on_importable(configuration, modeling)
+        sentinel = self.root / "checkpoint-config-inits.txt"
+        code = ENCODER_PACKAGE["configuration_tinyenc.py"].replace(
+            'model_type = "tinyenc"', f'model_type = "{model_type}"'
+        )
+        code = textwrap.dedent(code).replace(
+            "        self.vocab_size = vocab_size\n",
+            f"        open({str(sentinel)!r}, 'a').write('init\\n')\n        self.vocab_size = vocab_size\n",
+        )
+        checkpoint_config = self.dynamic_class(
+            {"configuration_tinyenc.py": code}, "configuration_tinyenc.TinyEncConfig"
+        )
+        self.assertTrue(checkpoint_config.__module__.startswith("transformers_modules."))
+        AutoConfig.register(model_type, checkpoint_config, exist_ok=True)
+        AutoModel.register(checkpoint_config, modeling.TinyEncModel, exist_ok=True)
+
+        def inits():
+            return len(sentinel.read_text(encoding="utf-8").splitlines()) if sentinel.exists() else 0
+
+        for name, load in self.loaders().items():
+            for flag in ({}, {"trust_remote_code": False}):
+                with self.subTest(loader=name, flag=flag):
+                    before = inits()
+                    with self.assertRaisesRegex(
+                        ValueError, "(?s)configuration_tinyenc.TinyEncConfig.*trust_remote_code=True"
+                    ):
+                        load(folder, **flag)
+                    self.assertEqual(inits(), before, "the config class of the checkpoint ran")
+            with self.subTest(loader=name, flag=True):
+                self.assertIsInstance(load(folder, trust_remote_code=True).config.text_config, checkpoint_config)

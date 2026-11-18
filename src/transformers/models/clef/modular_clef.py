@@ -175,6 +175,29 @@ class ClefConfig(PreTrainedConfig):
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
     extra_config_files = ("joint_head_config.json",)
+    # Whether the `ClefForDecision.from_pretrained` running in this context was given `trust_remote_code=True`, and what
+    # it loads (`None` outside of it): the code of a checkpoint (its config class included) runs only then, whatever is
+    # registered in the process
+    _trusts_remote_code_context = contextvars.ContextVar("clef_trusts_remote_code", default=None)
+
+    @staticmethod
+    def registered_checkpoint_config(text_config: dict | PreTrainedConfig | None) -> type | None:
+        """
+        The config class of `text_config` when it is the code of a checkpoint (a class of a dynamic module,
+        `transformers_modules.…`, that a load with `trust_remote_code=True` imported and registered), else `None`. For a
+        dict, the class registered for its `model_type`. Runs nothing.
+        """
+        from ..auto.configuration_auto import CONFIG_MAPPING
+
+        if isinstance(text_config, dict):
+            model_type = text_config.get("model_type")
+            # `CONFIG_MAPPING.get` is the `dict`'s, which misses the lazy entries
+            config_class = CONFIG_MAPPING[model_type] if model_type in CONFIG_MAPPING else None  # noqa: SIM401
+        else:
+            config_class = None if text_config is None else type(text_config)
+        if config_class is not None and config_class.__module__.startswith("transformers_modules."):
+            return config_class
+        return None
 
     @staticmethod
     def backbone_code(text_config: dict | PreTrainedConfig | None) -> dict | None:
@@ -293,16 +316,20 @@ class ClefConfig(PreTrainedConfig):
                     if isinstance(subconfig := getattr(backbone_config, key, None), PreTrainedConfig)
                 ]
         backbone_attention = [backbone_config._attn_implementation for backbone_config in backbone_configs]
-        # The config of a backbone defined by its checkpoint's code, whose classes are not registered, stays the dict it
-        # is: its config class is that code, which runs only in `ClefForDecision.from_pretrained` with
-        # `trust_remote_code=True`. A placeholder stands in for it while the sub-configs are built
+        # The config of a backbone defined by its checkpoint's code stays the dict it is: its config class is that code,
+        # which runs only in `ClefForDecision.from_pretrained` with `trust_remote_code=True`. So when its classes are
+        # not registered, and when the registered class is a checkpoint's code outside of such a call (even with no
+        # `auto_map`). A placeholder stands in for it while the sub-configs are built
         from ..auto.configuration_auto import CONFIG_MAPPING
 
+        loading = self._trusts_remote_code_context.get()
         deferred_text_config = None
-        if (
-            isinstance(self.text_config, dict)
-            and self.backbone_code(self.text_config) is not None
-            and self.text_config.get("model_type") not in CONFIG_MAPPING
+        if isinstance(self.text_config, dict) and (
+            (
+                self.backbone_code(self.text_config) is not None
+                and self.text_config.get("model_type") not in CONFIG_MAPPING
+            )
+            or (self.registered_checkpoint_config(self.text_config) is not None and not (loading and loading[0]))
         ):
             deferred_text_config, self.text_config = self.text_config, PreTrainedConfig()
         super().__post_init__(**kwargs)
@@ -340,11 +367,6 @@ def _hub_repository(*classes: type, name: str) -> str | None:
     ):
         return name
     return None
-
-
-# Whether the `ClefForDecision.from_pretrained` running in this context was given `trust_remote_code=True`, and what
-# it loads (`None` outside of it): the backbone of a checkpoint's own code is built only then, whatever is registered
-_FROM_PRETRAINED_TRUSTS_REMOTE_CODE = contextvars.ContextVar("clef_from_pretrained_trusts_remote_code", default=None)
 
 
 def pool_spans(
@@ -990,6 +1012,16 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         `trust_remote_code=True` (`AutoModel`, else `AutoModelForCausalLM`). Never prompts nor loads code itself.
         """
         backbone_code = ClefConfig.backbone_code(text_config)
+        if isinstance(text_config, dict):  # deferred: the config class of the backbone is a checkpoint's code
+            loading = ClefConfig._trusts_remote_code_context.get()
+            source = loading[1] if loading is not None else "this model"
+            raise ValueError(
+                ClefForDecision._refusal(text_config, source)
+                if backbone_code is not None
+                else ClefForDecision._registered_refusal(
+                    [ClefConfig.registered_checkpoint_config(text_config) or dict], text_config, source
+                )
+            )
         if backbone_code is None:
             # A model type of transformers: its class of transformers. Its `auto_map`, if any, is never followed, so
             # nothing prompts nor runs (a type without an `AutoModel` class would otherwise ask on stdin to run it)
@@ -1006,20 +1038,15 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
             if type(text_config) in AutoModel._model_mapping:
                 model_classes = AutoModel._model_mapping[type(text_config)]
                 classes += list(model_classes) if isinstance(model_classes, (tuple, list)) else [model_classes]
-            loading = _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.get()
+            loading = ClefConfig._trusts_remote_code_context.get()
             checkpoint_code = [
                 cls for cls in classes if cls.__module__.startswith(f"{TRANSFORMERS_DYNAMIC_MODULE_NAME}.")
             ]
             if checkpoint_code and loading is not None and not loading[0]:
-                raise ValueError(
-                    f"The backbone of the Clef model {loading[1]} ({text_config.model_type!r}) would be built with "
-                    f"{', '.join(f'{cls.__module__}.{cls.__name__}' for cls in checkpoint_code)}, the code of a "
-                    "checkpoint that an earlier load imported. Loading the model runs that code: read it, then pass "
-                    "`trust_remote_code=True` to allow it."
-                )
+                raise ValueError(ClefForDecision._registered_refusal(checkpoint_code, text_config, loading[1]))
             return AutoModel.from_config(text_config, trust_remote_code=False)
         _, auto_class = ClefForDecision._backbone_auto_class(backbone_code, text_config)
-        loading = _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.get()
+        loading = ClefConfig._trusts_remote_code_context.get()
         if loading is not None and not loading[0]:  # in `from_pretrained` without the flag
             raise ValueError(ClefForDecision._refusal(text_config, loading[1]))
         if isinstance(text_config, dict) or type(text_config) not in auto_class._model_mapping:
@@ -1031,6 +1058,17 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 "`ClefForDecision(config, model=backbone)`."
             )
         return auto_class.from_config(text_config, trust_remote_code=False)  # the registered class
+
+    @staticmethod
+    def _registered_refusal(classes: list, text_config, source: str) -> str:
+        """The refusal to build a backbone with classes of a checkpoint's code registered by an earlier load."""
+        model_type = text_config.get("model_type") if isinstance(text_config, dict) else text_config.model_type
+        return (
+            f"The backbone of the Clef model {source} ({model_type!r}) would be built with "
+            f"{', '.join(f'{cls.__module__}.{cls.__name__}' for cls in classes)}, the code of a checkpoint that an "
+            "earlier load imported. Loading the model runs that code: read it, then pass `trust_remote_code=True` to "
+            "allow it."
+        )
 
     @classmethod
     def _refusal(cls, text_config, source: str) -> str:
@@ -1117,12 +1155,19 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 config.tie_word_embeddings = config.tie_word_embeddings or getattr(
                     config.text_config, "tie_word_embeddings", False
                 )
+        elif (config_class := ClefConfig.registered_checkpoint_config(text_config)) is not None:
+            # No `auto_map`, but a `model_type` registered with a checkpoint's code: the registered class runs only
+            # with the flag, before any of its config is built
+            if kwargs.get("trust_remote_code") is not True:
+                raise ValueError(cls._registered_refusal([config_class], text_config, source))
+            if isinstance(config, ClefConfig) and isinstance(config.text_config, dict):
+                config.text_config = config_class(**config.text_config)
         # The backbone is built (`_backbone_from_config`) only with the flag, whatever is registered in the process
-        token = _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.set((kwargs.get("trust_remote_code") is True, source))
+        token = ClefConfig._trusts_remote_code_context.set((kwargs.get("trust_remote_code") is True, source))
         try:
             return super().from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         finally:
-            _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.reset(token)
+            ClefConfig._trusts_remote_code_context.reset(token)
 
     @staticmethod
     def _base_model_of_adapter(source: str, hub_kwargs: dict) -> str:
