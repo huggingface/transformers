@@ -22,6 +22,7 @@ import collections
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -1574,6 +1575,10 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Multimod
 
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`DeepseekOcr2Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

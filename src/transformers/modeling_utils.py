@@ -1429,6 +1429,11 @@ class PreTrainedModel(
             if tag not in self.model_tags:
                 self.model_tags.append(tag)
 
+    def get_data_dependent_inputs(self, **kwargs) -> dict[str, Any]:
+        """The inputs the forward computes with data-dependent ops (host syncs, loops over images). Passed back to it,
+        they keep it traceable by `torch.compile(fullgraph=True)` and `torch.export`. None by default."""
+        return {}
+
     @classmethod
     def _from_config(cls, config, **kwargs):
         """
