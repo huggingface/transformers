@@ -102,6 +102,11 @@ class ClefConfig(PreTrainedConfig):
     prompt_style (`str`, *optional*, defaults to `"chatml"`):
         The template of the decision config of a new model: `"chatml"` for the ChatML prompt of the checkpoints of
         clef, or `"plain"` for the same schema text between the `[CLS]` and `[SEP]` of an encoder.
+    backbone_hidden_module (`str`, *optional*):
+        The name of the submodule of the backbone whose output is its final hidden states, read with a forward hook,
+        for a backbone that returns neither `last_hidden_state` nor `hidden_states` (a causal language model of a
+        checkpoint's own code, for example). [`ClefForDecision.find_backbone_hidden_module`] finds it. By default the
+        hidden states are the `last_hidden_state` of the output of the backbone, else the last of its `hidden_states`.
 
     Example:
     ```python
@@ -140,10 +145,27 @@ class ClefConfig(PreTrainedConfig):
     cosine_initial_scale: float | int = 12.0
     global_pooling: str = "last"
     prompt_style: str = "chatml"
+    backbone_hidden_module: str | None = None
 
     # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
     extra_config_files = ("joint_head_config.json",)
+
+    @staticmethod
+    def backbone_code(text_config: dict | PreTrainedConfig | None) -> dict | None:
+        """
+        The `auto_map` of a backbone defined by the code of its checkpoint (a `model_type` that is not one of
+        transformers' and an `auto_map`), or `None` for a backbone of transformers. Reads the config only: runs nothing.
+        """
+        from ..auto.auto_mappings import CONFIG_MAPPING_NAMES
+
+        if isinstance(text_config, dict):
+            model_type, auto_map = text_config.get("model_type"), text_config.get("auto_map")
+        else:
+            model_type, auto_map = getattr(text_config, "model_type", None), getattr(text_config, "auto_map", None)
+        if not auto_map or model_type in CONFIG_MAPPING_NAMES:
+            return None
+        return dict(auto_map)
 
     @staticmethod
     def decision_config(head_configs: dict, text_config: dict):
@@ -153,6 +175,13 @@ class ClefConfig(PreTrainedConfig):
         from ..auto.modeling_auto import MODEL_FOR_MASKED_LM_MAPPING_NAMES
 
         model_type = text_config.get("model_type")
+        if ClefConfig.backbone_code(text_config) is not None and model_type != ClefConfig.model_type:
+            raise ValueError(
+                f"This folder ships a decision head in the layout of clef next to a backbone defined by its own code "
+                f"({model_type}), which does not load as is: nothing records the pooling, prompt and hidden states the "
+                "head was trained with. Build the model with `ClefForDecision(ClefConfig(text_config=backbone.config, "
+                "...), model=backbone)` around the backbone loaded with `trust_remote_code=True`, and save it."
+            )
         if model_type in MODEL_FOR_MASKED_LM_MAPPING_NAMES and model_type != ClefConfig.model_type:
             raise ValueError(
                 f"This folder ships a decision head in the layout of clef on a bidirectional backbone ({model_type}), "
@@ -239,11 +268,26 @@ class ClefConfig(PreTrainedConfig):
                     if isinstance(subconfig := getattr(backbone_config, key, None), PreTrainedConfig)
                 ]
         backbone_attention = [backbone_config._attn_implementation for backbone_config in backbone_configs]
+        # The config of a backbone defined by its checkpoint's code, whose classes are not registered, stays the dict it
+        # is: its config class is that code, which runs only in `ClefForDecision.from_pretrained` with
+        # `trust_remote_code=True`. A placeholder stands in for it while the sub-configs are built
+        from ..auto.configuration_auto import CONFIG_MAPPING
+
+        deferred_text_config = None
+        if (
+            isinstance(self.text_config, dict)
+            and self.backbone_code(self.text_config) is not None
+            and self.text_config.get("model_type") not in CONFIG_MAPPING
+        ):
+            deferred_text_config, self.text_config = self.text_config, PreTrainedConfig()
         super().__post_init__(**kwargs)
         for backbone_config, attention in zip(backbone_configs, backbone_attention):
             backbone_config._attn_implementation_internal = attention
+        if deferred_text_config is not None:
+            self.text_config = deferred_text_config
+            return
         # The output embeddings of the model are its input embeddings when its config ties them
-        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = self.tie_word_embeddings or getattr(self.text_config, "tie_word_embeddings", False)
 
 
 __all__ = ["ClefConfig"]

@@ -85,6 +85,39 @@ model = ClefForDecision(config, model=backbone)  # `model.model` is `backbone`
 
 UltraBERT ([`UltrabertModel`], for example `dmis-lab/UltraBERT-150M`) works the same way, with `global_pooling="first"` and `prompt_style="plain"`. Its rotary positions and its alternating local and global attention layers keep the scores of a prompt the same alone, in a batch, and with left or right padding, including prompts longer than its local attention window. Its tokenizer has no `[CLS]` token, and its padding, beginning and end of sequence tokens are the same `<|endoftext|>`: the plain prompt starts with that token and ends with its `<|sep|>` separator. It has no causal language modeling head class, so the model has no `lm_head`. A checkpoint that wraps an UltraBERT in remote code (`model_type: "ultrabert"` with another architecture and an `auto_map`, such as a reranker whose weights are stored as `backbone.<name>`) does not load its weights into a native [`UltrabertModel`] with `AutoModel` (they would all be newly initialized, with only a warning): convert it with `convert_clef_weights_to_hf.py` (see [Converting checkpoints](#converting-checkpoints)), which strips the prefix, loads the backbone strictly and adds a new decision head.
 
+## Backbones defined by their checkpoint's code
+
+A backbone whose architecture is not in transformers, but in the Python files of its checkpoint (an `auto_map` in its `config.json`), loads only with `trust_remote_code=True`, and so does a Clef model built on it. Loading such a model runs that code only when the caller passes `trust_remote_code=True`: without it (unset or `False`), `ClefForDecision.from_pretrained`, [`AutoModelForDecision`] and `pipeline("decision")` raise a `ValueError` that names the classes and where their code would come from, before anything of that code is downloaded or imported, and never prompt. Backbones of transformers load as before, with or without the flag.
+
+Build the model around the backbone loaded with the flag. The backbone can be a base model (`AutoModel`) or, when the package only has a causal language model (`AutoModelForCausalLM`, and no `AutoModel` in its `auto_map`), that causal language model itself: then the lexical prior of the joint head reads its output embeddings, and nothing is added to it. Give `backbone_hidden_size` yourself, since such a config may have no `hidden_size`. The backbone is called with only the arguments its `forward` accepts. Its final hidden states are the output of the submodule named by `backbone_hidden_module` when that is set (for a model that returns no hidden states), else the `last_hidden_state` of its output, else the last of its `hidden_states`. The submodule is the one that [`~ClefForDecision.find_backbone_hidden_module`] finds by checking, in one small forward pass, which output gives the logits of the model through its output embeddings (it raises when none does). The field is saved, so loading never guesses.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, ClefConfig, ClefForDecision
+
+backbone = AutoModelForCausalLM.from_pretrained("org/custom-model", trust_remote_code=True)
+config = ClefConfig(
+    text_config=backbone.config,
+    backbone_hidden_size=backbone.get_output_embeddings().weight.shape[-1],
+    backbone_hidden_module=ClefForDecision.find_backbone_hidden_module(backbone),
+    head_type="cosine",
+)
+model = ClefForDecision(config, model=backbone)
+# ... train, then
+model.save_pretrained("path/to/clef")
+AutoTokenizer.from_pretrained("org/custom-model").save_pretrained("path/to/clef")
+```
+
+`save_pretrained` keeps the `auto_map` of the backbone in the `text_config` of the saved config. For a backbone loaded from the Hub, its references name the repository (`org/custom-model--modeling_custom.CustomForCausalLM`): loading downloads the code of that repository again, from its default branch unless `code_revision` is given to `ClefForDecision.from_pretrained`. For a backbone loaded from a local folder, the code files are saved next to the model, which is then self-contained (upload the folder rather than `push_to_hub=True`, which is refused in that case). Load the saved model with the flag; the backbone is rebuilt with the class of its `auto_map` (`AutoModel` when there is one, else `AutoModelForCausalLM`), so build the model around a backbone of that class:
+
+```python
+from transformers import AutoModelForDecision, pipeline
+
+model = AutoModelForDecision.from_pretrained("path/to/clef", trust_remote_code=True)
+decide = pipeline("decision", model="path/to/clef", trust_remote_code=True)
+```
+
+A clef checkpoint in its original layout (`joint_head_config.json` next to the weights) on such a backbone is refused: build and save the model as above.
+
 ## Training
 
 Cloudflare has not published Clef's training objective; the loss below and its defaults are a community recipe, not an official Cloudflare objective.
@@ -159,6 +192,7 @@ with torch.autocast("cuda", dtype=torch.bfloat16):
 
 [[autodoc]] ClefForDecision
     - forward
+    - find_backbone_hidden_module
 
 ## ClefDecisionOutput
 

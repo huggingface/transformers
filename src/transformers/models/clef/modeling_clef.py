@@ -17,25 +17,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 import math
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
+from huggingface_hub.errors import HFValidationError
+from huggingface_hub.utils import validate_repo_id
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...decision import DecisionMixin, Question
+from ...dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
 from ...loss.loss_clef import check_clef_label_shapes, clef_label_errors, raise_label_error
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
-from ..auto import AutoModel
+from ..auto import AutoConfig, AutoModel, AutoModelForCausalLM
 from ..auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .configuration_clef import ClefConfig
 
@@ -553,6 +560,15 @@ class ClefDecisionOutput(ModelOutput):
         return self.logits[self.option_mask].split(split_size_or_sections)
 
 
+def _is_repo_id(name: str) -> bool:
+    """Whether `name` is the id of a repository of the Hub (`org/name`), not a path."""
+    try:
+        validate_repo_id(name)
+    except HFValidationError:
+        return False
+    return "/" in name
+
+
 @auto_docstring(
     custom_intro="""
     Clef (Cloudflare/clef): the model of its repo, its language modeling head and a decision head that scores all the
@@ -574,13 +590,30 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         """
         super().__init__(config)
         if model is None:
-            self.model = AutoModel.from_config(config.text_config)
+            self.model = self._backbone_from_config(config.text_config)
         else:
+            backbone_code = config.backbone_code(config.text_config)
+            if backbone_code is not None:  # the saved model rebuilds the class of the given backbone
+                key, _ = self._backbone_auto_class(backbone_code, config.text_config)
+                if backbone_code[key].rsplit(".", 1)[-1] != type(model).__name__:
+                    raise ValueError(
+                        f"The backbone is a {type(model).__name__}, but a saved model rebuilds the {key} of the "
+                        f"`auto_map` of its config, {backbone_code[key]}: load the backbone with {key}."
+                    )
             # `post_init` initializes the modules not marked as initialized: none of the given backbone, whether
             # `from_pretrained` marked them or its weights were set otherwise
             for module in model.modules():
                 module._is_hf_initialized = True
             self.model = model
+        if config.backbone_hidden_module is not None:
+            try:  # the named submodule of the backbone exists, before anything runs
+                self.model.get_submodule(config.backbone_hidden_module)
+            except AttributeError:
+                raise ValueError(
+                    f"`backbone_hidden_module` is {config.backbone_hidden_module!r}, which is not a submodule of the "
+                    f"backbone {type(self.model).__name__}. `ClefForDecision.find_backbone_hidden_module(backbone)` "
+                    "finds the module whose output is its final hidden states."
+                ) from None
         # A backbone whose position embeddings have a padding index (the RoBERTa family) numbers the positions of its
         # tokens itself, from `input_ids`, after that index: positions counted from the attention mask would be shifted
         self._positions_from_input_ids = any(
@@ -608,7 +641,9 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                     )
                 self._tied_weights_keys = {"lm_head.weight": f"model.{embeddings}.weight"}
                 self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-            else:  # an encoder without a language modeling head: the lexical prior reads its input embeddings
+            else:
+                # An encoder without a language modeling head: the lexical prior reads its input embeddings. A causal
+                # language model that is the backbone itself (one of a checkpoint's own code) has its own: they are read
                 self._tied_weights_keys = {}
             self.embeddings = ClefEmbeddings(config)
             self.encoder = ClefEncoder(config)
@@ -647,7 +682,265 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
     def lexical_embeddings(self) -> torch.Tensor:
         """The table of the embeddings of the tokens that gives the lexical prior of the options."""
         lm_head = getattr(self, "lm_head", None)
-        return self.model.get_input_embeddings().weight if lm_head is None else lm_head.weight
+        if lm_head is None:  # the output embeddings of a backbone that has them, else its input embeddings
+            lm_head = self.model.get_output_embeddings()
+            lm_head = self.model.get_input_embeddings() if lm_head is None else lm_head
+        return lm_head.weight
+
+    def backbone_hidden_states(self, input_ids: torch.LongTensor, **kwargs) -> torch.Tensor:
+        """
+        The final hidden states of the backbone for `input_ids`, of shape `(batch_size, sequence_length, hidden_size)`.
+        The backbone is called with the arguments of `kwargs` that its `forward` accepts. They are the output of its
+        submodule `config.backbone_hidden_module` when that is set, else the `last_hidden_state` of its output, else the
+        last of its `hidden_states` (asked for from a backbone with output embeddings, a causal language model).
+        """
+        parameters = inspect.signature(self.model.forward).parameters
+        takes_any = any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+        if not takes_any:
+            kwargs = {key: value for key, value in kwargs.items() if key in parameters}
+        module_name = self.config.backbone_hidden_module
+        if module_name is not None:
+            outputs = []
+            handle = self.model.get_submodule(module_name).register_forward_hook(
+                lambda module, args, output: outputs.append(output[0] if isinstance(output, tuple) else output)
+            )
+            try:
+                self.model(input_ids=input_ids, **kwargs)
+            finally:
+                handle.remove()
+            if not outputs:
+                raise ValueError(
+                    f"The submodule {module_name!r} of the backbone (`backbone_hidden_module`) did not run in its "
+                    "forward pass."
+                )
+            hidden_states = outputs[-1]
+        else:
+            if self.model.get_output_embeddings() is not None and (takes_any or "output_hidden_states" in parameters):
+                kwargs.setdefault("output_hidden_states", True)
+            output = self.model(input_ids=input_ids, **kwargs)
+            hidden_states = getattr(output, "last_hidden_state", None)
+            if hidden_states is None and getattr(output, "hidden_states", None) is not None:
+                hidden_states = output.hidden_states[-1]
+            if hidden_states is None:
+                raise ValueError(
+                    f"The backbone {type(self.model).__name__} returns neither `last_hidden_state` nor `hidden_states`: "
+                    "set `backbone_hidden_module` in the config to the submodule whose output is its final hidden "
+                    "states, which `ClefForDecision.find_backbone_hidden_module(backbone)` finds."
+                )
+        if not isinstance(hidden_states, torch.Tensor) or hidden_states.shape[:2] != input_ids.shape[:2]:
+            raise ValueError(
+                f"The hidden states of the backbone are not of shape (batch_size, sequence_length, hidden_size): got "
+                f"{getattr(hidden_states, 'shape', type(hidden_states))} for input_ids of shape {tuple(input_ids.shape)}."
+            )
+        return hidden_states
+
+    @staticmethod
+    def find_backbone_hidden_module(
+        backbone: PreTrainedModel, input_ids: torch.LongTensor | None = None, rtol: float = 1e-3, atol: float = 1e-3
+    ) -> str:
+        """
+        The name of the submodule of a causal language model whose output is its final hidden states, the
+        `backbone_hidden_module` of [`ClefConfig`]: in one forward pass of `input_ids` (a few tokens by default), the
+        last submodule whose output of shape `(batch_size, sequence_length, hidden_size)` gives the logits of the model
+        through its output embeddings, within `rtol` and `atol` (relative to the largest logit). Raises when none does.
+        """
+        output_embeddings = backbone.get_output_embeddings()
+        weight = getattr(output_embeddings, "weight", None)
+        if weight is None:
+            raise ValueError(
+                f"{type(backbone).__name__} has no output embeddings (`get_output_embeddings()`): its hidden states "
+                "cannot be verified against its logits."
+            )
+        bias = getattr(output_embeddings, "bias", None)
+        if input_ids is None:
+            input_ids = (torch.arange(1, 9, device=weight.device) % weight.shape[0])[None]
+        names = {module: name for name, module in backbone.named_modules() if name}
+        outputs = []
+
+        def keep(module, args, output):
+            output = output[0] if isinstance(output, tuple) and output else output
+            if (
+                isinstance(output, torch.Tensor)
+                and output.dim() == 3
+                and output.shape[:2] == input_ids.shape
+                and output.shape[-1] == weight.shape[-1]
+            ):
+                outputs.append((names[module], output))
+
+        handles = [module.register_forward_hook(keep) for module in names]
+        training = backbone.training
+        backbone.eval()
+        try:
+            with torch.no_grad():
+                output = backbone(input_ids=input_ids)
+        finally:
+            for handle in handles:
+                handle.remove()
+            backbone.train(training)
+        logits = (output[0] if isinstance(output, tuple) else output.logits).float()
+        weight, bias = weight.float(), None if bias is None else bias.float()
+        scale = logits.abs().max().clamp(min=1e-12)
+        for name, hidden_states in reversed(outputs):
+            predicted = nn.functional.linear(hidden_states.float(), weight, bias)
+            if predicted.shape == logits.shape and torch.allclose(predicted, logits, rtol=rtol, atol=atol * scale):
+                return name
+        raise ValueError(
+            f"No submodule of {type(backbone).__name__} outputs hidden states that give its logits through its output "
+            f"embeddings (of the {len(outputs)} outputs of shape (batch_size, sequence_length, {weight.shape[-1]})): set "
+            "`backbone_hidden_module` by hand, or use a backbone that returns its hidden states."
+        )
+
+    @staticmethod
+    def _backbone_auto_class(backbone_code: dict, text_config) -> tuple[str, type]:
+        """
+        The auto class that rebuilds a backbone of a checkpoint's own code: `AutoModel` when its `auto_map` names one,
+        else `AutoModelForCausalLM` (a causal language model that is the backbone itself).
+        """
+        for key, auto_class in (("AutoModel", AutoModel), ("AutoModelForCausalLM", AutoModelForCausalLM)):
+            if isinstance(backbone_code.get(key), str):
+                return key, auto_class
+        model_type = text_config.get("model_type") if isinstance(text_config, dict) else text_config.model_type
+        raise ValueError(
+            f"The backbone {model_type!r} is defined by its checkpoint's own code, whose `auto_map` names neither an "
+            f"`AutoModel` nor an `AutoModelForCausalLM` class ({backbone_code}): a saved model could not rebuild it."
+        )
+
+    @staticmethod
+    def _backbone_from_config(text_config) -> PreTrainedModel:
+        """
+        A new backbone from its config: the class of transformers for its `model_type`, or, for a backbone of its
+        checkpoint's own code, the class of its `auto_map` that `from_pretrained` registers with
+        `trust_remote_code=True` (`AutoModel`, else `AutoModelForCausalLM`). Never prompts nor loads code itself.
+        """
+        backbone_code = ClefConfig.backbone_code(text_config)
+        if backbone_code is None:
+            return AutoModel.from_config(text_config)
+        _, auto_class = ClefForDecision._backbone_auto_class(backbone_code, text_config)
+        if isinstance(text_config, dict) or type(text_config) not in auto_class._model_mapping:
+            model_type = text_config.get("model_type") if isinstance(text_config, dict) else text_config.model_type
+            raise ValueError(
+                f"The backbone {model_type!r} is defined by its checkpoint's own code ({backbone_code}), which is not "
+                "loaded. Load the saved model with `ClefForDecision.from_pretrained(folder, trust_remote_code=True)` "
+                "(which runs that code), or build it around a backbone loaded with `trust_remote_code=True`: "
+                "`ClefForDecision(config, model=backbone)`."
+            )
+        return auto_class.from_config(text_config, trust_remote_code=False)  # the registered class
+
+    @classmethod
+    def _load_backbone_code(cls, text_config, source, kwargs: dict) -> type[PreTrainedConfig]:
+        """
+        Loads the config and model classes of a backbone of its checkpoint's own code, only when `kwargs` has
+        `trust_remote_code=True`, and registers them with `AutoConfig` and the auto class that rebuilds the backbone,
+        as the auto classes do: the rest of the loading is the one of any backbone. Returns the config class.
+        """
+        backbone_code = ClefConfig.backbone_code(text_config)
+        model_type = text_config.get("model_type") if isinstance(text_config, dict) else text_config.model_type
+        key, auto_class = cls._backbone_auto_class(backbone_code, text_config)
+        if not isinstance(backbone_code.get("AutoConfig"), str):
+            raise ValueError(
+                f"The backbone {model_type!r} of {source} is defined by its checkpoint's own code, whose `auto_map` "
+                f"names no `AutoConfig` class ({backbone_code}): it cannot be rebuilt."
+            )
+        references = [backbone_code["AutoConfig"], backbone_code[key]]
+        local = os.path.abspath(source) if os.path.isdir(source) else source
+        origins = sorted({reference.split("--")[0] if "--" in reference else local for reference in references})
+        if kwargs.get("trust_remote_code") is not True:
+            raise ValueError(
+                f"The backbone of the Clef model {source} ({model_type!r}) is defined by code that is not part of "
+                f"transformers: {', '.join(references)}, from {', '.join(origins)}. Loading the model runs that code: "
+                "read it, then pass `trust_remote_code=True` to allow it."
+            )
+        hub_kwargs = {
+            name: kwargs[name]
+            for name in ("cache_dir", "force_download", "proxies", "token", "revision", "local_files_only")
+            if name in kwargs
+        }
+        code_revision = kwargs.get("code_revision")
+        config_class = get_class_from_dynamic_module(references[0], source, code_revision=code_revision, **hub_kwargs)
+        model_class = get_class_from_dynamic_module(references[1], source, code_revision=code_revision, **hub_kwargs)
+        AutoConfig.register(model_type, config_class, exist_ok=True)
+        auto_class.register(config_class, model_class, exist_ok=True)
+        config_class.register_for_auto_class()
+        model_class.register_for_auto_class(auto_class)
+        return config_class
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, config=None, **kwargs):
+        r"""
+        Also loads a model whose backbone is defined by its checkpoint's own code (its `text_config` has a `model_type`
+        that is not one of transformers' and an `auto_map`), only with `trust_remote_code=True`: the code its `auto_map`
+        names is loaded, from the repository it names or else from the folder of the model, and registered, then the
+        model loads as any other. Without it, raises once its config is read, before any code or weight is.
+        """
+        source = "" if pretrained_model_name_or_path is None else os.fspath(pretrained_model_name_or_path)
+        code_revision = kwargs.pop("code_revision", None)
+        text_config = None
+        if isinstance(config, ClefConfig):
+            text_config = config.text_config
+        elif (
+            config is None and source
+        ):  # the raw config, which runs nothing, to find a backbone of remote code before loading
+            config_kwargs = {
+                name: kwargs[name]
+                for name in ("cache_dir", "force_download", "proxies", "token", "revision", "local_files_only")
+                if name in kwargs
+            }
+            if "subfolder" in kwargs:
+                config_kwargs["subfolder"] = kwargs["subfolder"]
+            config_dict, _ = PreTrainedConfig.get_config_dict(source, **config_kwargs)
+            if config_dict.get("model_type") == ClefConfig.model_type:
+                text_config = config_dict.get("text_config")
+        if ClefConfig.backbone_code(text_config) is not None:
+            config_class = cls._load_backbone_code(text_config, source, {**kwargs, "code_revision": code_revision})
+            if isinstance(config, ClefConfig) and isinstance(config.text_config, dict):
+                config.text_config = config_class(**config.text_config)
+                config.tie_word_embeddings = config.tie_word_embeddings or getattr(
+                    config.text_config, "tie_word_embeddings", False
+                )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+
+    def save_pretrained(self, save_directory, *args, **kwargs):
+        """
+        Also saves what finds the code of a backbone defined by its checkpoint's own code again: the `auto_map` of its
+        config names the repository of that code when the backbone came from the Hub, and otherwise its code files are
+        saved next to the model, as for any model of custom code.
+        """
+        text_config = self.config.text_config
+        backbone_code = ClefConfig.backbone_code(text_config)
+        if backbone_code is None or not kwargs.get("is_main_process", True):
+            return super().save_pretrained(save_directory, *args, **kwargs)
+        local = {
+            key for key, reference in backbone_code.items() if isinstance(reference, str) and "--" not in reference
+        }
+        repository = getattr(text_config, "_name_or_path", "") or ""
+        auto_map = text_config.auto_map
+        if local and repository and not os.path.isdir(repository) and _is_repo_id(repository):
+            # Loaded from the Hub: the references name its repository
+            text_config.auto_map = {
+                key: f"{repository}--{reference}" if key in local else reference for key, reference in auto_map.items()
+            }
+        elif local:  # loaded from a folder: its code is saved next to the model
+            if kwargs.get("push_to_hub"):
+                raise ValueError(
+                    "The code of the backbone is saved next to the model, which `push_to_hub=True` would not upload: "
+                    "save the model to a folder, then upload the folder (`huggingface_hub.upload_folder`)."
+                )
+            os.makedirs(save_directory, exist_ok=True)
+            for obj in (text_config, self.model):
+                custom_object_save(obj, save_directory)
+            key, _ = self._backbone_auto_class(backbone_code, text_config)
+            for name in ("AutoConfig", key):
+                reference = backbone_code.get(name)
+                if name in local and not Path(save_directory, f"{reference.split('.')[0]}.py").is_file():
+                    raise ValueError(
+                        f"The code of the backbone ({name}: {reference}) could not be saved next to the model: its "
+                        f"classes are defined in {type(text_config).__module__} and {type(self.model).__module__}. "
+                        "Load the backbone from a folder or repository of its code with `trust_remote_code=True`."
+                    )
+        try:
+            return super().save_pretrained(save_directory, *args, **kwargs)
+        finally:
+            text_config.auto_map = auto_map
 
     @staticmethod
     def _check_inputs(input_ids, marks, num_options, question_options, option_mask, given_option_mask, labels):
@@ -746,9 +1039,9 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 torch.arange(int(question_options.max()), device=num_options.device) < question_options[:, None]
             )
         self._check_inputs(input_ids, marks, num_options, question_options, option_mask, given_option_mask, labels)
-        hidden_states = self.model(
+        hidden_states = self.backbone_hidden_states(
             input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, use_cache=False, **kwargs
-        ).last_hidden_state
+        )
         positions = torch.arange(max_options, device=num_options.device)
         is_option = positions < option_ends[:, -1:]
         positions = positions.expand(len(num_options), -1).contiguous()
