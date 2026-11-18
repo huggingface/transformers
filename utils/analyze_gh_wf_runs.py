@@ -192,6 +192,28 @@ def extract_failures(log):
     return [test_id for test_id, _ in extract_failures_with_errors(log)]
 
 
+# pytest's final line, e.g. "======== 3 failed, 95 passed, 19 warnings, 17 subtests passed in 8.85s ========"
+_FINAL_LINE_RE = re.compile(r"^=+ (.+) in [\d.]+s(?: \([\d:]+\))? =+$")
+_COUNT_RE = re.compile(r"(\d+) (passed|failed|skipped|errors?)\b")
+
+
+def extract_test_counts(log):
+    """
+    Return the test counts {"passed", "failed", "errors", "skipped"} from pytest's final line(s), summed over all
+    pytest runs in the log, or None if the log has no final line (e.g. the job was killed before pytest finished).
+    """
+    counts = None
+    for line in log.splitlines():
+        m = _FINAL_LINE_RE.match(_strip_timestamp(line).strip())
+        if not m:
+            continue
+        if counts is None:
+            counts = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0}
+        for number, kind in _COUNT_RE.findall(m.group(1)):
+            counts["errors" if kind.startswith("error") else kind] += int(number)
+    return counts
+
+
 # Prefix of failure-block headers for errors outside the test call, e.g. "ERROR at setup of TestFoo.test_bar".
 _BLOCK_ERROR_PREFIX_RE = re.compile(r"^ERROR at (?:setup|teardown) of ")
 
