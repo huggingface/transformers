@@ -297,7 +297,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             set_nan_tensor_to_zero(dict_object),
                             atol=1e-5,
                             rtol=1e-5,
-                            msg=(
+                            msg=lambda _: (
                                 "Tuple and dict output are not equal. Difference:"
                                 f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
                                 f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
