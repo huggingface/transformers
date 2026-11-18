@@ -22,11 +22,11 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    FuseWeightNorm,
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
     Interleave,
     MergeModulelist,
-    MergeWeightNorm,
     PermuteForRope,
     PrefixChange,
     Split,
@@ -2233,7 +2233,7 @@ def _build_checkpoint_conversion_mapping():
         WeightConverter(
             ["parametrizations.weight.original0", "parametrizations.weight.original1"],
             "weight",
-            operations=[MergeWeightNorm(dim=0)],
+            operations=[FuseWeightNorm()],
         )
     )
 

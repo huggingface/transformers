@@ -31,10 +31,10 @@ from transformers.core_model_loading import (
     Conv3dToLinear,
     ConversionOps,
     ErnieFuseAndSplitTextVisionExperts,
+    FuseWeightNorm,
     GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
-    MergeWeightNorm,
     PermuteForRope,
     PrefixChange,
     Split,
@@ -1507,7 +1507,7 @@ class TestConversionMapping(unittest.TestCase):
 
     def test_weight_norm_conversion_ops(self):
         source_patterns = ["parametrizations.weight.original0", "parametrizations.weight.original1"]
-        merge = MergeWeightNorm(dim=0)
+        fuse = FuseWeightNorm()
         for conv in (nn.Conv1d(4, 6, kernel_size=3), nn.ConvTranspose1d(6, 4, kernel_size=4, stride=2)):
             conv = nn.utils.parametrizations.weight_norm(conv)
             weight_g = torch.rand_like(conv.parametrizations.weight.original0) + 0.5
@@ -1518,11 +1518,11 @@ class TestConversionMapping(unittest.TestCase):
 
             # test weight_g, weight_v -> weight, as computed by the parametrization
             input_dict = dict(zip(source_patterns, [weight_g, weight_v]))
-            weight = merge.convert(input_dict, source_patterns, ["weight"])["weight"]
+            weight = fuse.convert(input_dict, source_patterns, ["weight"])["weight"]
             torch.testing.assert_close(weight, conv.weight.detach())
             # test weight -> weight_g, weight_v -> weight round trip
-            split = merge.reverse_op.convert({"weight": weight}, ["weight"], source_patterns)
-            torch.testing.assert_close(merge.convert(split, source_patterns, ["weight"])["weight"], weight)
+            unfused = fuse.reverse_op.convert({"weight": weight}, ["weight"], source_patterns)
+            torch.testing.assert_close(fuse.convert(unfused, source_patterns, ["weight"])["weight"], weight)
 
     def test_register_checkpoint_conversion_mapping(self):
         register_checkpoint_conversion_mapping(
