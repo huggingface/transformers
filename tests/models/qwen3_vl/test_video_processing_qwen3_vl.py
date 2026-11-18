@@ -439,3 +439,20 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             video_grid_thw = video_processed["video_grid_thw"]
             self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
+
+    def test_smart_resize_respects_max_pixels_after_temporal_padding(self):
+        # Frames are padded up to a multiple of temporal_patch_size, so the
+        # pixel budget must be evaluated for the padded frame count (#50871).
+        max_pixels = 32 * 32 * 768 * 64
+        for num_frames, temporal_factor in ((57, 2), (33, 2), (281, 4)):
+            padded_frames = -(-num_frames // temporal_factor) * temporal_factor
+            height, width = smart_resize(
+                num_frames=num_frames,
+                height=720,
+                width=1280,
+                temporal_factor=temporal_factor,
+                factor=32,
+                min_pixels=4096,
+                max_pixels=max_pixels,
+            )
+            self.assertLessEqual(padded_frames * height * width, max_pixels)
