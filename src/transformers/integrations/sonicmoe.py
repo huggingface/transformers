@@ -21,6 +21,7 @@ Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 from __future__ import annotations
 
 import importlib.metadata
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -169,6 +170,9 @@ def sonicmoe_experts_forward(
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
     if self.has_post_expert_norm:
         raise ValueError("The `sonicmoe` experts implementation does not support experts with a post-expert norm.")
+    limit = getattr(self, "limit", None)
+    if limit is not None and math.isfinite(limit):
+        raise ValueError("The `sonicmoe` experts implementation does not support expert clipping.")
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)

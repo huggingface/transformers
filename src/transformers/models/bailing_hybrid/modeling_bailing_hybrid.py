@@ -950,11 +950,6 @@ class BailingHybridPreTrainedModel(PreTrainedModel):
         elif isinstance(module, BailingHybridRMSNormGated):
             init.ones_(module.weight)
 
-    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
-        if requested_experts == "sonicmoe" and any(self.config.expert_swiglu_limit_list or []):
-            raise ValueError("SonicMoE does not support Ling's post-activation SwiGLU clipping.")
-        return super().get_correct_experts_implementation(requested_experts)
-
 
 @auto_docstring
 class BailingHybridModel(BailingHybridPreTrainedModel):

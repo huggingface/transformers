@@ -218,13 +218,6 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(model.model.layers[0].mlp.shared_experts.limit, 2.5)
         self.assertEqual(model.model.layers[1].mlp.shared_experts.limit, float("inf"))
 
-    def test_sonicmoe_rejects_unsupported_clipping(self):
-        config = self.model_tester.get_config()
-        config.expert_swiglu_limit_list = [0, 10]
-        model = BailingHybridForCausalLM(config)
-        with self.assertRaisesRegex(ValueError, "post-activation SwiGLU clipping"):
-            model.set_experts_implementation("sonicmoe")
-
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
         for q_lora_rank in (None, 12):
