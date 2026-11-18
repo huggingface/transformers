@@ -87,6 +87,7 @@ class DebertaV2Tokenizer(TokenizersBackend):
         mask_token="[MASK]",
         add_prefix_space=True,
         unk_id=1,
+        _spm_precompiled_charsmap: bytes | None = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
@@ -119,6 +120,10 @@ class DebertaV2Tokenizer(TokenizersBackend):
         list_normalizers = []
         if do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
+        # SentencePiece's own normalization (nmt_nfkc for DeBERTa-v3): without it, compatibility characters such as
+        # ligatures, fullwidth letters and circled digits are not folded and encode to [UNK]
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
 
         list_normalizers.extend(
             [
