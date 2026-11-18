@@ -654,6 +654,7 @@ class HunYuanVLPreTrainedModel(PreTrainedModel):
             init.normal_(module.image_sep, mean=0.0, std=embed_std)
 
 
+@auto_docstring
 class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
     """
     HunYuanVL vision tower: patch embedding -> transformer blocks -> per-image patch merger.
