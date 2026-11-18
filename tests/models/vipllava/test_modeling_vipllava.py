@@ -279,8 +279,12 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         model_id = "llava-hf/vip-llava-7b-hf"
 
+        # The checkpoint's config stores `vision_feature_layer=-2`, but its projector was trained on the five
+        # layers below (its `projector_layernorm` weight is 5 * hidden_size), so override the stale value.
         model = VipLlavaForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            vision_feature_layer=[-2, -5, -8, -11, 6],
         )
         processor = AutoProcessor.from_pretrained(model_id)
 
