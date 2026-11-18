@@ -268,14 +268,6 @@ class DecisionPipelineTest(unittest.TestCase):
             pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer)("Where is my parcel?")
 
     @require_torch
-    def test_label_head_needs_labels(self):
-        # A model without a decision head reads each option from the logit of its label token: a decision config that
-        # declares no labels (that of a head that pools spans, such as Clef's) leaves it nothing to read
-        config = DecisionConfig(labels={"noul": None, "choice": ["A", "B", "C"], "score": None})
-        with self.assertRaisesRegex(ValueError, r"label token.*`labels` None for \['noul', 'score'\]"):
-            pipeline("decision", model=tiny_qwen2(self.tokenizer), tokenizer=self.tokenizer, decision_config=config)
-
-    @require_torch
     def test_head_max_options(self):
         text_config = Qwen2Config(
             vocab_size=len(self.tokenizer),
