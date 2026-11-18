@@ -538,15 +538,16 @@ class Inkling2LoopBlockAttentionResidual(Inkling2BlockAttentionResidual):
 
 
 class Inkling2LoopSlidingDecoderLayer(Inkling2SlidingDecoderLayer):
+    pass
+
+
+class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # TODO: split into two classes or assign identity?
-        loop_config = config.loop_config
-        if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
-            self.q_controller = Inkling2LoopMessageController(config)
-            self.k_controller = Inkling2LoopMessageController(config)
-            self.v_controller = Inkling2LoopMessageController(config)
-            self.mlp_controller = Inkling2LoopMessageController(config)
+        self.q_controller = Inkling2LoopMessageController(config)
+        self.k_controller = Inkling2LoopMessageController(config)
+        self.v_controller = Inkling2LoopMessageController(config)
+        self.mlp_controller = Inkling2LoopMessageController(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -612,15 +613,16 @@ class Inkling2LoopSlidingDecoderLayer(Inkling2SlidingDecoderLayer):
 
 
 class Inkling2LoopFullDecoderLayer(Inkling2FullDecoderLayer):
+    pass
+
+
+class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        loop_config = config.loop_config
-
-        if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
-            self.q_controller = Inkling2LoopMessageController(config)
-            self.k_controller = Inkling2LoopMessageController(config)
-            self.v_controller = Inkling2LoopMessageController(config)
-            self.mlp_controller = Inkling2LoopMessageController(config)
+        self.q_controller = Inkling2LoopMessageController(config)
+        self.k_controller = Inkling2LoopMessageController(config)
+        self.v_controller = Inkling2LoopMessageController(config)
+        self.mlp_controller = Inkling2LoopMessageController(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -696,6 +698,8 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
     _no_split_modules = [
         "Inkling2LoopSlidingDecoderLayer",
         "Inkling2LoopFullDecoderLayer",
+        "Inkling2LoopSlidingLoopDecoderLayer",
+        "Inkling2LoopFullLoopDecoderLayer",
     ]
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -714,7 +718,12 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
     _can_record_outputs = {
         # one hidden state per layer visit: the core layers once per pass
         "hidden_states": OutputRecorder(
-            (Inkling2LoopSlidingDecoderLayer, Inkling2LoopFullDecoderLayer),
+            (
+                Inkling2LoopSlidingDecoderLayer,
+                Inkling2LoopFullDecoderLayer,
+                Inkling2LoopSlidingLoopDecoderLayer,
+                Inkling2LoopFullLoopDecoderLayer,
+            ),
             num_hidden_layers_key="total_num_hidden_layers",
         ),
         "attentions": [Inkling2LoopSlidingAttention, Inkling2LoopFullAttention],
@@ -747,6 +756,15 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
 class Inkling2LoopTextModel(Inkling2TextModel):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__(config)
+        loop_config = config.loop_config
+        self.layers = nn.ModuleList()
+        for layer_idx in range(config.num_hidden_layers):
+            is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
+            if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
+                layer_class = Inkling2LoopSlidingLoopDecoderLayer if is_sliding else Inkling2LoopFullLoopDecoderLayer
+            else:
+                layer_class = Inkling2LoopSlidingDecoderLayer if is_sliding else Inkling2LoopFullDecoderLayer
+            self.layers.append(layer_class(config, layer_idx))
         self.cross_pass_messages = Inkling2LoopCrossPassMessages(config)
 
     @merge_with_config_defaults
@@ -812,7 +830,6 @@ class Inkling2LoopTextModel(Inkling2TextModel):
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
         for layer_idx, loop_idx in layer_and_loop_indices:
             decoder_layer = self.layers[layer_idx]
-            cache_layer_idx = cache_layer_indices[layer_idx][loop_idx]
 
             if layer_idx == loop_layer_index_start and loop_idx == 0:
                 pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
@@ -823,18 +840,18 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 )
                 hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
 
-            messages = None
+            messages = []
             if loop_idx > 0:
-                messages = self.cross_pass_messages(message_bank, layer_idx - loop_layer_index_start)
+                messages.append(self.cross_pass_messages(message_bank, layer_idx - loop_layer_index_start))
 
             new_hidden_states = decoder_layer(
                 hidden_states,
                 block_states,
-                messages,
+                *messages,  # pass positionally for gradient checkpointing
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
-                cache_layer_idx=cache_layer_idx,
+                cache_layer_idx=cache_layer_indices[layer_idx][loop_idx],
                 position_ids=position_ids,
                 **kwargs,
             )

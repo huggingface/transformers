@@ -92,11 +92,11 @@ class Inkling2LoopCrossPassMessages(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
         # TODO: inline?
-        num_core_layers = config.loop_config["core_end"] - config.loop_config["core_start"]
+        num_looped_layers = config.loop_config["core_end"] - config.loop_config["core_start"]
         # rows `2 * i` and `2 * i + 1` belong to core layer `i`: its query and MLP inputs in `queries`, its key and
         # value inputs in `kv_queries`
-        self.queries = nn.Parameter(torch.zeros(2 * num_core_layers, config.hidden_size))
-        self.kv_queries = nn.Parameter(torch.zeros(2 * num_core_layers, config.hidden_size))
+        self.queries = nn.Parameter(torch.zeros(2 * num_looped_layers, config.hidden_size))
+        self.kv_queries = nn.Parameter(torch.zeros(2 * num_looped_layers, config.hidden_size))
         self.norm = Inkling2LoopUnweightedRMSNorm()
 
     def forward(self, message_bank: torch.Tensor, loop_layer_idx: int) -> torch.Tensor:
@@ -204,7 +204,7 @@ class Inkling2LoopShortConvolution(nn.Module):
             Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
             its own.
         """
-        # Only diff from Inkling2 is the cache_layer_idx
+        # Only difference from Inkling2 is the cache_layer_idx
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_dtype = hidden_states.dtype
@@ -272,7 +272,7 @@ class Inkling2LoopDynamicShortConvolution(nn.Module):
             Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
             its own.
         """
-        # Only diff from Inkling2 is the cache_layer_idx
+        # Only difference from Inkling2 is the cache_layer_idx
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_dtype = hidden_states.dtype
@@ -455,10 +455,8 @@ class Inkling2LoopSlidingAttention(nn.Module):
             Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
             pass through the loop core has its own.
         """
-        # Diff from Inkling2
+        # Different from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
-
-        # TODO: move this to Inkling2 which would also match the full attention class?
         key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
         value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
 
@@ -588,7 +586,7 @@ class Inkling2LoopFullAttention(nn.Module):
             Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
             pass through the loop core has its own.
         """
-        # Diff from Inkling2
+        # Different from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_shape = hidden_states.shape[:-1]
@@ -804,13 +802,65 @@ class Inkling2LoopSlidingDecoderLayer(GradientCheckpointingLayer):
         self.post_mlp_convolution = Inkling2LoopShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         )
-        # TODO: split into two classes or assign identity?
-        loop_config = config.loop_config
-        if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
-            self.q_controller = Inkling2LoopMessageController(config)
-            self.k_controller = Inkling2LoopMessageController(config)
-            self.v_controller = Inkling2LoopMessageController(config)
-            self.mlp_controller = Inkling2LoopMessageController(config)
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        block_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        conv_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        dtype = hidden_states.dtype
+        block_residual = hidden_states
+        if self.attention_input is not None:
+            hidden_states = self.attention_input(block_states, hidden_states)[0]
+
+        hidden_states, _ = self.self_attn(
+            hidden_states=self.input_layernorm(hidden_states).to(dtype),
+            attention_mask=attention_mask,
+            conv_mask=conv_mask,
+            cache=cache,
+            **kwargs,
+        )
+        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+
+        residual = hidden_states = hidden_states.float()
+        if self.is_block_boundary:
+            block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
+        else:
+            residual = hidden_states = block_residual.float() + hidden_states
+
+        hidden_states = self.mlp_input(block_states, hidden_states)[0]
+        hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
+        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+        return (residual + hidden_states).to(dtype)
+
+
+class Inkling2LoopSlidingLoopDecoderLayer(GradientCheckpointingLayer):
+    attention_type = "sliding_attention"
+
+    def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
+        super().__init__()
+        self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
+        self.attention_input = Inkling2LoopBlockAttentionResidual(config) if layer_idx > 0 else None
+        self.mlp_input = Inkling2LoopBlockAttentionResidual(config)
+        self.self_attn = Inkling2LoopSlidingAttention(config, layer_idx)
+        self.mlp = Inkling2LoopSparseMoeBlock(config)
+        self.input_layernorm = Inkling2LoopRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Inkling2LoopRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_convolution = Inkling2LoopShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
+        )
+        self.post_mlp_convolution = Inkling2LoopShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
+        )
+        self.q_controller = Inkling2LoopMessageController(config)
+        self.k_controller = Inkling2LoopMessageController(config)
+        self.v_controller = Inkling2LoopMessageController(config)
+        self.mlp_controller = Inkling2LoopMessageController(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -895,13 +945,73 @@ class Inkling2LoopFullDecoderLayer(GradientCheckpointingLayer):
         self.post_mlp_convolution = Inkling2LoopShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         )
-        loop_config = config.loop_config
 
-        if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
-            self.q_controller = Inkling2LoopMessageController(config)
-            self.k_controller = Inkling2LoopMessageController(config)
-            self.v_controller = Inkling2LoopMessageController(config)
-            self.mlp_controller = Inkling2LoopMessageController(config)
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        block_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        conv_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        dtype = hidden_states.dtype
+        block_residual = hidden_states
+        if self.attention_input is None:
+            query_hidden_states = key_hidden_states = value_hidden_states = hidden_states
+        else:
+            query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(
+                block_states, hidden_states
+            )
+
+        hidden_states, _ = self.self_attn(
+            hidden_states=self.q_input_layernorm(query_hidden_states).to(dtype),
+            key_hidden_states=self.k_input_layernorm(key_hidden_states).to(dtype),
+            value_hidden_states=self.v_input_layernorm(value_hidden_states).to(dtype),
+            attention_mask=attention_mask,
+            conv_mask=conv_mask,
+            cache=cache,
+            **kwargs,
+        )
+        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+
+        residual = hidden_states = hidden_states.float()
+        if self.is_block_boundary:
+            block_states = torch.cat([block_states, block_residual.unsqueeze(-2)], dim=-2)
+        else:
+            residual = hidden_states = block_residual.float() + hidden_states
+
+        hidden_states = self.mlp_input(block_states, hidden_states)[0]
+        hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
+        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+        return (residual + hidden_states).to(dtype)
+
+
+class Inkling2LoopFullLoopDecoderLayer(GradientCheckpointingLayer):
+    attention_type = "full_attention"
+
+    def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
+        super().__init__()
+        self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
+        self.attention_input = Inkling2LoopBlockAttentionResidual(config, num_queries=3) if layer_idx > 0 else None
+        self.mlp_input = Inkling2LoopBlockAttentionResidual(config)
+        self.self_attn = Inkling2LoopFullAttention(config, layer_idx)
+        self.mlp = Inkling2LoopSparseMoeBlock(config)
+        self.q_input_layernorm = Inkling2LoopRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.k_input_layernorm = Inkling2LoopRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.v_input_layernorm = Inkling2LoopRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Inkling2LoopRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_convolution = Inkling2LoopShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
+        )
+        self.post_mlp_convolution = Inkling2LoopShortConvolution(
+            config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
+        )
+        self.q_controller = Inkling2LoopMessageController(config)
+        self.k_controller = Inkling2LoopMessageController(config)
+        self.v_controller = Inkling2LoopMessageController(config)
+        self.mlp_controller = Inkling2LoopMessageController(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -999,6 +1109,8 @@ class Inkling2LoopPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "Inkling2LoopSlidingDecoderLayer",
         "Inkling2LoopFullDecoderLayer",
+        "Inkling2LoopSlidingLoopDecoderLayer",
+        "Inkling2LoopFullLoopDecoderLayer",
     ]
     _skip_keys_device_placement = ["cache"]
     # The relative position bias flows through the attention interface as a `position_bias` (duh)
@@ -1025,7 +1137,12 @@ class Inkling2LoopPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         # one hidden state per layer visit: the core layers once per pass
         "hidden_states": OutputRecorder(
-            (Inkling2LoopSlidingDecoderLayer, Inkling2LoopFullDecoderLayer),
+            (
+                Inkling2LoopSlidingDecoderLayer,
+                Inkling2LoopFullDecoderLayer,
+                Inkling2LoopSlidingLoopDecoderLayer,
+                Inkling2LoopFullLoopDecoderLayer,
+            ),
             num_hidden_layers_key="total_num_hidden_layers",
         ),
         "attentions": [Inkling2LoopSlidingAttention, Inkling2LoopFullAttention],
@@ -1075,17 +1192,18 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
         self.embed_tokens = Inkling2LoopNormedEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
         )
-        self.layers = nn.ModuleList(
-            [
-                Inkling2LoopSlidingDecoderLayer(config, layer_idx)
-                if config.layer_types[layer_idx] == "hybrid_sliding"
-                else Inkling2LoopFullDecoderLayer(config, layer_idx)
-                for layer_idx in range(config.num_hidden_layers)
-            ]
-        )
+        self.layers = nn.ModuleList()
         self.norm = Inkling2LoopRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         self.final_input = Inkling2LoopBlockAttentionResidual(config)
+        loop_config = config.loop_config
+        for layer_idx in range(config.num_hidden_layers):
+            is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
+            if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
+                layer_class = Inkling2LoopSlidingLoopDecoderLayer if is_sliding else Inkling2LoopFullLoopDecoderLayer
+            else:
+                layer_class = Inkling2LoopSlidingDecoderLayer if is_sliding else Inkling2LoopFullDecoderLayer
+            self.layers.append(layer_class(config, layer_idx))
         self.cross_pass_messages = Inkling2LoopCrossPassMessages(config)
 
         # Initialize weights and apply final processing
@@ -1154,7 +1272,6 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
         for layer_idx, loop_idx in layer_and_loop_indices:
             decoder_layer = self.layers[layer_idx]
-            cache_layer_idx = cache_layer_indices[layer_idx][loop_idx]
 
             if layer_idx == loop_layer_index_start and loop_idx == 0:
                 pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
@@ -1165,18 +1282,18 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
                 )
                 hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
 
-            messages = None
+            messages = []
             if loop_idx > 0:
-                messages = self.cross_pass_messages(message_bank, layer_idx - loop_layer_index_start)
+                messages.append(self.cross_pass_messages(message_bank, layer_idx - loop_layer_index_start))
 
             new_hidden_states = decoder_layer(
                 hidden_states,
                 block_states,
-                messages,
+                *messages,  # pass positionally for gradient checkpointing
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
-                cache_layer_idx=cache_layer_idx,
+                cache_layer_idx=cache_layer_indices[layer_idx][loop_idx],
                 position_ids=position_ids,
                 **kwargs,
             )
