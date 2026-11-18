@@ -39,7 +39,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaForSequenceClassification, eager_attention_forward
 from ..mamba.modeling_mamba import (
     MambaRMSNorm,
     causal_conv1d_fn,
@@ -48,7 +48,7 @@ from ..mamba.modeling_mamba import (
     mamba_selective_scan,
     mamba_selective_state_update,
 )
-from ..mistral.modeling_mistral import MistralForSequenceClassification, MistralMLP
+from ..mistral.modeling_mistral import MistralMLP
 from .configuration_zamba import ZambaConfig
 
 
@@ -734,7 +734,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-class ZambaForSequenceClassification(MistralForSequenceClassification):
+class ZambaForSequenceClassification(LlamaForSequenceClassification):
     pass
 
 
