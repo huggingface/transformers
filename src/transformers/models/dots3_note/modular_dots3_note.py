@@ -598,7 +598,6 @@ class Dots3NotePreTrainedModel(DeepseekV32PreTrainedModel):
         r"^model\.(language_model\.)?mtp\.",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Dots3NoteTextTopkRouter):
@@ -925,7 +924,6 @@ class Dots3NoteVisionPreTrainedModel(Qwen2VLPreTrainedModel):
     _no_split_modules = ["Dots3NoteVisionBlock"]
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Dots3NoteVisionTopKRouter):

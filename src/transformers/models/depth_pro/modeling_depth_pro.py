@@ -610,7 +610,6 @@ class DepthProPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DepthProPreActResidualLayer"]
     _keys_to_ignore_on_load_unexpected = ["fov_model.*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

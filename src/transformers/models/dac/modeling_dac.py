@@ -480,7 +480,6 @@ class DacPreTrainedModel(PreTrainedAudioTokenizerBase):
     main_input_name = "input_values"
     _no_split_modules = ["DacResidualUnit"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv1d):
             init.trunc_normal_(module.weight, std=0.02)

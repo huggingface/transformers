@@ -1221,7 +1221,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
-    _skip_keys_device_placement = ["cache"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
     # 2. linear attention not being considered atm
@@ -1245,7 +1244,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     ]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Glm5NextTextForgetGate):

@@ -264,17 +264,14 @@ class ModelRunner:
             max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
             total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
 
-            # Exit here if the decode fast path is not available
-            if self.cache.max_decode_fast_path_length <= 0:
-                continue
-
-            # Warm up the decode path
-            num_requests = 1
-            while True:
-                total_duration += self.run_one_warmup(model=model, num_q_tokens=num_requests, max_kv_read=None)
-                if num_requests >= self.cb_config.max_requests_per_batch:
-                    break
-                num_requests = min(2 * num_requests, self.cb_config.max_requests_per_batch)
+            # Warm up the decode fast path if it is available
+            if self.cache.max_decode_fast_path_length > 0:
+                num_requests = 1
+                while True:
+                    total_duration += self.run_one_warmup(model=model, num_q_tokens=num_requests, max_kv_read=None)
+                    if num_requests >= self.cb_config.max_requests_per_batch:
+                        break
+                    num_requests = min(2 * num_requests, self.cb_config.max_requests_per_batch)
 
             # Switch to the other IO pair if this is async
             if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
