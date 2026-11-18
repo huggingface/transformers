@@ -347,6 +347,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 (None, None): ["mr crilger is the apostle of the middle classes and we're glad to welcome his gospel"],
+                ("cuda", 8): ["mr quilter is the apostle of the middle classes and we're glad to welcome his gospel"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -368,6 +369,12 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
                 (None, None): [
                     "Two tabby cats are peacefully sleeping on a",
                     "mr crilger is the apostle of the",
+                    "Bern",
+                    "The image shows two cats lying on a pink couch",
+                ],
+                ("cuda", 8): [
+                    "Two tabby cats are peacefully sleeping on a",
+                    "mr quilter is the apostle of the middle",
                     "Bern",
                     "The image shows two cats lying on a pink couch",
                 ],
