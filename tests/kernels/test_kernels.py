@@ -27,6 +27,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 from parameterized import parameterized
+from torch._subclasses.fake_tensor import FakeTensorMode
 
 from tests.test_memory_cleanup_mixin import MemoryCleanupTestCase
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
@@ -732,6 +733,43 @@ class TestKernelUtilities(TestCasePlus):
         self.assertTrue(
             torch.equal(self._make_fallback_func(fake_op)(*inputs, cu_seqlens=cu_seqlens), torch.full((4,), 30.0))
         )
+
+
+# Not gated on `kernels`: the package fallback works without it, so this also runs in the CPU CI
+class TestKernelFallbackDevices(TestCasePlus):
+    def test_fallback_uses_torch_implementation_on_unsupported_devices(self):
+        """With a CUDA-only package such as `causal-conv1d` installed, CPU inputs take the torch path instead of failing
+        in the package, and refuse packed sequences there as they do without it. CUDA inputs, faked so that no GPU is
+        needed, still reach the package."""
+
+        def kernel(x, weight, bias=None, seq_idx=None, activation=None):
+            if not x.is_cuda:
+                raise RuntimeError("Expected x.is_cuda() to be true, but got false.")
+            return x
+
+        def causal_conv1d_fn(hidden_states, weight, bias=None, activation=None, **kwargs):
+            return hidden_states * 2
+
+        package = types.ModuleType("causal_conv1d")
+        package.causal_conv1d_fn = kernel
+        with patch.dict(sys.modules, {"causal_conv1d": package}):
+            decorated = use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")(causal_conv1d_fn)
+
+        class Wrapper(torch.nn.Module):
+            def forward(self, hidden_states, weight):
+                return decorated(hidden_states, weight)
+
+        hidden_states, weight = torch.ones(1, 8, 6), torch.ones(8, 4)
+        self.assertTrue(torch.equal(decorated(hidden_states, weight), hidden_states * 2))
+        self.assertTrue(torch.equal(decorated(hidden_states=hidden_states, weight=weight), hidden_states * 2))
+        compiled = torch.compile(Wrapper(), backend="eager", fullgraph=True)
+        self.assertTrue(torch.equal(compiled(hidden_states, weight), hidden_states * 2))
+        with self.assertRaisesRegex(ValueError, "packed sequences"):
+            decorated(hidden_states, weight, seq_idx=torch.zeros(1, 6, dtype=torch.int32))
+
+        with FakeTensorMode():
+            hidden_states, weight = torch.ones(1, 8, 6, device="cuda"), torch.ones(8, 4, device="cuda")
+            self.assertIs(decorated(hidden_states, weight), hidden_states)
 
 
 @require_kernels
