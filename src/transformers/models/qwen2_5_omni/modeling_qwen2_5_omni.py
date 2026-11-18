@@ -45,7 +45,7 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -134,7 +134,6 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5OmniDecoderLayer", "Qwen2_5OmniVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False
@@ -716,16 +715,7 @@ class SinusoidsPositionEmbedding(nn.Module):
 
 def get_audio_chunk_lengths(feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
     """Length of each `n_window * 2`-frame chunk the audios are split into (the last one of each audio may be
-    shorter), or pop `"chunk_lengths"` from `kwargs` if precomputed.
-
-    Args:
-        feature_lens: `(batch_size,)` per-sample frame counts.
-        n_window: half the target chunk size in frames.
-        kwargs: optional caller kwargs — if it contains `"chunk_lengths"` it is popped and returned.
-
-    Returns:
-        `(num_chunks,)` length of each chunk.
-    """
+    shorter), or pop `"chunk_lengths"` from `kwargs` if precomputed."""
     if kwargs is not None and (chunk_lengths := kwargs.pop("chunk_lengths", None)) is not None:
         return chunk_lengths
     chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
@@ -759,7 +749,6 @@ def chunk_and_pad_features(
     if padded_feature is not None:
         return padded_feature, chunk_lengths
 
-    # Each chunk's frames, right-padded with zeros to the longest chunk
     chunk_index = get_audio_chunk_index(chunk_lengths, kwargs=kwargs)
     padding_mask = torch.arange(chunk_index.shape[1], device=chunk_index.device) < chunk_lengths[:, None]
     padded_feature = input_features[:, chunk_index.clamp(max=input_features.shape[1] - 1)] * padding_mask
@@ -768,16 +757,7 @@ def chunk_and_pad_features(
 
 def get_audio_chunk_index(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
     """Gather index of each chunk's frames in the concatenated features, right-padded to the longest chunk, or pop
-    `"chunk_index"` from `kwargs` if precomputed.
-
-    Args:
-        chunk_lengths: `(num_chunks,)` length of each chunk.
-        kwargs: optional caller kwargs — if it contains `"chunk_index"` it is popped and returned.
-
-    Returns:
-        `(num_chunks, max_chunk_len)` frame indices; past a chunk's length they run on into the next chunk, for the
-        caller to mask.
-    """
+    `"chunk_index"` from `kwargs` if precomputed."""
     if kwargs is not None and (chunk_index := kwargs.pop("chunk_index", None)) is not None:
         return chunk_index
     chunk_starts = F.pad(chunk_lengths.cumsum(0)[:-1], (1, 0))
@@ -893,16 +873,9 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
 
     @merge_with_config_defaults
     def get_data_dependent_inputs(self, feature_lens: torch.LongTensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `feature_lens` with data-dependent operations (host syncs, loops over the
-        chunks): the chunks' `chunk_lengths` and `chunk_index`, the non-padding frames' `valid_indices`, the pooling's
-        `pool_indices`, and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the forward, they keep
-        `torch.compile` and `torch.export` free of those operations.
-
-        Args:
-            feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
-                The mel length of each audio.
-        """
+        """What the forward derives from `feature_lens` with data-dependent ops: the chunks' `chunk_lengths` and
+        `chunk_index`, the non-padding frames' `valid_indices`, the pooling's `pool_indices`, and the attention's
+        `cu_seqlens` and `max_seqlen`."""
         chunk_lengths = get_audio_chunk_lengths(feature_lens, self.n_window)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths)
         return {
@@ -1012,7 +985,6 @@ class Qwen2_5OmniVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1289,17 +1261,9 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         return input_tensor
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the rotary `position_ids` of the patches, the full attention's `cu_seqlens` and `max_seqlen`, and the
-        window attention's `window_index`, `cu_window_seqlens` and `max_window_seqlen`. Passed back to the forward,
-        they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are returned
-        as they are; only the config is read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width dimensions of feature shape for each image.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        the full attention's `cu_seqlens` and `max_seqlen`, and the window attention's `window_index`,
+        `cu_window_seqlens` and `max_window_seqlen`."""
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -1423,7 +1387,6 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, Qwen2_5Omni has different position ids for the grids
@@ -1755,15 +1718,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
 
 
 def get_audio_frame_indices(feature_attention_mask: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
-    """Flat indices of the real mel frames of a padded batch, or pop `"frame_indices"` from `kwargs` if precomputed.
-
-    Args:
-        feature_attention_mask: `(batch_size, max_frames)` 1 for real frames, 0 for padding.
-        kwargs: optional caller kwargs — if it contains `"frame_indices"` it is popped and returned.
-
-    Returns:
-        `(total_frames,)` indices into the batch's `(batch_size * max_frames)` frames.
-    """
+    """Flat indices of the real mel frames of a padded batch, or pop `"frame_indices"` from `kwargs` if precomputed."""
     if kwargs is not None and (frame_indices := kwargs.pop("frame_indices", None)) is not None:
         return frame_indices
     return feature_attention_mask.flatten().nonzero().squeeze(-1)
@@ -1774,7 +1729,7 @@ def get_audio_frame_indices(feature_attention_mask: torch.Tensor, kwargs: dict |
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
+class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration, MultimodalMixin):
     config: Qwen2_5OmniThinkerConfig
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^token2wav"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
@@ -1797,21 +1752,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         audio_feature_lengths: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
-        and the audio encoder's (see [`Qwen2_5OmniAudioEncoder.get_data_dependent_inputs`]) with the real mel frames'
-        `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them. Only the config is read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video.
-            feature_attention_mask (`torch.LongTensor` of shape `(batch_size, max_frames)`, *optional*):
-                1 for the audios' real mel frames, 0 for padding.
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The mel length of each audio, when there is no `feature_attention_mask`.
-        """
+        """The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
+        and the audio encoder's (see [`Qwen2_5OmniAudioEncoder.get_data_dependent_inputs`]) with the real mel
+        frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
         inputs = {}
         for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
             if grid_thw is not None:
@@ -1835,24 +1778,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1864,24 +1792,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
@@ -2139,7 +2052,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         )
 
 
-class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+class Qwen2_5OmniThinkerForConditionalGeneration(
+    Qwen2_5OmniPreTrainedModelForConditionalGeneration, MultimodalMixin, GenerationMixin
+):
     config: Qwen2_5OmniThinkerConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
@@ -2152,58 +2067,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.post_init()
-
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_audio_features(
@@ -2733,7 +2596,6 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

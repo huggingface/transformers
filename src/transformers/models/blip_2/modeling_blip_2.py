@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
@@ -419,9 +419,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "Blip2TextEmbeddings",
         "Blip2VisionEmbeddings",
     ]
-    _skip_keys_device_placement = ["cache"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -1457,7 +1455,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     </Tip>
     """
 )
-class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
+class Blip2ForConditionalGeneration(Blip2PreTrainedModel, MultimodalMixin, GenerationMixin):
     config: Blip2Config
     main_input_name = "pixel_values"
 
@@ -1518,7 +1516,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
@@ -1567,6 +1565,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         image_features = self.language_projection(query_output)
         vision_outputs.pooler_output = image_features
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):
@@ -1679,11 +1681,13 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_embeddings(
                 pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
             )
 
         language_model_inputs = mm_encoder_outputs["image"].pooler_output
+        if not isinstance(language_model_inputs, torch.Tensor):
+            language_model_inputs = torch.cat(language_model_inputs, dim=0)
         qformer_outputs = mm_encoder_outputs["image"].qformer_outputs
         vision_outputs = mm_encoder_outputs["image"].vision_outputs
 

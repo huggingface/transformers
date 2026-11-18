@@ -395,7 +395,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaddleOCRDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -618,17 +617,8 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the position table's `interp_indices` and `interp_weights`, the rotary `position_ids` and the
-        attention's `cu_seqlens` and `max_seqlen`. Passed back to the forward, they keep `torch.compile` and
-        `torch.export` free of those operations. Those already in `kwargs` are returned as they are; only the config
-        and the tower's constants are read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width patch-grid dimensions for each image.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the position table's `interp_indices` and
+        `interp_weights`, the rotary `position_ids` and the attention's `cu_seqlens` and `max_seqlen`."""
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             num_grid_per_side=self.embeddings.num_grid_per_side,
@@ -697,13 +687,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The vision transformer's (see [`PaddleOCRVisionTransformer.get_data_dependent_inputs`]).
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width patch-grid dimensions for each image.
-        """
+        """The vision transformer's (see [`PaddleOCRVisionTransformer.get_data_dependent_inputs`])."""
         return self.vision_model.get_data_dependent_inputs(grid_thw, **kwargs)
 
     def forward(
@@ -734,36 +718,18 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLModel does not support video.")
-
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
         vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
-        return vision_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_embeds = vision_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
-
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     def get_placeholder_mask(
@@ -850,9 +816,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
-
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

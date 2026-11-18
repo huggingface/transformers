@@ -16,62 +16,83 @@ rendered properly in your Markdown viewer.
 
 # MXFP4
 
-Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b.
+MXFP4 is the 4-bit floating-point format from the [Open Compute Project Microscaling (MX) specification](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf). It stores E2M1 values in blocks that share one power-of-two (E8M0) scale. In Transformers, MXFP4 quantizes the mixture-of-experts layers of [GPT-OSS](../model_doc/gpt_oss) models, so use it to run GPT-OSS with less memory.
 
-MXFP4 is a 4-bit floating point format that dramatically reduces the memory requirements of large models. Large models (GPT-OSS-120B) can fit on a single 80GB GPU and smaller models (GPT-OSS-20B) only require 16GB of memory. It uses blockwise scaling to preserve its range and accuracy, which typically becomes degraded at lower precisions.
+The table below summarizes what MXFP4 supports in Transformers.
 
-To use MXPF4, make sure your hardware meets the following requirements.
+| | |
+|---|---|
+| Config | [`Mxfp4Config`] |
+| `quant_method` | `mxfp4` |
+| Workflow | Quantize while loading, load pre-quantized |
+| Bits | 4 |
+| Hardware | CUDA (compute capability 7.5+), XPU, CPU |
+| Save | ✅ |
+| Fine-tune | ❌ |
+| Auto-compile | ❌ |
 
-- Install Accelerate, kernels, and Triton ≥ 3.4. Only manually install Triton ≥ 3.4 if you're using PyTorch 2.7 because it is already supported in PyTorch 2.8.
-- NVIDIA GPU Compute Capability ≥ 7.5 which includes Tesla GPUs and newer. Use [get_device_capability](https://docs.pytorch.org/docs/stable/generated/torch.cuda.get_device_capability.html) to check Compute Capability.
+## Install MXFP4
 
-```python
-from torch import cuda
-cuda.get_device_capability()
+Transformers downloads the MXFP4 Triton kernels from the [kernels-community/gpt-oss-triton-kernels](https://huggingface.co/kernels-community/gpt-oss-triton-kernels) repository on the Hub. Install the [kernels](https://huggingface.co/docs/kernels/index) library, [Accelerate](https://huggingface.co/docs/accelerate/index), and Triton. CUDA needs Triton 3.4.0 or later, and XPU and CPU need Triton 3.5.0 or later.
 
-# (7, 5)
+```bash
+pip install -U "transformers[kernels]" accelerate "triton>=3.4.0"
 ```
 
-Check a model's quantization config as shown below to see if it supports MXFP4. If `'quant_method': 'mxfp4'`, then the model automatically uses MXFP4.
+## Quantize a model with MXFP4
+
+Create a [`Mxfp4Config`] and pass it to [`~PreTrainedModel.from_pretrained`] to quantize a bf16 GPT-OSS checkpoint while it loads. MXFP4 quantizes only the expert weights. The attention layers, router, embeddings, and `lm_head` keep their original precision.
 
 ```py
-from transformers import GptOssConfig
+from transformers import AutoModelForCausalLM, Mxfp4Config
 
-model_id = "openai/gpt-oss-120b"
-cfg = GptOssConfig.from_pretrained(model_id)
-print(cfg.quantization_config)
-
-# Example output:
-# {
-#   'modules_to_not_convert': [
-#     'model.layers.*.self_attn',
-#     'model.layers.*.mlp.router',
-#     'model.embed_tokens',
-#     'lm_head'
-#   ],
-#   'quant_method': 'mxfp4'
-# }
+quantization_config = Mxfp4Config()
+model = AutoModelForCausalLM.from_pretrained(
+    "unsloth/gpt-oss-20b-BF16",
+    quantization_config=quantization_config,
+    device_map="cuda",
+)
 ```
 
-## MXFP4 kernels
+If the hardware or packages MXFP4 needs aren't available, set `dequantize=True` to load the model in bf16 instead.
 
-Transformers automatically pulls the MXFP4-aware Triton kernels from the community repository when you load a model that needs them. The kernels are stored in your local cache and used during the forward pass.
+## Load a pre-quantized checkpoint
 
-MXFP4 kernels are used by default, if available and supported, and does not require any code changes.
+The [openai/gpt-oss-20b](https://huggingface.co/openai/gpt-oss-20b) and [openai/gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b) checkpoints are stored in MXFP4, and their config sets `quant_method` to `mxfp4`. Load them without a [`Mxfp4Config`].
 
-You can use [hf cache scan](https://huggingface.co/docs/huggingface_hub/en/guides/manage-cache#scan-your-cache) to verify the kernels are downloaded.
+```py
+from transformers import AutoModelForCausalLM
 
-```shell
-hf cache scan
+model = AutoModelForCausalLM.from_pretrained("openai/gpt-oss-20b", device_map="cuda")
 ```
 
-```shell
-REPO ID                          REPO TYPE SIZE ON DISK
--------------------------------- --------- ------------
-kernels-community/triton_kernels model           536.2K
-openai/gpt-oss-20b               model            13.8G
+If your hardware or packages can't run MXFP4, Transformers logs a warning and dequantizes a pre-quantized checkpoint to bf16 instead of raising an error.
+
+## Choose a kernel backend
+
+By default, MXFP4 runs the expert layers with the Triton kernels on CUDA and XPU. Pass `use_kernels=True` to [`~PreTrainedModel.from_pretrained`] to run them with the [MegaBlocks](https://huggingface.co/kernels-community/megablocks) kernel from the Hub instead.
+
+```py
+model = AutoModelForCausalLM.from_pretrained("openai/gpt-oss-20b", device_map="cpu", use_kernels=True)
 ```
+
+The backend you get depends on the device.
+
+| Device | `use_kernels=False` | `use_kernels=True` |
+|---|---|---|
+| CUDA | MXFP4 with Triton kernels | Dequantizes to bf16 |
+| XPU | MXFP4 with Triton kernels | MXFP4 with MegaBlocks |
+| CPU | Dequantizes to bf16 | MXFP4 with MegaBlocks |
+
+## Limitations
+
+- MXFP4 quantizes only GPT-OSS expert layers. Other models load without any quantized layers, and Transformers logs a warning.
+- MXFP4 needs a CUDA GPU with compute capability 7.5 or later, an XPU, or a CPU. Quantizing a model on unsupported hardware or without Triton or kernels raises a `ValueError`. Quantizing a model on a machine with another accelerator, like MPS, raises a `RuntimeError`.
+- Quantizing a model while it loads can't offload to disk. A `device_map` that includes `"disk"` raises a `ValueError`.
+- MXFP4 models can't be fine-tuned. Load the model with `dequantize=True` to train it in bf16.
 
 ## Resources
 
-Learn more about MXFP4 quantization and how blockwise scaling works in this [blog post](https://huggingface.co/blog/faster-transformers#mxfp4-quantization).
+- [OCP Microscaling Formats (MX) v1.0](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf) specification
+- [MXFP4 quantization](https://huggingface.co/blog/faster-transformers#mxfp4-quantization) section of the gpt-oss tricks blog post
+- [kernels-community/gpt-oss-triton-kernels](https://huggingface.co/kernels-community/gpt-oss-triton-kernels) Hub kernel

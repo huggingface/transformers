@@ -932,15 +932,12 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
         """
-        target_dtype = self.patch_embedding.weight.dtype
-        embeddings = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
 
         interp_indices, interp_weights = self.get_interpolation_inputs(grid_thw, kwargs=kwargs)
         # helper returns `(total_thw, n_taps)`, so sum over the taps axis
         pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        embeddings = embeddings + pos_embeds.to(embeddings.dtype)
-
-        return embeddings
+        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseGlimmerVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
@@ -988,18 +985,9 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the full and window attention's `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position
-        table's `interp_indices` and `interp_weights`, the rotary `position_ids` and the merger's
-        `pixel_shuffle_index`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
-        operations. Those already in `kwargs` are returned as they are; only the config and the tower's constants are
-        read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width patch-grid dimensions for each packed image or video.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the full and window attention's
+        `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position table's `interp_indices` and
+        `interp_weights`, the rotary `position_ids` and the merger's `pixel_shuffle_index`."""
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
@@ -1095,16 +1083,9 @@ class MuseGlimmerModel(Kimi_K25Model):
         self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
     def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
         tower's (see [`MuseGlimmerVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
-        `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export`
-        free of those operations. Only the config and the tower's constants are read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of each image's patch grid.
-        """
+        `get_image_embeddings` takes them."""
         if image_grid_thw is None:
             return {}
         tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)
@@ -1117,9 +1098,6 @@ class MuseGlimmerModel(Kimi_K25Model):
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -1129,18 +1107,7 @@ class MuseGlimmerModel(Kimi_K25Model):
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
         vision_outputs.pooler_output = vision_features
-        return vision_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        vision_features = vision_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
         return vision_outputs
 
 

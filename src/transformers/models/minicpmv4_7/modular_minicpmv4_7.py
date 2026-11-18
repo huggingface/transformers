@@ -550,7 +550,7 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             and pixel_values is not None
             and self.config.image_token_id is not None
         ):
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values[:1], target_sizes, downsample_mode=downsample_mode
             )
 
@@ -559,21 +559,23 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
             and pixel_values_videos is not None
             and self.config.video_token_id is not None
         ):
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output
+            if not isinstance(video_features, torch.Tensor):
+                video_features = torch.cat(video_features, dim=0)
+            video_features = video_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 

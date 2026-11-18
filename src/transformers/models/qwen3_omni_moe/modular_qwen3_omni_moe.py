@@ -147,7 +147,6 @@ def chunk_and_pad_features(
     if padded_feature is not None:
         return padded_feature, chunk_lengths
 
-    # Each chunk's frames, right-padded with zeros to the longest chunk
     chunk_index = get_audio_chunk_index(chunk_lengths, kwargs=kwargs)
     padding_mask = torch.arange(chunk_index.shape[1], device=chunk_index.device) < chunk_lengths[:, None]
     padded_feature = input_features[:, chunk_index.clamp(max=input_features.shape[1] - 1)] * padding_mask
@@ -286,7 +285,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe_text"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
@@ -670,7 +668,6 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)
@@ -994,16 +991,9 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         self.conv2d1 = value
 
     def get_data_dependent_inputs(self, feature_lens: torch.LongTensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `feature_lens` with data-dependent operations (host syncs, loops over the
-        audios): the chunks' `chunk_lengths` and `chunk_index`, the non-padding frames' `valid_indices`, and the
-        windowed attention's `cu_seqlens` and `max_seqlen`. Passed back to the forward, they keep `torch.compile` and
-        `torch.export` free of those operations.
-
-        Args:
-            feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
-                The mel length of each audio.
-        """
+        """What the forward derives from `feature_lens` with data-dependent ops: the chunks' `chunk_lengths` and
+        `chunk_index`, the non-padding frames' `valid_indices`, and the windowed attention's `cu_seqlens` and
+        `max_seqlen`."""
         chunk_lengths = get_audio_chunk_lengths(feature_lens, self.n_window)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
         return {
@@ -1198,25 +1188,9 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        return vision_outputs
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        vision_outputs = self.get_video_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     def get_image_embeddings(
@@ -1225,25 +1199,9 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        return vision_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
@@ -1336,12 +1294,10 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
+            image_embeds_multiscale = mm_encoder_outputs["image"].deepstack_features
             if not isinstance(image_embeds, torch.Tensor):
                 image_embeds = torch.cat(image_embeds, dim=0)
-            image_embeds_multiscale = [
-                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
-                for feat in mm_encoder_outputs["image"].deepstack_features
-            ]
+                image_embeds_multiscale = [torch.cat(feat, dim=0) for feat in image_embeds_multiscale]
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1350,12 +1306,10 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
+            video_embeds_multiscale = mm_encoder_outputs["video"].deepstack_features
             if not isinstance(video_embeds, torch.Tensor):
                 video_embeds = torch.cat(video_embeds, dim=0)
-            video_embeds_multiscale = [
-                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
-                for feat in mm_encoder_outputs["video"].deepstack_features
-            ]
+                video_embeds_multiscale = [torch.cat(feat, dim=0) for feat in video_embeds_multiscale]
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1430,22 +1384,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
-
-    @auto_docstring
-    def get_image_embeddings(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_image_embeddings(**super_kwargs)
-
-    @auto_docstring
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_embeddings(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_video_embeddings(**super_kwargs)
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_video_features(**super_kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -2919,8 +2857,39 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
-        return super().__call__(
-            text=text, images=images, videos=videos, audio=audio, audio_kwargs=audio_kwargs, **kwargs
+        videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
+        for key in ("seconds_per_chunk", "position_id_per_seconds"):
+            if key in videos_kwargs:
+                logger.warning_once(
+                    f"Passing `{key}` in `videos_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+                # "videos_kwargs" has priority for backwards compatibility
+                kwargs[key] = videos_kwargs.pop(key)
+
+        if kwargs.pop("use_audio_in_video", False) or videos_kwargs.pop("use_audio_in_video", False):
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            kwargs["load_audio_from_video"] = True
+        return OmniModalProcessorMixin.__call__(
+            self,
+            images=images,
+            text=text,
+            videos=videos,
+            audio=audio,
+            audio_kwargs=audio_kwargs,
+            videos_kwargs=videos_kwargs,
+            **kwargs,
+        )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
+        if "n_window" in kwargs:
+            kwargs["audio_kwargs"] = dict(kwargs.get("audio_kwargs", {}))
+            kwargs["audio_kwargs"].setdefault("n_window", kwargs.pop("n_window"))
+        return super()._get_num_multimodal_tokens(
+            image_sizes=image_sizes, video_sizes=video_sizes, audio_lengths=audio_lengths, **kwargs
         )
 
     def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:

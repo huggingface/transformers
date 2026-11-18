@@ -526,13 +526,13 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     if isinstance(sample, Mapping) and not any(name.startswith("input.cache.") for name in names):
         sample = {key: value for key, value in sample.items() if key != "cache"}
     leaves = get_leaf_tensors(sample)
-    # `beam_idx` reorders the cache's batch axis: read it off a cache tensor (not a sliding layer's 0-d counter), else
-    # a text input (the first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`).
+    # `beam_idx` reorders the cache's batch axis: read it off the highest-rank cache tensor, not a counter (a sliding
+    # layer's 0-d tensor, xLSTM's 1-d `seqlen_offset`) whose leading dim is not the batch, else off a text input (the
+    # first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`).
     batched = [path for path, tensor in leaves.items() if tensor.dim()]
-    batch_path = next(
-        (path for path in batched if path.startswith("cache.")),
-        next((name for name in BATCH_INPUTS if name in batched), batched[0] if batched else None),
-    )
+    cache_paths = [path for path in batched if path.startswith("cache.")]
+    text_path = next((name for name in BATCH_INPUTS if name in batched), batched[0] if batched else None)
+    batch_path = max(cache_paths, key=lambda path: leaves[path].dim(), default=text_path)
     batch = leaves[batch_path].shape[0] if batch_path is not None else 1
 
     def port_value(name: str) -> Any:

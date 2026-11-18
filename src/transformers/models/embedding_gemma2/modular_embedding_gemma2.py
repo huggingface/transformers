@@ -415,10 +415,7 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
 class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     config: EmbeddingGemma2Config
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
-    # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
-    _skip_keys_device_placement = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):
@@ -576,6 +573,8 @@ class EmbeddingGemma2Model(Gemma4Model):
         r"(^|\.)embed_audio\.",
     ]
 
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
+
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
         # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)
@@ -584,7 +583,7 @@ class EmbeddingGemma2Model(Gemma4Model):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
@@ -599,11 +598,11 @@ class EmbeddingGemma2Model(Gemma4Model):
                 "Image features were requested, but the model was initialized without a vision_config. "
                 "Cannot process images without a vision tower and vision embedder."
             )
-        return super().get_image_features(pixel_values=pixel_values, image_position_ids=image_position_ids, **kwargs)
+        return super().get_image_embeddings(pixel_values=pixel_values, image_position_ids=image_position_ids, **kwargs)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
@@ -625,7 +624,7 @@ class EmbeddingGemma2Model(Gemma4Model):
                 "Video features were requested, but the model was initialized without a vision_config. "
                 "Cannot process video without a vision tower and vision embedder."
             )
-        return super().get_video_features(
+        return super().get_video_embeddings(
             pixel_values_videos=pixel_values_videos,
             video_position_ids=video_position_ids,
             num_frames_per_video=num_frames_per_video,
@@ -698,10 +697,10 @@ class EmbeddingGemma2Model(Gemma4Model):
             )
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(
+            video_features = self.get_video_embeddings(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
             ).pooler_output
-            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()

@@ -1396,7 +1396,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for key in inputs:
                 if (
                     "pixel" in key
-                    or key in ["image_patches", "input_feature", "input_features", "feature_attention_mask"]
+                    or key
+                    in ["image_patches", "input_feature", "input_features", "feature_attention_mask", "input_values"]
                 ) and key != model.main_input_name:
                     keys_to_pop.append(key)
             for key in keys_to_pop:
@@ -2395,9 +2396,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 logits_padded = res_padded.logits[dummy_attention_mask.bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                # acceptable numerical instability
+                # acceptable numerical instability, scaled to the logits: with the norm eps set to 1.0 for less flaky
+                # tests, the logits of the tiny test models are often smaller than `tol` itself
                 tol = torch.finfo(torch.bfloat16).eps
-                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+                atol = tol * logits_padded.abs().max().item()
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=atol)
 
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager")
@@ -2702,7 +2705,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         for model_class in self.all_generative_model_classes:
             with self.subTest(model_class.__name__):
-                model = model_class(config)
+                model = model_class(config).to(torch_device)
                 model.eval()
 
                 generate_kwarg = {
@@ -3452,6 +3455,30 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_prefix_constraints_with_multiple_sampled_returns(self):
+        config = AutoConfig.for_model(
+            "gpt2",
+            vocab_size=32,
+            n_positions=32,
+            n_embd=32,
+            n_layer=1,
+            n_head=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=0,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        inputs = torch.tensor([[10, 11], [20, 21]], device=torch_device)
+        allowed = [[5], [7]]
+        output = model.generate(
+            inputs,
+            do_sample=True,
+            num_return_sequences=3,
+            max_new_tokens=1,
+            prefix_allowed_tokens_fn=lambda batch_id, _: allowed[batch_id],
+        )
+        self.assertEqual(output[:, -1].tolist(), [5, 5, 5, 7, 7, 7])
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

@@ -172,16 +172,8 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         return lengths
 
     def get_data_dependent_inputs(self, input_features_mask: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `input_features_mask` with data-dependent operations (host syncs, loops
-        over the clips): the windowed attention's `cu_seqlens` and `max_seqlen`, and the non-padding frames'
-        `valid_indices`. Passed back to the forward, they keep `torch.compile` and `torch.export` free of those
-        operations.
-
-        Args:
-            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
-                1 for valid mel frames and 0 for padding.
-        """
+        """What the forward derives from `input_features_mask` with data-dependent ops: the windowed attention's
+        `cu_seqlens` and `max_seqlen`, and the non-padding frames' `valid_indices`."""
         chunk_lengths = input_features_mask.view(input_features_mask.shape[0], -1, self.n_window * 2).sum(-1)
         chunk_lengths = chunk_lengths.reshape(-1).to(torch.long)
         feature_lens = input_features_mask.sum(-1).to(torch.long)
@@ -265,14 +257,8 @@ class Qwen3ASRMultiModalProjector(VoxtralMultiModalProjector):
 
 class Qwen3ASRModel(AudioFlamingo3Model):
     def get_data_dependent_inputs(self, input_features_mask: torch.Tensor | None = None, **kwargs) -> dict[str, Any]:
-        r"""
-        The audio encoder's data-dependent inputs (see [`Qwen3ASREncoder.get_data_dependent_inputs`]), prefixed
-        `audio_`, as `get_audio_features` takes them.
-
-        Args:
-            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`, *optional*):
-                1 for valid mel frames and 0 for padding.
-        """
+        """The audio encoder's data-dependent inputs (see [`Qwen3ASREncoder.get_data_dependent_inputs`]), prefixed
+        `audio_`, as `get_audio_features` takes them."""
         if input_features_mask is None:
             return {}
         inputs = self.audio_tower.get_data_dependent_inputs(input_features_mask)

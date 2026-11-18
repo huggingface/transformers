@@ -23,6 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
 from itertools import accumulate
+from typing import Any
 
 import numpy as np
 import torch
@@ -38,7 +39,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -247,7 +248,6 @@ class Granite4VisionTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -505,7 +505,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -519,7 +518,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
         "attentions": Granite4VisionTextAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Granite4VisionModel):
@@ -733,7 +731,7 @@ def unpad_image(tensor, original_size):
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
     """
 )
-class Granite4VisionModel(Granite4VisionPreTrainedModel):
+class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     config: Granite4VisionConfig
 
@@ -833,7 +831,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
@@ -889,7 +887,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, packed_features))
+            all_features.append((llm_layer, torch.cat(packed_features, dim=0)))
 
         # Spatial features: extract 4 offset groups from a single vision layer
         spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
@@ -907,11 +905,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, packed_group))
+            all_features.append((llm_layer, torch.cat(packed_group, dim=0)))
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
             hidden_states=vision_outputs.hidden_states,
+            split_sizes=torch.tensor([len(features) for features in packed_group], device=spatial_feature.device),
         )
 
     def get_placeholder_mask(
@@ -975,7 +974,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -1020,13 +1019,22 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             else None,
         )
 
+    @staticmethod
+    def split_modality_outputs(outputs):
+        """Splits each `(layer, features)` deepstack pair per image by `split_sizes`."""
+        split_sizes = outputs.split_sizes.tolist()
+        outputs.deepstack_features = [
+            (layer, torch.split(features, split_sizes)) for layer, features in outputs.deepstack_features
+        ]
+        return outputs
+
 
 @auto_docstring(
     custom_intro="""
     The LLAVA-NeXT model which consists of a vision backbone and a language model.
     """
 )
-class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, GenerationMixin):
+class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -1047,37 +1055,9 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             image_newline=image_newline,
         )
 
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
-            The tensors corresponding to the input images.
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Actual image size of each images (H, W).
-        vision_feature_layer (`Union[int, list[int]]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Granite4VisionModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple

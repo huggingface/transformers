@@ -1155,7 +1155,6 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
         "attentions": DeepseekV4Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range

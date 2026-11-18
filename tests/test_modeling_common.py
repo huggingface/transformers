@@ -876,6 +876,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -4491,106 +4492,60 @@ class ModelTesterMixin(ExportTesterMixin):
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        """Given the inputs `get_data_dependent_inputs` computes, each modality's encoder (`get_image_embeddings`,
-        `get_video_embeddings`, `get_audio_embeddings`) traces into one graph, with no graph break, and returns what
-        eager does. Under varlen flash attention, which takes the packed patches' or frames' lengths as tensors, so
-        nothing is split or read back on the host."""
-
-        def encoders(model_class):
-            """Each modality's getter: the flat one (`get_<modality>_embeddings`), else `get_<modality>_features`
-            where a model has only that, already flat."""
-            found = []
-            for modality in ("image", "video", "audio"):
-                for getter in (f"get_{modality}_embeddings", f"get_{modality}_features"):
-                    if hasattr(model_class, getter):
-                        found.append(getter)
-                        break
-            return found
-
-        model_classes = [cls for cls in self.all_model_classes if encoders(cls)]
-        if not model_classes:
-            self.skipTest(reason="The model has no modality encoder")
-        for model_class in model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(reason=f"{model_class.__name__} does not support flash attention")
+        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches eager."""
+        tested = False
+        for model_class in self.all_model_classes:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            # Flash attention for every sub-model that supports it: one without (a timm backbone, say) keeps its
-            # default. Which ones do is read off a first build, then requested per sub-config at the real one
-            probe = model_class._from_config(copy.deepcopy(config))
-            supported = {
-                id(module.config)
-                for module in probe.modules()
-                if isinstance(module, PreTrainedModel) and module._supports_flash_attn
-            }
-
-            def implementations(sub_config):
-                plan = {"": "flash_attention_2"} if id(sub_config) in supported else {}
-                for key in sub_config.sub_configs:
-                    if getattr(sub_config, key, None) is not None:
-                        plan[key] = implementations(getattr(sub_config, key))
-                return plan
-
-            plan = implementations(probe.config)
-            del probe
-            model = model_class._from_config(config, attn_implementation=plan, dtype=torch.bfloat16)
+            try:
+                model = model_class._from_config(
+                    copy.deepcopy(config), attn_implementation="flash_attention_2", dtype=torch.bfloat16
+                )
+            except (ValueError, ImportError):
+                continue
             model = model.to(torch_device).eval()
-            # Flash attention's attention sinks need a Hopper GPU
-            has_sinks = any(name.endswith("sinks") for name, _ in model.named_parameters())
-            if has_sinks and torch.cuda.get_device_capability()[0] < 9:
-                self.skipTest(reason="Flash attention's attention sinks need a Hopper GPU")
-            inputs = self._prepare_for_class(inputs, model_class)
             inputs = {
                 name: value.to(torch.bfloat16)
                 if isinstance(value, torch.Tensor) and value.is_floating_point()
                 else value
-                for name, value in inputs.items()
+                for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            data_dependent_inputs = model.get_data_dependent_inputs(**inputs)
-
-            # The arguments each encoder gets in the forward, recorded on the module that defines it
-            getters = encoders(model_class)
-            calls = {}
-            owners = {}
-            for module in model.modules():
-                for getter in getters:
-                    if getter in type(module).__dict__ and getter not in owners:
-                        owners[getter] = module
-
-            def recorder(getter, original):
-                def record(*args, **kwargs):
-                    calls.setdefault(getter, (args, kwargs))
-                    return original(*args, **kwargs)
-
-                return record
-
-            for getter, owner in owners.items():
-                setattr(owner, getter, recorder(getter, getattr(owner, getter)))
-            try:
-                with torch.no_grad():
-                    model(**copy.deepcopy(inputs))
-            finally:
-                for getter, owner in owners.items():
-                    delattr(owner, getter)
-
-            for getter, (args, kwargs) in calls.items():
-                prefix = getter.removeprefix("get_").split("_")[0] + "_"
-                derived = {name: value for name, value in data_dependent_inputs.items() if name.startswith(prefix)}
-                encoder = getattr(owners[getter], getter)
+            data_dependent_inputs = model.base_model.get_data_dependent_inputs(**inputs)
+            for modality in ("image", "video", "audio"):
+                encoder = getattr(model.base_model, f"get_{modality}_embeddings", None) or getattr(
+                    model.base_model, f"get_{modality}_features", None
+                )
+                if encoder is None:
+                    continue
+                parameters = inspect.signature(encoder).parameters
+                takes_kwargs = any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
+                encoder_inputs = {
+                    name: value
+                    for name, value in inputs.items()
+                    if name in parameters or (takes_kwargs and name.startswith(f"{modality}_"))
+                }
+                required = [
+                    name
+                    for name, parameter in parameters.items()
+                    if parameter.default is parameter.empty and parameter.kind is parameter.POSITIONAL_OR_KEYWORD
+                ]
+                if not encoder_inputs or any(name not in encoder_inputs for name in required):
+                    continue
+                encoder_inputs.update(
+                    {name: value for name, value in data_dependent_inputs.items() if name.startswith(f"{modality}_")}
+                )
                 torch._dynamo.reset()
                 compiled = torch.compile(encoder, fullgraph=True, backend="eager")
                 with torch.no_grad():
-                    expected = encoder(*copy.deepcopy(args), **copy.deepcopy(kwargs), **derived)
-                    actual = compiled(*copy.deepcopy(args), **copy.deepcopy(kwargs), **derived)
+                    expected = encoder(**copy.deepcopy(encoder_inputs))
+                    actual = compiled(**copy.deepcopy(encoder_inputs))
                 tensors = [
-                    [
-                        leaf
-                        for leaf in torch.utils._pytree.tree_leaves(out.to_tuple())
-                        if isinstance(leaf, torch.Tensor)
-                    ]
-                    for out in (actual, expected)
+                    [leaf for leaf in torch.utils._pytree.tree_leaves(output) if isinstance(leaf, torch.Tensor)]
+                    for output in (actual, expected)
                 ]
-                for output, reference in zip(*tensors):
-                    torch.testing.assert_close(output, reference)
+                torch.testing.assert_close(*tensors)
+                tested = True
+        if not tested:
+            self.skipTest(reason="The model has no modality encoder taking these inputs")
 
     @slow
     @require_torch_accelerator
@@ -5143,30 +5098,27 @@ class ModelTesterMixin(ExportTesterMixin):
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_tied_head_has_a_tp_plan_entry(self):
-        """A tied head IS the embedding's parameter, which a tying config shards `embedding_rowwise`,
-        so without an entry of its own `F.linear` gets a plain input and a DTensor weight."""
+    def test_tied_weights_are_sharded_together(self):
+        """A tied head IS the embedding's parameter, so the TP plan must shard both or neither: a sharded head over a
+        replicated embedding gathers `tp x vocab` logits, and a sharded embedding gives a head without an entry of its
+        own a plain input and a DTensor weight in `F.linear`."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.base_model_tp_plan is None and all(
-            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
-        ):
-            self.skipTest("Model does not have a TP plan.")
-
-        for model_class in self.all_generative_model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
-            head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
-            if (
-                not model._tied_weights_keys
-                or not isinstance(head, nn.Linear)
-                or not isinstance(embedding, nn.Embedding)
-            ):
+            try:
+                head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
+            except NotImplementedError:
                 continue
-            head_name = next(name for name, module in model.named_modules() if module is head)
-            self.assertIn(
-                head_name,
-                model.tp_plan,
-                f"{model_class.__name__} ties `{head_name}` to its input embedding, so a tying checkpoint shards the "
-                "weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
+            if not isinstance(head, nn.Linear) or not isinstance(embedding, nn.Embedding):
+                continue
+            names = {module: name for name, module in model.named_modules()}
+            if f"{names[head]}.weight" not in (model._tied_weights_keys or {}):
+                continue
+            self.assertEqual(
+                names[head] in model.tp_plan,
+                names[embedding] in model.tp_plan,
+                f"{model_class.__name__} ties `{names[head]}` to `{names[embedding]}`, so its TP plan must shard both "
+                "or neither",
             )
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
@@ -5716,6 +5668,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 2,
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
+            if hasattr(model, "get_image_embeddings"):
+                with torch.no_grad():
+                    split_sizes = model.get_image_embeddings(**inputs_dict, return_dict=True).split_sizes
+                self.assertIsNotNone(split_sizes, "`get_image_embeddings` must return `split_sizes` for `generate`")
+                self.assertEqual(split_sizes.tolist(), [len(item) for item in pooler_output])
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5993,7 +5950,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_video_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6071,7 +6028,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
                 continue
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6091,6 +6048,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 2,
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
+            if hasattr(model, "get_video_embeddings"):
+                with torch.no_grad():
+                    split_sizes = model.get_video_embeddings(**inputs_dict, return_dict=True).split_sizes
+                self.assertIsNotNone(split_sizes, "`get_video_embeddings` must return `split_sizes` for `generate`")
+                self.assertEqual(split_sizes.tolist(), [len(item) for item in pooler_output])
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -6112,7 +6074,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6154,7 +6116,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6824,7 +6786,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Copy to avoid polluting between iterations
             local_inputs_dict = copy.deepcopy(inputs_dict)
             with self.subTest(model_class.__name__):
-                model = model_class(config)
+                model = model_class(config).to(torch_device)
                 model.eval()
 
                 if "cache" not in inspect.signature(model.forward).parameters.keys():

@@ -141,6 +141,10 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
     def get_experts_implementation(self) -> dict:
         return {}
 
+    def get_data_dependent_inputs(self, **kwargs) -> dict:
+        """None from `generate`: the multimodal runtime precomputes what its encoder programs take."""
+        return {}
+
     def get_compiled_call(self, compile_config):
         """The graphs are already compiled."""
         return self.__call__

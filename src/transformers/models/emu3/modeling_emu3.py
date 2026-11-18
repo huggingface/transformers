@@ -37,7 +37,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -948,7 +948,6 @@ class Emu3VQVAE(PreTrainedModel):
         "attentions": Emu3VQVAEAttentionBlock,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
@@ -1115,7 +1114,6 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "Emu3DecoderLayer",
     ]
-    _skip_keys_device_placement = ["cache", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -1164,7 +1162,6 @@ class Emu3RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1329,7 +1326,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         )
 
 
-class Emu3Model(Emu3PreTrainedModel):
+class Emu3Model(Emu3PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.text_model = Emu3TextModel._from_config(config.text_config)
@@ -1368,7 +1365,7 @@ class Emu3Model(Emu3PreTrainedModel):
     @auto_docstring(
         custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer"
     )
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Emu3VQVAEModelOutput:
         r"""
@@ -1378,16 +1375,15 @@ class Emu3Model(Emu3PreTrainedModel):
         vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(
             pixel_values, image_sizes, return_dict=True, **kwargs
         )
-        split_sizes = [
-            (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
-            for height, width in image_sizes
-        ]
+        heights, widths = torch.as_tensor(image_sizes, device=pixel_values.device).unbind(-1)
+        factor = self.vqmodel.vision_spatial_factor
+        vqmodel_outputs.split_sizes = (heights // factor) * (widths // factor + 1)
         bpe_tokens_list = [
             self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in vqmodel_outputs.image_tokens
         ]
         bpe_tokens = torch.cat(bpe_tokens_list)
         image_embeddings = self.get_input_embeddings()(bpe_tokens)
-        vqmodel_outputs.pooler_output = torch.split(image_embeddings, split_sizes)
+        vqmodel_outputs.pooler_output = image_embeddings
         return vqmodel_outputs
 
     @torch.no_grad()
@@ -1468,10 +1464,12 @@ class Emu3Model(Emu3PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_sizes)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_sizes)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -1490,9 +1488,10 @@ class Emu3Model(Emu3PreTrainedModel):
         return outputs
 
 
-class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
+class Emu3ForConditionalGeneration(Emu3PreTrainedModel, MultimodalMixin, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Emu3Config):
         super().__init__(config)

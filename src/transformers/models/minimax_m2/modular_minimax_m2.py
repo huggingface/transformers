@@ -66,7 +66,6 @@ class MiniMaxM2Config(PreTrainedConfig):
     ```"""
 
     model_type = "minimax_m2"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
@@ -177,7 +176,6 @@ class MiniMaxM2Attention(FlexOlmoAttention):
 
 
 class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range

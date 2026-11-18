@@ -41,7 +41,7 @@ providing more explicit control over text generation. These codes also allow CTR
 training data are most likely given a sequence. This provides a potential method for analyzing large amounts of data
 via model-based source attribution.*
 
-This model was contributed by [keskarnitishr](https://huggingface.co/keskarnitishr). The original code can be found
+This model was contributed by keskarnitishr. The original code can be found
 [here](https://github.com/salesforce/ctrl).
 
 ## Usage tips

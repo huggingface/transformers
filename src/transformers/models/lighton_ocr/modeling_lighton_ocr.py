@@ -28,7 +28,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -58,6 +58,26 @@ class LightOnOcrRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+def get_merge_index(
+    image_sizes: torch.Tensor | list, patch_size: int, merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """For each merged token, the indices of its `merge_size ** 2` patches in the packed sequence, block by block in
+    row-major order (an image's last row or column of patches is dropped when it doesn't fill a block), or pop
+    `"merge_index"` from `kwargs` if precomputed."""
+    if kwargs is not None and (merge_index := kwargs.pop("merge_index", None)) is not None:
+        return merge_index
+    device = image_sizes.device if isinstance(image_sizes, torch.Tensor) else None
+    block = torch.arange(merge_size, device=device)
+    merge_index, offset = [], 0
+    for height, width in (torch.as_tensor(image_sizes) // patch_size).tolist():
+        rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
+        columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
+        within = (block[:, None] * width + block[None, :]).flatten()
+        merge_index.append((rows * width + columns).reshape(-1, 1) + within + offset)
+        offset += height * width
+    return torch.cat(merge_index)
+
+
 class LightOnOcrPatchMerger(nn.Module):
     """
     Learned merging of spatial_merge_size ** 2 patches
@@ -72,29 +92,8 @@ class LightOnOcrPatchMerger(nn.Module):
         self.patch_size = self.config.vision_config.patch_size
         self.merging_layer = nn.Linear(hidden_size * self.spatial_merge_size**2, hidden_size, bias=False)
 
-    def get_merge_index(self, image_sizes: torch.Tensor | list, device: torch.device | None = None) -> torch.Tensor:
-        """
-        For each merged token, the indices of its `spatial_merge_size ** 2` patches in the packed sequence, block by
-        block in row-major order (an image's last row or column of patches is dropped when it doesn't fill a block).
-        """
-        merge_size = self.spatial_merge_size
-        grids = (torch.as_tensor(image_sizes) // self.patch_size).tolist()
-        block = torch.arange(merge_size, device=device)
-        merge_index, offset = [], 0
-        for height, width in grids:
-            # Each block's top-left patch, plus the offsets of the patches within a block
-            rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
-            columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
-            within = (block[:, None] * width + block[None, :]).flatten()
-            merge_index.append((rows * width + columns).reshape(-1, 1) + within + offset)
-            offset += height * width
-        return torch.cat(merge_index)
-
-    def forward(
-        self, image_features: torch.Tensor, image_sizes: torch.Tensor, merge_index: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        if merge_index is None:
-            merge_index = self.get_merge_index(image_sizes, image_features.device)
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor, **kwargs) -> torch.Tensor:
+        merge_index = get_merge_index(image_sizes, self.patch_size, self.spatial_merge_size, kwargs=kwargs)
         # Each merged token concatenates its patches channel-major, as `unfold` lays them out
         merged_size = image_features.shape[-1] * merge_index.shape[-1]
         image_features = image_features[merge_index].transpose(1, 2).reshape(-1, merged_size)
@@ -112,11 +111,9 @@ class LightOnOcrMultiModalProjector(nn.Module):
         self.act = nn.GELU()
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
 
-    def forward(
-        self, image_features: torch.Tensor, image_sizes: torch.Tensor, merge_index: torch.Tensor | None = None
-    ):
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor, **kwargs):
         image_features = self.norm(image_features)
-        image_features = self.patch_merger(image_features, image_sizes, merge_index=merge_index)
+        image_features = self.patch_merger(image_features, image_sizes, **kwargs)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
@@ -150,7 +147,6 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -165,7 +161,7 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     The LightOnOcr model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class LightOnOcrModel(LightOnOcrPreTrainedModel):
+class LightOnOcrModel(LightOnOcrPreTrainedModel, MultimodalMixin):
     base_model_prefix = ""
 
     def __init__(self, config: LightOnOcrConfig):
@@ -175,16 +171,23 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor | list,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_sizes, return_dict=True, **kwargs)
-        # Split features per image based on the effective patch size
+        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
+        image_outputs.pooler_output = self.vision_projection(
+            image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
+        )
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
-        split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        image_outputs.split_sizes = (
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+        ).prod(dim=-1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -238,14 +241,15 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -271,45 +275,16 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
     def get_data_dependent_inputs(
         self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
     ) -> dict[str, torch.Tensor]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
         encoder's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
-        prefixed `image_`, as `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile`
-        and `torch.export` free of those operations. Only the config and the shape of `pixel_values` are read.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`, *optional*):
-                The padded images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
-                The height and width of each image, before padding.
-        """
+        prefixed `image_`, as `get_image_embeddings` takes them."""
         if pixel_values is None or image_sizes is None:
             return {}
         inputs = self.vision_encoder.get_data_dependent_inputs(pixel_values, image_sizes)
-        inputs["merge_index"] = self.vision_projection.patch_merger.get_merge_index(image_sizes, pixel_values.device)
-        return {f"image_{name}": value for name, value in inputs.items()}
-
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor | list,
-        merge_index: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-
-        merge_index (`torch.LongTensor` of shape `(num_merged_tokens, spatial_merge_size**2)`, *optional*):
-            The patch merger's indices, see [`LightOnOcrPatchMerger.get_merge_index`].
-        """
-        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
-        image_outputs.pooler_output = self.vision_projection(
-            image_outputs.last_hidden_state.squeeze(0), image_sizes, merge_index=merge_index
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
         )
-        return image_outputs
+        return {f"image_{name}": value for name, value in inputs.items()}
 
 
 @auto_docstring(
@@ -347,7 +322,7 @@ class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     The LIGHTON_OCR model which consists of a vision backbone and a language model.
     """
 )
-class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
+class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -359,12 +334,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -440,12 +409,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    @auto_docstring
-    def get_image_embeddings(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_embeddings(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`LightOnOcrModel.get_data_dependent_inputs`]."""

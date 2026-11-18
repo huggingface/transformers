@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..dynamic_module_utils import resolve_trust_remote_code
 from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
@@ -272,8 +273,9 @@ class ExportedModel(PushToHubMixin):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
             trust_remote_code (`bool`, *optional*, defaults to `False`):
-                Whether to load the config of a model whose code lives in its repo, as for
-                [`~AutoConfig.from_pretrained`].
+                Whether to run code the export holds: the config of a model whose code lives in its repo, as for
+                [`~AutoConfig.from_pretrained`], and programs of a format whose loading runs code (`torch.export`'s
+                pickled `.pt2`), which can't be loaded without it. Only pass it for an export you trust.
             runner_kwargs (*optional*):
                 The backend's runner options, as for [`~ExportedModel.to`]: `providers` and `session_options` for
                 ONNX Runtime, `config` and `torch_threads` for OpenVINO.
@@ -308,6 +310,18 @@ class ExportedModel(PushToHubMixin):
                 f"transformers reads ({EXPORT_SCHEMA_VERSION}): some fields might be ignored or misinterpreted."
             )
         exporter = get_exporter_class(manifest["export_format"])
+        if exporter.requires_trust_remote_code:
+            # Gated as remote code even from a local directory, as `custom_generate` is
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code,
+                str(pretrained_model_name_or_path),
+                has_local_code=False,
+                has_remote_code=True,
+                error_message=(
+                    f"`{pretrained_model_name_or_path}` holds {exporter.export_format} programs, which run code when "
+                    "loaded: they are pickled."
+                ),
+            )
         has_runner = EXPORT_BACKENDS[exporter.export_format].runner is not None
         runner_options = []
         if has_runner:
@@ -416,6 +430,8 @@ class HfExporter(ABC):
     program_prefix: str = ""
     # `export_for_generation`'s default: whether an encoder-decoder's decode graph writes its own cross-attention cache.
     decoder_writes_cross_cache: bool = False
+    # Whether loading a saved program runs code from it (a pickle), so `from_pretrained` needs `trust_remote_code`.
+    requires_trust_remote_code: bool = False
 
     required_packages: list[str] = []
     # Hard minimum versions — the exporter raises below these (features it relies on are absent).

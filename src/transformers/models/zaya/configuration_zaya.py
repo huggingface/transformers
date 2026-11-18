@@ -51,7 +51,6 @@ class ZayaConfig(PreTrainedConfig):
     """
 
     model_type = "zaya"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

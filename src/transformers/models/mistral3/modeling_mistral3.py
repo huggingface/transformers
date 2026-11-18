@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -61,6 +61,26 @@ class Mistral3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+def get_merge_index(
+    image_sizes: torch.Tensor | list, patch_size: int, merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """For each merged token, the indices of its `merge_size ** 2` patches in the packed sequence, block by block in
+    row-major order (an image's last row or column of patches is dropped when it doesn't fill a block), or pop
+    `"merge_index"` from `kwargs` if precomputed."""
+    if kwargs is not None and (merge_index := kwargs.pop("merge_index", None)) is not None:
+        return merge_index
+    device = image_sizes.device if isinstance(image_sizes, torch.Tensor) else None
+    block = torch.arange(merge_size, device=device)
+    merge_index, offset = [], 0
+    for height, width in (torch.as_tensor(image_sizes) // patch_size).tolist():
+        rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
+        columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
+        within = (block[:, None] * width + block[None, :]).flatten()
+        merge_index.append((rows * width + columns).reshape(-1, 1) + within + offset)
+        offset += height * width
+    return torch.cat(merge_index)
+
+
 class Mistral3PatchMerger(nn.Module):
     """
     Learned merging of spatial_merge_size ** 2 patches
@@ -75,29 +95,8 @@ class Mistral3PatchMerger(nn.Module):
         self.patch_size = self.config.vision_config.patch_size
         self.merging_layer = nn.Linear(hidden_size * self.spatial_merge_size**2, hidden_size, bias=False)
 
-    def get_merge_index(self, image_sizes: torch.Tensor | list, device: torch.device | None = None) -> torch.Tensor:
-        """
-        For each merged token, the indices of its `spatial_merge_size ** 2` patches in the packed sequence, block by
-        block in row-major order (an image's last row or column of patches is dropped when it doesn't fill a block).
-        """
-        merge_size = self.spatial_merge_size
-        grids = (torch.as_tensor(image_sizes) // self.patch_size).tolist()
-        block = torch.arange(merge_size, device=device)
-        merge_index, offset = [], 0
-        for height, width in grids:
-            # Each block's top-left patch, plus the offsets of the patches within a block
-            rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
-            columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
-            within = (block[:, None] * width + block[None, :]).flatten()
-            merge_index.append((rows * width + columns).reshape(-1, 1) + within + offset)
-            offset += height * width
-        return torch.cat(merge_index)
-
-    def forward(
-        self, image_features: torch.Tensor, image_sizes: torch.Tensor, merge_index: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        if merge_index is None:
-            merge_index = self.get_merge_index(image_sizes, image_features.device)
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor, **kwargs) -> torch.Tensor:
+        merge_index = get_merge_index(image_sizes, self.patch_size, self.spatial_merge_size, kwargs=kwargs)
         # Each merged token concatenates its patches channel-major, as `unfold` lays them out
         merged_size = image_features.shape[-1] * merge_index.shape[-1]
         image_features = image_features[merge_index].transpose(1, 2).reshape(-1, merged_size)
@@ -124,11 +123,9 @@ class Mistral3MultiModalProjector(nn.Module):
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
         )
 
-    def forward(
-        self, image_features: torch.Tensor, image_sizes: torch.Tensor, merge_index: torch.Tensor | None = None
-    ):
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor, **kwargs):
         image_features = self.norm(image_features)
-        image_features = self.patch_merger(image_features, image_sizes, merge_index=merge_index)
+        image_features = self.patch_merger(image_features, image_sizes, **kwargs)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
@@ -192,7 +189,6 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -207,7 +203,7 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     The Mistral3 model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class Mistral3Model(Mistral3PreTrainedModel):
+class Mistral3Model(Mistral3PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Mistral3Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -216,27 +212,41 @@ class Mistral3Model(Mistral3PreTrainedModel):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
+    @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(
-            pixel_values, image_sizes, vision_feature_layer=vision_feature_layer, return_dict=True, **kwargs
+        image_outputs = self.vision_tower(
+            pixel_values,
+            image_sizes=image_sizes,
+            return_dict=True,
+            **kwargs,
+        )
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
+        image_outputs.pooler_output = self.multi_modal_projector(
+            selected_image_feature.squeeze(0), image_sizes, **kwargs
         )
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        split_sizes = (
-            (torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio)
-            .prod(dim=-1)
-            .tolist()
-        )
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        image_outputs.split_sizes = (
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+        ).prod(dim=-1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -292,7 +302,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
@@ -300,9 +310,10 @@ class Mistral3Model(Mistral3PreTrainedModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -328,64 +339,16 @@ class Mistral3Model(Mistral3PreTrainedModel):
     def get_data_dependent_inputs(
         self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
-        tower's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`, prefixed
-        `image_`, as `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile` and
-        `torch.export` free of those operations. Only the config and the shape of `pixel_values` are read.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`, *optional*):
-                The padded images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
-                The height and width of each image, before padding.
-        """
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
         if pixel_values is None or image_sizes is None:
             return {}
         inputs = self.vision_tower.get_data_dependent_inputs(pixel_values, image_sizes)
-        inputs["merge_index"] = self.multi_modal_projector.patch_merger.get_merge_index(
-            image_sizes, pixel_values.device
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
         )
         return {f"image_{name}": value for name, value in inputs.items()}
-
-    @accepts_precomputed_kwargs(modality="image")
-    @merge_with_config_defaults
-    @can_return_tuple
-    @select_hidden_states("vision_feature_layer")
-    @auto_docstring(
-        custom_intro="All images' last hidden states from the vision tower, projected, as one tensor; "
-        "`get_image_features` splits them per image."
-    )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        merge_index: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        merge_index (`torch.LongTensor` of shape `(num_merged_tokens, spatial_merge_size**2)`, *optional*):
-            The patch merger's indices, see [`Mistral3PatchMerger.get_merge_index`].
-        """
-        image_outputs = self.vision_tower(
-            pixel_values,
-            image_sizes=image_sizes,
-            return_dict=True,
-            **kwargs,
-        )
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        image_outputs.pooler_output = self.multi_modal_projector(
-            selected_image_feature.squeeze(0), image_sizes, merge_index=merge_index
-        )
-        return image_outputs
 
 
 @auto_docstring(
@@ -393,7 +356,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
     The MISTRAL3 model which consists of a vision backbone and a language model.
     """
 )
-class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin):
+class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -405,23 +368,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            **kwargs,
-        )
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -496,18 +442,6 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
-        )
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_embeddings(
-            pixel_values=pixel_values, image_sizes=image_sizes, vision_feature_layer=vision_feature_layer, **kwargs
         )
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:

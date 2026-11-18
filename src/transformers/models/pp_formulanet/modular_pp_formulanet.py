@@ -258,7 +258,6 @@ class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(module)
@@ -420,6 +419,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     @can_return_tuple
     @auto_docstring
@@ -514,9 +514,6 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
 
     def get_placeholder_mask(self):
         raise AttributeError("The PPFormulaNet does not need placeholder mask.")
-
-    def get_image_features(self):
-        raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
     def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
