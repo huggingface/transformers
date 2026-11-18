@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import GotOcr2Processor
 from transformers.testing_utils import is_torch_available, require_vision
 
@@ -68,6 +70,21 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(image_input, return_tensors="pt", crop_to_patches=True, max_patches=6)
         self.assertEqual(inputs["input_ids"].shape, (1, 1872))
         self.assertEqual(inputs["pixel_values"].shape, (7, 3, 384, 384))
+
+    def test_box_normalization(self):
+        """Check that the box normalization works for different image types.
+
+        Regression test for https://github.com/huggingface/transformers/issues/49902
+        """
+        processor = self.get_processor()
+        pil_image = self.prepare_images_inputs()
+        numpy_image = np.array(pil_image).transpose(2, 0, 1)
+        torch_image = torch.from_numpy(numpy_image)
+        for image in [pil_image, numpy_image, torch_image]:
+            with self.subTest(image_type=type(image).__name__):
+                inputs = processor(image, return_tensors="pt", box=[0, 0, 100, 10])
+                prompt = processor.decode(inputs["input_ids"][0])
+                self.assertIn("[0, 0, 250, 333] OCR", prompt)
 
     def test_processor_text_has_no_visual(self):
         # Overwritten: requires `multi_page` kwarg to process nested vision inputs

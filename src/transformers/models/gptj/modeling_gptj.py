@@ -424,7 +424,6 @@ class GPTJPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _can_compile_fullgraph = True
 

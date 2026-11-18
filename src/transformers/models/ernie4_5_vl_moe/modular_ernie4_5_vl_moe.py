@@ -198,7 +198,6 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "vision_config": Ernie4_5_VLMoeVisionConfig,
         "text_config": Ernie4_5_VLMoeTextConfig,
@@ -264,7 +263,6 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
 
         return inv_freq_3d, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)

@@ -24,6 +24,7 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
+    Expectations,
     backend_device_count,
     backend_torch_accelerator_module,
     cleanup,
@@ -1138,21 +1139,42 @@ class CacheHardIntegrationTest(unittest.TestCase):
         input_length = inputs.input_ids.shape[1]
         score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
-        EXPECTED_GENERATION = (
-            "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
-            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
-            "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
-            "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
-            "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
-            "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
-            "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
-            "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
-            "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
-            "disabilities. They have a long life span, and they can live for many years. They are also known for "
-            "their agility and gracefulness. They are often associated with mystery and independence. They are also "
-            "known for their ability to land on their feet when they fall. They"
-        )
-        EXPECTED_SCORE_SUM = 10834.7919921875
+        EXPECTED_GENERATION = Expectations(
+            {
+                (None, None): (
+                    "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
+                    "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
+                    "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
+                    "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
+                    "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
+                    "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
+                    "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
+                    "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
+                    "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
+                    "disabilities. They have a long life span, and they can live for many years. They are also known for "
+                    "their agility and gracefulness. They are often associated with mystery and independence. They are also "
+                    "known for their ability to land on their feet when they fall. They"
+                ),
+                ("cuda", (8, 6)): (
+                    "Here's everything I know about cats. Cats are mammals, they have fur, they have four legs, they "
+                    "have a tail, they have a face, they have a nose, they have a mouth, they have a body, they have a "
+                    "heart, they have a brain, they have a liver, they have a stomach, they have a kidney, they have a "
+                    "bladder, they have a skeleton, they have a circulatory system, they have a respiratory system, they "
+                    "have a digestive system, they have a nervous system, they have a muscular system, they have a "
+                    "skeletal system, they have a lymphatic system, they have a reproductive system, they have a "
+                    "excretory system, they have a endocrine system, they have a immune system, they have a "
+                    "integumentary system, they have a sensory system, they have a excretory system, they have a "
+                    "digestive system, they have a circulatory system, they have a respiratory system, they have a "
+                    "nervous system, they have a muscular system, they have a skeletal system, they have a lymphatic "
+                    "system, they have a reproductive system, they have a excretory system, they have a endocrine "
+                    "system, they have a immune system, they have a integumentary system, they have a sensory system. "
+                    "\n\nOkay, so I have"
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_SCORE_SUM = Expectations(
+            {(None, None): 10834.7919921875, ("cuda", (8, 6)): 11565.626953125}
+        ).get_expectation()
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
         self.assertAlmostEqual(score_sum.item(), EXPECTED_SCORE_SUM, places=2)
         self.assertIsInstance(gen_out.cache, DynamicCache)  # sanity check
@@ -1306,13 +1328,22 @@ class CacheHardIntegrationTest(unittest.TestCase):
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
-        EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
-            "wonderful way to explore the world, learn about different cultures, and create unforgettable "
-            "memories. Whether you're a seasoned traveler or someone",
-            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
-            " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
-        ]
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore the world, learn about different cultures, and create unforgettable "
+                "memories. Whether you're a seasoned traveler or someone",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+            ("cuda", (8, 6)): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore new places, cultures, and experiences. Whether you are a seasoned "
+                "traveler or a first-time adventurer, there is always something",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+        }).get_expectation()  # fmt: skip
 
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 

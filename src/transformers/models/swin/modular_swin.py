@@ -695,7 +695,6 @@ class SwinPreTrainedModel(ViTPreTrainedModel):
         "attentions": OutputRecorder(SwinStage, index=2, capture_initial_hidden_state=False),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
