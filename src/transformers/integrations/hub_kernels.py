@@ -27,6 +27,7 @@ from ..conversion_mapping import get_checkpoint_conversion_mapping, register_che
 from ..modeling_flash_attention_utils import FLASH_ATTN_KERNEL_VERSIONS
 from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
+from ..utils.generic import suppress_kernels_logging
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
     KERNELS_MIN_VERSION,
@@ -950,26 +951,8 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-# Layers that runtimes managing their own state (e.g. vLLM) replace with `kernelize`, which have no kernel on the Hub
-_RUNTIME_ONLY_KERNEL_LAYERS = ("causal_conv1d_forward", "ssd_forward", "selective_scan_forward")
-
-
-def _is_not_runtime_only_mapping_warning(record) -> bool:
-    message = record.getMessage()
-    is_mapping_warning = "No kernel mapping found" in message
-    return not (is_mapping_warning and any(f"`{name}`" in message for name in _RUNTIME_ONLY_KERNEL_LAYERS))
-
-
-@contextmanager
-def _hide_runtime_only_mapping_warnings():
-    kernels_logger = logging.get_logger("kernels.layer.layer")
-    kernels_logger.addFilter(_is_not_runtime_only_mapping_warning)
-    try:
-        yield
-    finally:
-        kernels_logger.removeFilter(_is_not_runtime_only_mapping_warning)
-
-
+# Runtimes managing their own state (e.g. vLLM) replace these layers with `kernelize`, they have no kernel on the Hub
+@suppress_kernels_logging(layers={"causal_conv1d_forward", "ssd_forward", "selective_scan_forward"})
 def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
@@ -980,13 +963,12 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 
-    with _hide_runtime_only_mapping_warnings():
-        if model.kernel_config is not None:
-            inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
-            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
-                _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
-        else:
+    if model.kernel_config is not None:
+        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
+        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
             _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
+    else:
+        _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
 
     model._use_kernels = True
 
