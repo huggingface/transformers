@@ -416,16 +416,15 @@ jobs:
           print(f"[HF memory patch] psutil total: {before:.1f} GiB -> {after:.1f} GiB", flush=True)
           EOF
 
-      # TODO: deselect test_mtp_draft_loads_mtp_weights (e.g. `--deselect` or `-k "not test_mtp_draft_loads_mtp_weights"`):
-      # it needs a GPU but has no CPU skip, so it fails here with "Cannot access accelerator device when none is
-      # available" (added in vllm-project/vllm#61270).
       - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         env:
           PYTHONPATH: /tmp
         run: |
+          # test_mtp_draft_loads_mtp_weights needs a GPU (vLLM runs test_backend.py on GPU only)
           pytest -p hf_ci_memory -v -s tests/models/transformers/ \
-            --num-shards=4 --shard-id=$SHARD_ID
+            --num-shards=4 --shard-id=$SHARD_ID \
+            --deselect tests/models/transformers/test_backend.py::test_mtp_draft_loads_mtp_weights
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
