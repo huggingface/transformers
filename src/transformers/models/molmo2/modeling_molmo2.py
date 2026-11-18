@@ -240,10 +240,10 @@ def rotate_half(x):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class Molmo2Attention(nn.Module):
-    """Olmo2 attention whose q/k RMSNorm runs either over the full projection (`olmo`) or per head (`qwen3`)."""
+class Molmo2OlmoAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Molmo2TextConfig, layer_idx: int) -> None:
+    def __init__(self, config: Molmo2TextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -262,16 +262,12 @@ class Molmo2Attention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.q_norm = Molmo2RMSNorm(
-            self.head_dim if config.qk_norm_type == "qwen3" else config.num_attention_heads * self.head_dim,
-            eps=config.rms_norm_eps,
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.k_norm = Molmo2RMSNorm(
-            self.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * self.head_dim,
-            eps=config.rms_norm_eps,
-        )
-        self.qk_norm_type = config.qk_norm_type
+        # Llama-style RMSNorm (casts before the weight), unlike Olmo2's
+        self.q_norm = Molmo2RMSNorm(config.num_attention_heads * self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Molmo2RMSNorm(config.num_key_value_heads * self.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -280,28 +276,18 @@ class Molmo2Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         cache: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states))
+        key_states = self.k_norm(self.k_proj(hidden_states))
+        value_states = self.v_proj(hidden_states)
 
-        if self.qk_norm_type == "olmo":
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
-
-        query_states = query_states.view(hidden_shape)
-        key_states = key_states.view(hidden_shape)
-
-        if self.qk_norm_type == "qwen3":
-            query_states = self.q_norm(query_states)
-            key_states = self.k_norm(key_states)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -329,6 +315,79 @@ class Molmo2Attention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
+class Molmo2Qwen3Attention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: Molmo2TextConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Molmo2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.sliding_window = None
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,  # diff with Llama
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
 class Molmo2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -345,12 +404,15 @@ class Molmo2MLP(nn.Module):
         return down_proj
 
 
+# `qk_norm_type`: RMSNorm over the full q/k projections (`olmo`) or per head (`qwen3`)
+MOLMO2_ATTENTION_CLASSES = {"olmo": Molmo2OlmoAttention, "qwen3": Molmo2Qwen3Attention}
+
+
 class Molmo2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Molmo2TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = Molmo2Attention(config=config, layer_idx=layer_idx)
+        self.self_attn = MOLMO2_ATTENTION_CLASSES[config.qk_norm_type](config, layer_idx)
 
         self.mlp = Molmo2MLP(config)
         self.input_layernorm = Molmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -413,7 +475,7 @@ class Molmo2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Molmo2DecoderLayer,
-        "attentions": Molmo2Attention,
+        "attentions": [Molmo2OlmoAttention, Molmo2Qwen3Attention],
     }
     input_modalities = ("image", "video", "text")
 
