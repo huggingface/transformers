@@ -663,7 +663,6 @@ class LxmertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "lxmert"
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

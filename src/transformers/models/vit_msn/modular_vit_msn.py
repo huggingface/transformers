@@ -68,7 +68,6 @@ class ViTMSNLayer(ViTLayer):
 class ViTMSNPreTrainedModel(ViTPreTrainedModel):
     base_model_prefix = "vit"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, ViTMSNEmbeddings):

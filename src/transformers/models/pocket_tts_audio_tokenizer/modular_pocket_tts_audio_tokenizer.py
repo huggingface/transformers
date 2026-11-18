@@ -222,7 +222,6 @@ class PocketTTSAudioTokenizerLayerScale(MimiLayerScale):
 
 @auto_docstring
 class PocketTTSAudioTokenizerPreTrainedModel(MimiPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         # Mimi's, without its residual vector quantizer's codebooks
         PreTrainedModel._init_weights(self, module)

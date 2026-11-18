@@ -98,8 +98,8 @@ from ..distributed_testing_utils import run_distributed
 # Constants for tests
 _DEFAULT_USER_MESSAGES = [
     "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
-    "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
-    "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
+    "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+    "Toulouse has twice as many sheep as Charleston. Charleston has 4 times as many sheep as Seattle. How many sheep do Toulouse, Charleston, and Seattle have together if Seattle has 20 sheep?",
 ]  # fmt: skip
 
 
@@ -823,6 +823,39 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 if idx != allocator.write_trash_index:
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
+
+    def test_generate_batch_under_inference_mode(self) -> None:
+        """The background generation thread runs in the caller's `torch.inference_mode()`."""
+        tokenizer, model = get_tokenizer_and_model(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", "sdpa", torch_device, dtype=torch.float32
+        )
+        input_ids = get_generation_inputs(["Where is Paris?"], tokenizer, for_continuous_batching=True)
+        generation_config = GenerationConfig(do_sample=False, max_new_tokens=5, eos_token_id=-1)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False,
+            use_async_batching=False,
+            auto_switch_to_flash=False,
+            num_blocks=16,
+            max_batch_tokens=256,
+        )
+
+        expected = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+        forward_in_inference_mode = []
+        model.register_forward_pre_hook(lambda *_: forward_in_inference_mode.append(torch.is_inference_mode_enabled()))
+        with torch.inference_mode():
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+        self.assertTrue(forward_in_inference_mode)
+        self.assertTrue(all(forward_in_inference_mode))
+        self.assertEqual(len(outputs["req_0"].generated_tokens), 5)
+        self.assertEqual(outputs["req_0"].generated_tokens, expected["req_0"].generated_tokens)
 
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
@@ -2173,7 +2206,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         tokenizer, model = get_tokenizer_and_model(
             model_id, "flash_attention_2", torch_device, torch.bfloat16, upcast_lm_head=True
         )
-        # Skip the "Josh" prompt: its 5th token is an exact tie in bf16, which the fp32 lm_head breaks differently
         user_messages = [_DEFAULT_USER_MESSAGES[0], _DEFAULT_USER_MESSAGES[2]]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -2188,9 +2220,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Generated with a regular generate in bf16, without CB nor upcast lm_head
         expected_texts = Expectations(
             {
-                ("cuda", (10, 0)): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                ("cuda", (10, 0)): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
                 # Default expectation was not tested but needs to be there to avoid crashes. Feel free to change.
-                (None, None): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                (None, None): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
             }
         ).get_expectation()
         self.assertEqual(len(outputs), len(expected_texts))
