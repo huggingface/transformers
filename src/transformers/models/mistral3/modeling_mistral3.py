@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 import torch
@@ -60,6 +61,26 @@ class Mistral3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+def get_merge_index(
+    image_sizes: torch.Tensor | list, patch_size: int, merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """For each merged token, the indices of its `merge_size ** 2` patches in the packed sequence, block by block in
+    row-major order (an image's last row or column of patches is dropped when it doesn't fill a block), or pop
+    `"merge_index"` from `kwargs` if precomputed."""
+    if kwargs is not None and (merge_index := kwargs.pop("merge_index", None)) is not None:
+        return merge_index
+    device = image_sizes.device if isinstance(image_sizes, torch.Tensor) else None
+    block = torch.arange(merge_size, device=device)
+    merge_index, offset = [], 0
+    for height, width in (torch.as_tensor(image_sizes) // patch_size).tolist():
+        rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
+        columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
+        within = (block[:, None] * width + block[None, :]).flatten()
+        merge_index.append((rows * width + columns).reshape(-1, 1) + within + offset)
+        offset += height * width
+    return torch.cat(merge_index)
+
+
 class Mistral3PatchMerger(nn.Module):
     """
     Learned merging of spatial_merge_size ** 2 patches
@@ -74,26 +95,11 @@ class Mistral3PatchMerger(nn.Module):
         self.patch_size = self.config.vision_config.patch_size
         self.merging_layer = nn.Linear(hidden_size * self.spatial_merge_size**2, hidden_size, bias=False)
 
-    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
-        image_sizes = [
-            (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
-        ]
-
-        tokens_per_image = [h * w for h, w in image_sizes]
-        d = image_features.shape[-1]
-
-        permuted_tensor = []
-        for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
-            # Reshape image_tokens into a 2D grid
-            h, w = image_sizes[image_index]
-            image_grid = image_tokens.view(h, w, d).permute(2, 0, 1).unsqueeze(0)
-            grid = torch.nn.functional.unfold(
-                image_grid, kernel_size=self.spatial_merge_size, stride=self.spatial_merge_size
-            )
-            grid = grid.view(d * self.spatial_merge_size**2, -1).t()
-            permuted_tensor.append(grid)
-
-        image_features = torch.cat(permuted_tensor, dim=0)
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor, **kwargs) -> torch.Tensor:
+        merge_index = get_merge_index(image_sizes, self.patch_size, self.spatial_merge_size, kwargs=kwargs)
+        # Each merged token concatenates its patches channel-major, as `unfold` lays them out
+        merged_size = image_features.shape[-1] * merge_index.shape[-1]
+        image_features = image_features[merge_index].transpose(1, 2).reshape(-1, merged_size)
         image_features = self.merging_layer(image_features)
         return image_features
 
@@ -117,9 +123,9 @@ class Mistral3MultiModalProjector(nn.Module):
             config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
         )
 
-    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor):
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor, **kwargs):
         image_features = self.norm(image_features)
-        image_features = self.patch_merger(image_features, image_sizes)
+        image_features = self.patch_merger(image_features, image_sizes, **kwargs)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
@@ -233,12 +239,13 @@ class Mistral3Model(Mistral3PreTrainedModel, MultimodalMixin):
             hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
-        image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
+        image_outputs.pooler_output = self.multi_modal_projector(
+            selected_image_feature.squeeze(0), image_sizes, **kwargs
+        )
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
         image_outputs.split_sizes = (
-            torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
         ).prod(dim=-1)
-        image_outputs.pooler_output = image_features.squeeze(0)
         return image_outputs
 
     def get_placeholder_mask(
