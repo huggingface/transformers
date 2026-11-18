@@ -289,6 +289,16 @@ class DummyRootMerged(PreTrainedModel):
         self.post_init()
 
 
+class DummyConvModel(PreTrainedModel):
+    config: PreTrainedConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.conv = nn.Conv1d(4, 6, kernel_size=3)
+        self.conv_t = nn.ConvTranspose1d(6, 4, kernel_size=4, stride=2)
+        self.post_init()
+
+
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
@@ -1347,6 +1357,46 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         saved_qkv = {key: value for key, value in saved.items() if "qkv_proj" in key}
         self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
 
+    def test_fuse_weight_norm(self):
+        # a checkpoint of weight-normalized convolutions: each weight is saved as its magnitude and direction
+        reference = DummyConvModel(PreTrainedConfig())
+        for name in ("conv", "conv_t"):
+            module = nn.utils.parametrizations.weight_norm(getattr(reference, name))
+            with torch.no_grad():
+                module.parametrizations.weight.original0.uniform_(0.5, 1.5)
+                module.parametrizations.weight.original1.normal_()
+        state_dict = {key: value.clone() for key, value in reference.state_dict().items()}
+        self.assertIn("conv.parametrizations.weight.original0", state_dict)
+
+        model = DummyConvModel(PreTrainedConfig())
+        weight_mapping = [
+            WeightConverter(
+                ["parametrizations.weight.original0", "parametrizations.weight.original1"],
+                "weight",
+                operations=[FuseWeightNorm()],
+            )
+        ]
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+        # the loaded weights are the ones the parametrization computes at every forward
+        for name in ("conv", "conv_t"):
+            torch.testing.assert_close(getattr(model, name).weight, getattr(reference, name).weight)
+            torch.testing.assert_close(getattr(model, name).bias, getattr(reference, name).bias)
+
+        # saving splits each weight again, as `weight_norm` does when it is applied to the loaded weights
+        expected = DummyConvModel(PreTrainedConfig())
+        expected.load_state_dict(model.state_dict())
+        for name in ("conv", "conv_t"):
+            nn.utils.parametrizations.weight_norm(getattr(expected, name))
+        reversed_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(reversed_state_dict), set(state_dict))
+        for key, value in expected.state_dict().items():
+            torch.testing.assert_close(reversed_state_dict[key], value)
+
     def test_quantize_on_load_receives_the_checkpoint_dtype(self):
         # Casting to the int8 storage before quantizing would zero the weight
         class QuantizeOp(ConversionOps):
@@ -1504,25 +1554,6 @@ class TestConversionMapping(unittest.TestCase):
         torch.testing.assert_close(
             convert(conv_to_linear.reverse_op, convert(conv_to_linear, conv_weight)), conv_weight
         )
-
-    def test_weight_norm_conversion_ops(self):
-        source_patterns = ["parametrizations.weight.original0", "parametrizations.weight.original1"]
-        fuse = FuseWeightNorm()
-        for conv in (nn.Conv1d(4, 6, kernel_size=3), nn.ConvTranspose1d(6, 4, kernel_size=4, stride=2)):
-            conv = nn.utils.parametrizations.weight_norm(conv)
-            weight_g = torch.rand_like(conv.parametrizations.weight.original0) + 0.5
-            weight_v = torch.randn_like(conv.parametrizations.weight.original1)
-            with torch.no_grad():
-                conv.parametrizations.weight.original0.copy_(weight_g)
-                conv.parametrizations.weight.original1.copy_(weight_v)
-
-            # test weight_g, weight_v -> weight, as computed by the parametrization
-            input_dict = dict(zip(source_patterns, [weight_g, weight_v]))
-            weight = fuse.convert(input_dict, source_patterns, ["weight"])["weight"]
-            torch.testing.assert_close(weight, conv.weight.detach())
-            # test weight -> weight_g, weight_v -> weight round trip
-            unfused = fuse.reverse_op.convert({"weight": weight}, ["weight"], source_patterns)
-            torch.testing.assert_close(fuse.convert(unfused, source_patterns, ["weight"])["weight"], weight)
 
     def test_register_checkpoint_conversion_mapping(self):
         register_checkpoint_conversion_mapping(

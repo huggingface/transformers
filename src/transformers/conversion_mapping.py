@@ -2149,6 +2149,48 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^head\.decoder\.", "lm_head."),
             WeightRenaming(r"^head\.", "projection_head."),
         ],
+        "yue2_vae": [
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.0\.",
+                r"^\1.snake1.",
+            ),
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.1\.",
+                r"^\1.conv1.",
+            ),
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.2\.",
+                r"^\1.snake2.",
+            ),
+            WeightRenaming(
+                r"^(encoder\.layers\.[1-6]\.layers\.[0-2]|decoder\.layers\.[1-6]\.layers\.[2-4])\.layers\.3\.",
+                r"^\1.conv2.",
+            ),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.0\.", r"^\1.res_unit1."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.1\.", r"^\1.res_unit2."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.2\.", r"^\1.res_unit3."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.3\.", r"^\1.snake1."),
+            WeightRenaming(r"^(encoder\.layers\.[1-6])\.layers\.4\.", r"^\1.conv1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.0\.", r"^\1.snake1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.1\.", r"^\1.conv_t1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.2\.", r"^\1.res_unit1."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.3\.", r"^\1.res_unit2."),
+            WeightRenaming(r"^(decoder\.layers\.[1-6])\.layers\.4\.", r"^\1.res_unit3."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.0\.", r"^\1.conv1."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.1\.", r"^\1.block.0."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.2\.", r"^\1.block.1."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.3\.", r"^\1.block.2."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.4\.", r"^\1.block.3."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.5\.", r"^\1.block.4."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.6\.", r"^\1.block.5."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.7\.", r"^\1.snake1."),
+            WeightRenaming(r"^(encoder|decoder)\.layers\.8\.", r"^\1.conv2."),
+            WeightConverter(
+                ["parametrizations.weight.original0", "parametrizations.weight.original1"],
+                "weight",
+                operations=[FuseWeightNorm()],
+            ),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [
@@ -2206,36 +2248,6 @@ def _build_checkpoint_conversion_mapping():
     # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
     mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
-
-    mapping["yue2_vae"] = [
-        WeightRenaming(r"^(encoder|decoder)\.layers\.0\.", r"^\1.conv1."),
-        WeightRenaming(r"^(encoder|decoder)\.layers\.7\.", r"^\1.snake1."),
-        WeightRenaming(r"^(encoder|decoder)\.layers\.8\.", r"^\1.conv2."),
-    ]
-    yue2_acoustic_tokenizer_block_modules = {
-        "encoder": ["res_unit1", "res_unit2", "res_unit3", "snake1", "conv1"],
-        "decoder": ["snake1", "conv_t1", "res_unit1", "res_unit2", "res_unit3"],
-    }
-    yue2_acoustic_tokenizer_res_unit_modules = ["snake1", "conv1", "snake2", "conv2"]
-    for part, modules in yue2_acoustic_tokenizer_block_modules.items():
-        for block in range(6):
-            for index, module in enumerate(modules):
-                source = rf"^{part}\.layers\.{block + 1}\.layers\.{index}\."
-                target = rf"^{part}.block.{block}.{module}."
-                if not module.startswith("res_unit"):
-                    mapping["yue2_vae"].append(WeightRenaming(source, target))
-                    continue
-                mapping["yue2_vae"] += [
-                    WeightRenaming(rf"{source}layers\.{res_index}\.", rf"{target}{res_module}.")
-                    for res_index, res_module in enumerate(yue2_acoustic_tokenizer_res_unit_modules)
-                ]
-    mapping["yue2_vae"].append(
-        WeightConverter(
-            ["parametrizations.weight.original0", "parametrizations.weight.original1"],
-            "weight",
-            operations=[FuseWeightNorm()],
-        )
-    )
 
     mapping["bailing_hybrid"] = mapping["qwen2_moe"].copy()
     mapping["bailing_hybrid"] += [
