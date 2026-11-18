@@ -1248,9 +1248,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         video_outputs.pooler_output = video_embeds
@@ -1265,9 +1262,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         image_outputs.pooler_output = image_embeds

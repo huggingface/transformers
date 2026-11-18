@@ -1397,9 +1397,6 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1410,9 +1407,6 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
         return vision_outputs

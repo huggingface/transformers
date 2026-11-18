@@ -1520,9 +1520,6 @@ class Molmo2Model(LlavaModel):
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]

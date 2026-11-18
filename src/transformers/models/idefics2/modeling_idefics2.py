@@ -826,7 +826,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        All real (non-padding) images' features as one tensor; `get_image_features` splits them per batch row.
+        Skips the padding images.
 
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.

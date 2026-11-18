@@ -513,8 +513,6 @@ class VideoLlama3Model(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
