@@ -336,7 +336,6 @@ class ModernBertDecoderPredictionHead(ModernBertPredictionHead):
 
 @auto_docstring
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
-    _skip_keys_device_placement = ["cache"]
     _no_split_modules = ["ModernBertDecoderLayer"]
     _supports_flex_attn = True
     _supports_attention_backend = True
