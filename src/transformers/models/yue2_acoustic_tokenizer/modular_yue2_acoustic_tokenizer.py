@@ -103,13 +103,29 @@ class YuE2AcousticTokenizerDecoderBlock(DacDecoderBlock):
         self.res_unit3 = YuE2AcousticTokenizerResidualUnit(out_channels, dilation=9)
 
 
+class YuE2AcousticTokenizerVAEBottleneck(nn.Module):
+    """The diagonal Gaussian posterior of the VAE: its mean, or a sample of it, from the mean and the scale."""
+
+    def __init__(self, eps: float = 1e-4):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, hidden_states: torch.Tensor, sample: bool = False) -> torch.Tensor:
+        mean, scale = hidden_states.chunk(2, dim=1)
+        if not sample:
+            return mean
+        std = nn.functional.softplus(scale) + self.eps
+        return mean + std * torch.randn_like(mean)
+
+
 @auto_docstring
 class YuE2AcousticTokenizerPreTrainedModel(PreTrainedModel):
     config: YuE2AcousticTokenizerConfig
-    base_model_prefix = "yue2_acoustic_tokenizer"
+    base_model_prefix = "model"
     main_input_name = "input_values"
     input_modalities = "audio"
     _no_split_modules = ["YuE2AcousticTokenizerResidualUnit"]
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -141,6 +157,7 @@ class YuE2AcousticTokenizerEncoderModel(YuE2AcousticTokenizerPreTrainedModel):
         )
         self.snake1 = YuE2AcousticTokenizerSnakeBeta(hidden_sizes[-1])
         self.conv2 = nn.Conv1d(hidden_sizes[-1], config.latent_dim, kernel_size=3, padding=1)
+        self.bottleneck = YuE2AcousticTokenizerVAEBottleneck()
         self.post_init()
 
     @can_return_tuple
@@ -158,12 +175,7 @@ class YuE2AcousticTokenizerEncoderModel(YuE2AcousticTokenizerPreTrainedModel):
         for layer in self.block:
             hidden_states = layer(hidden_states)
         hidden_states = self.conv2(self.snake1(hidden_states))
-
-        mean, scale = hidden_states.chunk(2, dim=1)
-        latents = mean
-        if sample:
-            std = nn.functional.softplus(scale) + 1e-4
-            latents = mean + std * torch.randn_like(mean)
+        latents = self.bottleneck(hidden_states, sample=sample)
         return YuE2AcousticTokenizerEncoderOutput(latents=latents.transpose(1, 2))
 
 
