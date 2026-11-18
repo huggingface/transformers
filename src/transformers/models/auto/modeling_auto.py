@@ -1208,6 +1208,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("cosmos3_edge", "Cosmos3EdgeForConditionalGeneration"),
         ("cosmos3_omni", "Cosmos3OmniForConditionalGeneration"),
         ("deepseek_ocr2", "DeepseekOcr2ForConditionalGeneration"),
+        ("deepseek_v41", "DeepseekV41ForCausalLM"),
         ("deepseek_vl", "DeepseekVLForConditionalGeneration"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridForConditionalGeneration"),
         ("diffusion_gemma", "DiffusionGemmaForBlockDiffusion"),

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -18,11 +19,15 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ChannelDimension, ImageInput, ImageType, PILImageResampling, SizeDict, get_image_type
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -34,8 +39,15 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -76,7 +88,7 @@ class DeepseekV41VisionConfig(PreTrainedConfig):
     min_pixels (`int`, *optional*, defaults to 295936):
         Images with fewer pixels are scaled up to this area. Only used for preprocessing.
     max_wh_ratio (`float`, *optional*):
-        Images wider than this ratio are cropped down to it. Only used for preprocessing.
+        Images wider than this width-to-height ratio are squashed to it. Only used for preprocessing.
     """
 
     model_type = "deepseek_v41_vision"
@@ -1851,6 +1863,283 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
+def get_resized_image_size(
+    height: int,
+    width: int,
+    patch_size: int,
+    downsample_ratio: int,
+    max_image_tokens: int,
+    min_pixels: int,
+    max_wh_ratio: float | None = None,
+) -> tuple[int, int]:
+    """
+    Works out the size that an image is resized to before it is cut into patches. Both sides come out as a
+    multiple of `patch_size`, small images are scaled up to about `min_pixels`, and large ones are scaled down
+    until they fit in `max_image_tokens`.
+
+    The model merges every `downsample_ratio x downsample_ratio` square of patches into one token. An image
+    with `rows x columns` of those takes `rows * (columns + 1) + 2` positions in the prompt: a newline after
+    each row, plus a start and an end delimiter.
+
+    Args:
+        height (`int`):
+            Height of the image.
+        width (`int`):
+            Width of the image.
+        patch_size (`int`):
+            Side of the square patches that the vision encoder embeds.
+        downsample_ratio (`int`):
+            Side of the square of patches that the model merges into one token.
+        max_image_tokens (`int`):
+            The most positions the image may take in the prompt, delimiters included.
+        min_pixels (`int`):
+            Images with fewer pixels are scaled up to this area.
+        max_wh_ratio (`float`, *optional*):
+            Images wider than this width-to-height ratio are planned as if they had exactly this ratio.
+
+    Returns:
+        `tuple[int, int]`: The height and width to resize the image to.
+
+    Example:
+
+    ```python
+    >>> from transformers.models.deepseek_v41.image_processing_deepseek_v41 import get_resized_image_size
+
+    >>> limits = {"patch_size": 14, "downsample_ratio": 3, "max_image_tokens": 1024, "min_pixels": 295936}
+    >>> get_resized_image_size(701, 1024, **limits)
+    (714, 1036)
+    >>> # A small image is scaled up
+    >>> get_resized_image_size(200, 320, **limits)
+    (434, 700)
+    >>> # ... and one that would take more than 1024 positions is scaled down
+    >>> get_resized_image_size(2000, 3000, **limits)
+    (1050, 1568)
+
+    ```
+    """
+    # First, an image that is too wide is planned at the widest ratio allowed. It is squashed to that ratio
+    # afterwards, not cropped.
+    if max_wh_ratio is not None and width > height * max_wh_ratio:
+        width = height * max_wh_ratio
+    # Next, a small image is scaled up to `min_pixels`. The sides are truncated, so it can end up just below.
+    if 0 < width * height < min_pixels:
+        scale = (min_pixels / (width * height)) ** 0.5
+        width, height = int(width * scale), int(height * scale)
+    # Both sides are rounded up to whole patches, and a partial square of patches still makes a token
+    resized_height = math.ceil(height / patch_size) * patch_size
+    resized_width = math.ceil(width / patch_size) * patch_size
+    rows = math.ceil(resized_height // patch_size / downsample_ratio)
+    columns = math.ceil(resized_width // patch_size / downsample_ratio)
+    if rows * (columns + 1) + 2 <= max_image_tokens:
+        return resized_height, resized_width
+
+    # Finally, an image that takes too many positions is scaled down. With `rows = aspect * columns`, the
+    # budget `rows * (columns + 1) + 2 <= max_image_tokens` is a quadratic in `columns`, and this is its
+    # positive root.
+    aspect = height / width
+    max_columns = math.sqrt((max_image_tokens - 2) / aspect + 0.25) - 0.5
+    max_rows = max_columns * aspect
+    token_size = patch_size * downsample_ratio
+    if max_columns < 1.0:
+        # Too tall for one full column at its own aspect ratio, so it becomes a single column of tokens
+        return (max_image_tokens - 2) // 2 * token_size, token_size
+    if max_rows < 1.0:
+        # Too wide for one full row, so it becomes a single row of tokens
+        return token_size, (max_image_tokens - 3) * token_size
+    # Otherwise it is scaled to fit the largest whole grid of tokens, and keeps the whole patches that it covers
+    scale = min(math.floor(max_columns) * token_size / width, math.floor(max_rows) * token_size / height)
+    return math.floor(height * scale / patch_size) * patch_size, math.floor(width * scale / patch_size) * patch_size
+
+
+class DeepseekV41ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        Side of the square patches that the vision encoder embeds.
+    downsample_ratio (`int`, *optional*, defaults to 3):
+        Side of the square of patches that the model merges into one token.
+    max_image_tokens (`int`, *optional*, defaults to 1024):
+        The most positions an image may take in the prompt, delimiters included. Larger images are scaled down.
+    min_pixels (`int`, *optional*, defaults to 295936):
+        Images with fewer pixels are scaled up to this area.
+    max_wh_ratio (`float`, *optional*):
+        Images wider than this width-to-height ratio are squashed to it. The released checkpoints set no limit.
+    """
+
+    patch_size: int
+    downsample_ratio: int
+    max_image_tokens: int
+    min_pixels: int
+    max_wh_ratio: float | None
+
+
+@auto_docstring(
+    custom_intro="""
+    Constructs a DeepSeek-V4.1 image processor. Each image keeps its own resolution and aspect ratio: it is
+    resized to a whole number of patches, padded with gray where needed, and cut into flattened patches.
+    """
+)
+class DeepseekV41ImageProcessor(TorchvisionBackend):
+    do_convert_rgb = True
+    do_resize = True
+    resample = PILImageResampling.BICUBIC
+    do_rescale = True
+    do_normalize = True
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    patch_size = 14
+    downsample_ratio = 3
+    max_image_tokens = 1024
+    min_pixels = 295936
+    max_wh_ratio = None
+    valid_kwargs = DeepseekV41ImageProcessorKwargs
+    model_input_names = ["pixel_values", "image_grid_hw"]
+
+    def __init__(self, **kwargs: Unpack[DeepseekV41ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[DeepseekV41ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # The output size comes from `min_pixels` and `max_image_tokens`, so there is no `size` for the base
+        # class to check
+        kwargs.pop("do_resize", None)
+        super()._validate_preprocess_kwargs(**kwargs)
+
+    def process_image(
+        self,
+        image: ImageInput,
+        do_convert_rgb: bool | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+        device: "torch.device | None" = None,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> "torch.Tensor":
+        # The original preprocessing converts with a plain `convert("RGB")`, which drops an alpha channel. The
+        # base class would composite it onto a white background instead.
+        if do_convert_rgb and get_image_type(image) == ImageType.PIL:
+            image = tvF.pil_to_tensor(image.convert("RGB"))
+            input_data_format = ChannelDimension.FIRST
+        return super().process_image(
+            image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+        )
+
+    def resize_and_pad(
+        self,
+        image: "torch.Tensor",
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        fill_value: int = 127,
+    ) -> "torch.Tensor":
+        """
+        Resizes an image to fit inside `size` without changing its aspect ratio, and centers it on a canvas of
+        that size. This is what `PIL.ImageOps.pad` does, which the original preprocessing uses with a gray
+        canvas.
+
+        Args:
+            image (`torch.Tensor` of shape `(num_channels, height, width)`):
+                The image to resize.
+            size (`SizeDict`):
+                The height and width of the canvas.
+            resample (`PILImageResampling` or `InterpolationMode`):
+                The filter to resize with.
+            fill_value (`int`, *optional*, defaults to 127):
+                The value of the canvas around the image, on the 0-255 scale.
+
+        Returns:
+            `torch.Tensor` of shape `(num_channels, size.height, size.width)`: The image on its canvas.
+        """
+        height, width = image.shape[-2:]
+        content_height, content_width = size.height, size.width
+        if width / height > size.width / size.height:
+            # Relatively wider than the canvas: it fills the width, with a bar above and below
+            content_height = round(height / width * size.width)
+        elif width / height < size.width / size.height:
+            # Relatively taller than the canvas: it fills the height, with a bar on the left and right
+            content_width = round(width / height * size.height)
+        image = self.resize(image, SizeDict(height=content_height, width=content_width), resample)
+        if (content_height, content_width) == (size.height, size.width):
+            return image
+
+        canvas = image.new_full((*image.shape[:-2], size.height, size.width), fill_value)
+        top = round((size.height - content_height) * 0.5)
+        left = round((size.width - content_width) * 0.5)
+        canvas[..., top : top + content_height, left : left + content_width] = image
+        return canvas
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        downsample_ratio: int,
+        max_image_tokens: int,
+        min_pixels: int,
+        max_wh_ratio: float | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        patches, image_grid_hw = [], []
+        for image in images:
+            channels, height, width = image.shape
+            if do_resize:
+                resized_height, resized_width = get_resized_image_size(
+                    height, width, patch_size, downsample_ratio, max_image_tokens, min_pixels, max_wh_ratio
+                )
+                size = SizeDict(height=resized_height, width=resized_width)
+                if max_wh_ratio is not None and width >= max_wh_ratio * height:
+                    # Too wide: squashed to the size that was planned at the widest ratio allowed
+                    image = self.resize(image, size, resample)
+                else:
+                    # Everything else keeps its aspect ratio, with gray bars to fill up the last patches
+                    image = self.resize_and_pad(image, size, resample)
+                height, width = resized_height, resized_width
+            if height % patch_size != 0 or width % patch_size != 0:
+                raise ValueError(
+                    "With `do_resize=False`, the height and width of an image must be multiples of the patch "
+                    f"size.\nImage size: {(height, width)}\nPatch size: {patch_size}"
+                )
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            # One row per patch in reading order, each flattened as (channels, patch height, patch width)
+            rows, columns = height // patch_size, width // patch_size
+            image = image.reshape(channels, rows, patch_size, columns, patch_size).permute(1, 3, 0, 2, 4)
+            patches.append(image.reshape(rows * columns, -1))
+            image_grid_hw.append([rows, columns])
+        return BatchFeature(
+            data={"pixel_values": torch.cat(patches), "image_grid_hw": torch.tensor(image_grid_hw)},
+            tensor_type=return_tensors,
+        )
+
+
+@auto_docstring
+class DeepseekV41Processor(ProcessorMixin):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, image_token="<｜deepseek_image｜>"):
+        r"""
+        image_token (`str`, *optional*, defaults to `"<｜deepseek_image｜>"`):
+            The placeholder for an image in the prompt. The processor repeats it once for every position that
+            the image takes up.
+        """
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        # The model merges every `downsample_ratio x downsample_ratio` square of patches into a token, and a
+        # partial square at the edge still makes one
+        downsample_ratio = kwargs.get("downsample_ratio") or self.image_processor.downsample_ratio
+        height, width = (int(side) for side in image_inputs["image_grid_hw"][image_idx])
+        rows, columns = math.ceil(height / downsample_ratio), math.ceil(width / downsample_ratio)
+        # Every position of the image carries the image token: its start, each row with a newline after it,
+        # and its end. The model tells them apart by where they are in that layout.
+        return self.image_token * (rows * (columns + 1) + 2)
+
+
 __all__ = [
     "DeepseekV41Config",
     "DeepseekV41TextConfig",
@@ -1860,4 +2149,6 @@ __all__ = [
     "DeepseekV41TextModel",
     "DeepseekV41Model",
     "DeepseekV41ForCausalLM",
+    "DeepseekV41ImageProcessor",
+    "DeepseekV41Processor",
 ]

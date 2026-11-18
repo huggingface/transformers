@@ -37,7 +37,7 @@ class DeepseekV41VisionConfig(PreTrainedConfig):
     min_pixels (`int`, *optional*, defaults to 295936):
         Images with fewer pixels are scaled up to this area. Only used for preprocessing.
     max_wh_ratio (`float`, *optional*):
-        Images wider than this ratio are cropped down to it. Only used for preprocessing.
+        Images wider than this width-to-height ratio are squashed to it. Only used for preprocessing.
     """
 
     model_type = "deepseek_v41_vision"
