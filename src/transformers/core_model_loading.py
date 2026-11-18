@@ -1732,11 +1732,16 @@ def convert_and_load_state_dict_in_model(
             key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
         # FIXME: this should just not happen
-        if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
-            # Key should probably not have been renamed but we might need the `prefix` to be added.
-            renamed_key, source_pattern = rename_source_key(
-                original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
-            )
+        if renamed_key not in meta_model_state_dict:
+            # A converter's target that is not a param: the key renamed only, else as saved (we might need the
+            # `prefix` to be added)
+            for candidate, candidate_renamings in ((key, renamings), (original_key, [])):
+                fallback, _ = rename_source_key(
+                    candidate, candidate_renamings, [], base_model_prefix, meta_model_state_dict
+                )
+                if fallback in meta_model_state_dict:
+                    renamed_key, source_pattern = fallback, None
+                    break
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
