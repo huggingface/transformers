@@ -532,7 +532,6 @@ class HYV4VLModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        # Same implementation as for images
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -543,7 +542,6 @@ class HYV4VLModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        # Same implementation as for images
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 

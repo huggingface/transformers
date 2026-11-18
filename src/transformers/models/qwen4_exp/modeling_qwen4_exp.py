@@ -2375,7 +2375,6 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel, MultimodalMixin):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        # Same implementation as for images
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
