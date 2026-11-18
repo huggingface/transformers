@@ -198,7 +198,6 @@ class DeepseekVLHybridAligner(nn.Module):
 
 
 class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
@@ -257,7 +256,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         high_res_pixel_values: torch.Tensor,
@@ -269,7 +268,8 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=image_features.flatten(0, 1),
+            split_sizes=image_features.new_full(image_features.shape[:1], image_features.shape[1], dtype=torch.long),
             hidden_states=low_res_outputs.hidden_states,
             attentions=low_res_outputs.attentions,
             high_res_vision_last_hidden_state=high_res_outputs.last_hidden_state,
@@ -309,12 +309,15 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, high_res_pixel_values, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.reshape(-1, inputs_embeds.shape[-1])
             image_attention_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = image_attention_mask.to(inputs_embeds.device)

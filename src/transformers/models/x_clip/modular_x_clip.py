@@ -184,7 +184,6 @@ class XCLIPPreTrainedModel(CLIPPreTrainedModel):
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
@@ -513,6 +512,7 @@ class XCLIPPromptGenerator(nn.Module):
 
 class XCLIPModel(CLIPModel, XCLIPPreTrainedModel):
     config: XCLIPConfig
+    input_modalities = ("video", "text")
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)

@@ -463,6 +463,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            cache=cache,
         )
 
         hidden_states = self.drop(inputs_embeds + position_embeds)

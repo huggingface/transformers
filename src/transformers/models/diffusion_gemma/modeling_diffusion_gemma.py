@@ -45,7 +45,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -121,7 +121,6 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -827,8 +826,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -837,7 +835,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
@@ -998,9 +995,10 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     assumes the MoE code path in the inner layers.
     """
 )
-class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
+class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
@@ -1017,27 +1015,6 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1147,6 +1124,28 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
     def set_per_layer_input_embeddings(self, value):
         self.language_model.embed_tokens_per_layer = value
+
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        return vision_outputs
+
+    def get_video_features(self, *args, **kwargs):
+        raise NotImplementedError("DiffusionGemma does not support video inputs.")
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

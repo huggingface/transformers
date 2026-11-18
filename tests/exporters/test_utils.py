@@ -240,6 +240,34 @@ class ExportedModelTest(unittest.TestCase):
                     ExportedModel.from_pretrained(directory, trust_remote_code=True)
         self.assertTrue(load_config.call_args.kwargs["trust_remote_code"])
 
+    def test_from_pretrained_needs_trust_remote_code_for_programs_that_run_code(self):
+        """A format whose programs run code when loaded (pickled `.pt2`) is refused before any program is read, even
+        from a local directory, unless `trust_remote_code=True`."""
+
+        class _PickledStubExporter(_StubExporter):
+            requires_trust_remote_code = True
+
+        components = {"model": ExportedComponent("program", ExportMetadata())}
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend(_PickledStubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportedModel(components, "stub").save_pretrained(directory)
+                with mock.patch.object(_PickledStubExporter, "load_program") as load_program:
+                    with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
+                        ExportedModel.from_pretrained(directory)
+                load_program.assert_not_called()
+                loaded = ExportedModel.from_pretrained(directory, trust_remote_code=True)
+        self.assertEqual(loaded.components["model"].program, "program")
+
+    def test_only_pickled_programs_need_trust_remote_code(self):
+        """Only the Dynamo exporter's `.pt2` programs are pickled: the exporters built on it write programs that run no
+        code when loaded, so they load without `trust_remote_code=True`."""
+        from transformers.exporters import DynamoExporter, ExecutorchExporter, OnnxExporter, OpenVINOExporter
+
+        self.assertTrue(DynamoExporter.requires_trust_remote_code)
+        for exporter in (OnnxExporter, OpenVINOExporter, ExecutorchExporter):
+            self.assertFalse(exporter.requires_trust_remote_code, exporter.__name__)
+
     def test_from_pretrained_loads_a_newer_manifest(self):
         """An export from a newer transformers, with a field this version doesn't know, loads with a warning."""
         components = {"model": ExportedComponent("program", ExportMetadata(architecture="Stub"))}
@@ -676,4 +704,4 @@ class DecomposeMultimodalTest(unittest.TestCase):
         self.assertEqual(set(exported.components), names)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
-            self.assertEqual(set(ExportedModel.from_pretrained(directory).components), names)
+            self.assertEqual(set(ExportedModel.from_pretrained(directory, trust_remote_code=True).components), names)

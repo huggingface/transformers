@@ -96,7 +96,7 @@ class Lfm2VlModel(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
@@ -119,26 +119,29 @@ class Lfm2VlModel(LlavaModel):
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state
+        num_images, num_patches, _ = last_hidden_state.shape
+        factor = self.config.downsample_factor
 
-        img_feature_lengths = pixel_attention_mask.sum(dim=1)
-        image_features = []
+        # Each image's tokens, padded to the most an image can have: its `factor x factor` block of patch rows
+        widths = spatial_shapes[:, 1, None]
+        blocks_per_row = widths // factor
+        num_tokens = (spatial_shapes[:, 0, None] // factor) * blocks_per_row
+        token = torch.arange(num_patches // factor**2, device=last_hidden_state.device)[None]
+        block_offset = torch.arange(factor, device=last_hidden_state.device)
+        rows = (token // blocks_per_row * factor)[..., None, None] + block_offset[:, None]
+        columns = (token % blocks_per_row * factor)[..., None, None] + block_offset
+        image_offset = torch.arange(num_images, device=last_hidden_state.device)[:, None, None, None] * num_patches
+        patch_index = image_offset + rows * widths[..., None, None] + columns
 
-        for img_idx in range(last_hidden_state.size(0)):
-            feature = last_hidden_state[img_idx]
-            # unpad the image representation
-            feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
-
-            # reshape to original height and width
-            feature_org_h, feature_org_w = spatial_shapes[img_idx]
-            feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
-
-            # project the image representation
-            img_embedding = self.multi_modal_projector(feature)
-
-            # flatten here to handle variable length in naflex
-            img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
-            image_features.append(img_embedding)
-
+        # Every image's token slots side by side in one patch grid, which the projector unshuffles as one image. Padding
+        # slots read the first patch and are dropped after, so the projector's shape doesn't depend on the image sizes
+        is_token = token < num_tokens
+        patch_index = patch_index.masked_fill(~is_token[..., None, None], 0)
+        patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
+        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
+        image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
+        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        image_outputs.split_sizes = (spatial_shapes // factor).prod(-1)
         image_outputs.pooler_output = image_features
         return image_outputs
 
@@ -201,7 +204,7 @@ class Lfm2VlModel(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
@@ -209,9 +212,10 @@ class Lfm2VlModel(LlavaModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
@@ -238,29 +242,6 @@ class Lfm2VlModel(LlavaModel):
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        spatial_shapes: torch.Tensor,
-        pixel_attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
-            The spatial shapes of the input images.
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
-            The pixel attention mask of the input images.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            spatial_shapes=spatial_shapes,
-            pixel_attention_mask=pixel_attention_mask,
-            **kwargs,
-        )
-
     @can_return_tuple
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

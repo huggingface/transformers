@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from collections.abc import Callable
 
@@ -219,15 +218,6 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-# Missing from the hub config: the routed experts are MXFP8 (e4m3, a ue8m0 scale per row and 32 values), the rest bf16
-INKLING2_QUANTIZATION_CONFIG = {
-    "quant_method": "fp8",
-    "weight_block_size": [1, 32],
-    "scale_fmt": "ue8m0",
-    "modules_to_not_convert": ["lm_head", "model.vision_tower", "model.language_model.layers.*.self_attn"],
-}
-
-
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2Config(InklingConfig):
@@ -246,14 +236,6 @@ class Inkling2Config(InklingConfig):
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not needed for Inkling2")
-
-    @classmethod
-    def from_dict(cls, config_dict: dict, **kwargs):
-        # Quantization config is missing from the hub config: only added to an original checkpoint's config, not to
-        # one saved by Transformers (which has its own, or none once dequantized)
-        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
-            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
-        return PreTrainedConfig.from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:
@@ -978,7 +960,6 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     ]
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.get_text_config().initializer_range
@@ -1232,12 +1213,12 @@ class Inkling2Model(InklingModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into language model embeddings, one per image token.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        image_outputs.pooler_output = image_outputs.pooler_output.split(image_grid_thw.prod(-1).tolist())
+        image_outputs.split_sizes = image_grid_thw.prod(-1)
         return image_outputs
 
     def get_audio_features(self):
@@ -1310,11 +1291,13 @@ class Inkling2Model(InklingModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True)
 
         image_embeds = None
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
@@ -1345,12 +1328,6 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
     def __init__(self, config: Inkling2Config):
         super().__init__(config)
         self.logit_softcap = Inkling2Softcap(config.text_config.final_logit_softcapping)
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ):
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

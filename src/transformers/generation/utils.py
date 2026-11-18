@@ -160,6 +160,7 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "input_features",
     "input_features_mask",
     "input_values",
+    "padding_mask",
     "input_values_mask",
     "pixel_values_videos",
     "num_local_patches",
@@ -767,9 +768,7 @@ class GenerationMixin(ContinuousMixin):
             elif key not in model_inputs:
                 model_inputs[key] = value
 
-        # 6. What the forward derives from its inputs with data-dependent operations, computed here, outside it, on the
-        # steps that carry the prompt's inputs (as for the multimodal ones above). Those already laid out (the
-        # positions) are kept
+        # 6. The forward's data-dependent inputs, computed with the prompt's; those already laid out are kept
         if is_first_iteration or not kwargs.get("use_cache", True):
             data_dependent_inputs = self.get_data_dependent_inputs(**model_inputs)
             model_inputs.update(
@@ -1033,13 +1032,18 @@ class GenerationMixin(ContinuousMixin):
         self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any]
     ) -> torch.Tensor:
         """Prepares image/video hidden states if model support this modality"""
+        from ..modeling_utils import MultimodalMixin
+
         model_kwargs.setdefault("mm_encoder_outputs", {})
         keys_to_pop = set()
         for modality in ["image", "video"]:
-            if (
-                modality in self.input_modalities
-                and (encoder_fn := getattr(self.base_model, f"get_{modality}_features", None)) is not None
+            encoder_fn = getattr(self.base_model, f"get_{modality}_features", None)
+            # Features that are the mixin's split of the flat embeddings: encode flat, expansion splits if it repeats
+            if getattr(type(self.base_model), f"get_{modality}_features", None) is getattr(
+                MultimodalMixin, f"get_{modality}_features"
             ):
+                encoder_fn = getattr(self.base_model, f"get_{modality}_embeddings")
+            if modality in self.input_modalities and encoder_fn is not None:
                 encoder_kwargs = {
                     key: model_kwargs[key]
                     for key in inspect.signature(encoder_fn).parameters
@@ -1208,6 +1212,15 @@ class GenerationMixin(ContinuousMixin):
 
         # IMPORTANT - expand before input ids because the helper counts placeholders within encoded text!
         if (mm_encoder_output := model_kwargs.get("mm_encoder_outputs")) is not None:
+            from ..modeling_utils import MultimodalMixin
+
+            # Flat outputs from `get_*_embeddings` are repeated per item, so split them first
+            for modality, outputs in mm_encoder_output.items():
+                if getattr(outputs, "split_sizes", None) is not None and not isinstance(
+                    outputs.pooler_output, (tuple, list)
+                ):
+                    split = getattr(self.base_model, "split_modality_outputs", MultimodalMixin.split_modality_outputs)
+                    mm_encoder_output[modality] = split(outputs)
             model_kwargs["mm_encoder_outputs"] = self._expand_multimodal_outputs(
                 input_ids,
                 mm_encoder_output,
@@ -1252,16 +1265,9 @@ class GenerationMixin(ContinuousMixin):
         new tokens of the total sequence.
         Note that this function never slices inputs, this is performed in `prepare_inputs_for_generation`.
         """
-        # update cache keeping its naming used in model code
-        for possible_cache_name in ALL_CACHE_NAMES:
-            if possible_cache_name in outputs:
-                # TODO (joao): remove output/input mismatch when these old models (xlnet, reformer) are deprecated
-                if possible_cache_name in ("past_buckets_states", "mems"):
-                    cache_name = "cache"
-                else:
-                    cache_name = possible_cache_name
-                model_kwargs[cache_name] = getattr(outputs, possible_cache_name)
-                break
+        # Add the cache as input if present in outputs
+        if "cache" in outputs:
+            model_kwargs["cache"] = outputs["cache"]
 
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
@@ -1552,7 +1558,7 @@ class GenerationMixin(ContinuousMixin):
             processors.append(
                 PrefixConstrainedLogitsProcessor(
                     prefix_allowed_tokens_fn,
-                    generation_config.num_beams,
+                    max(generation_config.num_beams, generation_config.num_return_sequences),
                 )
             )
         if generation_config.forced_bos_token_id is not None:
@@ -4414,15 +4420,15 @@ class GenerationMixin(ContinuousMixin):
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
     """
     Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
-    output, in the container type the model expects: a single-item list, or a tensor with a batch of one. Only the
-    pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
+    output, in the container type the model expects: a single-item list, a flat tensor, or a tensor with a batch of one.
+    Only the pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
     """
 
     def slice_features(features):
-        rows_features = torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]
         if isinstance(features, torch.Tensor):
-            return rows_features.unsqueeze(0)
-        return [rows_features]
+            rows_features = features.reshape(-1, features.shape[-1])[rows]
+            return rows_features if features.ndim == 2 else rows_features.unsqueeze(0)
+        return [torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]]
 
     sliced = {"pooler_output": slice_features(output["pooler_output"])}
     deepstack_features = output.get("deepstack_features")

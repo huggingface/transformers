@@ -36,7 +36,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -132,7 +132,6 @@ class Dots3NoteTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -661,7 +660,6 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer", "Dots3NoteTextDecoderLayer", "Dots3NoteVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -679,7 +677,6 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         r"^model\.(language_model\.)?mtp\.",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteTextTopkRouter):
@@ -900,7 +897,6 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1123,7 +1119,6 @@ class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1234,7 +1229,6 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1492,7 +1486,6 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -1501,7 +1494,6 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteVisionTopKRouter):
@@ -1541,16 +1533,8 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the rotary `position_ids` of the patches, and the attention's `cu_seqlens` and `max_seqlen`.
-        Passed back to the forward, they keep `torch.compile` and `torch.export` free of those operations. Those
-        already in `kwargs` are returned as they are; only the config is read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width dimensions of feature shape for each image.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        and the attention's `cu_seqlens` and `max_seqlen`."""
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
@@ -1583,7 +1567,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
 
 
 @auto_docstring
-class Dots3NoteModel(Dots3NotePreTrainedModel):
+class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "audio", "text")
@@ -1599,7 +1583,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
@@ -1612,8 +1596,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
             **kwargs,
         )
 
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        outputs.pooler_output = outputs.pooler_output.split(split_sizes)
+        outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
         return outputs
 
     @can_return_tuple
@@ -1695,22 +1678,26 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("image") is not None:
-            image_embeddings = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeddings = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_embeddings, torch.Tensor):
+                image_embeddings = torch.cat(image_embeddings, dim=0)
             image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeddings, self.config.image_token_id
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeddings.to(inputs_embeds))
 
         if pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("video") is not None:
-            video_embeddings = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeddings = mm_encoder_outputs["video"].pooler_output
+            if not isinstance(video_embeddings, torch.Tensor):
+                video_embeddings = torch.cat(video_embeddings, dim=0)
             video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, video_embeddings, self.config.video_token_id
             )
@@ -1736,17 +1723,21 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring
-class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixin):
+class Dots3NoteForConditionalGeneration(
+    Dots3NotePreTrainedModel,
+    GenerationMixin,
+    MultimodalMixin,
+):
     input_modalities = ("image", "video", "audio", "text")
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}

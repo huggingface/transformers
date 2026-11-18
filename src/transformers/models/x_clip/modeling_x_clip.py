@@ -432,7 +432,6 @@ class XCLIPPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -913,6 +912,7 @@ def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
 @auto_docstring
 class XCLIPModel(XCLIPPreTrainedModel):
     config: XCLIPConfig
+    input_modalities = ("video", "text")
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)

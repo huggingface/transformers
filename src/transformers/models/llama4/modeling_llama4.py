@@ -40,7 +40,7 @@ from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -213,7 +213,6 @@ class Llama4TextRotaryEmbedding(nn.Module):
         return inv_freq, attention_factor
 
     # Ignore copy
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -448,7 +447,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -456,7 +454,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = (
@@ -540,11 +537,14 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "cache": cache,
                 "position_ids": position_ids,
             }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "chunked_attention": create_chunked_causal_mask(**mask_kwargs),
+            # Create the masks, only for the layer types that are present
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "chunked_attention": lambda: create_chunked_causal_mask(**mask_kwargs),
             }
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
 
         hidden_states = inputs_embeds
 
@@ -1152,7 +1152,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         )
 
 
-class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
+class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {"lm_head": "colwise_gather_output"}
     base_model_prefix = "model"
@@ -1186,12 +1186,18 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_model(pixel_values, **kwargs)
+        image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
+        image_features = image_outputs.last_hidden_state
+        image_outputs.pooler_output = self.multi_modal_projector(image_features.flatten(0, 1))
+        image_outputs.split_sizes = image_features.new_full(
+            image_features.shape[:1], image_features.shape[1], dtype=torch.long
+        )
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1285,14 +1291,17 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].last_hidden_state
-            vision_flat = image_features.view(-1, image_features.size(-1))
-            projected_vision_flat = self.multi_modal_projector(vision_flat).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            projected_vision_flat = mm_encoder_outputs["image"].pooler_output
+            if projected_vision_flat is None:
+                # The vision model's outputs, before the projector
+                image_features = mm_encoder_outputs["image"].last_hidden_state
+                projected_vision_flat = self.multi_modal_projector(image_features.view(-1, image_features.size(-1)))
+            elif not isinstance(projected_vision_flat, torch.Tensor):
+                projected_vision_flat = torch.cat(projected_vision_flat, dim=0)
+            projected_vision_flat = projected_vision_flat.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=projected_vision_flat
             )

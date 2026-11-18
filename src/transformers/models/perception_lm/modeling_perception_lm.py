@@ -27,7 +27,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -92,7 +92,6 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -164,7 +163,7 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
 
 
 @auto_docstring
-class PerceptionLMModel(PerceptionLMPreTrainedModel):
+class PerceptionLMModel(PerceptionLMPreTrainedModel, MultimodalMixin):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -176,7 +175,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -188,6 +187,10 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         image_features = self.multi_modal_projector(last_hidden_state)
         image_outputs.pooler_output = image_features
 
+        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
+            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -256,12 +259,13 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         image_features = None
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.to(
-                inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -269,12 +273,13 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
 
         video_features = None
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_image_features(pixel_values=pixel_values_videos, return_dict=True)
+            mm_encoder_outputs["video"] = self.get_image_embeddings(pixel_values=pixel_values_videos, return_dict=True)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output.to(
-                inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output
+            if not isinstance(video_features, torch.Tensor):
+                video_features = torch.cat(video_features, dim=0)
+            video_features = video_features.to(inputs_embeds.device, dtype=inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -298,9 +303,22 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
 
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.get_image_embeddings(pixel_values_videos, return_dict=True, **kwargs)
+
 
 @auto_docstring
-class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
+class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
