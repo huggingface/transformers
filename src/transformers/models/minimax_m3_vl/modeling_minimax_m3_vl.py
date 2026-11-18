@@ -1521,7 +1521,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_video_features(
         self,

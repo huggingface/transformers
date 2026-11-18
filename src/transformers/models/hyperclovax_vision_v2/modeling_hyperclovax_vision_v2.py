@@ -77,7 +77,9 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
-        return self.get_image_embeddings(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
+        return self.get_image_embeddings(
+            pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, return_dict=True, **kwargs
+        )
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -227,21 +229,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
 
 @auto_docstring

@@ -484,24 +484,7 @@ class VideoLlama3Model(Qwen2VLModel):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
-            **kwargs,
-        )
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
+            return_dict=True,
             **kwargs,
         )
 

@@ -615,6 +615,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
         return vision_outputs
 
+    @can_return_tuple
     @auto_docstring
     def get_video_embeddings(
         self,
@@ -626,20 +627,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(
         self,

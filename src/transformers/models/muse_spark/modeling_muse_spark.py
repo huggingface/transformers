@@ -1307,6 +1307,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
         return vision_outputs
 
+    @can_return_tuple
     @auto_docstring
     def get_video_embeddings(
         self,
@@ -1318,20 +1319,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(
         self,

@@ -263,7 +263,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel, MultimodalMixin):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -487,14 +487,6 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel, MultimodalMixin):
         )
 
         return outputs
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, MultimodalMixin, GenerationMixin):

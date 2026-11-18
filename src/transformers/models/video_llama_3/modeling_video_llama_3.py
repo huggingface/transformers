@@ -565,6 +565,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
+            return_dict=True,
             **kwargs,
         )
 
@@ -723,24 +724,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
             attentions=outputs.attentions,
             image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
             video_hidden_states=video_embeds if mm_encoder_outputs.get("video") is not None else None,
-        )
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
-            **kwargs,
         )
 
 

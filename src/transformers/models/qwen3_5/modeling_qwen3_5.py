@@ -1649,14 +1649,6 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel, MultimodalMixin):
         )
         return outputs
 
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
-
 
 @auto_docstring
 class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):

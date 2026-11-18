@@ -935,7 +935,9 @@ class Molmo2Model(Molmo2PreTrainedModel):
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
-        return self.get_image_embeddings(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
+        return self.get_image_embeddings(
+            pixel_values_videos, video_token_pooling, image_grids, return_dict=True, **kwargs
+        )
 
     @auto_docstring(
         custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "

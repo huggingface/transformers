@@ -542,7 +542,7 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -676,14 +676,6 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
             image_pooler_output=image_features if mm_encoder_outputs.get("image") is not None else None,
             video_pooler_output=video_features if mm_encoder_outputs.get("video") is not None else None,
         )
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 @auto_docstring(
