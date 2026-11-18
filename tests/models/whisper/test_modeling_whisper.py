@@ -403,9 +403,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
-        # [Temporary] experiment A: same fix as DeepseekV32ModelTest (gc.collect() right before every CUDA graph capture).
-        if hasattr(torch.compiler.config, "force_cudagraph_gc"):
-            self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
