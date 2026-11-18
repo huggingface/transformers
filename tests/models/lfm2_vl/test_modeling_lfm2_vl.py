@@ -230,7 +230,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", (8, 0)): [
+                ("cuda", 8): [
                     "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
                 ],
                 ("xpu", 5): [
