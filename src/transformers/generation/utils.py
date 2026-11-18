@@ -1246,7 +1246,7 @@ class GenerationMixin(ContinuousMixin):
         """
         # Add the cache as input if present in outputs
         if "cache" in outputs:
-            model_kwargs["cache"] = outputs.cache
+            model_kwargs["cache"] = outputs["cache"]
 
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
