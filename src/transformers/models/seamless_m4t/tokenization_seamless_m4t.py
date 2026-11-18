@@ -145,8 +145,6 @@ class SeamlessM4TTokenizer(TokenizersBackend):
 
         self._spm_precompiled_charsmap = _spm_precompiled_charsmap
         list_normalizers = [normalizers.Replace(Regex(r"[\n\r\t]"), " ")]
-        # The real SentencePiece model normalizes with its own precompiled charsmap; NFKC() is only a
-        # fallback approximation for when no charsmap is available at all.
         if _spm_precompiled_charsmap is not None:
             list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
         else:

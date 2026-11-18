@@ -1322,14 +1322,16 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
 
-    def test_precompiled_charsmap_normalizer(self):
-        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
-        # precompiled_charsmap (Unicode compatibility folding, e.g. fullwidth -> ASCII) must be
-        # wired into the fast tokenizer's normalizer instead of being dropped on the floor.
-        tokenizer = UdopTokenizer.from_pretrained(SAMPLE_VOCAB)
-        self.assertIsNotNone(tokenizer._spm_precompiled_charsmap)
-        normalized = tokenizer.backend_tokenizer.normalizer.normalize_str("ｆｕｌｌｗｉｄｔｈ")
-        self.assertEqual(normalized, "fullwidth")
+    def test_sentencepiece_normalization(self):
+        # Regression test for #50674: test the SentencePiece charsmap.
+        # Expected values fixed from transformers v4.57.6.
+        text = "Ｈｅｌｌｏ，ｗｏｒｌｄ！ ﬁne Wait… a\u200bb a \u200bb a\u00a0b hello  "
+        expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁', 'a', '▁', 'b', '▁', 'a', '▁', 'b', '▁', 'a', '▁', 'b', '▁hello']  # fmt: skip
+        expected_ids = [8774, 6, 7276, 55, 1399, 14583, 233, 3, 9, 3, 115, 3, 9, 3, 115, 3, 9, 3, 115, 21820]  # fmt: skip
+
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.tokenize(text), expected_tokens)
+        self.assertEqual(tokenizer.encode(text, add_special_tokens=False), expected_ids)
 
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

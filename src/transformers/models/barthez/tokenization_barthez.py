@@ -119,14 +119,18 @@ class BarthezTokenizer(TokenizersBackend):
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
         self._spm_precompiled_charsmap = _spm_precompiled_charsmap
-        list_normalizers = [normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " ")]
-        # The real SentencePiece model normalizes with its own precompiled charsmap (nmt_nfkc for most
-        # checkpoints); NFC() is only a fallback approximation for when no charsmap is available at all.
         if _spm_precompiled_charsmap is not None:
-            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
+            list_normalizers = [
+                normalizers.Precompiled(_spm_precompiled_charsmap),
+                normalizers.Strip(left=False, right=True),
+                normalizers.Replace(Regex(r" {2,}"), "▁"),
+            ]
         else:
-            list_normalizers.append(normalizers.NFC())
-        list_normalizers.append(normalizers.Strip(left=False, right=True))
+            list_normalizers = [
+                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
+                normalizers.NFC(), # NFC() is a fallback approximation when no charsmap is available.
+                normalizers.Strip(left=False, right=True),
+            ]
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)

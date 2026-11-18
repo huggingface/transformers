@@ -15,12 +15,9 @@
 import unittest
 
 from transformers import BarthezTokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 @require_sentencepiece
@@ -44,15 +41,13 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(cls.tmpdirname)
 
+    def test_sentencepiece_normalization(self):
+        # Regression test for #50674: test the SentencePiece charsmap.
+        # Expected values fixed from transformers v4.57.6.
+        text = "Ｈｅｌｌｏ，ｗｏｒｌｄ！ ﬁne Wait… a\u200bb a \u200bb a\u00a0b hello  "
+        expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁a', '▁b', '▁a', '▁b', '▁a', '▁b', '▁hell', 'o']  # fmt: skip
+        expected_ids = [18324, 4, 16952, 36, 3518, 79506, 27, 10, 649, 10, 649, 10, 649, 17469, 30]  # fmt: skip
 
-@require_sentencepiece
-@require_tokenizers
-class BarthezPrecompiledCharsmapTest(unittest.TestCase):
-    def test_precompiled_charsmap_normalizer(self):
-        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
-        # precompiled_charsmap (Unicode compatibility folding, e.g. fullwidth -> ASCII) must be
-        # wired into the fast tokenizer's normalizer instead of being dropped on the floor.
-        tokenizer = BarthezTokenizer.from_pretrained(SAMPLE_VOCAB)
-        self.assertIsNotNone(tokenizer._spm_precompiled_charsmap)
-        normalized = tokenizer.backend_tokenizer.normalizer.normalize_str("ｆｕｌｌｗｉｄｔｈ")
-        self.assertEqual(normalized, "fullwidth")
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.tokenize(text), expected_tokens)
+        self.assertEqual(tokenizer.encode(text, add_special_tokens=False), expected_ids)

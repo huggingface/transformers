@@ -114,7 +114,7 @@ class BigBirdTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(vocab, unk_id=unk_id, byte_fallback=False))
         self._tokenizer.normalizer = normalizers.Sequence(
-            [normalizers.Strip(left=False, right=False), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
+            [normalizers.Strip(left=False, right=True), normalizers.Replace(Regex(r" {2,}"), SPIECE_UNDERLINE)]
         )
 
         prepend_scheme = "always" if add_prefix_space else "never"

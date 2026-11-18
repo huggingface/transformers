@@ -1538,14 +1538,18 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
 
-    def test_precompiled_charsmap_normalizer(self):
-        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
-        # precompiled_charsmap (Unicode compatibility folding, e.g. fullwidth -> ASCII) must be
-        # wired into the fast tokenizer's normalizer instead of being dropped on the floor.
-        tokenizer = LayoutXLMTokenizer.from_pretrained(SAMPLE_VOCAB)
-        self.assertIsNotNone(tokenizer._spm_precompiled_charsmap)
-        normalized = tokenizer.backend_tokenizer.normalizer.normalize_str("ｆｕｌｌｗｉｄｔｈ")
-        self.assertEqual(normalized, "fullwidth")
+    def test_sentencepiece_normalization(self):
+        # Regression test for #50674: test the SentencePiece charsmap.
+        # Expected values fixed from transformers v4.57.6.
+        text = "Ｈｅｌｌｏ，ｗｏｒｌｄ！ ﬁne Wait… a\u200bb a \u200bb a\u00a0b hello  "
+        expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁a', '▁b', '▁a', '▁b', '▁a', '▁b', '▁hell', 'o']  # fmt: skip
+        expected_ids = [35378, 4, 32554, 38, 5885, 175254, 27, 10, 876, 10, 876, 10, 876, 33600, 31]  # fmt: skip
+
+        # setUpClass builds the saved tokenizer from vocab only (no charsmap), so load the real checkpoint.
+        tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
+        self.assertEqual(tokenizer.tokenize(text), expected_tokens)
+        # `encode` expects words and boxes, so go through the backend tokenizer
+        self.assertEqual(tokenizer.backend_tokenizer.encode(text, add_special_tokens=False).ids, expected_ids)
 
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

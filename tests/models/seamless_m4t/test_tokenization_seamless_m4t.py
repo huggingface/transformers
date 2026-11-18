@@ -219,6 +219,17 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
 
+    def test_sentencepiece_normalization(self):
+        # Regression test for #50674: test the SentencePiece charsmap.
+        # Expected values fixed from transformers v4.57.6.
+        text = "Ｈｅｌｌｏ，ｗｏｒｌｄ！ ﬁne Wait… a\u200bb a \u200bb a\u00a0b hello  "
+        expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁a', '▁b', '▁a', '▁b', '▁a', '▁b', '▁hello']  # fmt: skip
+        expected_ids = [94124, 248079, 141962, 248203, 21510, 129186, 284, 9, 16, 9, 16, 9, 16, 133863]  # fmt: skip
+
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.tokenize(text), expected_tokens)
+        self.assertEqual(tokenizer.encode(text, add_special_tokens=False), expected_ids)
+
 
 @require_torch
 @require_sentencepiece
@@ -436,15 +447,3 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [3, 1, 285, 2, 157, 3])
         tokens = self.tokenizer.tokenize("No <s> ▁He")
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
-
-    def test_precompiled_charsmap_normalizer(self):
-        # Regression test for huggingface/transformers#50674: the sentencepiece model's own
-        # precompiled_charsmap must be wired into the fast tokenizer's normalizer. The zero-width
-        # space below is the documented regression case: the charsmap folds it to a plain space
-        # (which later becomes a word boundary), instead of it surviving and tokenizing as <unk>.
-        self.assertIsNotNone(self.tokenizer._spm_precompiled_charsmap)
-        normalized = self.tokenizer.backend_tokenizer.normalizer.normalize_str("a​b")
-        self.assertEqual(normalized, "a b")
-
-        tokens = self.tokenizer.tokenize("a​b")
-        self.assertNotIn(self.tokenizer.unk_token, tokens)
