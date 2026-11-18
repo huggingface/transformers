@@ -177,7 +177,6 @@ class MiniMaxM2Attention(FlexOlmoAttention):
 
 
 class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
