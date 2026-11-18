@@ -1431,6 +1431,8 @@ def set_param_for_module(
 
         # For DTensor parameters, compare against the local shard loaded on this rank.
         expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
+        if in_place and param_value.shape != expected_shape and param_value.numel() == ref.numel():
+            param_value = param_value.reshape(expected_shape)  # e.g. a scalar scale into a `[1]` param
 
         # Shape errors result in mismatched key, except for quantized params
         if (
