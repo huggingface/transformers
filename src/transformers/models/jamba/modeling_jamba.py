@@ -219,7 +219,8 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
-def torch_causal_conv1d_update(
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
+def causal_conv1d_update(
     hidden_states: torch.Tensor,
     conv_state: torch.Tensor,
     weight: nn.Parameter,
@@ -238,7 +239,8 @@ def torch_causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-def torch_causal_conv1d_fn(
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
+def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
@@ -258,32 +260,6 @@ def torch_causal_conv1d_fn(
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
-
-
-@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    return torch_causal_conv1d_update(hidden_states, conv_state, weight, bias, activation)
-
-
-@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    return torch_causal_conv1d_fn(hidden_states, weight, bias, activation, **kwargs)
-
-
-# The `causal_conv1d` kernels only support these kernel widths
-CAUSAL_CONV1D_KERNEL_WIDTHS = (2, 3, 4)
 
 
 @use_kernel_forward_from_hub("causal_conv1d_forward")
@@ -323,20 +299,16 @@ def causal_conv1d_forward(
     seq_len = hidden_states.shape[-1]
     conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
     weight = conv1d.weight.squeeze(1)
-    if conv1d.kernel_size[0] in CAUSAL_CONV1D_KERNEL_WIDTHS:
-        update_fn, conv_fn = causal_conv1d_update, causal_conv1d_fn
-    else:
-        update_fn, conv_fn = torch_causal_conv1d_update, torch_causal_conv1d_fn
 
     # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
     if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):
-        return update_fn(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
+        return causal_conv1d_update(hidden_states, conv_state, weight, conv1d.bias, activation=activation)
 
     if cache is not None:
         hidden_states = cache.update_conv_state(
             hidden_states, layer_idx, state_idx=state_idx, conv_kernel_size=conv1d.kernel_size[0]
         )
-    hidden_states = conv_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
+    hidden_states = causal_conv1d_fn(hidden_states, weight, conv1d.bias, activation=activation, **kwargs)
     # Drop the previous states prepended by the cache
     if cache is not None:
         hidden_states = hidden_states[:, :, -seq_len:]
