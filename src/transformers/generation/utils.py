@@ -1025,17 +1025,21 @@ class GenerationMixin(ContinuousMixin):
         self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any]
     ) -> torch.Tensor:
         """Prepares image/video hidden states if model support this modality"""
+        from ..modeling_utils import MultimodalMixin
+
         model_kwargs.setdefault("mm_encoder_outputs", {})
         keys_to_pop = set()
         for modality in ["image", "video"]:
-            if (
-                modality in self.input_modalities
-                and (encoder_fn := getattr(self.base_model, f"get_{modality}_features", None)) is not None
+            encoder_fn = getattr(self.base_model, f"get_{modality}_features", None)
+            # Features that are the mixin's split of the flat embeddings: encode flat, expansion splits if it repeats
+            if getattr(type(self.base_model), f"get_{modality}_features", None) is getattr(
+                MultimodalMixin, f"get_{modality}_features"
             ):
-                signature_fn = getattr(self.base_model, f"get_{modality}_embeddings", encoder_fn)
+                encoder_fn = getattr(self.base_model, f"get_{modality}_embeddings")
+            if modality in self.input_modalities and encoder_fn is not None:
                 encoder_kwargs = {
                     key: model_kwargs[key]
-                    for key in inspect.signature(signature_fn).parameters
+                    for key in inspect.signature(encoder_fn).parameters
                     if key != "kwargs" and key in model_kwargs
                 }
                 keys_to_pop.update(encoder_kwargs.keys())
@@ -1201,6 +1205,14 @@ class GenerationMixin(ContinuousMixin):
 
         # IMPORTANT - expand before input ids because the helper counts placeholders within encoded text!
         if (mm_encoder_output := model_kwargs.get("mm_encoder_outputs")) is not None:
+            from ..modeling_utils import MultimodalMixin
+
+            # Flat outputs from `get_*_embeddings` are repeated per item, so split them first
+            for modality, outputs in mm_encoder_output.items():
+                if getattr(outputs, "split_sizes", None) is not None and isinstance(
+                    outputs.pooler_output, torch.Tensor
+                ):
+                    mm_encoder_output[modality] = MultimodalMixin.split_modality_outputs(outputs)
             model_kwargs["mm_encoder_outputs"] = self._expand_multimodal_outputs(
                 input_ids,
                 mm_encoder_output,
@@ -4407,15 +4419,15 @@ class GenerationMixin(ContinuousMixin):
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
     """
     Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
-    output, in the container type the model expects: a single-item list, or a tensor with a batch of one. Only the
-    pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
+    output, in the container type the model expects: a single-item list, a flat tensor, or a tensor with a batch of one.
+    Only the pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
     """
 
     def slice_features(features):
-        rows_features = torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]
         if isinstance(features, torch.Tensor):
-            return rows_features.unsqueeze(0)
-        return [rows_features]
+            rows_features = features.reshape(-1, features.shape[-1])[rows]
+            return rows_features if features.ndim == 2 else rows_features.unsqueeze(0)
+        return [torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]]
 
     sliced = {"pooler_output": slice_features(output["pooler_output"])}
     deepstack_features = output.get("deepstack_features")

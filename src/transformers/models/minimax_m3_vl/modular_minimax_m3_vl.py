@@ -24,11 +24,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
@@ -953,7 +954,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
-class MiniMaxM3VLModel(LlavaModel):
+class MiniMaxM3VLModel(LlavaModel, MultimodalMixin):
     config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):
@@ -980,23 +981,11 @@ class MiniMaxM3VLModel(LlavaModel):
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
         vision_outputs.pooler_output = image_features
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
         return vision_outputs
 
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_features = vision_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_features, split_sizes)
-        return vision_outputs
+    def get_image_features(self):
+        raise AttributeError("Not needed for MiniMax-M3-VL")
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -1010,16 +999,6 @@ class MiniMaxM3VLModel(LlavaModel):
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        # Video frames flow through the same vision pipeline as images (the tower is
-        # grid-agnostic); only the placeholder token they scatter into differs.
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     def get_placeholder_mask(
         self,
@@ -1141,23 +1120,11 @@ class MiniMaxM3VLModel(LlavaModel):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
-class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
+class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration, MultimodalMixin, GenerationMixin):
     config: MiniMaxM3VLConfig
 
-    @auto_docstring
-    def get_image_embeddings(self, pixel_values, image_grid_thw, **kwargs):
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
-    def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_embeddings(self, pixel_values_videos, video_grid_thw, **kwargs):
-        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+    def get_image_features(self):
+        raise AttributeError("Not needed for MiniMax-M3-VL")
 
     @can_return_tuple
     @auto_docstring

@@ -877,9 +877,6 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             attentions=outputs.attentions,
         )
 
-    def get_video_features(self):
-        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
-
 
 __getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 

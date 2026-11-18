@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple
@@ -180,7 +180,7 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class UltraVBertModel(UltraVBertPreTrainedModel):
+class UltraVBertModel(UltraVBertPreTrainedModel, MultimodalMixin):
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -204,33 +204,6 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        image_outputs = self.get_image_embeddings(pixel_values, pixel_attention_mask, return_dict=True, **kwargs)
-        # Padding images are all zeros (one is kept when all are)
-        real_images = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != pixel_values.shape[2:].numel()
-        real_images.view(-1)[0] |= ~torch.any(real_images)
-        num_real_images_per_batch = real_images.sum(dim=1)
-        tokens_per_image = image_outputs.pooler_output.shape[0] // max(int(num_real_images_per_batch.sum()), 1)
-        split_sizes = (num_real_images_per_batch * tokens_per_image).tolist()
-        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, split_sizes))
-
-        return image_outputs
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
@@ -362,6 +335,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
         return image_outputs
 
 

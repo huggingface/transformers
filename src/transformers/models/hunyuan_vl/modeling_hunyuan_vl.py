@@ -1139,19 +1139,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, MultimodalMixi
         self.vocab_size = config.text_config.vocab_size
         self.post_init()
 
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor`):
-            Flat per-patch pixel features produced by the image processor.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

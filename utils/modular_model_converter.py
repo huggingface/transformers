@@ -1043,7 +1043,10 @@ def replace_class_node(
     for original_base in original_modeling_node.bases:
         new_base = original_base
         # we only potentially switch base for Name-based bases, not Attribute
-        if m.matches(original_base.value, m.Name()):
+        if m.matches(original_base.value, m.Name()) and original_base.value.value in additional_bases:
+            # Listed again in the modular class: keep it, rather than let a base sharing its suffix replace it
+            additional_bases.discard(original_base.value.value)
+        elif m.matches(original_base.value, m.Name()):
             original_base_name = original_base.value.value
             for additional_base_name in additional_bases:
                 suffix = common_partial_suffix(original_base_name, additional_base_name)

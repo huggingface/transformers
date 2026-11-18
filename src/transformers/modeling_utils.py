@@ -971,23 +971,26 @@ class MultimodalMixin:
     def get_video_embeddings(self, *args, **kwargs):
         return self.model.get_video_embeddings(*args, **kwargs)
 
+    @staticmethod
+    def split_modality_outputs(outputs):
+        """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
+        split_sizes = outputs.split_sizes.tolist()
+        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
+        if getattr(outputs, "deepstack_features", None) is not None:
+            outputs.deepstack_features = [
+                torch.split(features, split_sizes) for features in outputs.deepstack_features
+            ]
+        return outputs
+
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
         """Each image's features, from `get_image_embeddings`."""
-        return _split_modality_outputs(self.get_image_embeddings(*args, return_dict=True, **kwargs))
+        return self.split_modality_outputs(self.get_image_embeddings(*args, return_dict=True, **kwargs))
 
     @can_return_tuple
     def get_video_features(self, *args, **kwargs):
         """Each video's features, from `get_video_embeddings`."""
-        return _split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
-
-
-def _split_modality_outputs(outputs):
-    split_sizes = outputs.split_sizes.tolist()
-    outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
-    if getattr(outputs, "deepstack_features", None) is not None:
-        outputs.deepstack_features = [torch.split(features, split_sizes) for features in outputs.deepstack_features]
-    return outputs
+        return self.split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
 
 
 class EmbeddingAccessMixin:

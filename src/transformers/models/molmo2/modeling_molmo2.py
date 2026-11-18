@@ -36,7 +36,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -736,7 +736,7 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
     modeling head.
     """
 )
-class Molmo2Model(Molmo2PreTrainedModel):
+class Molmo2Model(Molmo2PreTrainedModel, MultimodalMixin):
     config: Molmo2Config
 
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
@@ -747,26 +747,6 @@ class Molmo2Model(Molmo2PreTrainedModel):
         self.multi_modal_projector = Molmo2Adapter(config.adapter_config)
         self.language_model = Molmo2TextModel(config.text_config)
         self.post_init()
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is a "
-        "tuple with one `(num_image_tokens, hidden_size)` tensor per image."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_token_pooling: torch.Tensor,
-        image_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(
-            pixel_values, image_token_pooling, image_grids, return_dict=True, **kwargs
-        )
-        pooled_features = image_outputs.pooler_output
-        split_sizes = (image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]).tolist()
-        image_outputs.pooler_output = torch.split(pooled_features, split_sizes)
-        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -918,6 +898,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
             image_features = image_features.reshape(*image_shape, -1)
         pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
         image_outputs.pooler_output = pooled_features
+        image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
         return image_outputs
 
     @can_return_tuple
@@ -939,29 +920,13 @@ class Molmo2Model(Molmo2PreTrainedModel):
             pixel_values_videos, video_token_pooling, image_grids, return_dict=True, **kwargs
         )
 
-    @auto_docstring(
-        custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "
-        "tuple with one `(num_video_tokens, hidden_size)` tensor per video."
-    )
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_token_pooling: torch.Tensor,
-        video_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
-        num_frames, rows, cols = video_grids.unbind(-1)
-        image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
-        return self.get_image_features(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
-
 
 @auto_docstring(
     custom_intro="""
     The Molmo2 model which consists of a vision backbone, a pooling adapter and a language model.
     """
 )
-class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
+class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, MultimodalMixin, GenerationMixin):
     # the loss must not be normalized by `num_items_in_batch`: logits/labels are filtered before computing it
     accepts_loss_kwargs = False
     config: Molmo2Config
@@ -977,46 +942,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_token_pooling: torch.Tensor,
-        image_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_embeddings(pixel_values, image_token_pooling, image_grids, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_token_pooling: torch.Tensor,
-        image_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values, image_token_pooling, image_grids, **kwargs)
-
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_token_pooling: torch.Tensor,
-        video_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_video_embeddings(pixel_values_videos, video_token_pooling, video_grids, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_token_pooling: torch.Tensor,
-        video_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_video_features(pixel_values_videos, video_token_pooling, video_grids, **kwargs)
 
     @can_return_tuple
     @auto_docstring

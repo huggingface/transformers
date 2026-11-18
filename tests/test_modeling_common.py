@@ -5607,6 +5607,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 2,
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
+            if hasattr(model, "get_image_embeddings"):
+                with torch.no_grad():
+                    split_sizes = model.get_image_embeddings(**inputs_dict, return_dict=True).split_sizes
+                self.assertIsNotNone(split_sizes, "`get_image_embeddings` must return `split_sizes` for `generate`")
+                self.assertEqual(split_sizes.tolist(), [len(item) for item in pooler_output])
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5982,6 +5987,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 2,
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
+            if hasattr(model, "get_video_embeddings"):
+                with torch.no_grad():
+                    split_sizes = model.get_video_embeddings(**inputs_dict, return_dict=True).split_sizes
+                self.assertIsNotNone(split_sizes, "`get_video_embeddings` must return `split_sizes` for `generate`")
+                self.assertEqual(split_sizes.tolist(), [len(item) for item in pooler_output])
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

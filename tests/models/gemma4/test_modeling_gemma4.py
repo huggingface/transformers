@@ -339,6 +339,10 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_video_features_attentions(self):
         pass
 
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_pooler_output(self):
+        pass
+
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
@@ -609,6 +613,10 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_attentions(self):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_features_pooler_output(self):
         pass
 
     @parameterized.expand([True, False, None])
