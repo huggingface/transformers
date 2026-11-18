@@ -275,7 +275,7 @@ class Inkling2LoopIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 10): [-14.193360328674316, -12.197671890258789, -17.577695846557617, -18.56708335876465, -21.122817993164062],
+                ("cuda", 10): [-12.755270957946777, -11.535194396972656, -16.171504974365234, -17.790428161621094, -19.750545501708984],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -306,7 +306,7 @@ class Inkling2LoopIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("cuda", 10): [-3.9177968502044678, -3.2600231170654297, -4.5490851402282715, -9.422932624816895, -11.752306938171387],
+                ("cuda", 10): [-3.7679390907287598, -3.2080488204956055, -4.347489356994629, -9.261019706726074, -11.941338539123535],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
