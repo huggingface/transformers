@@ -590,48 +590,44 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
 
     def get_placeholder_mask(
         self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
+    ):
         """
-        Obtain image and video placeholder masks and check that their feature counts match the placeholders.
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            image_mask = image_mask.all(dim=-1)
-            video_mask = inputs_embeds == self.get_input_embeddings()(
+            special_image_mask = special_image_mask.all(-1)
+            special_video_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            video_mask = video_mask.all(dim=-1)
+            special_video_mask = special_video_mask.all(-1)
         else:
-            image_mask = input_ids == self.config.image_token_id
-            video_mask = input_ids == self.config.video_token_id
+            special_image_mask = input_ids == self.config.image_token_id
+            special_video_mask = input_ids == self.config.video_token_id
 
-        image_mask = image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                image_mask.sum() * inputs_embeds.shape[-1] == image_features.numel(),
-                lambda: (
-                    f"Image features and image tokens do not match, tokens: {image_mask.sum()}, "
-                    f"features: {image_features.shape[0]}"
-                ),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.size()[:-1].numel()}",
             )
 
-        video_mask = video_mask.unsqueeze(-1).to(inputs_embeds.device)
+        n_video_tokens = special_video_mask.sum()
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                video_mask.sum() * inputs_embeds.shape[-1] == video_features.numel(),
-                lambda: (
-                    f"Video features and video tokens do not match, tokens: {video_mask.sum()}, "
-                    f"features: {video_features.shape[0]}"
-                ),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.size()[:-1].numel()}",
             )
-
-        return image_mask, video_mask
+        return special_image_mask, special_video_mask
 
     @can_return_tuple
     @auto_docstring

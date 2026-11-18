@@ -144,8 +144,11 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             features = getattr(model, f"get_{modality}_features")(**feature_inputs, return_dict=True)
             inputs["mm_encoder_outputs"] = {modality: BaseModelOutputWithPooling(pooler_output=features.pooler_output)}
             outputs = model(**inputs)
+            inputs["inputs_embeds"] = model.get_input_embeddings()(inputs.pop("input_ids"))
+            embedded_outputs = model(**inputs)
 
         torch.testing.assert_close(outputs.last_hidden_state, expected_hidden_state, rtol=0, atol=0)
+        torch.testing.assert_close(embedded_outputs.last_hidden_state, expected_hidden_state, rtol=0, atol=0)
         self.assertNotIn("image_pooler_output", outputs)
         self.assertNotIn("video_pooler_output", outputs)
 

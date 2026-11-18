@@ -43,9 +43,9 @@ from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
-from ..llava.modeling_llava import LlavaModel
 from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6VisionEmbeddings
 from ..muse_glimmer.modeling_muse_glimmer import MuseGlimmerVisionModel, MuseGlimmerVisionRotaryEmbedding
+from ..perception_lm.modeling_perception_lm import PerceptionLMModel
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3PreTrainedModel,
     VideoLlama3VisionAttention,
@@ -518,7 +518,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel, MuseGlimmerVisionModel):
 
 
 @auto_docstring(custom_intro="The bare Ovis2.5 multimodal model, without the language modeling head.")
-class Ovis2_5Model(LlavaModel):
+class Ovis2_5Model(PerceptionLMModel):
     def __init__(self, config: Ovis2_5Config):
         super().__init__(config)
         self.vision_tower = Ovis2_5VisionModel(config.vision_config)
@@ -561,51 +561,6 @@ class Ovis2_5Model(LlavaModel):
             image_grid_thw=video_grid_thw,
             **kwargs,
         )
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Obtain image and video placeholder masks and check that their feature counts match the placeholders.
-        """
-        if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            image_mask = image_mask.all(dim=-1)
-            video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            video_mask = video_mask.all(dim=-1)
-        else:
-            image_mask = input_ids == self.config.image_token_id
-            video_mask = input_ids == self.config.video_token_id
-
-        image_mask = image_mask.unsqueeze(-1).to(inputs_embeds.device)
-        if image_features is not None:
-            torch_compilable_check(
-                image_mask.sum() * inputs_embeds.shape[-1] == image_features.numel(),
-                lambda: (
-                    f"Image features and image tokens do not match, tokens: {image_mask.sum()}, "
-                    f"features: {image_features.shape[0]}"
-                ),
-            )
-
-        video_mask = video_mask.unsqueeze(-1).to(inputs_embeds.device)
-        if video_features is not None:
-            torch_compilable_check(
-                video_mask.sum() * inputs_embeds.shape[-1] == video_features.numel(),
-                lambda: (
-                    f"Video features and video tokens do not match, tokens: {video_mask.sum()}, "
-                    f"features: {video_features.shape[0]}"
-                ),
-            )
-
-        return image_mask, video_mask
 
     def _merge_visual_features(
         self,
