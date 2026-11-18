@@ -2576,8 +2576,6 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    # Looped Inkling2: the Inkling2 layout plus the loop core's message gates and message queries. Renamed
-    # first, before Inkling2's `.attn.` -> `.self_attn.` would also catch `controllers.attn.`
     mapping["inkling2_loop"] = mapping["inkling2"].copy()
     mapping["inkling2_loop_text"] = [
         WeightRenaming(source_patterns=r"controllers\.attn\.", target_patterns=r"q_message_gate."),
