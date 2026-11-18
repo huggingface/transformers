@@ -112,6 +112,7 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
+    "MiniCPMV2_5VisionTransformer",
     "MiniCPMV4_6VisionPreTrainedModel",
     "MiniCPMV4_6VisionModel",
     "MiniMaxM3VLVisionModel",
