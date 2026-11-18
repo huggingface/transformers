@@ -14,15 +14,12 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernelized_func
 from ...masking_utils import (
     create_causal_mask,
     create_recurrent_attention_mask,
@@ -43,11 +40,9 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2Model,
     Lfm2PreTrainedModel,
     Lfm2RMSNorm,
-    Lfm2ShortConv,
 )
 from ..lfm2_moe.modeling_lfm2_moe import Lfm2MoeMLP
 from ..llama.modeling_llama import eager_attention_forward
-from ..mamba.modeling_mamba import causal_conv1d_forward
 from ..olmo.modeling_olmo import apply_rotary_pos_emb
 from ..olmo3.modeling_olmo3 import Olmo3RotaryEmbedding
 from ..qwen3.modeling_qwen3 import Qwen3Attention
@@ -209,53 +204,6 @@ class Lfm3Attention(Qwen3Attention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
-
-
-# torch only: the hub causal_conv1d kernels serve widths 2-4, LFM3 uses 7
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-@use_kernelized_func([causal_conv1d_forward])
-class Lfm3ShortConv(Lfm2ShortConv):
-    pass
 
 
 class Lfm3DecoderLayer(Lfm2DecoderLayer):
