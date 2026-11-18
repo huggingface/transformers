@@ -110,7 +110,6 @@ class VideoLlama3Config(PreTrainedConfig):
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
         "vision_config": VideoLlama3VisionConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -346,7 +345,6 @@ def get_pixel_unshuffle_indices_and_weights(
         column_low, column_high, column_weight = taps(width, width // merge_size)
         rows = torch.stack([row_low, row_low, row_high, row_high], dim=-1)[:, None]
         columns = torch.stack([column_low, column_high, column_low, column_high], dim=-1)[None]
-        # Raster position to merge-block order
         block_index = (rows // merge_size * (width // merge_size) + columns // merge_size) * merge_size**2
         index = block_index + rows % merge_size * merge_size + columns % merge_size
         row_weights = torch.stack([1 - row_weight, 1 - row_weight, row_weight, row_weight], dim=-1)[:, None]
@@ -542,24 +540,7 @@ class VideoLlama3Model(Qwen2VLModel):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
-            **kwargs,
-        )
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
+            return_dict=True,
             **kwargs,
         )
 
@@ -571,8 +552,6 @@ class VideoLlama3Model(Qwen2VLModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
@@ -586,25 +565,7 @@ class VideoLlama3Model(Qwen2VLModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        return vision_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-            The spatial downsampling ratio of each image feature.
-        """
-        vision_outputs = self.get_image_embeddings(
-            pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
-        )
-        image_embeds = vision_outputs.pooler_output
-        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // image_merge_sizes**2
         return vision_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

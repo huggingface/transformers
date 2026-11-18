@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -618,7 +618,7 @@ class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
     The MiniCPMV4_7 model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
+class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
     def __init__(self, config: MiniCPMV4_7Config):
         super().__init__(config)
 
@@ -631,7 +631,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         target_sizes: torch.IntTensor,
@@ -658,7 +658,12 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
         if use_vit_merger:
             target_sizes = target_sizes // 2
-        vision_output.pooler_output = self.merger(vision_output.last_hidden_state, target_sizes)
+        vision_output.pooler_output = torch.cat(self.merger(vision_output.last_hidden_state, target_sizes), dim=0)
+        merge_height, merge_width = self.merger.merge_kernel_size
+        rounds = self.merger.merger_times
+        vision_output.split_sizes = (target_sizes[:, 0] // merge_height**rounds) * (
+            target_sizes[:, 1] // merge_width**rounds
+        )
         return vision_output
 
     def get_placeholder_mask(
@@ -735,7 +740,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             and pixel_values is not None
             and self.config.image_token_id is not None
         ):
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values[:1], target_sizes, downsample_mode=downsample_mode
             )
 
@@ -744,21 +749,23 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             and pixel_values_videos is not None
             and self.config.video_token_id is not None
         ):
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output
+            if not isinstance(video_features, torch.Tensor):
+                video_features = torch.cat(video_features, dim=0)
+            video_features = video_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 
@@ -797,7 +804,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
     @auto_docstring(
         custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
     )
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         target_sizes_videos: torch.IntTensor,
@@ -820,10 +827,11 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
         )
         target_sizes = target_sizes_videos.repeat(num_frames, 1)
-        return self.get_image_features(
+        return self.get_image_embeddings(
             pixel_values,
             target_sizes,
             downsample_mode=downsample_mode,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1245,7 +1253,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
 
 @auto_docstring
-class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, GenerationMixin):
+class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -1326,16 +1334,6 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
-    def get_image_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
-        return self.model.get_image_features(*args, **kwargs)
-
-    @auto_docstring(
-        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
-    )
-    def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
-        return self.model.get_video_features(*args, **kwargs)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(

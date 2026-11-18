@@ -290,8 +290,7 @@ def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list
 
     def wrapped_fn(func):
         if isinstance(selection, str):
-            # Where the selection is passed, found once: `Signature.bind` on every call can't be traced by
-            # `torch.compile`
+            # `Signature.bind` on every call can't be traced by `torch.compile`
             parameters = inspect.signature(func).parameters
             position = list(parameters).index(selection) - 1  # `self` is not in `args`
             default = parameters[selection].default

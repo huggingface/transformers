@@ -459,7 +459,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         target_dtype = self.patch_conv.weight.dtype
         patch_embeds = self.patch_conv(pixel_values.to(dtype=target_dtype))
 
-        # gather each image's unpadded patches into a single sequence
         patch_embeds = patch_embeds.permute(0, 2, 3, 1)[patch_image_index, position_ids[:, 0], position_ids[:, 1]]
         patch_embeds = self.ln_pre(patch_embeds.unsqueeze(0))
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
