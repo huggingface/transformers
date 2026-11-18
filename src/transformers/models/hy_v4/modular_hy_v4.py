@@ -87,7 +87,6 @@ class HYV4Config(PreTrainedConfig):
     """
 
     model_type = "hy_v4"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -489,7 +488,6 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
         "sinks",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, HYV4TopkRouter):

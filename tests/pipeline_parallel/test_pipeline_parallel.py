@@ -299,6 +299,12 @@ class TestPipelineStage(unittest.TestCase):
         self.assertTrue(stage.comm_on_cpu)
         mock_get_backend.assert_called_once_with(stage.pp_group)
 
+    @patch("transformers.distributed.pipeline_parallel.dist.get_backend", return_value="gloo")
+    def test_layer_range_for_rank(self, mock_get_backend):
+        stage = PipelineStage(_FakeDeviceMesh(rank=0, size=3))
+        ranges = [stage.layer_range_for_rank(rank, 32) for rank in range(3)]
+        self.assertEqual(ranges, [(0, 11), (11, 22), (22, 32)])
+
 
 class TestPipelineParallelLoadReport(TestCasePlus):
     @parameterized.expand([(pp_size, tie_word_embeddings) for pp_size in [2] for tie_word_embeddings in [True, False]])

@@ -52,7 +52,6 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "kyutai_speech_to_text"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="mimi"),
     }
