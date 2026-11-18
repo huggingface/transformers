@@ -507,6 +507,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             Temporal, height, and width patch-grid dimensions for each packed image or video.
         """
+        # Ovis feeds embeddings to the encoder without Muse's input LayerNorm.
         hidden_states = self.embeddings(pixel_values, grid_thw, **kwargs)
         spatial_merge_unit = self.spatial_merge_size**2
         window_index, cu_window_seqlens = get_vision_window_index(
@@ -525,6 +526,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
         hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
         hidden_states = hidden_states[window_index].reshape(sequence_length, -1)
 
+        # Ovis uses these RoPE coordinates without Muse's axis flip or offset.
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         position_ids = position_ids.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
         position_ids = position_ids[window_index].reshape(sequence_length, -1)
@@ -544,6 +546,7 @@ class Ovis2_5VisionModel(Ovis2_5PreTrainedModel):
                 **kwargs,
             )
 
+        # Keep one feature row per patch; the visual tokenizer performs spatial merging later.
         reverse_indices = torch.argsort(window_index)
         hidden_states = hidden_states.reshape(sequence_length // spatial_merge_unit, spatial_merge_unit, -1)
         pre_layernorm_hidden_state = hidden_states[reverse_indices].reshape(sequence_length, -1)
