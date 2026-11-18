@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from dataclasses import dataclass
 
 import torch
 from torch import nn
 
 from ...decision.modeling_utils import DecisionMixin
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_kev import KevConfig
 
@@ -28,6 +29,17 @@ class KevPreTrainedModel(PreTrainedModel):
     config: KevConfig
     base_model_prefix = "model"
     _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
+
+
+@auto_docstring
+@dataclass
+class KevDecisionOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(total_num_options,)`):
+        The scores of the options, concatenated in question order.
+    """
+
+    logits: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -45,6 +57,7 @@ class KevForDecision(DecisionMixin, KevPreTrainedModel):
         self.query = nn.Linear(config.hidden_size, config.head_dim)
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -53,13 +66,13 @@ class KevForDecision(DecisionMixin, KevPreTrainedModel):
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> KevDecisionOutput:
         marks, num_options = marks[0], num_options[0]  # a batch of one prompt
         outputs = self.model(input_ids=input_ids, use_cache=False, **kwargs)
         hidden_states = outputs.last_hidden_state[0].to(self.key.weight.dtype)
         blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
         scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
-        return scores / math.sqrt(self.config.head_dim)
+        return KevDecisionOutput(logits=scores / math.sqrt(self.config.head_dim))
 
 
 __all__ = ["KevForDecision", "KevPreTrainedModel"]

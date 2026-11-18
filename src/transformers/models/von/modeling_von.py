@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -25,7 +26,7 @@ from ...masking_utils import (
     padding_mask_function,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_von import VonConfig
 
@@ -35,6 +36,17 @@ class VonPreTrainedModel(PreTrainedModel):
     config: VonConfig
     base_model_prefix = "model"
     _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
+
+
+@auto_docstring
+@dataclass
+class VonDecisionOutput(ModelOutput):
+    r"""
+    logits (`torch.FloatTensor` of shape `(total_num_options,)`):
+        The scores of the options, concatenated in question order.
+    """
+
+    logits: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -110,6 +122,7 @@ class VonForDecision(DecisionMixin, VonPreTrainedModel):
             )
         return {"inputs_embeds": inputs_embeds, "position_ids": position_ids, "attention_mask": attention_mask}
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -118,7 +131,7 @@ class VonForDecision(DecisionMixin, VonPreTrainedModel):
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> VonDecisionOutput:
         input_ids, marks, num_options = input_ids[0], marks[0], num_options[0]  # a batch of one prompt
         backbone_inputs = self.backbone_inputs(input_ids, marks, num_options)
         hidden_states = self.model(**backbone_inputs, **kwargs).last_hidden_state[0]
@@ -131,7 +144,7 @@ class VonForDecision(DecisionMixin, VonPreTrainedModel):
             prior = self.config.noul_prior
             correction = prior["a"] * (logits[1, 0] - logits[1, 1]) + prior["b"]
             scores = torch.stack([scores[0] - correction, scores[1]])
-        return scores
+        return VonDecisionOutput(logits=scores)
 
 
 __all__ = ["VonForDecision", "VonPreTrainedModel"]
