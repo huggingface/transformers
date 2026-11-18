@@ -100,7 +100,6 @@ class MBartTokenizer(TokenizersBackend):
         self._vocab = vocab
         self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
-        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
         list_normalizers = []
         if _spm_precompiled_charsmap is not None:
             list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
