@@ -31,7 +31,11 @@ from torch.utils.checkpoint import checkpoint
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...decision import DecisionConfig, DecisionMixin, Question
-from ...dynamic_module_utils import custom_object_save, get_class_from_dynamic_module
+from ...dynamic_module_utils import (
+    TRANSFORMERS_DYNAMIC_MODULE_NAME,
+    custom_object_save,
+    get_class_from_dynamic_module,
+)
 from ...loss.loss_clef import check_clef_label_shapes, clef_label_errors, raise_label_error
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -326,7 +330,7 @@ def _hub_repository(*classes: type, name: str) -> str | None:
     modules of the Hub are `transformers_modules.<org>.<repo>.<commit>.<module>`, those of a folder
     `transformers_modules.<folder>.<hash>.<module>`: the module tells where the code came from, whatever `name` says.
     """
-    from ...dynamic_module_utils import TRANSFORMERS_DYNAMIC_MODULE_NAME, _sanitize_module_name
+    from ...dynamic_module_utils import _sanitize_module_name
 
     if not name or os.path.isdir(name) or not _is_repo_id(name):
         return None
@@ -994,6 +998,24 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                     f"The backbone {text_config.model_type!r} is a model type of transformers that has no `AutoModel` "
                     f"class. Clef does not run the code its `auto_map` names for a model type of transformers "
                     f"({text_config.auto_map}): use a backbone with an `AutoModel` class."
+                )
+            # A config without an `auto_map` whose classes are registered: code of a checkpoint (a dynamic module that
+            # an earlier load with the flag imported) is built in `from_pretrained` only with the flag, while classes
+            # a user registered from an importable module of their own are built as they are
+            classes = [type(text_config)]
+            if type(text_config) in AutoModel._model_mapping:
+                model_classes = AutoModel._model_mapping[type(text_config)]
+                classes += list(model_classes) if isinstance(model_classes, (tuple, list)) else [model_classes]
+            loading = _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.get()
+            checkpoint_code = [
+                cls for cls in classes if cls.__module__.startswith(f"{TRANSFORMERS_DYNAMIC_MODULE_NAME}.")
+            ]
+            if checkpoint_code and loading is not None and not loading[0]:
+                raise ValueError(
+                    f"The backbone of the Clef model {loading[1]} ({text_config.model_type!r}) would be built with "
+                    f"{', '.join(f'{cls.__module__}.{cls.__name__}' for cls in checkpoint_code)}, the code of a "
+                    "checkpoint that an earlier load imported. Loading the model runs that code: read it, then pass "
+                    "`trust_remote_code=True` to allow it."
                 )
             return AutoModel.from_config(text_config, trust_remote_code=False)
         _, auto_class = ClefForDecision._backbone_auto_class(backbone_code, text_config)

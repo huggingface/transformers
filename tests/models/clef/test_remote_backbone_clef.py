@@ -14,6 +14,7 @@
 """Clef on a backbone defined by its checkpoint's own code, loaded only with `trust_remote_code=True`."""
 
 import copy
+import importlib
 import json
 import os
 import subprocess
@@ -843,3 +844,80 @@ class ClefRemoteBackboneTest(unittest.TestCase):
                     self.assertEqual(loaded.config.text_config.model_type, model_type)
                     with torch.no_grad():
                         torch.testing.assert_close(loaded.eval()(**inputs).logits, logits, rtol=0, atol=0)
+
+    # Fix round 2
+
+    def loaders(self):
+        return {
+            "ClefForDecision": ClefForDecision.from_pretrained,
+            "AutoModelForDecision": AutoModelForDecision.from_pretrained,
+            "pipeline": lambda folder, **kwargs: pipeline("decision", model=folder, device="cpu", **kwargs).model,
+        }
+
+    def test_registered_checkpoint_code_without_auto_map_needs_the_flag(self):
+        # O1: a saved model whose backbone type an earlier load with the flag registered, with the `auto_map` removed
+        # from its `text_config` and no code files: the registered classes are a checkpoint's code, so every loader
+        # refuses them without the flag, and builds them with it
+        _, model = self.model("encoder", "cosine", model_type=unique_model_type("tinyenc"))
+        model.eval()
+        inputs, _ = self.inputs(model, "encoder")
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        folder = self.save(model, "encoder")
+        ClefForDecision.from_pretrained(folder, trust_remote_code=True)  # registers the classes
+        config = json.loads(Path(folder, "config.json").read_text(encoding="utf-8"))
+        del config["text_config"]["auto_map"]
+        Path(folder, "config.json").write_text(json.dumps(config), encoding="utf-8")
+        for code in Path(folder).glob("*.py"):
+            code.unlink()
+        for name, load in self.loaders().items():
+            for flag in ({}, {"trust_remote_code": False}):
+                with self.subTest(loader=name, flag=flag):
+                    with self.assertRaisesRegex(ValueError, "(?s)transformers_modules.*trust_remote_code=True"):
+                        load(folder, **flag)
+            with self.subTest(loader=name, flag=True):
+                loaded = load(folder, trust_remote_code=True).eval()
+                with torch.no_grad():
+                    torch.testing.assert_close(loaded(**inputs).logits, logits, rtol=0, atol=0)
+
+    def test_classes_registered_from_an_importable_module_need_no_flag(self):
+        # Classes a user registers on purpose from an importable module of their own are not a checkpoint's code: a
+        # model on them loads without the flag, as before
+        model_type = unique_model_type("tinyenc")
+        package = f"clef_user_package_{uuid.uuid4().hex[:8]}"
+        directory = Path(self.folder("importable"), package)
+        directory.mkdir()
+        Path(directory, "__init__.py").write_text("", encoding="utf-8")
+        for name, code in ENCODER_PACKAGE.items():
+            code = textwrap.dedent(code).lstrip().replace('model_type = "tinyenc"', f'model_type = "{model_type}"')
+            Path(directory, name).write_text(code, encoding="utf-8")
+        sys.path.insert(0, str(directory.parent))
+        try:
+            configuration = importlib.import_module(f"{package}.configuration_tinyenc")
+            modeling = importlib.import_module(f"{package}.modeling_tinyenc")
+        finally:
+            sys.path.remove(str(directory.parent))
+        AutoConfig.register(model_type, configuration.TinyEncConfig)
+        AutoModel.register(configuration.TinyEncConfig, modeling.TinyEncModel)
+        torch.manual_seed(0)
+        backbone = modeling.TinyEncModel(
+            configuration.TinyEncConfig(vocab_size=len(self.encoder_tokenizer), hidden_size=24)
+        ).eval()
+        with torch.no_grad():
+            for parameter in backbone.parameters():
+                parameter.copy_(torch.randn_like(parameter) * 0.5)
+        model = ClefForDecision(self.clef_config(backbone, "encoder", "cosine"), model=backbone).eval()
+        inputs, _ = self.inputs(model, "encoder")
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        folder = self.save(model, "encoder")
+        self.assertNotIn(
+            "auto_map", json.loads(Path(folder, "config.json").read_text(encoding="utf-8"))["text_config"]
+        )
+        for name, load in self.loaders().items():
+            for flag in ({}, {"trust_remote_code": False}, {"trust_remote_code": True}):
+                with self.subTest(loader=name, flag=flag):
+                    loaded = load(folder, **flag).eval()
+                    self.assertIs(type(loaded.model), modeling.TinyEncModel)
+                    with torch.no_grad():
+                        torch.testing.assert_close(loaded(**inputs).logits, logits, rtol=0, atol=0)
