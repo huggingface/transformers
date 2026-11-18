@@ -653,18 +653,8 @@ def is_torch_supa_available(check_device: bool = False) -> bool:
 
     import torch
 
-    if not hasattr(torch, "supa"):
-        return False
-
-    if check_device:
-        try:
-            # Will raise a RuntimeError if no SUPA device is found
-            _ = torch.supa.device_count()
-            return torch.supa.is_available()
-        except RuntimeError:
-            return False
-    return torch.supa.is_available()
-
+    accelerator = get_current_accelerator()
+    return accelerator is not None and accelerator.type == "supa" and torch.accelerator.is_available()
 
 @lru_cache
 @_make_compile_constant
