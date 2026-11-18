@@ -124,8 +124,11 @@ jobs:
             tests: >-
               test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion
               test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion_stream
+          # test_colliding_low_hash_bits_do_not_reuse_image_kv needs a GPU (SGLang runs this file on GPU only)
           - suite: vision-language
-            tests: test/registered/vlm/test_vlm_input_format.py::TestQwenVLUnderstandsImage
+            tests: >-
+              test/registered/vlm/test_vlm_input_format.py::TestQwenVLUnderstandsImage
+              --deselect test/registered/vlm/test_vlm_input_format.py::TestQwenVLUnderstandsImage::test_colliding_low_hash_bits_do_not_reuse_image_kv
           - suite: audio
             tests: >-
               test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_basic_transcription
