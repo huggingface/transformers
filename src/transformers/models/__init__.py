@@ -76,6 +76,7 @@ if TYPE_CHECKING:
     from .clef import *
     from .clip import *
     from .clipseg import *
+    from .clm import *
     from .clvp import *
     from .code_llama import *
     from .codegen import *

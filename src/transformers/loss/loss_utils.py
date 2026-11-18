@@ -18,6 +18,7 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_clef import ClefForDecisionLoss
+from .loss_clm import ClmForDecisionLoss
 from .loss_ctc import ForCTCLoss
 from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
@@ -175,6 +176,7 @@ def ForSemanticSegmentationLoss(
 
 
 LOSS_MAPPING = {
+    "ClmForDecision": ClmForDecisionLoss,
     "JevForDecision": JevForDecisionLoss,
     "JevaForDecision": JevaForDecisionLoss,
     "ForSemanticSegmentation": ForSemanticSegmentationLoss,
