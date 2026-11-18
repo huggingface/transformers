@@ -29,7 +29,7 @@ from ...masking_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
@@ -45,10 +45,9 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2ShortConv,
 )
 from ..lfm2_moe.modeling_lfm2_moe import Lfm2MoeMLP
-from ..llama.modeling_llama import eager_attention_forward
-from ..olmo.modeling_olmo import apply_rotary_pos_emb
+from ..olmo.modeling_olmo import apply_rotary_pos_emb  # noqa: F401
 from ..olmo3.modeling_olmo3 import Olmo3RotaryEmbedding
-from ..qwen3.modeling_qwen3 import Qwen3Attention
+from ..step3p7.modeling_step3p7 import Step3p7Attention
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM3-1.7B")
@@ -79,7 +78,7 @@ class Lfm3Config(Lfm2Config):
     """
 
     model_type = "lfm3"
-    attribute_map = {"rms_norm_eps": "norm_eps"}
+    attribute_map = {"rms_norm_eps": "norm_eps", "gating": "use_attention_gate", "query_pre_attn_scalar": "head_dim"}
     _rope_type_labels = ("full_attention", "sliding_attention")
 
     vocab_size: int = 128_000
@@ -153,60 +152,11 @@ class Lfm3MLP(Lfm2MoeMLP):
     pass
 
 
-@no_inherit_decorator
-class Lfm3Attention(Qwen3Attention):
+class Lfm3Attention(Step3p7Attention):
     """Qwen3 attention with RoPE in float32 and a sigmoid output gate per head."""
 
     def __init__(self, config: Lfm3Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.g_proj = (
-            nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
-            if config.use_attention_gate
-            else None
-        )
-
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        cache: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-        if self.g_proj is not None:
-            attn_output = attn_output * torch.sigmoid(self.g_proj(hidden_states)).unsqueeze(-1)
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 # torch only: the hub causal_conv1d kernels serve widths 2-4, LFM3 uses 7
