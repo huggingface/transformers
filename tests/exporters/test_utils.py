@@ -701,4 +701,4 @@ class DecomposeMultimodalTest(unittest.TestCase):
         self.assertEqual(set(exported.components), names)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
-            self.assertEqual(set(ExportedModel.from_pretrained(directory).components), names)
+            self.assertEqual(set(ExportedModel.from_pretrained(directory, trust_remote_code=True).components), names)
