@@ -49,6 +49,7 @@ logger = logging.getLogger("ci_capture_debug")
 DEFAULT_TARGETS = (
     "DeepseekV32ModelTest::test_static_cache_no_recompile_with_smaller_length",
     "WhisperModelTest::test_onnx_export_generate_dynamic_static_cache",
+    "HiggsAudioV2ModelTest::test_static_cache_no_recompile_with_smaller_length",
 )
 TARGETS = tuple(t for t in os.environ.get("CAPDBG_TARGETS", ",".join(DEFAULT_TARGETS)).split(",") if t)
 REPEAT = int(os.environ.get("CAPDBG_REPEAT", "5"))
@@ -58,7 +59,7 @@ RESET_BETWEEN_REPEATS = os.environ.get("CAPDBG_RESET", "1") != "0"
 STATS = os.environ.get("CAPDBG_STATS", "0") == "1"
 # "patched": MINIMAL pure-Python patches + FULL tracing in odd repeats. "repeat_only": no patch at all (bisect: even
 # the MINIMAL patches seemed to hide the whisper failure, 4/4 plugin-on passes vs 6/8 plugin-off failures).
-PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "repeat_only_c_stacks")
+PLUGIN_MODE = os.environ.get("CAPDBG_MODE", "force_gc_in_capture")
 
 _CAPTURE_STATUS = {0: "NONE", 1: "ACTIVE", 2: "INVALIDATED"}
 
