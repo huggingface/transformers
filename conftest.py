@@ -42,6 +42,7 @@ from transformers.testing_utils import (
     record_ci_source_deps_by_file,
     record_ci_source_deps_chains,
     scan_preloaded_test_module_deps,
+    scoped_non_kernels_class,
     set_ci_collecting_file,
     set_ci_deps_phase,
     write_ci_module_graph,
@@ -349,6 +350,13 @@ def pytest_configure(config):
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
     register_network_debug_plugin(config)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_pycollect_makeitem(collector, name, obj):
+    # Disable any kernels usage on integration tests
+    if isinstance(obj, type) and "integration" in name.lower():
+        scoped_non_kernels_class(obj)
 
 
 def pytest_collection_modifyitems(items):

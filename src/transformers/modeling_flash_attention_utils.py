@@ -27,7 +27,6 @@ from .utils import (
     is_flash_attn_4_available,
     is_rocm_platform,
     is_torch_cuda_available,
-    is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_musa_available,
     is_torch_npu_available,
@@ -74,12 +73,11 @@ FLASH_ATTN_KERNEL_FALLBACK = {
 }
 
 FLASH_ATTN_KERNEL_VERSIONS = {
-    # v4 was only tested on 2.10 and upwards
-    "kernels-community/flash-attn2": 4 if is_torch_greater_or_equal("2.10", accept_dev=True) else 3,
-    "kernels-community/flash-attn3": 1,
+    "kernels-community/flash-attn2": 4,
+    "kernels-community/flash-attn3": 2,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
-    "kernels-community/flash-attn4": 0,
+    "kernels-community/flash-attn4": 1,
     "kernels-community/metal-flash-sdpa": 2,
 }
 

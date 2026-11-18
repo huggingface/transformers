@@ -252,6 +252,10 @@ class FalconH1ModelTester:
         model.to(device)
         model.eval()
 
+        # Enable kernels path
+        if device != "cpu":
+            model.use_kernels = True
+
         input_ids = input_ids[:1].to(device)
         prefill_len = input_ids.shape[1] // 2 + 1
         prompt = input_ids[:, :prefill_len]
