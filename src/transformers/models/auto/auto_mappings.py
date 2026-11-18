@@ -1257,6 +1257,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("cosmos3_edge", "Cosmos3EdgeProcessor"),
         ("csm", "CsmProcessor"),
         ("deepseek_ocr2", "DeepseekOcr2Processor"),
+        ("deepseek_v41", "DeepseekV41Processor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
@@ -1417,6 +1418,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("convnext", {"pil": "ConvNextImageProcessorPil", "torchvision": "ConvNextImageProcessor"}),
         ("cosmos3_edge", {"pil": "Cosmos3EdgeImageProcessorPil", "torchvision": "Cosmos3EdgeImageProcessor"}),
         ("deepseek_ocr2", {"pil": "DeepseekOcr2ImageProcessorPil", "torchvision": "DeepseekOcr2ImageProcessor"}),
+        ("deepseek_v41", {"torchvision": "DeepseekV41ImageProcessor"}),
         ("deepseek_vl", {"pil": "DeepseekVLImageProcessorPil", "torchvision": "DeepseekVLImageProcessor"}),
         (
             "deepseek_vl_hybrid",

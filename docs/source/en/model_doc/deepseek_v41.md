@@ -67,14 +67,51 @@ print(tokenizer.decode(outputs[0, inputs["input_ids"].shape[1] :]))
 If you forget that step, the model raises an error that tells you what to call, instead of quietly hashing with the
 wrong ids.
 
+### Images
+
+Images go in the chat like any other content. The **processor** resizes each one to a whole number of 14x14 patches at
+its own aspect ratio, and makes room for it in the prompt: one position for every 3x3 square of patches, a newline
+after each row, and a delimiter at either end. A 1024x701 photo takes 444 positions, and no image takes more than 1024.
+
+The checkpoint doesn't ship a processor config (yet!), so you build the processor from its two parts for now.
+
+```python
+import torch
+from transformers import AutoModelForImageTextToText, AutoTokenizer, DeepseekV41ImageProcessor, DeepseekV41Processor
+
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
+processor = DeepseekV41Processor(
+    image_processor=DeepseekV41ImageProcessor(), tokenizer=tokenizer, chat_template=tokenizer.chat_template
+)
+model = AutoModelForImageTextToText.from_pretrained(
+    "deepseek-ai/DeepSeek-V4.1-Flash", dtype=torch.bfloat16, device_map="auto"
+)
+model.set_engram_token_map(tokenizer)
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "What is in this picture?"},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+)
+outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
+print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
+```
+
 ## Notes
 
 - The model needs `input_ids` even when you pass `inputs_embeds`, because Engram hashes token ids.
 - Batched generation with left padding does not match unpadded generation yet. The compressor pools consecutive
   tokens, so padding shifts its groups.
 - The DSpark draft layers of the checkpoint (`mtp.*`) are not loaded.
-- There is no image processor yet. Images go in as `pixel_values` (the flattened patches of all the images) and
-  `image_grid_hw` (the height and width of each image's patch grid).
+- The image processor resizes with torchvision, while the original preprocessing uses PIL. Sizes and padding are the
+  same, but resampling leaves a fraction of a percent of the pixel values off by one or two levels out of 255.
 
 ## DeepseekV41Config
 
@@ -87,6 +124,16 @@ wrong ids.
 ## DeepseekV41VisionConfig
 
 [[autodoc]] DeepseekV41VisionConfig
+
+## DeepseekV41ImageProcessor
+
+[[autodoc]] DeepseekV41ImageProcessor
+    - preprocess
+
+## DeepseekV41Processor
+
+[[autodoc]] DeepseekV41Processor
+    - __call__
 
 ## DeepseekV41VisionModel
 
