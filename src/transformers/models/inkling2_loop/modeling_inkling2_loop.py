@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1026,7 +1025,8 @@ class Inkling2LoopPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         # one hidden state per layer visit: the core layers once per pass
         "hidden_states": OutputRecorder(
-            (Inkling2LoopSlidingDecoderLayer, Inkling2LoopFullDecoderLayer), num_hidden_layers_key="num_layer_visits"
+            (Inkling2LoopSlidingDecoderLayer, Inkling2LoopFullDecoderLayer),
+            num_hidden_layers_key="total_num_hidden_layers",
         ),
         "attentions": [Inkling2LoopSlidingAttention, Inkling2LoopFullAttention],
         "router_logits": OutputRecorder(Inkling2LoopTopKRouter, index=0),
@@ -1113,8 +1113,6 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
 
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
-        if cache is not None:
-            self._add_loop_cache_layers(cache)
 
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
@@ -1137,22 +1135,28 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
 
         loop_config = self.config.loop_config
         loop_layer_index_start, loop_layer_index_end = loop_config["core_start"], loop_config["core_end"]
-        num_loop_layers = loop_layer_index_end - loop_layer_index_start
         # pre loop layers, then `num_passes` times the loop layers, then post loop layers
-        layer_visits = [(layer_idx, 0) for layer_idx in range(loop_layer_index_start)]
-        layer_visits += [
-            (layer_idx, pass_idx)
-            for pass_idx in range(loop_config["num_passes"])
+        layer_and_loop_indices = [(layer_idx, 0) for layer_idx in range(loop_layer_index_start)]
+        layer_and_loop_indices += [
+            (layer_idx, loop_idx)
+            for loop_idx in range(loop_config["num_passes"])
             for layer_idx in range(loop_layer_index_start, loop_layer_index_end)
         ]
-        layer_visits += [(layer_idx, 0) for layer_idx in range(loop_layer_index_end, self.config.num_hidden_layers)]
+        layer_and_loop_indices += [
+            (layer_idx, 0) for layer_idx in range(loop_layer_index_end, self.config.num_hidden_layers)
+        ]
+
+        cache_layer_indices = [[] for _ in range(self.config.num_hidden_layers)]
+        for cache_layer_idx, layer_idx in enumerate(self.config.cache_layer_indices):
+            cache_layer_indices[layer_idx].append(cache_layer_idx)
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
-        for layer_idx, pass_idx in layer_visits:
+        for layer_idx, loop_idx in layer_and_loop_indices:
             decoder_layer = self.layers[layer_idx]
+            cache_layer_idx = cache_layer_indices[layer_idx][loop_idx]
 
-            if layer_idx == loop_layer_index_start and pass_idx == 0:
+            if layer_idx == loop_layer_index_start and loop_idx == 0:
                 pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
             elif layer_idx == loop_layer_index_start:
                 num_pre_loop_blocks = pre_loop_block_states.shape[-2] + 1
@@ -1161,11 +1165,9 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
                 )
                 hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
 
-            messages, cache_layer_idx = None, None
-            if pass_idx > 0:
+            messages = None
+            if loop_idx > 0:
                 messages = self.cross_pass_messages(message_bank, layer_idx - loop_layer_index_start)
-                cache_layer_idx = self.config.num_hidden_layers + (pass_idx - 1) * num_loop_layers
-                cache_layer_idx += layer_idx - loop_layer_index_start
 
             new_hidden_states = decoder_layer(
                 hidden_states,
@@ -1188,18 +1190,6 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
             last_hidden_state=hidden_states,
             cache=cache,
         )
-
-    def _add_loop_cache_layers(self, cache: Cache):
-        """
-        Appends one cache layer per layer of every pass through the loop core after the first, as copies of the
-        (still empty) cache layers of the core, so that every pass keeps its own keys, values and convolution states.
-        """
-        if len(cache.layers) != self.config.num_hidden_layers:
-            return
-        loop_config = self.config.loop_config
-        core = range(loop_config["core_start"], loop_config["core_end"])
-        for _ in range(loop_config["num_passes"] - 1):
-            cache.layers.extend(copy.deepcopy(cache.layers[layer_idx]) for layer_idx in core)
 
 
 @auto_docstring(

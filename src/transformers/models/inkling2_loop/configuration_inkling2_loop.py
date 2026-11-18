@@ -145,12 +145,16 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
             ]
         super().__post_init__(**kwargs)
 
-    # TODO: check, looks weird
     @property
-    def num_layer_visits(self) -> int:
-        """Number of decoder layers run per token: the core layers once per pass."""
-        num_core_layers = self.loop_config["core_end"] - self.loop_config["core_start"]
-        return self.num_hidden_layers + (self.loop_config["num_passes"] - 1) * num_core_layers
+    def cache_layer_indices(self) -> list[int]:
+        """Returns decoder layer index for each cache layer."""
+        looped_layer_indices = range(self.loop_config["core_start"], self.loop_config["core_end"])
+        return list(range(self.num_hidden_layers)) + (self.loop_config["num_passes"] - 1) * list(looped_layer_indices)
+
+    @property
+    def total_num_hidden_layers(self) -> int:
+        """Total number of decoder layers visited in each forward pass. This takes looped layers into account."""
+        return len(self.cache_layer_indices)
 
     # TODO: move to validate archictecture?
     def validate_loop_config(self):
