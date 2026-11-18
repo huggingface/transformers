@@ -521,11 +521,90 @@ def mamba_selective_scan(
     return scan_output
 
 
+@use_kernel_forward_from_hub("selective_scan_forward")
+def selective_scan_forward(
+    module: nn.Module,
+    hidden_states: torch.Tensor,
+    time_step: torch.Tensor,
+    B: torch.Tensor,
+    C: torch.Tensor,
+    gate: torch.Tensor,
+    recurrent_state: torch.Tensor | None,
+    cache: Cache | None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Selective scan of a Jamba layer, reading and updating its recurrent state in `cache`. Layers list it in
+    `use_kernelized_func`, so that `kernelize` can replace it, e.g. with a runtime that manages the recurrent state
+    itself.
+
+    Args:
+        module (`nn.Module`):
+            The Jamba mixer, from which `A_log`, `D`, `dt_proj.bias`, `layer_idx` and the scan options are read.
+        hidden_states (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The input to the scan.
+        time_step (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The time step, before `dt_proj.bias` and softplus.
+        B (`torch.Tensor` of shape `(batch_size, seq_len, ssm_state_size)`):
+            The input projection of the state space model.
+        C (`torch.Tensor` of shape `(batch_size, seq_len, ssm_state_size)`):
+            The output projection of the state space model.
+        gate (`torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`):
+            The gate applied to the output of the scan.
+        recurrent_state (`torch.Tensor`, *optional*):
+            The layer's recurrent state in `cache` from before this forward pass, or `None` if it has none.
+        cache (`Cache`, *optional*):
+            The cache holding the recurrent state, updated in place.
+
+    Returns:
+        `torch.Tensor` of shape `(batch_size, intermediate_size, seq_len)`: The gated output of the scan, including
+        the `D` skip connection.
+    """
+    A = -torch.exp(module.A_log.float())
+    time_proj_bias = module.dt_proj.bias.float() if module.dt_proj.bias is not None else None
+
+    if recurrent_state is not None and hidden_states.shape[-1] == 1:
+        return mamba_selective_state_update(
+            recurrent_state,
+            hidden_states[..., 0],
+            time_step[..., 0],
+            A,
+            B[:, 0],
+            C[:, 0],
+            module.D,
+            z=gate[..., 0],
+            dt_bias=time_proj_bias,
+            dt_softplus=True,
+        ).unsqueeze(-1)
+
+    output_final_state = cache is not None
+    scan_result = mamba_selective_scan(
+        hidden_states,
+        time_step,
+        A,
+        B.transpose(1, 2),
+        C.transpose(1, 2),
+        D=module.D.float(),
+        z=gate,
+        delta_bias=time_proj_bias,
+        delta_softplus=True,
+        return_last_state=output_final_state,
+        use_mambapy=module.use_mambapy,
+        use_associative_scan=module.use_associative_scan,
+    )
+    if not output_final_state:
+        return scan_result
+    scan_output, final_state = scan_result
+    cache.update_recurrent_state(final_state, module.layer_idx)
+    return scan_output
+
+
 @use_kernelized_func(
     [
         mamba_inner_fn,
         mamba_selective_scan,
         mamba_selective_state_update,
+        selective_scan_forward,
         causal_conv1d_forward,
         causal_conv1d_fn,
         causal_conv1d_update,
@@ -600,7 +679,6 @@ class JambaMambaMixer(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
-        seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
         # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
         if cache is not None:
@@ -614,8 +692,6 @@ class JambaMambaMixer(nn.Module):
 
         # Key difference to falcon mamba: mamba inner fn applies its dt norm at a different time
         # leading to incompatible implementations
-        A = -torch.exp(self.A_log.float())
-
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
@@ -647,46 +723,9 @@ class JambaMambaMixer(nn.Module):
             time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
         else:
             time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
-        time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
-
-        # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            scan_output = mamba_selective_state_update(
-                recurrent_state,
-                hidden_states_B_C.transpose(1, 2)[..., 0],
-                time_step[..., 0],
-                A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                z=gate[..., 0],
-                dt_bias=time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
-
-        # Full sequence form
-        else:
-            output_final_state = cache is not None
-            scan_result = mamba_selective_scan(
-                hidden_states_B_C.transpose(1, 2),
-                time_step,
-                A,
-                B.transpose(1, 2),
-                C.transpose(1, 2),
-                D=self.D.float(),
-                z=gate,
-                delta_bias=time_proj_bias,
-                delta_softplus=True,
-                return_last_state=output_final_state,
-                use_mambapy=self.use_mambapy,
-                use_associative_scan=self.use_associative_scan,
-            )
-
-            if output_final_state:
-                scan_output, final_state = scan_result
-                cache.update_recurrent_state(final_state, self.layer_idx)
-            else:
-                scan_output = scan_result
+        scan_output = selective_scan_forward(
+            self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, recurrent_state, cache, **kwargs
+        )
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2).to(dtype))
