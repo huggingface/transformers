@@ -116,6 +116,8 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
     # TODO: should prob make those flat attributes instead of dict
     loop_config: dict | None = None
 
+    # TODO: check tp/ep plans
+
     def __post_init__(self, **kwargs):
         if self.loop_config is None:
             # TODO: Better naming: layer_index_start, layer_index_end, num_passes, gate_rank
@@ -162,7 +164,10 @@ class Inkling2LoopConfig(Inkling2Config):
     sub_configs_defaults = {
         "text_config": Inkling2LoopTextConfig,
         "vision_config": SubConfigSpec(
-            config_class=AutoConfig, model_type="inkling2_vision", init_kwargs={"text_hidden_size": 2304}
+            # TODO: text_hidden_size must be set in hub config to work when loading from hub
+            config_class=AutoConfig,
+            model_type="inkling2_vision",
+            init_kwargs={"text_hidden_size": 2304},
         ),
     }
 

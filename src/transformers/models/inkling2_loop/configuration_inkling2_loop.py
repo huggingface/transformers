@@ -185,7 +185,10 @@ class Inkling2LoopConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "text_config": Inkling2LoopTextConfig,
         "vision_config": SubConfigSpec(
-            config_class=AutoConfig, model_type="inkling2_vision", init_kwargs={"text_hidden_size": 2304}
+            # TODO: text_hidden_size must be set in hub config to work when loading from hub
+            config_class=AutoConfig,
+            model_type="inkling2_vision",
+            init_kwargs={"text_hidden_size": 2304},
         ),
     }
 
