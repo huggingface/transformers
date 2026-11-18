@@ -95,7 +95,7 @@ class EngineClient:
         self.managed_process: multiprocessing.process.BaseProcess | None = None
         self.is_dead = False
         self.fatal_error: str | None = None
-        self.result_queues: dict[tuple[int, str], asyncio.Queue[EngineResult]] = {}
+        self.result_queues: dict[str, asyncio.Queue[EngineResult]] = {}
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
@@ -191,7 +191,7 @@ class EngineClient:
             await asyncio.to_thread(self.start)
 
         self._loop = asyncio.get_running_loop()
-        request_id = (self.api_server, uuid.uuid4().hex)
+        request_id = f"{self.api_server}-{uuid.uuid4().hex}"
         result_queue = asyncio.Queue()
         self.result_queues[request_id] = result_queue
         self._cancel_idle_shutdown()
@@ -354,7 +354,7 @@ class EngineClient:
 
         def send_results(engine_results: list[EngineResult]) -> None:
             for api_server, results_queue in enumerate(results):
-                to_send = [result for result in engine_results if result.request_id[0] == api_server]
+                to_send = [result for result in engine_results if result.request_id.startswith(f"{api_server}-")]
                 if to_send:
                     results_queue.put(to_send)
 
