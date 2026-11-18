@@ -1408,7 +1408,7 @@ def set_param_for_module(
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
     hf_quantizer: HfQuantizer,
-    in_place: bool = False,
+    in_place: bool | Callable = False,
 ):
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
@@ -1449,7 +1449,7 @@ def set_param_for_module(
                     dtensor_param, requires_grad=ref.requires_grad and dtensor_param.is_floating_point()
                 )
             if in_place:  # the engine's own param, e.g. a vLLM param with its sharding attributes
-                ref.data.copy_(param_value)
+                ref.data.copy_(param_value) if in_place is True else in_place(ref, param_value)
                 return
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
