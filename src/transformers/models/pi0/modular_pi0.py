@@ -423,7 +423,8 @@ class PI0Model(PI0PreTrainedModel):
     def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask, attention_mask=None):
         batch_size, max_num_cameras = pixel_attention_mask.shape
         pixel_values = pixel_values.flatten(0, 1)
-        image_features = self.vlm.get_image_features(pixel_values).pooler_output
+        image_features = self.vlm.get_image_embeddings(pixel_values).pooler_output
+        image_features = image_features.unflatten(0, (pixel_values.shape[0], -1))
         tokens_per_image, hidden_size = image_features.shape[1], image_features.shape[2]
         image_features = image_features.reshape(batch_size, max_num_cameras * tokens_per_image, hidden_size)
 
