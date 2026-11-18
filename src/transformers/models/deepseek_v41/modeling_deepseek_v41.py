@@ -535,8 +535,16 @@ def eager_attention_forward(
 
 class DeepseekV41Attention(nn.Module):
     r"""
-    Sliding-window attention, which is all that the `"sliding_attention"` layers do. The other attention
-    variants add compressed KV on top of the window by overriding `get_compressed_kv`.
+    Attention over a sliding window, which is all that the `"sliding_attention"` layers do. The other layer
+    types also attend to compressed KV entries, which go after the window on the KV axis:
+
+    * `"compressed_attention"` compresses KV of its own. It also makes the index keys for them and runs an
+      indexer over those keys. The KV-sharing layers after it read all three: the compressed KV, the index
+      keys and the selection.
+    * `"kv_shared_indexed_attention"` reads the compressed KV of the last `"compressed_attention"` layer, and
+      runs its own indexer to select which of them each query attends to.
+    * `"kv_shared_attention"` reads those compressed KV too, and reuses the selection of the last layer that
+      ran an indexer.
 
     Shared with DeepSeek-V4:
     * Shared-KV multi-query attention: there is a single KV head, and the same tensor is read as both key and
@@ -546,12 +554,14 @@ class DeepseekV41Attention(nn.Module):
     * A learnable attention sink per head, and a grouped low-rank output projection.
     """
 
-    rope_layer_type = "main"
-
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
+        self.layer_type = config.attention_layer_types[layer_idx]
+        # A layer that reads compressed KV uses their RoPE base for everything, its window included
+        self.rope_layer_type = "main" if self.layer_type == "sliding_attention" else "compress"
+        self.compress_ratio = config.compress_ratios[layer_idx]
         self.num_heads = config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads  # single KV head, broadcast to all
         self.head_dim = config.head_dim
@@ -570,22 +580,10 @@ class DeepseekV41Attention(nn.Module):
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(self.num_heads))
-
-    def get_compressed_kv(
-        self,
-        hidden_states: torch.Tensor,
-        q_residual: torch.Tensor,
-        position_ids: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: Cache | None,
-        shared_states: dict[str, torch.Tensor],
-    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        """
-        Returns the compressed KV entries of shape `(batch_size, num_entries, head_dim)` and a boolean mask of
-        shape `(batch_size, seq_len, num_entries)` that says which of them each query attends to. A
-        sliding-window-only layer has neither.
-        """
-        return None, None
+        if self.layer_type in ("compressed_attention", "kv_shared_indexed_attention"):
+            self.indexer = DeepseekV41Indexer(config, layer_idx)
+        if self.layer_type == "compressed_attention":
+            self.compressor = DeepseekV41Compressor(config, layer_idx)
 
     def forward(
         self,
@@ -594,6 +592,7 @@ class DeepseekV41Attention(nn.Module):
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
         shared_states: dict[str, torch.Tensor] | None = None,
+        compressed_position_embeddings: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -610,14 +609,41 @@ class DeepseekV41Attention(nn.Module):
         if cache is not None:
             kv = cache.update(kv, kv, self.layer_idx)[0]
 
-        # The compressed entries go after the window on the KV axis. The model built the mask for the window
-        # only, so we extend it with the entries that each query selected.
-        compressed_kv, selected = self.get_compressed_kv(
-            hidden_states, q_residual, kwargs.get("position_ids"), (cos, sin), cache, shared_states
-        )
-        if compressed_kv is not None:
-            # With a device map, the layer that made the compressed KV may sit on another device
-            compressed_kv, selected = compressed_kv.to(kv.device, kv.dtype), selected.to(kv.device)
+        if self.layer_type == "compressed_attention":
+            # This layer compresses the groups that this call completes. There may be none of them, e.g. when
+            # decoding a token that is not the last of its group.
+            cache_layer: DeepseekV41CacheLayer | None = cache.layers[self.layer_idx] if cache is not None else None
+            latents = self.compressor(hidden_states, cache_layer)
+            entry_cos, entry_sin = compressed_position_embeddings[self.compress_ratio]
+            # The index keys come from the latents before RoPE, so we make them before we rotate the latents
+            index_keys = self.indexer.k_norm(self.indexer.k_proj(latents))
+            index_keys = apply_rotary_pos_emb(index_keys.unsqueeze(1), entry_cos, entry_sin).squeeze(1)
+            compressed_kv = apply_rotary_pos_emb(latents.unsqueeze(1), entry_cos, entry_sin).squeeze(1)
+            if cache_layer is not None:
+                compressed_kv, index_keys = cache_layer.update_compressed_states(compressed_kv, index_keys)
+            # We publish both for the indexers and the KV-sharing layers after us, starting with our own
+            shared_states["compressed_kv"], shared_states["index_keys"] = compressed_kv, index_keys
+
+        if self.layer_type in ("compressed_attention", "kv_shared_indexed_attention"):
+            # This layer selects which compressed entries each query attends to, and the
+            # `"kv_shared_attention"` layers after it reuse the selection. With a device map, the layers that
+            # made the index keys and the candidates may sit on another device.
+            candidates = shared_states.get("candidates")
+            shared_states["selected"], shared_states["candidates"] = self.indexer(
+                hidden_states,
+                q_residual,
+                shared_states["index_keys"].to(hidden_states.device),
+                kwargs.get("position_ids"),
+                (cos, sin),
+                candidates.to(hidden_states.device) if candidates is not None else None,
+            )
+
+        if self.layer_type != "sliding_attention":
+            # The compressed entries go after the window on the KV axis. The model built the mask for the
+            # window only, so we extend it with the entries that each query selected. With a device map, the
+            # layer that made the compressed KV may sit on another device.
+            compressed_kv = shared_states["compressed_kv"].to(kv.device, kv.dtype)
+            selected = shared_states["selected"].to(kv.device)
             kv = torch.cat([kv, compressed_kv.unsqueeze(1)], dim=2)
             compressed_mask = torch.zeros_like(selected, dtype=attention_mask.dtype)
             compressed_mask = compressed_mask.masked_fill(~selected, torch.finfo(attention_mask.dtype).min)
@@ -647,108 +673,6 @@ class DeepseekV41Attention(nn.Module):
         grouped = self.o_a_proj(grouped).flatten(2)
         output = self.o_b_proj(grouped)
         return output, attn_weights
-
-
-class DeepseekV41KVSharedAttention(DeepseekV41Attention):
-    """
-    Attention over a sliding window, plus the compressed KV of the last `"compressed_attention"` layer. Which
-    compressed entries each query attends to is also reused, from the last layer that ran an indexer.
-    """
-
-    rope_layer_type = "compress"
-
-    def get_compressed_kv(
-        self,
-        hidden_states: torch.Tensor,
-        q_residual: torch.Tensor,
-        position_ids: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: Cache | None,
-        shared_states: dict[str, torch.Tensor],
-    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        return shared_states["compressed_kv"], shared_states["selected"]
-
-
-class DeepseekV41KVSharedIndexedAttention(DeepseekV41KVSharedAttention):
-    """
-    Attention over a sliding window, plus the compressed KV of the last `"compressed_attention"` layer. This
-    layer runs its own indexer to select which compressed entries each query attends to, and the
-    `"kv_shared_attention"` layers after it reuse that selection.
-    """
-
-    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.indexer = DeepseekV41Indexer(config, layer_idx)
-
-    def get_compressed_kv(
-        self,
-        hidden_states: torch.Tensor,
-        q_residual: torch.Tensor,
-        position_ids: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: Cache | None,
-        shared_states: dict[str, torch.Tensor],
-    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        # With a device map, the layers that made the index keys and the candidates may sit on another device
-        candidates = shared_states.get("candidates")
-        shared_states["selected"], shared_states["candidates"] = self.indexer(
-            hidden_states,
-            q_residual,
-            shared_states["index_keys"].to(hidden_states.device),
-            position_ids,
-            position_embeddings,
-            candidates.to(hidden_states.device) if candidates is not None else None,
-        )
-        return shared_states["compressed_kv"], shared_states["selected"]
-
-
-class DeepseekV41CompressedAttention(DeepseekV41KVSharedIndexedAttention):
-    """
-    Attention over a sliding window, plus KV that this layer compresses itself. It also makes the index keys
-    for those compressed KV and runs an indexer over them. The KV-sharing layers after it read all three: the
-    compressed KV, the index keys and the selection.
-    """
-
-    def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.compressor = DeepseekV41Compressor(config, layer_idx)
-        self.rotary_emb = DeepseekV41RotaryEmbedding(config)
-
-    def get_compressed_kv(
-        self,
-        hidden_states: torch.Tensor,
-        q_residual: torch.Tensor,
-        position_ids: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: Cache | None,
-        shared_states: dict[str, torch.Tensor],
-    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-        cache_layer: DeepseekV41CacheLayer | None = cache.layers[self.layer_idx] if cache is not None else None
-        num_previous_entries = cache_layer.num_compressed_entries if cache_layer is not None else 0
-
-        # First, compress the groups that this call completes. There may be none of them, e.g. when decoding
-        # a token that is not the last of its group.
-        latents = self.compressor(hidden_states, cache_layer)
-        batch_size, num_new_entries, _ = latents.shape
-
-        # A latent stands for the first token of its group, so group `j` rotates at position `j * ratio`
-        positions = torch.arange(num_new_entries, device=latents.device) + num_previous_entries
-        positions = (positions * self.compressor.compress_ratio).unsqueeze(0).expand(batch_size, -1)
-        cos, sin = self.rotary_emb(latents, position_ids=positions, layer_type=self.rope_layer_type)
-
-        # Next, make the index keys. They come from the latents before RoPE, so this has to happen before we
-        # rotate the latents themselves.
-        index_keys = self.indexer.k_norm(self.indexer.k_proj(latents))
-        index_keys = apply_rotary_pos_emb(index_keys.unsqueeze(1), cos, sin).squeeze(1)
-        compressed_kv = apply_rotary_pos_emb(latents.unsqueeze(1), cos, sin).squeeze(1)
-        if cache_layer is not None:
-            compressed_kv, index_keys = cache_layer.update_compressed_states(compressed_kv, index_keys)
-
-        # Finally, publish both for the indexers and the KV-sharing layers after us, starting with our own
-        shared_states["compressed_kv"], shared_states["index_keys"] = compressed_kv, index_keys
-        return super().get_compressed_kv(
-            hidden_states, q_residual, position_ids, position_embeddings, cache, shared_states
-        )
 
 
 class DeepseekV41HyperConnection(nn.Module):
@@ -1071,14 +995,6 @@ class DeepseekV41Engram(nn.Module):
         return (streams + gate.unsqueeze(-1) * value.float().unsqueeze(-2)).to(hidden_streams.dtype)
 
 
-DEEPSEEK_V41_ATTENTION_CLASSES = {
-    "sliding_attention": DeepseekV41Attention,
-    "compressed_attention": DeepseekV41CompressedAttention,
-    "kv_shared_indexed_attention": DeepseekV41KVSharedIndexedAttention,
-    "kv_shared_attention": DeepseekV41KVSharedAttention,
-}
-
-
 class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
     r"""
     DeepSeek-V4.1 decoder block. As in DeepSeek-V4, the residual is a stack of `hc_mult` parallel streams of
@@ -1094,7 +1010,7 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.self_attn = DEEPSEEK_V41_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](config, layer_idx)
+        self.self_attn = DeepseekV41Attention(config, layer_idx)
         self.mlp = DeepseekV41SparseMoeBlock(config)
         self.input_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1243,6 +1159,67 @@ class DeepseekV41MultiModalProjector(nn.Module):
         return self.linear_2(F.gelu(self.linear_1(image_features)))
 
 
+def build_engram_token_map(tokenizer) -> torch.Tensor:
+    """
+    Builds the map from token ids to the smaller id space that the Engram n-grams are hashed over. Tokens that
+    normalize alike are merged there, so that " The", "the" and "THE" all hash the same way.
+
+    The DeepSeek-V4.1 checkpoints do not store this map. The reference implementation builds it from the
+    tokenizer when it creates the model, and this function does the same.
+
+    Args:
+        tokenizer ([`PreTrainedTokenizerFast`]):
+            The tokenizer of the checkpoint.
+
+    Returns:
+        `torch.Tensor` of shape `(len(tokenizer),)`: The compressed id of each token.
+
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer
+    >>> from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_engram_token_map
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
+    >>> token_map = build_engram_token_map(tokenizer)
+    >>> token_map[tokenizer.convert_tokens_to_ids("The")] == token_map[tokenizer.convert_tokens_to_ids("the")]
+    tensor(True)
+
+    ```
+    """
+    from tokenizers import Regex, normalizers
+
+    # A private-use char, so that a token that is exactly one space survives `Strip()` instead of collapsing
+    # to the empty string and merging with unrelated tokens
+    sentinel = ""
+    normalizer = normalizers.Sequence(
+        [
+            normalizers.NFKC(),
+            normalizers.NFD(),
+            normalizers.StripAccents(),
+            normalizers.Lowercase(),
+            normalizers.Replace(Regex(r"[ \t\r\n]+"), " "),
+            normalizers.Replace(Regex(r"^ $"), sentinel),
+            normalizers.Strip(),
+            normalizers.Replace(sentinel, " "),
+        ]
+    )
+
+    # We decode with the raw Rust tokenizer, which is what training did (no `clean_up_tokenization_spaces`)
+    backend = tokenizer.backend_tokenizer
+    key_to_compressed_id: dict[str, int] = {}
+    token_map = []
+    for token_id in range(len(tokenizer)):
+        text = backend.decode([token_id], skip_special_tokens=False)
+        if "�" in text:
+            # A partial UTF-8 byte token has nothing to normalize, so we key it by its raw form
+            key = backend.id_to_token(token_id)
+        else:
+            key = normalizer.normalize_str(text) or text
+        token_map.append(key_to_compressed_id.setdefault(key, len(key_to_compressed_id)))
+    return torch.tensor(token_map, dtype=torch.long)
+
+
 @auto_docstring
 class DeepseekV41PreTrainedModel(PreTrainedModel):
     config: DeepseekV41Config
@@ -1317,6 +1294,42 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
+    # The structure linter reads any `set_*` method as a hyperparameter that should live on the config. This one
+    # fills a buffer that is saved and loaded with the weights, and it only exists because the original
+    # checkpoints left that buffer out.
+    def set_engram_token_map(self, tokenizer_or_token_map):  # trf-ignore: TRF033
+        """
+        Sets the map from token ids to compressed ids that the Engram n-grams are hashed over. The checkpoints do
+        not store it, so it has to be set once after loading the model.
+
+        Args:
+            tokenizer_or_token_map ([`PreTrainedTokenizerFast`] or `torch.Tensor`):
+                The tokenizer of the checkpoint, or a map that `build_engram_token_map` made from it.
+        """
+        hasher = next((module for module in self.modules() if isinstance(module, DeepseekV41NgramHasher)), None)
+        if hasher is None:
+            raise ValueError("This model has no Engram layers, so there is no token map to set.")
+        if isinstance(tokenizer_or_token_map, torch.Tensor):
+            # An existing map, e.g. one that was built earlier and saved
+            token_map = tokenizer_or_token_map
+        else:
+            # A tokenizer, which we build the map from in the same way as the reference implementation
+            token_map = build_engram_token_map(tokenizer_or_token_map)
+        num_compressed_ids = int(token_map.max()) + 1
+        if num_compressed_ids != hasher.config.engram_compressed_vocab_size:
+            raise ValueError(
+                f"The token map has {num_compressed_ids} compressed ids, but the model was trained with "
+                f"{hasher.config.engram_compressed_vocab_size} (`config.engram_compressed_vocab_size`). The hash "
+                "multipliers are derived from that number, so this is not the tokenizer the checkpoint was "
+                "trained with."
+            )
+        if token_map.shape[0] > hasher.token_map.shape[0]:
+            raise ValueError(
+                f"The token map has {token_map.shape[0]} entries, but the model only has "
+                f"{hasher.token_map.shape[0]} tokens (`config.vocab_size`)."
+            )
+        hasher.token_map[: token_map.shape[0]] = token_map.to(hasher.token_map.device)
+
 
 @auto_docstring(
     custom_intro="""
@@ -1373,67 +1386,6 @@ class DeepseekV41VisionModel(DeepseekV41PreTrainedModel):
         return BaseModelOutput(last_hidden_state=self.norm(hidden_states))
 
 
-def build_engram_token_map(tokenizer) -> torch.Tensor:
-    """
-    Builds the map from token ids to the smaller id space that the Engram n-grams are hashed over. Tokens that
-    normalize alike are merged there, so that " The", "the" and "THE" all hash the same way.
-
-    The DeepSeek-V4.1 checkpoints do not store this map. The reference implementation builds it from the
-    tokenizer when it creates the model, and this function does the same.
-
-    Args:
-        tokenizer ([`PreTrainedTokenizerFast`]):
-            The tokenizer of the checkpoint.
-
-    Returns:
-        `torch.Tensor` of shape `(len(tokenizer),)`: The compressed id of each token.
-
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer
-    >>> from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_engram_token_map
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
-    >>> token_map = build_engram_token_map(tokenizer)
-    >>> token_map[tokenizer.convert_tokens_to_ids("The")] == token_map[tokenizer.convert_tokens_to_ids("the")]
-    tensor(True)
-
-    ```
-    """
-    from tokenizers import Regex, normalizers
-
-    # A private-use char, so that a token that is exactly one space survives `Strip()` instead of collapsing
-    # to the empty string and merging with unrelated tokens
-    sentinel = ""
-    normalizer = normalizers.Sequence(
-        [
-            normalizers.NFKC(),
-            normalizers.NFD(),
-            normalizers.StripAccents(),
-            normalizers.Lowercase(),
-            normalizers.Replace(Regex(r"[ \t\r\n]+"), " "),
-            normalizers.Replace(Regex(r"^ $"), sentinel),
-            normalizers.Strip(),
-            normalizers.Replace(sentinel, " "),
-        ]
-    )
-
-    # We decode with the raw Rust tokenizer, which is what training did (no `clean_up_tokenization_spaces`)
-    backend = tokenizer.backend_tokenizer
-    key_to_compressed_id: dict[str, int] = {}
-    token_map = []
-    for token_id in range(len(tokenizer)):
-        text = backend.decode([token_id], skip_special_tokens=False)
-        if "�" in text:
-            # A partial UTF-8 byte token has nothing to normalize, so we key it by its raw form
-            key = backend.id_to_token(token_id)
-        else:
-            key = normalizer.normalize_str(text) or text
-        token_map.append(key_to_compressed_id.setdefault(key, len(key_to_compressed_id)))
-    return torch.tensor(token_map, dtype=torch.long)
-
-
 @auto_docstring(
     custom_intro="""
     The DeepSeek-V4.1 language model, without the vision encoder and the language modeling head.
@@ -1487,8 +1439,8 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         batch_size, seq_len, _ = inputs_embeds.shape
+        past_seen = cache.get_seq_length() if cache is not None else 0
         if position_ids is None:
-            past_seen = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(seq_len, device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
 
@@ -1526,6 +1478,18 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
         }
+        # The compressed entries get RoPE as well. An entry stands for the first token of its group, so entry
+        # `j` of a layer with ratio `r` rotates at position `j * r`. We count groups from the tokens that the
+        # cache has seen, and only rotate the entries of the groups that this call completes.
+        compressed_position_embeddings = {}
+        for ratio, layer_type in zip(self.config.compress_ratios, self.config.attention_layer_types):
+            if layer_type == "compressed_attention" and ratio not in compressed_position_embeddings:
+                entry_ids = torch.arange(
+                    past_seen // ratio, (past_seen + seq_len) // ratio, device=inputs_embeds.device
+                )
+                compressed_position_embeddings[ratio] = self.rotary_emb(
+                    inputs_embeds, position_ids=(entry_ids * ratio).unsqueeze(0), layer_type="compress"
+                )
         # What the attention layers hand down the stack instead of recomputing: the compressed KV, the index
         # keys, the selection and the candidate blocks. Every source writes before the layers after it read.
         shared_states = {}
@@ -1542,6 +1506,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 engram_mask=engram_mask,
                 image_mask=image_mask,
                 position_embeddings=position_embeddings,
+                compressed_position_embeddings=compressed_position_embeddings,
                 position_ids=position_ids,
                 attention_mask=causal_mask,
                 cache=cache,
@@ -1553,38 +1518,6 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         hidden_states = (pre.unsqueeze(-1) * hidden_states.float()).sum(dim=2).to(hidden_states.dtype)
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
-
-    def set_engram_token_map(self, tokenizer_or_token_map):
-        """
-        Sets the map from token ids to compressed ids that the Engram n-grams are hashed over. The checkpoints do
-        not store it, so it has to be set once after loading the model.
-
-        Args:
-            tokenizer_or_token_map ([`PreTrainedTokenizerFast`] or `torch.Tensor`):
-                The tokenizer of the checkpoint, or a map that `build_engram_token_map` made from it.
-        """
-        if self.engram_hasher is None:
-            raise ValueError("This model has no Engram layers (`config.engram_layer_ids` is empty).")
-        if isinstance(tokenizer_or_token_map, torch.Tensor):
-            # An existing map, e.g. one that was built earlier and saved
-            token_map = tokenizer_or_token_map
-        else:
-            # A tokenizer, which we build the map from in the same way as the reference implementation
-            token_map = build_engram_token_map(tokenizer_or_token_map)
-        num_compressed_ids = int(token_map.max()) + 1
-        if num_compressed_ids != self.config.engram_compressed_vocab_size:
-            raise ValueError(
-                f"The token map has {num_compressed_ids} compressed ids, but the model was trained with "
-                f"{self.config.engram_compressed_vocab_size} (`config.engram_compressed_vocab_size`). The hash "
-                "multipliers are derived from that number, so this is not the tokenizer the checkpoint was "
-                "trained with."
-            )
-        if token_map.shape[0] > self.engram_hasher.token_map.shape[0]:
-            raise ValueError(
-                f"The token map has {token_map.shape[0]} entries, but the model only has "
-                f"{self.engram_hasher.token_map.shape[0]} tokens (`config.vocab_size`)."
-            )
-        self.engram_hasher.token_map[: token_map.shape[0]] = token_map.to(self.engram_hasher.token_map.device)
 
 
 @auto_docstring(
@@ -1610,9 +1543,6 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
-
-    def set_engram_token_map(self, tokenizer_or_token_map):
-        self.language_model.set_engram_token_map(tokenizer_or_token_map)
 
     @can_return_tuple
     @auto_docstring(
@@ -1740,17 +1670,6 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    def set_engram_token_map(self, tokenizer_or_token_map):
-        """
-        Sets the map from token ids to compressed ids that the Engram n-grams are hashed over. The checkpoints do
-        not store it, so it has to be set once after loading the model.
-
-        Args:
-            tokenizer_or_token_map ([`PreTrainedTokenizerFast`] or `torch.Tensor`):
-                The tokenizer of the checkpoint, or a map that `build_engram_token_map` made from it.
-        """
-        self.model.set_engram_token_map(tokenizer_or_token_map)
 
     @can_return_tuple
     @auto_docstring
