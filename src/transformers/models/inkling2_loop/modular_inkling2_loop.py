@@ -206,35 +206,21 @@ class Inkling2LoopMessageController(nn.Module):
 
 
 class Inkling2LoopCrossPassMessages(nn.Module):
-    """
-    Reads the messages of a core layer from the residual blocks the previous pass wrote (the message bank): one
-    block attention residual per input (query, key, value and MLP), each with its own query.
-    """
+    """Retrieves messages from the message bank (residual blocks from previous pass) using learned queries."""
 
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
-        # TODO: inline?
-        num_looped_layers = config.loop_config["core_end"] - config.loop_config["core_start"]
-        # rows `2 * i` and `2 * i + 1` belong to core layer `i`: its query and MLP inputs in `queries`, its key and
-        # value inputs in `kv_queries`
-        self.queries = nn.Parameter(torch.zeros(2 * num_looped_layers, config.hidden_size))
-        self.kv_queries = nn.Parameter(torch.zeros(2 * num_looped_layers, config.hidden_size))
+        # 4 * num_loop_layers queries, shape is (2 * num_loop_layers, 2 * hidden_dim) because of original checkpoint shapes.
+        self.queries = nn.Parameter(
+            torch.zeros(2 * config.loop_config["core_end"] - config.loop_config["core_start"], 2 * config.hidden_size)
+        )
         self.norm = Inkling2LoopUnweightedRMSNorm()
 
     def forward(self, message_bank: torch.Tensor, loop_layer_idx: int) -> torch.Tensor:
-        # TODO: stacking order looks odd
-        query_states = torch.stack(
-            [
-                self.queries[2 * loop_layer_idx],
-                self.kv_queries[2 * loop_layer_idx],
-                self.kv_queries[2 * loop_layer_idx + 1],
-                self.queries[2 * loop_layer_idx + 1],
-            ]
-        ).float()  # TODO: check dtype, convert early to float?
         bank_states = self.norm(message_bank.float())
-
         hidden_size = bank_states.shape[-1]
-        # (batch, seq_len, 4, hidden_size), the same queries at every position
+        # 4 query states for query, key, mlp, and value queries
+        query_states = self.queries.view(-1, 4, hidden_size)[loop_layer_idx].float()
         query_states = query_states.expand(*bank_states.shape[:-2], -1, -1)
         return F.scaled_dot_product_attention(query_states, bank_states, bank_states, scale=hidden_size**-0.5)
 
@@ -256,7 +242,7 @@ class Inkling2LoopShortConvolution(Inkling2ShortConvolution):
             Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
             its own.
         """
-        # Only difference from Inkling2 is the cache_layer_idx
+        # Difference from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_dtype = hidden_states.dtype
@@ -307,7 +293,7 @@ class Inkling2LoopDynamicShortConvolution(Inkling2DynamicShortConvolution):
             Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
             its own.
         """
-        # Only difference from Inkling2 is the cache_layer_idx
+        # Difference from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_dtype = hidden_states.dtype
@@ -363,7 +349,7 @@ class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):
             Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
             pass through the loop core has its own.
         """
-        # Different from Inkling2
+        # Difference from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
         key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
         value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
@@ -450,7 +436,7 @@ class Inkling2LoopFullAttention(Inkling2FullAttention):
             Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
             pass through the loop core has its own.
         """
-        # Different from Inkling2
+        # Difference from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_shape = hidden_states.shape[:-1]
@@ -563,7 +549,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
     ) -> torch.Tensor:
         r"""
         messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop core for the query, key, value and MLP inputs, in the
+            Messages of the previous pass through the loop core for the query, key, MLP and value inputs, in the
             passes after the first.
         cache_layer_idx (`int`, *optional*):
             Cache layer holding the states of this call, `layer_idx` by default. Each pass through the loop core has
@@ -577,7 +563,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
         if messages is None:
             query_hidden_states = key_hidden_states = value_hidden_states = self.input_layernorm(hidden_states)
         else:
-            query_message, key_message, value_message, _ = messages.unbind(-2)
+            query_message, key_message, mlp_message, value_message = messages.unbind(-2)
             query_hidden_states = self.input_layernorm(self.q_controller(hidden_states, query_message))
             key_hidden_states = self.input_layernorm(self.k_controller(hidden_states, key_message))
             value_hidden_states = self.input_layernorm(self.v_controller(hidden_states, value_message))
@@ -604,7 +590,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         if messages is not None:
-            hidden_states = self.mlp_controller(hidden_states, messages[..., 3, :])
+            hidden_states = self.mlp_controller(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
             hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
@@ -638,7 +624,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
     ) -> torch.Tensor:
         r"""
         messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop core for the query, key, value and MLP inputs, in the
+            Messages of the previous pass through the loop core for the query, key, MLP and value inputs, in the
             passes after the first.
         cache_layer_idx (`int`, *optional*):
             Cache layer holding the states of this call, `layer_idx` by default. Each pass through the loop core has
@@ -654,7 +640,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             )
 
         if messages is not None:
-            query_message, key_message, value_message, _ = messages.unbind(-2)
+            query_message, key_message, _, value_message = messages.unbind(-2)
             query_hidden_states = self.q_controller(query_hidden_states, query_message)
             key_hidden_states = self.k_controller(key_hidden_states, key_message)
             value_hidden_states = self.v_controller(value_hidden_states, value_message)
@@ -681,7 +667,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         if messages is not None:
-            hidden_states = self.mlp_controller(hidden_states, messages[..., 3, :])
+            hidden_states = self.mlp_controller(hidden_states, messages[..., 2, :])
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
             hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
@@ -716,7 +702,6 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
         "forget_proj",
     ]
     _can_record_outputs = {
-        # one hidden state per layer visit: the core layers once per pass
         "hidden_states": OutputRecorder(
             (
                 Inkling2LoopSlidingDecoderLayer,
@@ -749,7 +734,6 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
             init.zeros_(module.query)
         elif isinstance(module, Inkling2LoopCrossPassMessages):
             init.zeros_(module.queries)
-            init.zeros_(module.kv_queries)
 
 
 @auto_docstring
@@ -760,7 +744,8 @@ class Inkling2LoopTextModel(Inkling2TextModel):
         self.layers = nn.ModuleList()
         for layer_idx in range(config.num_hidden_layers):
             is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
-            if loop_config["core_start"] <= layer_idx < loop_config["core_end"]:
+            is_loop_layer = loop_config["core_start"] <= layer_idx < loop_config["core_end"]
+            if is_loop_layer:
                 layer_class = Inkling2LoopSlidingLoopDecoderLayer if is_sliding else Inkling2LoopFullLoopDecoderLayer
             else:
                 layer_class = Inkling2LoopSlidingDecoderLayer if is_sliding else Inkling2LoopFullDecoderLayer
