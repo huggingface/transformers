@@ -16,7 +16,7 @@ import unittest
 
 from transformers import Ovis2_5Processor
 from transformers.testing_utils import require_torch, require_torchcodec, require_torchvision, require_vision
-from transformers.utils import is_torchcodec_available
+from transformers.utils import is_torchcodec_usable
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -36,7 +36,7 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if modality == "video":
             if batch_size > 1:
                 self.skipTest("Ovis2.5 accepts exactly one video")
-            if isinstance(input_data[0], str) and not is_torchcodec_available():
+            if isinstance(input_data[0], str) and not is_torchcodec_usable(decode="video"):
                 self.skipTest("Video URL decoding requires Torchcodec")
         super()._test_apply_chat_template(modality, batch_size, return_tensors, input_name, processor_name, input_data)
 
