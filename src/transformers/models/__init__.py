@@ -234,6 +234,7 @@ if TYPE_CHECKING:
     from .hunyuan_vl import *
     from .hy_v3 import *
     from .hy_v4 import *
+    from .hy_v4_vl import *
     from .hyperclovax import *
     from .hyperclovax_vision_v2 import *
     from .ibert import *
@@ -263,6 +264,7 @@ if TYPE_CHECKING:
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
     from .laguna import *
+    from .lara_mini import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *

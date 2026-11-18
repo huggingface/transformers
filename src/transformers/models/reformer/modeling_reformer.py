@@ -1826,7 +1826,7 @@ class ReformerOnlyLMHead(nn.Module):
         # Layer Norm is done over 2 * hidden_size
         self.seq_len_dim = 1
         self.chunk_size_lm_head = config.chunk_size_lm_head
-        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):

@@ -145,7 +145,7 @@ def build_server(
     @app.get("/v1/models")
     @app.options("/v1/models")
     def list_models():
-        return JSONResponse({"object": "list", "data": model_manager.get_gen_models()})
+        return JSONResponse({"object": "list", "data": model_manager.list_models()})
 
     @app.get("/health")
     def health():
