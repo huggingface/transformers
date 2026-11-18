@@ -46,6 +46,8 @@ if is_torch_available():
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         SequenceBiasLogitsProcessor,
+        SuppressTokensAtBeginLogitsProcessor,
+        SuppressTokensLogitsProcessor,
         SynthIDTextWatermarkLogitsProcessor,
         TemperatureLogitsWarper,
         TopHLogitsWarper,
@@ -1006,6 +1008,29 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         processed_scores = logits_processor(input_ids, scores)
         self.assertFalse(torch.isinf(processed_scores).any())
+
+    def test_suppress_tokens_logits_processors(self):
+        vocab_size = 20
+        batch_size = 4
+        input_ids = ids_tensor((batch_size, 3), vocab_size=vocab_size)
+
+        # token ids outside the vocabulary are ignored, and an empty list suppresses nothing
+        for suppress_tokens, expected_suppressed in (([1, 5, 5, 25, -1], [1, 5]), ([], []), ([20, 21], [])):
+            for logits_processor in (
+                SuppressTokensLogitsProcessor(suppress_tokens, device=torch_device),
+                SuppressTokensAtBeginLogitsProcessor(suppress_tokens, begin_index=3, device=torch_device),
+            ):
+                scores = self._get_uniform_logits(batch_size, vocab_size)
+                processed_scores = logits_processor(input_ids, scores)
+                suppressed = torch.isneginf(processed_scores).all(dim=0).nonzero().flatten().tolist()
+                self.assertListEqual(suppressed, expected_suppressed)
+                # processor should not change logits in-place
+                self.assertFalse(torch.isinf(scores).any())
+
+        # SuppressTokensAtBeginLogitsProcessor only suppresses at `begin_index`
+        logits_processor = SuppressTokensAtBeginLogitsProcessor([1, 5], begin_index=2, device=torch_device)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+        self.assertFalse(torch.isinf(logits_processor(input_ids, scores)).any())
 
     def test_remove_nan_inf_logits_processor(self):
         scores = torch.tensor(

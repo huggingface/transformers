@@ -1892,19 +1892,27 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     def __init__(self, begin_suppress_tokens, begin_index, device: str = "cpu"):
         self.begin_suppress_tokens = torch.tensor(list(begin_suppress_tokens), device=device)
         self.begin_index = begin_index
+        # Index of the tokens to suppress, populated on the first call (the vocabulary size is only known then)
+        self.suppress_index = None
 
     def set_begin_index(self, begin_index):
         self.begin_index = begin_index
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
-        vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens.to(scores.device))
-        scores_processed = scores
-        if input_ids.shape[-1] == self.begin_index:
-            scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
+        if input_ids.shape[-1] != self.begin_index:
+            return scores
+        if self.suppress_index is None:
+            self.suppress_index = self._get_suppress_index(scores)
+        if self.suppress_index.numel() == 0:
+            return scores
+        return scores.index_fill(-1, self.suppress_index.to(scores.device), -float("inf"))
 
-        return scores_processed
+    def _get_suppress_index(self, scores: torch.Tensor) -> torch.LongTensor:
+        # Token ids outside the vocabulary are ignored
+        vocabulary_size = scores.shape[-1]
+        token_ids = [token_id for token_id in self.begin_suppress_tokens.tolist() if 0 <= token_id < vocabulary_size]
+        return torch.tensor(token_ids, dtype=torch.long, device=scores.device)
 
 
 class SuppressTokensLogitsProcessor(LogitsProcessor):
@@ -1938,13 +1946,22 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
 
     def __init__(self, suppress_tokens, device: str = "cpu"):
         self.suppress_tokens = torch.tensor(list(suppress_tokens), device=device)
+        # Index of the tokens to suppress, populated on the first call (the vocabulary size is only known then)
+        self.suppress_index = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
-        vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens.to(scores.device))
-        scores = torch.where(suppress_token_mask, -float("inf"), scores)
-        return scores
+        if self.suppress_index is None:
+            self.suppress_index = self._get_suppress_index(scores)
+        if self.suppress_index.numel() == 0:
+            return scores
+        return scores.index_fill(-1, self.suppress_index.to(scores.device), -float("inf"))
+
+    def _get_suppress_index(self, scores: torch.Tensor) -> torch.LongTensor:
+        # Token ids outside the vocabulary are ignored
+        vocabulary_size = scores.shape[-1]
+        token_ids = [token_id for token_id in self.suppress_tokens.tolist() if 0 <= token_id < vocabulary_size]
+        return torch.tensor(token_ids, dtype=torch.long, device=scores.device)
 
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
