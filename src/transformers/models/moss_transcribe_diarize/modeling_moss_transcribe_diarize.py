@@ -530,8 +530,8 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_audio_features(self, input_features, input_features_mask, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
+    def get_audio_features(self, input_features, input_features_mask, padding_mask, **kwargs):
+        return self.model.get_audio_features(input_features, input_features_mask, padding_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

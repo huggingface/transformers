@@ -432,7 +432,6 @@ class XCLIPPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(XCLIPAttention, layer_name="self_attn", index=1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

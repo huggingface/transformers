@@ -398,7 +398,6 @@ class Tipsv2VisionPreTrainedModel(PreTrainedModel):
     _input_embed_layer = "patch_embeddings"
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -618,7 +617,6 @@ class Tipsv2SinusoidalPositionalEmbedding(nn.Module):
             emb[padding_idx, :] = 0
         return emb.to(torch.get_default_dtype())
 
-    @torch.no_grad()
     def forward(self, position_ids: torch.LongTensor) -> torch.Tensor:
         return self.weights[position_ids]
 
@@ -839,7 +837,6 @@ class Tipsv2TextPreTrainedModel(PreTrainedModel):
         "attentions": Tipsv2TextAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Tipsv2TextEmbeddings):

@@ -558,7 +558,6 @@ class MambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)

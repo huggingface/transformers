@@ -183,7 +183,6 @@ class Dinov2WithRegistersLayerScale(Dinov2LayerScale):
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     base_model_prefix = "dinov2_with_registers"
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):

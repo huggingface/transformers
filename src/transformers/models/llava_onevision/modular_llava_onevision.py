@@ -405,22 +405,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         super().__init__(config)
         del self.vision_resampler
 
-    def get_image_num_patches(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
-
-    def get_pack_index(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
-
-    def get_pack_index_per_image(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
-
-    def get_patch_index(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
-
     def get_data_dependent_inputs(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
-
-    def get_image_embeddings(self):
         raise AttributeError("LlavaOnevision packs its image features differently")
 
     def pack_image_features(self, image_features, image_sizes, image_newline=None, vision_aspect_ratio="anyres_max_9"):
@@ -576,6 +561,19 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         )
         image_outputs.pooler_output = image_features
 
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="All images' features as one tensor; `get_image_features` gives them per image.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        """
+        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
+        image_outputs.pooler_output = torch.cat(image_outputs.pooler_output)
         return image_outputs
 
     @merge_with_config_defaults
@@ -831,12 +829,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
-
-    def get_image_embeddings(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
-
-    def get_data_dependent_inputs(self):
-        raise AttributeError("LlavaOnevision packs its image features differently")
 
     @merge_with_config_defaults
     @can_return_tuple

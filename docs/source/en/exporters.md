@@ -56,8 +56,13 @@ from transformers.exporters import ExportedModel
 
 exported.program  # the backend's program
 exported.save_pretrained("exported-model")  # model.<suffix>, export.json, config.json
-loaded = ExportedModel.from_pretrained("exported-model")
+loaded = ExportedModel.from_pretrained("exported-model", trust_remote_code=True)  # a Dynamo .pt2, see below
 ```
+
+> [!WARNING]
+> A Dynamo `.pt2` is a pickle, so loading one runs code from it. [`~ExportedModel.from_pretrained`] refuses it, from
+> the Hub or a local directory, unless you pass `trust_remote_code=True`. Only pass it for an export you trust, as
+> you would for a model with custom code. ONNX, OpenVINO and ExecuTorch programs load without it.
 
 A directory holds one export, since `export.json` and `config.json` have fixed names. Keep exports to several
 formats in their own subfolders (`onnx/`, `openvino/`) and load them with `subfolder="onnx"`.

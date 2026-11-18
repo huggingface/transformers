@@ -77,7 +77,6 @@ class PixtralVisionRotaryEmbedding(nn.Module):
 
         return inv_freq_2d, attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
@@ -368,6 +367,45 @@ def generate_block_attention_mask(patch_image_index, tensor):
     return block_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
 
 
+def get_patch_positions(
+    pixel_values: torch.Tensor,
+    image_sizes: torch.Tensor | list | None,
+    patch_size: int,
+    kwargs: dict | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The image each unpadded patch belongs to and its 2D position within that image, or pop
+    `"patch_image_index"`/`"position_ids"` from `kwargs` if precomputed."""
+    if kwargs is not None and (patch_image_index := kwargs.pop("patch_image_index", None)) is not None:
+        return patch_image_index, kwargs.pop("position_ids")
+    batch_size, _, height, width = pixel_values.shape
+    if image_sizes is None:
+        image_sizes = [(height, width)] * batch_size
+    # Slicing the padded grid keeps each image's patch count bounded by it
+    rows, columns = torch.meshgrid(
+        torch.arange(height // patch_size, device=pixel_values.device),
+        torch.arange(width // patch_size, device=pixel_values.device),
+        indexing="ij",
+    )
+    patch_image_index, position_ids = [], []
+    for index, size in enumerate(image_sizes):
+        image_rows = rows[: size[0] // patch_size, : size[1] // patch_size].flatten()
+        image_columns = columns[: size[0] // patch_size, : size[1] // patch_size].flatten()
+        position_ids.append(torch.stack([image_rows, image_columns], dim=-1))
+        patch_image_index.append(torch.full_like(image_rows, index))
+    return torch.cat(patch_image_index), torch.cat(position_ids)
+
+
+def get_patch_attention_seqlens(
+    patch_image_index: torch.Tensor, config, kwargs: dict | None = None
+) -> tuple[torch.Tensor, int | None]:
+    """Each image's patch boundaries and the largest image's patch count, or pop `"cu_seqlens"`/`"max_seqlen"` from
+    `kwargs` if precomputed."""
+    if kwargs is None or (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
+        sequence_lengths = torch.bincount(patch_image_index)
+        cu_seqlens = F.pad(sequence_lengths.cumsum(0, dtype=torch.int32), (1, 0))
+    return cu_seqlens, get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
+
+
 @auto_docstring
 class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
@@ -392,61 +430,16 @@ class PixtralVisionModel(PixtralPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_conv
 
-    def get_patch_positions(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, kwargs: dict | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        The image each unpadded patch belongs to and its 2D position within that image, or `kwargs`'
-        `patch_image_index` and `position_ids` when precomputed.
-        """
-        if kwargs is not None and (patch_image_index := kwargs.pop("patch_image_index", None)) is not None:
-            return patch_image_index, kwargs.pop("position_ids")
-        batch_size, _, height, width = pixel_values.shape
-        if image_sizes is None:
-            image_sizes = [(height, width)] * batch_size
-        # Slicing the padded grid keeps each image's patch count bounded by it
-        rows, columns = torch.meshgrid(
-            torch.arange(height // self.patch_size, device=pixel_values.device),
-            torch.arange(width // self.patch_size, device=pixel_values.device),
-            indexing="ij",
-        )
-        patch_image_index, position_ids = [], []
-        for index, size in enumerate(image_sizes):
-            image_rows = rows[: size[0] // self.patch_size, : size[1] // self.patch_size].flatten()
-            image_columns = columns[: size[0] // self.patch_size, : size[1] // self.patch_size].flatten()
-            position_ids.append(torch.stack([image_rows, image_columns], dim=-1))
-            patch_image_index.append(torch.full_like(image_rows, index))
-        return torch.cat(patch_image_index), torch.cat(position_ids)
-
-    def get_attention_seqlens(
-        self, patch_image_index: torch.Tensor, kwargs: dict | None = None
-    ) -> tuple[torch.Tensor, int | None]:
-        """Each image's patch boundaries and the largest image's patch count, or `kwargs`' when precomputed."""
-        if kwargs is None or (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
-            sequence_lengths = torch.bincount(patch_image_index)
-            cu_seqlens = F.pad(sequence_lengths.cumsum(0, dtype=torch.int32), (1, 0))
-        return cu_seqlens, get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
-
     def get_data_dependent_inputs(
         self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list | None = None, **kwargs
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `image_sizes` with data-dependent operations (host syncs, loops over
-        images): the image each unpadded patch belongs to (`patch_image_index`) and its 2D `position_ids` within that
-        image, plus the attention's `cu_seqlens` and `max_seqlen` with flash attention. Passed back to the forward,
-        they keep `torch.compile` and `torch.export` free of those operations. Only the config and the shape of
-        `pixel_values` are read.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
-                The padded images, whose height and width bound each image's patch grid.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)` or `list`, *optional*):
-                The height and width of each image, before padding. All of the padded size when not given.
-        """
-        patch_image_index, position_ids = self.get_patch_positions(pixel_values, image_sizes)
+        """What the forward derives from `image_sizes` with data-dependent ops: the image each unpadded patch belongs
+        to (`patch_image_index`) and its 2D `position_ids` within that image, plus the attention's `cu_seqlens` and
+        `max_seqlen` with flash attention."""
+        patch_image_index, position_ids = get_patch_positions(pixel_values, image_sizes, self.patch_size)
         inputs = {"patch_image_index": patch_image_index, "position_ids": position_ids}
         if is_flash_attention_requested(self.config):
-            inputs["cu_seqlens"], inputs["max_seqlen"] = self.get_attention_seqlens(patch_image_index)
+            inputs["cu_seqlens"], inputs["max_seqlen"] = get_patch_attention_seqlens(patch_image_index, self.config)
         return inputs
 
     @merge_with_config_defaults
@@ -458,7 +451,9 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        patch_image_index, position_ids = self.get_patch_positions(pixel_values, image_sizes, kwargs=kwargs)
+        patch_image_index, position_ids = get_patch_positions(
+            pixel_values, image_sizes, self.patch_size, kwargs=kwargs
+        )
 
         # pass images through initial convolution independently
         target_dtype = self.patch_conv.weight.dtype
@@ -472,7 +467,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         if is_flash_attention_requested(self.config):
             # Axial RoPE positions have two coordinates per patch, so they cannot
             # describe the packed image boundaries expected by Flash Attention.
-            cu_seqlens, max_seqlen = self.get_attention_seqlens(patch_image_index, kwargs=kwargs)
+            cu_seqlens, max_seqlen = get_patch_attention_seqlens(patch_image_index, self.config, kwargs=kwargs)
             kwargs.update(
                 cu_seq_lens_q=cu_seqlens, cu_seq_lens_k=cu_seqlens, max_length_q=max_seqlen, max_length_k=max_seqlen
             )

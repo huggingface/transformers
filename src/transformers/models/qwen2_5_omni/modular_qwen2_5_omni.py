@@ -84,16 +84,7 @@ logger = logging.get_logger(__name__)
 
 def get_audio_chunk_lengths(feature_lens: torch.Tensor, n_window: int, kwargs: dict | None = None) -> torch.Tensor:
     """Length of each `n_window * 2`-frame chunk the audios are split into (the last one of each audio may be
-    shorter), or pop `"chunk_lengths"` from `kwargs` if precomputed.
-
-    Args:
-        feature_lens: `(batch_size,)` per-sample frame counts.
-        n_window: half the target chunk size in frames.
-        kwargs: optional caller kwargs — if it contains `"chunk_lengths"` it is popped and returned.
-
-    Returns:
-        `(num_chunks,)` length of each chunk.
-    """
+    shorter), or pop `"chunk_lengths"` from `kwargs` if precomputed."""
     if kwargs is not None and (chunk_lengths := kwargs.pop("chunk_lengths", None)) is not None:
         return chunk_lengths
     chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
@@ -127,7 +118,6 @@ def chunk_and_pad_features(
     if padded_feature is not None:
         return padded_feature, chunk_lengths
 
-    # Each chunk's frames, right-padded with zeros to the longest chunk
     chunk_index = get_audio_chunk_index(chunk_lengths, kwargs=kwargs)
     padding_mask = torch.arange(chunk_index.shape[1], device=chunk_index.device) < chunk_lengths[:, None]
     padded_feature = input_features[:, chunk_index.clamp(max=input_features.shape[1] - 1)] * padding_mask
@@ -136,16 +126,7 @@ def chunk_and_pad_features(
 
 def get_audio_chunk_index(chunk_lengths: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
     """Gather index of each chunk's frames in the concatenated features, right-padded to the longest chunk, or pop
-    `"chunk_index"` from `kwargs` if precomputed.
-
-    Args:
-        chunk_lengths: `(num_chunks,)` length of each chunk.
-        kwargs: optional caller kwargs — if it contains `"chunk_index"` it is popped and returned.
-
-    Returns:
-        `(num_chunks, max_chunk_len)` frame indices; past a chunk's length they run on into the next chunk, for the
-        caller to mask.
-    """
+    `"chunk_index"` from `kwargs` if precomputed."""
     if kwargs is not None and (chunk_index := kwargs.pop("chunk_index", None)) is not None:
         return chunk_index
     chunk_starts = F.pad(chunk_lengths.cumsum(0)[:-1], (1, 0))
@@ -153,15 +134,7 @@ def get_audio_chunk_index(chunk_lengths: torch.Tensor, kwargs: dict | None = Non
 
 
 def get_audio_frame_indices(feature_attention_mask: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
-    """Flat indices of the real mel frames of a padded batch, or pop `"frame_indices"` from `kwargs` if precomputed.
-
-    Args:
-        feature_attention_mask: `(batch_size, max_frames)` 1 for real frames, 0 for padding.
-        kwargs: optional caller kwargs — if it contains `"frame_indices"` it is popped and returned.
-
-    Returns:
-        `(total_frames,)` indices into the batch's `(batch_size * max_frames)` frames.
-    """
+    """Flat indices of the real mel frames of a padded batch, or pop `"frame_indices"` from `kwargs` if precomputed."""
     if kwargs is not None and (frame_indices := kwargs.pop("frame_indices", None)) is not None:
         return frame_indices
     return feature_attention_mask.flatten().nonzero().squeeze(-1)
@@ -1343,16 +1316,9 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
 
     @merge_with_config_defaults
     def get_data_dependent_inputs(self, feature_lens: torch.LongTensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `feature_lens` with data-dependent operations (host syncs, loops over the
-        chunks): the chunks' `chunk_lengths` and `chunk_index`, the non-padding frames' `valid_indices`, the pooling's
-        `pool_indices`, and the attention's `cu_seqlens` and `max_seqlen`. Passed back to the forward, they keep
-        `torch.compile` and `torch.export` free of those operations.
-
-        Args:
-            feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
-                The mel length of each audio.
-        """
+        """What the forward derives from `feature_lens` with data-dependent ops: the chunks' `chunk_lengths` and
+        `chunk_index`, the non-padding frames' `valid_indices`, the pooling's `pool_indices`, and the attention's
+        `cu_seqlens` and `max_seqlen`."""
         chunk_lengths = get_audio_chunk_lengths(feature_lens, self.n_window)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths)
         return {
@@ -1700,21 +1666,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         audio_feature_lengths: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
-        and the audio encoder's (see [`Qwen2_5OmniAudioEncoder.get_data_dependent_inputs`]) with the real mel frames'
-        `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them. Only the config is read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video.
-            feature_attention_mask (`torch.LongTensor` of shape `(batch_size, max_frames)`, *optional*):
-                1 for the audios' real mel frames, 0 for padding.
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The mel length of each audio, when there is no `feature_attention_mask`.
-        """
+        """The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
+        and the audio encoder's (see [`Qwen2_5OmniAudioEncoder.get_data_dependent_inputs`]) with the real mel
+        frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
         inputs = {}
         for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
             if grid_thw is not None:

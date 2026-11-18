@@ -476,18 +476,9 @@ class GlmImageModel(Glm4vModel):
         images_per_sample: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
-        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`, as
-        `get_image_features` takes them. Passed back to the forward, they keep `torch.compile` and `torch.export` free
-        of those operations. Only the config and the tower's constants are read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of each image's patch grid, the target grids included.
-            images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Number of images (including target grids) for each sample in the batch.
-        """
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`,
+        as `get_image_features` takes them."""
         if image_grid_thw is None:
             return {}
         source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)

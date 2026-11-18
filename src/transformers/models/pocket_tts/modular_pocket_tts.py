@@ -217,7 +217,6 @@ class PocketTTSPreTrainedModel(LlamaPreTrainedModel):
     _no_split_modules = ["PocketTTSDecoderLayer", "PocketTTSFlowHead"]
     input_modalities = ("text", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, PocketTTSTimestepNorm):

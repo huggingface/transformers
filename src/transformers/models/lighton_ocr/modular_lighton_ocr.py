@@ -36,6 +36,7 @@ from ..mistral3.modeling_mistral3 import (
     Mistral3Model,
     Mistral3ModelOutputWithPast,
     Mistral3MultiModalProjector,
+    get_merge_index,
 )
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
@@ -219,22 +220,15 @@ class LightOnOcrModel(Mistral3Model):
     def get_data_dependent_inputs(
         self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
     ) -> dict[str, torch.Tensor]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
         encoder's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
-        prefixed `image_`, as `get_image_embeddings` takes them. Passed back to the forward, they keep `torch.compile`
-        and `torch.export` free of those operations. Only the config and the shape of `pixel_values` are read.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`, *optional*):
-                The padded images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`, *optional*):
-                The height and width of each image, before padding.
-        """
+        prefixed `image_`, as `get_image_embeddings` takes them."""
         if pixel_values is None or image_sizes is None:
             return {}
         inputs = self.vision_encoder.get_data_dependent_inputs(pixel_values, image_sizes)
-        inputs["merge_index"] = self.vision_projection.patch_merger.get_merge_index(image_sizes, pixel_values.device)
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
+        )
         return {f"image_{name}": value for name, value in inputs.items()}
 
     @accepts_precomputed_kwargs(modality="image")
@@ -244,18 +238,14 @@ class LightOnOcrModel(Mistral3Model):
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | list,
-        merge_index: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         All images' features as one tensor; `get_image_features` splits them per image.
-
-        merge_index (`torch.LongTensor` of shape `(num_merged_tokens, spatial_merge_size**2)`, *optional*):
-            The patch merger's indices, see [`LightOnOcrPatchMerger.get_merge_index`].
         """
         image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
         image_outputs.pooler_output = self.vision_projection(
-            image_outputs.last_hidden_state.squeeze(0), image_sizes, merge_index=merge_index
+            image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
         )
         return image_outputs
 
