@@ -422,6 +422,12 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
+        # Collect garbage right before every CUDA graph capture. Otherwise, objects owning CUDA resources left over from
+        # earlier tests (here: ONNX Runtime CUDA sessions from the ONNX export tests) can be finalized by an automatic GC
+        # pass *inside* the capture: freeing CUDA memory (`cuMemFree`) is not allowed during a capture and invalidates it
+        # ("operation failed due to a previous error during capture"). torch >= 2.15 no longer collects by default.
+        if hasattr(torch.compiler.config, "force_cudagraph_gc"):
+            self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
