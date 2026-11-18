@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_accelerate, require_torch, torch_device
 
 
 if is_torch_available():
@@ -24,11 +25,13 @@ if is_torch_available():
 
     from transformers import DeepseekV41Config, DeepseekV41ForCausalLM, DeepseekV41Model, DeepseekV41TextConfig
     from transformers.models.deepseek_v41.modeling_deepseek_v41 import (
+        DeepseekV41Compressor,
         DeepseekV41NgramHasher,
         select_candidate_blocks,
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_configuration_common import ConfigTester
 
 
 class DeepseekV41ModelTester(CausalLMModelTester):
@@ -119,8 +122,99 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     # The indexer parameters only influence which compressed entries are selected, which is not differentiable
     test_all_params_have_gradient = False
 
+    def setUp(self):
+        super().setUp()
+        # The config is a composite, so the text fields like `vocab_size` are on its `text_config`
+        self.config_tester = ConfigTester(
+            self, config_class=DeepseekV41Config, has_text_modality=False, common_properties=["image_token_id"]
+        )
+
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
+
+    def _image_features_prepare_config_and_inputs(self):
+        # The common inputs are text only, so we make the image inputs here: two images with different grids
+        config = self.model_tester.get_config()
+        image_grid_hw = torch.tensor([[5, 7], [3, 6]], device=torch_device)
+        num_patches = int(image_grid_hw.prod(-1).sum())
+        pixel_values = torch.randn(num_patches, 3 * config.vision_config.patch_size**2, device=torch_device)
+        return config, {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
+
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
+    ):
+        # The layers that attend to compressed KV have those entries after the window on the KV axis, one per
+        # complete group of `compress_ratio` tokens. So the KV length differs between layers.
+        config = config.get_text_config()
+        self.assertIsInstance(attentions, tuple)
+        self.assertEqual(len(attentions), output_length - prompt_length)
+        for generated_length, iter_attentions in enumerate(attentions):
+            self.assertIsInstance(iter_attentions, tuple)
+            seq_length = prompt_length + generated_length
+            if decoder_cache is not None and generated_length > 0:
+                # Decoding one token from the cache, which only keeps the rest of the window
+                query_length = 1
+                window_length = min(seq_length, config.sliding_window)
+            else:
+                # The whole sequence goes in, and the mask is what limits each query to its window
+                query_length = window_length = seq_length
+            expected_shapes = [
+                (
+                    batch_size,
+                    config.num_attention_heads,
+                    query_length,
+                    window_length + (seq_length // ratio if ratio else 0),
+                )
+                for ratio in config.compress_ratios
+            ]
+            self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
+
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
+    ):
+        # The residual is `hc_mult` parallel streams, which are only collapsed for the final norm. So every
+        # hidden state has an extra dim, except for the last one.
+        config = config.get_text_config()
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertEqual(len(hidden_states), output_length - prompt_length)
+        for generated_length, iter_hidden_states in enumerate(hidden_states):
+            self.assertIsInstance(iter_hidden_states, tuple)
+            input_length = 1 if use_cache and generated_length > 0 else prompt_length + generated_length
+            streams_shape = (batch_size, input_length, config.hc_mult, config.hidden_size)
+            self.assertListEqual(
+                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
+                [streams_shape] * config.num_hidden_layers + [(batch_size, input_length, config.hidden_size)],
+            )
+
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        # Every layer keeps the part of its window that the next token can still see, and there is a single
+        # KV head
+        config = config.get_text_config()
+        self.assertEqual(len(cache.layers), config.num_hidden_layers)
+        window_shape = (batch_size, 1, min(seq_length, config.sliding_window - 1), config.head_dim)
+        for layer, attention_type, ratio in zip(cache.layers, config.attention_layer_types, config.compress_ratios):
+            self.assertEqual(layer.keys.shape, window_shape)
+            self.assertEqual(layer.values.shape, window_shape)
+            if attention_type == "compressed_attention":
+                # Only the layer that compresses the KV stores it. The KV-sharing layers read it from there.
+                self.assertEqual(layer.compressed_kv.shape, (batch_size, seq_length // ratio, config.head_dim))
+            else:
+                self.assertIsNone(layer.compressed_kv)
+
+    def test_hidden_states_output(self):
+        # Same as the common test, but the hidden states are `hc_mult` parallel streams until the final norm
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        batch_size, seq_length = inputs_dict["input_ids"].shape
+        text_config = config.text_config
+        streams_shape = (batch_size, seq_length, text_config.hc_mult, text_config.hidden_size)
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                hidden_states = model(**inputs_dict, output_hidden_states=True).hidden_states
+            self.assertListEqual(
+                [layer_hidden_states.shape for layer_hidden_states in hidden_states],
+                [streams_shape] * text_config.num_hidden_layers + [(batch_size, seq_length, text_config.hidden_size)],
+            )
 
     @unittest.skip(
         reason=(
@@ -179,6 +273,25 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
             logits = model(input_ids=input_ids, use_cache=False).logits[0, -1]
             changed_logits = model(input_ids=changed, use_cache=False).logits[0, -1]
         self.assertGreater((logits - changed_logits).abs().max().item(), 1e-4)
+
+    @require_accelerate
+    def test_compressor_with_offloaded_weights(self):
+        """Offloaded weights are only loaded while the module that owns them runs, and the pooling must cope."""
+        from accelerate import cpu_offload
+
+        config = self.model_tester.get_config().text_config
+        # Layer 1 pools 2-to-1, which is the path that promotes its weights to float32
+        compressor = DeepseekV41Compressor(config, layer_idx=1).to(torch_device).eval()
+        offloaded_compressor = copy.deepcopy(compressor)
+        cpu_offload(offloaded_compressor, execution_device=torch.device(torch_device))
+        hidden_states = torch.randn(2, 6, config.hidden_size, device=torch_device)
+        with torch.no_grad():
+            # The offloaded one goes first. A weight that was not loaded is uninitialized memory, which could
+            # otherwise still hold the result we are comparing with.
+            offloaded = offloaded_compressor(hidden_states)
+            expected = compressor(hidden_states)
+        self.assertEqual(expected.shape, (2, 3, config.head_dim))
+        torch.testing.assert_close(offloaded, expected)
 
     def test_attention_layer_types(self):
         config = self.model_tester.get_config().text_config
@@ -266,7 +379,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         image = torch.full((1, num_image_tokens), config.image_token_id, device=torch_device)
         input_ids = torch.cat([text[:, :4], image, text[:, 4:]], dim=1)
         with torch.no_grad():
-            image_features = model.model.get_image_features(pixel_values, image_grid_hw)
+            image_features = model.model.get_image_features(pixel_values, image_grid_hw).pooler_output[0]
             logits = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_hw=image_grid_hw).logits
             other_image = model(input_ids=input_ids, pixel_values=pixel_values + 1, image_grid_hw=image_grid_hw).logits
         self.assertEqual(image_features.shape, (num_image_tokens, config.text_config.hidden_size))
@@ -282,3 +395,33 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         short_input_ids = torch.cat([input_ids[:, :5], input_ids[:, 6:]], dim=1)
         with self.assertRaisesRegex(ValueError, "image tokens"):
             model(input_ids=short_input_ids, pixel_values=pixel_values, image_grid_hw=image_grid_hw)
+
+    def test_image_features_of_several_images(self):
+        """Images are encoded independently, whether or not they come in together."""
+        config, model = self._get_model()
+        model.set_attn_implementation("eager")
+        image_grid_hw = torch.tensor([[5, 7], [3, 6]], device=torch_device)
+        pixel_values = torch.randn(5 * 7 + 3 * 6, 3 * config.vision_config.patch_size**2, device=torch_device)
+        with torch.no_grad():
+            outputs = model.model.get_image_features(
+                pixel_values, image_grid_hw, output_hidden_states=True, output_attentions=True
+            )
+            first = model.model.get_image_features(pixel_values[:35], image_grid_hw[:1], output_attentions=True)
+            second = model.model.get_image_features(pixel_values[35:], image_grid_hw[1:], output_attentions=True)
+
+        # 2 x 3 and 1 x 2 tokens, each with a newline per row and the two delimiters
+        self.assertEqual([features.shape[0] for features in outputs.pooler_output], [10, 5])
+        torch.testing.assert_close(outputs.pooler_output[0], first.pooler_output[0])
+        torch.testing.assert_close(outputs.pooler_output[1], second.pooler_output[0])
+        # The hidden states and the attentions cover the patches of both images, like `pixel_values`
+        self.assertEqual(len(outputs.hidden_states), config.vision_config.num_hidden_layers + 1)
+        self.assertEqual(outputs.last_hidden_state.shape, (53, config.vision_config.hidden_size))
+        for layer_attention, first_attention, second_attention in zip(
+            outputs.attentions, first.attentions, second.attentions
+        ):
+            self.assertEqual(layer_attention.shape, (config.vision_config.num_attention_heads, 53, 53))
+            torch.testing.assert_close(layer_attention[:, :35, :35], first_attention)
+            torch.testing.assert_close(layer_attention[:, 35:, 35:], second_attention)
+            # ... and no patch attends to the other image
+            self.assertEqual(layer_attention[:, :35, 35:].abs().max().item(), 0.0)
+            self.assertEqual(layer_attention[:, 35:, :35].abs().max().item(), 0.0)
