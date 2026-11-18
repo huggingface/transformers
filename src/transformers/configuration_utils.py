@@ -71,6 +71,7 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "indexed_attention",  # For indexer-based attentions
     "compressed_sparse_attention",  # CSA, used in deepseek_v4
     "heavily_compressed_attention",  # HCA, used in deepseek_v4
+    "shared_compressed_attention",  # sliding window + compressed KV shared across layers, used in deepseek_v41
     "minimax_m3_sparse",  # lightning-index sparse attention, used in minimax_m3_vl
     "conv",
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
