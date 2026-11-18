@@ -116,15 +116,24 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
             ({"index_compression": 0}, "`index_compression` must be positive"),
             ({"index_pool_size": 10, "index_compression": 4}, "`index_pool_size` must be a multiple"),
             ({"head_dim": 24}, "`head_dim` that is a multiple of 16"),
-            ({"mlp_only_layers": [0]}, "`mlp_only_layers` need a positive `mlp_only_intermediate_size`"),
             ({"mlp_only_layers": [4], "mlp_only_intermediate_size": 8}, "`mlp_only_layers` must be layer indices"),
-            ({"mlp_only_layers": [0], "mlp_only_intermediate_size": -8}, "`mlp_only_layers` need a positive"),
+            ({"mlp_only_layers": [0], "mlp_only_intermediate_size": -8}, "`mlp_only_layers` need a positive `mlp_only_intermediate_size`"),
             # Indexers score keys with the query heads of key head 0
             ({"num_attention_heads": 8, "num_key_value_heads": 2, "index_num_heads": 5}, "`index_num_heads` must be"),
         ]  # fmt: skip
         for overrides, message in invalid:
             with self.subTest(**overrides), self.assertRaisesRegex(StrictDataclassClassValidationError, message):
                 Kolibri1_1Config(**{**kwargs, **overrides})
+
+    def test_default_layout(self):
+        # The layout of the released model
+        config = Kolibri1_1Config()
+        indexed_layers = [i for i, layer_type in enumerate(config.layer_types) if layer_type == "indexed_attention"]
+        self.assertEqual(indexed_layers, [4, 9, 14, 19, 24, 29, 34, 39, 44, 49])
+        self.assertEqual(config.index_layers, [4, 14, 19, 29])
+        self.assertEqual([config.kv_source_layers[i] for i in indexed_layers], [4, 4, 4, 19, 24, 29, 29, 29, 29, 4])
+        self.assertEqual(config.mlp_only_layers, [0, 1])
+        self.assertEqual(config.mlp_only_intermediate_size, 3584)
 
     def test_kv_shared_layers_have_no_kv_weights(self):
         config = self.model_tester.get_config()

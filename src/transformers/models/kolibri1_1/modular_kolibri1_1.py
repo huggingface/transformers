@@ -70,8 +70,9 @@ class Kolibri1_1Config(Kolibri1Config):
     index_num_sink_tokens (`int`, *optional*, defaults to 8):
         Number of leading tokens that every query of a sparse layer attends to.
     mlp_only_layers (`list[int]`, *optional*):
-        Indices of the layers with a dense MLP instead of a mixture of experts. Defaults to none.
-    mlp_only_intermediate_size (`int`, *optional*):
+        Indices of the layers with a dense MLP instead of a mixture of experts. Defaults to Kolibri 1.1's layout: the
+        first two layers.
+    mlp_only_intermediate_size (`int`, *optional*, defaults to 3584):
         Intermediate size of the dense MLPs of `mlp_only_layers`.
 
     ```python
@@ -107,7 +108,7 @@ class Kolibri1_1Config(Kolibri1Config):
     index_num_local_tokens: int = 128
     index_num_sink_tokens: int = 8
     mlp_only_layers: list[int] | None = None
-    mlp_only_intermediate_size: int | None = None
+    mlp_only_intermediate_size: int = 3584
 
     def __post_init__(self, **kwargs):
         # `layer_types` is needed before the parent's `__post_init__`, to derive the default sparse layout
@@ -118,7 +119,7 @@ class Kolibri1_1Config(Kolibri1Config):
         # Checkpoints list the layers with an indexer as "full_attention", like the full-attention layers of Kolibri 1
         self.layer_types = ["indexed_attention" if t == "full_attention" else t for t in self.layer_types]
         if self.mlp_only_layers is None:
-            self.mlp_only_layers = []
+            self.mlp_only_layers = [i for i in (0, 1) if i < self.num_hidden_layers]
         indexed_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "indexed_attention"]
         if self.index_layers is None:
             self.index_layers = [indexed_layers[i] for i in (0, 2, 3, 5) if i < len(indexed_layers)]
@@ -164,7 +165,7 @@ class Kolibri1_1Config(Kolibri1Config):
             raise ValueError("`index_num_heads` must be between 1 and the number of query heads of key head 0.")
         if not set(self.mlp_only_layers) <= set(range(self.num_hidden_layers)):
             raise ValueError(f"`mlp_only_layers` must be layer indices, got {self.mlp_only_layers}.")
-        if self.mlp_only_layers and (self.mlp_only_intermediate_size or 0) <= 0:
+        if self.mlp_only_layers and self.mlp_only_intermediate_size <= 0:
             raise ValueError("`mlp_only_layers` need a positive `mlp_only_intermediate_size`.")
 
     @property
