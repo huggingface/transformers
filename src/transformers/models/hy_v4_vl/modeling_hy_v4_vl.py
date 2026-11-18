@@ -687,7 +687,6 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HYV4VLDecoderLayer", "HYV4VLVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     # Combination of sinks and DSA disable anything but eager atm
     _supports_flash_attn = False
     _supports_sdpa = False

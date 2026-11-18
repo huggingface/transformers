@@ -3455,6 +3455,30 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_prefix_constraints_with_multiple_sampled_returns(self):
+        config = AutoConfig.for_model(
+            "gpt2",
+            vocab_size=32,
+            n_positions=32,
+            n_embd=32,
+            n_layer=1,
+            n_head=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=0,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        inputs = torch.tensor([[10, 11], [20, 21]], device=torch_device)
+        allowed = [[5], [7]]
+        output = model.generate(
+            inputs,
+            do_sample=True,
+            num_return_sequences=3,
+            max_new_tokens=1,
+            prefix_allowed_tokens_fn=lambda batch_id, _: allowed[batch_id],
+        )
+        self.assertEqual(output[:, -1].tolist(), [5, 5, 5, 7, 7, 7])
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

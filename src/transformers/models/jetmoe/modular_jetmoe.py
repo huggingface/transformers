@@ -428,7 +428,6 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = False
     _no_split_modules = ["JetMoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"

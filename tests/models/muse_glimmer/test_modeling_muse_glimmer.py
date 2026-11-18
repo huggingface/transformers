@@ -23,6 +23,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -133,8 +134,24 @@ class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # never checked. 24 leaves margin for a different token split without paying for tokens nobody reads --
         # which is not free: on a single-accelerator runner every decoded token restreams the CPU-offloaded
         # weights across PCIe.
-        output = model.generate(input_ids=input_ids, max_new_tokens=24, do_sample=False)
-        completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+        output = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=24,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 8): [-9.625, -10.125, -10.375, -10.25, -9.125],
+                ("cuda", 10): [-9.625, -10.25, -10.5625, -10.25, -9.25],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        completion = tokenizer.decode(output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(completion[: len(self.EXPECTED_TEXT_PREFIX)], self.EXPECTED_TEXT_PREFIX)
 
     def test_image_generation_matches_reference(self):
@@ -163,6 +180,18 @@ class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             # further tokens this used to generate were never compared against anything.
             max_new_tokens=12,
             do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
         )
-        completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 8): [-10.875, -11.3125, -11.1875, -10.3125, -10.5625],
+                ("cuda", 10): [-10.9375, -11.375, -11.1875, -10.375, -10.5625],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        completion = tokenizer.decode(output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(completion[: len(self.EXPECTED_IMAGE_PREFIX)], self.EXPECTED_IMAGE_PREFIX)

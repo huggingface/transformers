@@ -764,7 +764,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
     config: ClvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "hidden_states": [ClvpEncoderLayer, ClvpDecoderLayer],
         "attentions": ClvpSelfAttention,

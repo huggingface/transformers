@@ -612,7 +612,6 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Cosmos3EdgeTextDecoderLayer", "Cosmos3EdgeVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
