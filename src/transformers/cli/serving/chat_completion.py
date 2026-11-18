@@ -51,6 +51,7 @@ from .utils import (
     ReasoningText,
     ToolCall,
     _StreamError,
+    _template_accepts_reasoning,
     build_response_parser,
     parse_assistant_message,
 )
@@ -121,7 +122,9 @@ class ChatCompletionHandler(BaseHandler):
         use_cb = self.generation_state.use_continuous_batching(model, modality)
         logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-        processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
+        processor_inputs = self.get_processor_inputs_from_messages(
+            body["messages"], modality, preserve_reasoning=_template_accepts_reasoning(processor)
+        )
 
         has_video = any(
             c.get("type") == "video"

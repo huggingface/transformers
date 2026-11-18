@@ -289,6 +289,18 @@ class ToolCall:
     arguments: str
 
 
+def _template_accepts_reasoning(processor) -> bool:
+    """Return False for native mistral-common tokenizers, whether passed directly or wrapped by a processor.
+
+    The native backend converts reasoning into ThinkChunks, which non-reasoning tokenizers reject.
+    """
+    # MistralCommonBackend itself wraps a native tokenizer without a backend attribute.
+    if getattr(processor, "backend", None) == "mistral_common":
+        return False
+    tokenizer = getattr(processor, "tokenizer", processor)
+    return getattr(tokenizer, "backend", None) != "mistral_common"
+
+
 def get_response_template(processor, model: "PreTrainedModel") -> dict | None:
     """Return the response template (new declarative format) for this model.
 
@@ -1272,7 +1284,9 @@ class BaseHandler:
         return generation_config
 
     @staticmethod
-    def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
+    def get_processor_inputs_from_messages(
+        messages: list[dict], modality: Modality, *, preserve_reasoning: bool = True
+    ) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
         All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
@@ -1282,6 +1296,9 @@ class BaseHandler:
         Args:
             messages (`list[dict]`): OpenAI-format chat messages.
             modality (`Modality`): The model modality (LLM, VLM, or MULTIMODAL).
+            preserve_reasoning (`bool`, *optional*, defaults to `True`):
+                Forward non-null reasoning fields to the chat template. Disable for the native mistral-common backend,
+                whose non-reasoning tokenizers reject thinking chunks.
 
         Returns:
             `list[dict]`: Processor-compatible messages.
@@ -1290,6 +1307,10 @@ class BaseHandler:
 
         for message in messages:
             parsed = {"role": message["role"], "content": []}
+            if preserve_reasoning:
+                for field in _REASONING_FIELDS:
+                    if message.get(field) is not None:
+                        parsed[field] = message[field]
 
             # Parse function.arguments back to a dict — chat templates iterate it as a mapping.
             if message.get("tool_calls"):
