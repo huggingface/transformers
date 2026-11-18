@@ -108,6 +108,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "granitemoehybrid": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
     "glm5_next_text": "glm5_next",
+    "hy_v4_vl_text": "hy_v4",
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
@@ -171,6 +172,32 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.hc_head_fn", ".hc_fn"),
             WeightRenaming(r"\.hc_head_base", ".hc_base"),
             WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
+        ],
+        # HY4-VL: text renames come from the scoped `hy_v4_vl_text` mapping after module placement.
+        # Vision renames follow `hunyuan_vl`, with only `before_rms` and no image begin/end/sep embeddings.
+        "hy_v4_vl": [
+            # -- vision tower: Megatron-style MLP and pre/post norm names --
+            WeightRenaming(source_patterns="mlp.dense_h_to_4h", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns="mlp.dense_4h_to_h", target_patterns="mlp.fc2"),
+            WeightRenaming(
+                source_patterns=r"^vit\.layers\.(\d+)\.input_layernorm\.",
+                target_patterns=r"vit.layers.\1.layer_norm1.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^vit\.layers\.(\d+)\.post_attention_layernorm\.",
+                target_patterns=r"vit.layers.\1.layer_norm2.",
+            ),
+            # -- projector: normalize the RMS name and give the convolutions explicit module names --
+            WeightRenaming(source_patterns=r"(perceive|patch_merger)\.norm\.", target_patterns=r"\1.before_rms."),
+            WeightRenaming(source_patterns=r"perceive\.proj\.0\.", target_patterns="perceive.proj_conv."),
+            WeightRenaming(source_patterns=r"perceive\.proj\.2\.", target_patterns="perceive.proj_out."),
+            WeightRenaming(source_patterns=r"perceive\.", target_patterns="patch_merger."),
+            # -- module placement: text under `language_model`, tower under `vision_tower` --
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|vit|vision_tower))",
+                target_patterns="model.language_model",
+            ),
+            WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
         ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
@@ -260,28 +287,32 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
         ],
         "inkling2": [
-            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model.language_model."),
+            WeightRenaming(source_patterns=r"model\.visual\.", target_patterns=r"model.vision_tower."),
             WeightRenaming(
-                source_patterns=r"model\.visual\.backbone\.embeddings\.",
-                target_patterns=r"model.vision_tower.embeddings.",
+                source_patterns=r"vision_tower\.backbone\.embeddings\.",
+                target_patterns=r"vision_tower.embeddings.",
             ),
             WeightRenaming(
                 source_patterns=r"vision_tower\.embeddings\.position_embedding",
                 target_patterns=r"vision_tower.embeddings.position_embedding.weight",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.backbone\.ln_pre\.",
-                target_patterns=r"model.vision_tower.pre_layernorm.",
+                source_patterns=r"vision_tower\.backbone\.ln_pre\.",
+                target_patterns=r"vision_tower.pre_layernorm.",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.backbone\.layers\.", target_patterns=r"model.vision_tower.layers."
+                source_patterns=r"vision_tower\.backbone\.layers\.",
+                target_patterns=r"vision_tower.layers.",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.proj_in\.", target_patterns=r"model.vision_tower.merger.linear_1."
+                source_patterns=r"vision_tower\.proj_in\.",
+                target_patterns=r"vision_tower.merger.linear_1.",
             ),
             WeightRenaming(
-                source_patterns=r"model\.visual\.proj_out\.", target_patterns=r"model.vision_tower.merger.linear_2."
+                source_patterns=r"vision_tower\.proj_out\.",
+                target_patterns=r"vision_tower.merger.linear_2.",
             ),
             WeightRenaming(
                 source_patterns=r"(vision_tower\.layers\.\d+)\.ln_1\.", target_patterns=r"\1.layernorm_before."
@@ -303,7 +334,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "inkling2_text": [
-            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),
@@ -322,17 +353,14 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"mlp\.experts\.w2_weight_scale", target_patterns=r"mlp.experts.down_proj_scale_inv"
             ),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
-            WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
-            WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
-            WeightRenaming(source_patterns=r"attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
-            WeightRenaming(source_patterns=r"attn\.wr_du", target_patterns=r"self_attn.r_proj"),
-            WeightRenaming(source_patterns=r"attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
-            WeightRenaming(source_patterns=r"attn\.gate_attn", target_patterns=r"self_attn.gate_proj"),
-            WeightRenaming(source_patterns=r"attn\.attn_sink_proj", target_patterns=r"self_attn.sink_proj"),
-            WeightRenaming(
-                source_patterns=r"\.attn\.(q_l2_clip|k_l2_clip|rel_l2_clip|k_sconv|v_sconv|rel_logits_proj)\.",
-                target_patterns=r".self_attn.\1.",
-            ),
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
+            WeightRenaming(source_patterns=r"self_attn\.wq_du", target_patterns=r"self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wr_du", target_patterns=r"self_attn.r_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.gate_attn", target_patterns=r"self_attn.gate_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.attn_sink_proj", target_patterns=r"self_attn.sink_proj"),
             WeightRenaming(source_patterns=r"attn_sconv\.", target_patterns=r"post_attention_convolution."),
             WeightRenaming(source_patterns=r"mlp_sconv\.", target_patterns=r"post_mlp_convolution."),
             WeightRenaming(source_patterns=r"(convolution|sconv)\.weight(?!_)", target_patterns=r"\1.conv1d.weight"),
@@ -1249,6 +1277,20 @@ def _build_checkpoint_conversion_mapping():
                 ],
                 target_patterns="linear_attn.conv1d.weight",
                 operations=[Concatenate(dim=0)],
+            ),
+        ],
+        "lara_mini": [
+            WeightRenaming(source_patterns=r"linear_attn\.out_norm\.", target_patterns="linear_attn.norm."),
+            # The checkpoints fuse the gated delta net input projections into one `in_proj`, rows `[q|k|v|z|b|a]`
+            WeightConverter(
+                source_patterns="linear_attn.in_proj",
+                target_patterns=[
+                    "linear_attn.in_proj_qkv",
+                    "linear_attn.in_proj_z",
+                    "linear_attn.in_proj_b",
+                    "linear_attn.in_proj_a",
+                ],
+                operations=[Split(dim=0)],
             ),
         ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],

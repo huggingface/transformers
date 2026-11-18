@@ -41,6 +41,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from transformers import pipeline
+from contextlib import asynccontextmanager
 import asyncio
 
 async def homepage(request):
@@ -58,17 +59,20 @@ async def server_loop(q):
         out = pipe(string)
         await response_q.put(out)
 
+@asynccontextmanager
+async def lifespan(app):
+    q = asyncio.Queue()
+    app.model_queue = q
+    task = asyncio.create_task(server_loop(q))
+    yield
+    task.cancel()
+
 app = Starlette(
     routes=[
         Route("/", homepage, methods=["POST"]),
     ],
+    lifespan=lifespan,
 )
-
-@app.on_event("startup")
-async def startup_event():
-    q = asyncio.Queue()
-    app.model_queue = q
-    asyncio.create_task(server_loop(q))
 ```
 
 Start the server with the following command.
