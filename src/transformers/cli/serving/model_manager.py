@@ -23,7 +23,7 @@ import queue
 import threading
 import uuid
 from collections.abc import AsyncIterator, Callable
-from functools import cached_property, lru_cache, partial
+from functools import cached_property, partial
 from typing import TYPE_CHECKING, Any
 
 from huggingface_hub import CacheNotFound
@@ -42,12 +42,15 @@ from .utils import (
     Modality,
     ModelNotServedError,
     _StreamError,
+    canonical_model_id,
+    decision_model_class,
     exit_with_parent,
+    get_gen_models,
     make_progress_tqdm_class,
-    process_model_name,
+    model_owner,
+    parse_model_id,
     prompt_length,
     set_torch_seed,
-    split_model_id,
 )
 
 
@@ -143,7 +146,7 @@ class EngineClient:
         return self._stream_results(results, response_parser)
 
     async def submit(self, function: Callable, *args) -> Any:
-        """Runs `function(model, *args)` in the model's process, and returns its result."""
+        """Runs `function(model, processor, *args)` in the model's process, and returns its result."""
         results = [result async for result in self._send_request("submit", stream=False, args=(function, args))]
         return results[-1].data
 
@@ -311,7 +314,7 @@ class EngineClient:
     ) -> tuple[multiprocessing.process.BaseProcess, Any, list]:
         """Starts a model's process, and waits for the model to load. Returns the process, its requests queue, and its
         results queues (one per API server)."""
-        load = partial(loader.load_model_and_processor, process_model_name(model))
+        load = partial(loader.load_model_and_processor, canonical_model_id(model))
         context = multiprocessing.get_context("spawn")
         requests, results = context.Queue(), [context.Queue() for _ in range(api_servers)]
         reader, writer = context.Pipe(duplex=False)
@@ -418,7 +421,7 @@ class ModelManager:
         Preloads the engine of the model of the command line: its process starts now, or in an API server, it connects
         to the one `Serve.run_api_servers` started (`engine_connection`). It never stops for being idle.
         """
-        model_id = process_model_name(force_model)
+        model_id = canonical_model_id(force_model)
         engine = EngineClient(model_id, self.loader, self.generation_state, connection=engine_connection)
         self.engines[model_id] = engine
         if engine_connection is None:
@@ -432,7 +435,7 @@ class ModelManager:
 
         Args:
             model (`str`): The model, as requests name it: ``'repo'`` or ``'repo@revision'``, with ``':file.gguf'``
-                for a GGUF file (see `process_model_name`).
+                for a GGUF file (see `canonical_model_id`).
         """
         if self.force_model is not None:
             if model is not None and model != self.force_model:
@@ -440,7 +443,7 @@ class ModelManager:
             model = self.force_model
         if model is None:
             raise ModelNotServedError("The request names no model, and the server wasn't started with one.")
-        model_id = process_model_name(model)
+        model_id = canonical_model_id(model)
         if model_id not in self.engines:
             self.engines[model_id] = EngineClient(
                 model_id, self.loader, self.generation_state, timeout=self.model_timeout
@@ -544,18 +547,19 @@ class ModelManager:
             `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc., and a ``status``
             telling whether the model is loaded.
         """
+        # The models whose process is running
+        loaded = [model_id for model_id, engine in self.engines.items() if engine.running]
+
         if self.force_model is not None:
             # A pinned server only answers for its model, under the name it was given: list it alone.
-            repo, gguf_file = split_model_id(self.force_model)
-            name = self.process_model_name(repo)
-            is_loaded = (name if gguf_file is None else f"{name}:{gguf_file}") in self.loaded_models
+            repo, _, _ = parse_model_id(self.force_model)
             return [
                 {
                     "owned_by": model_owner(repo),
                     "id": self.force_model,
                     "object": "model",
                     "created": 0,
-                    "status": {"value": "loaded" if is_loaded else "unloaded"},
+                    "status": {"value": "loaded" if canonical_model_id(self.force_model) in loaded else "unloaded"},
                 }
             ]
 
@@ -566,9 +570,8 @@ class ModelManager:
             models = []
 
         loaded_models = {}
-        for name in list(self.loaded_models):
-            name, gguf_file = split_model_id(name)
-            model_id, revision = split_revision(name)
+        for name in loaded:
+            model_id, revision, gguf_file = parse_model_id(name)
             owned_by = model_owner(model_id)
             # Named as the cache names them: `main` is left out, a GGUF file comes after a colon.
             if revision not in (None, "main"):
@@ -581,43 +584,11 @@ class ModelManager:
         listed = {model["id"] for model in models}
         models += [model for model_id, model in loaded_models.items() if model_id not in listed]
 
-                # One quantization per file, each a separate model, so list files rather than the repo.
-                gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
-                for gguf_file in gguf_files:
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": f"{repo.repo_id}:{gguf_file}",
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
-
-                config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
-                if not config_path:
-                    continue
-
-                config = json.loads(config_path.open().read())
-                if not isinstance(config, dict):
-                    continue
-
-                architectures = config.get("architectures") or []
-                llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
-                vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
-                multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
-
-                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": repo_handle,
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
-
-        return generative_models
+        # `status` is not an OpenAI field: it tells which of the listed models are in memory.
+        for index, model in enumerate(models):
+            status = "loaded" if model["id"] in loaded_models else "unloaded"
+            models[index] = {**model, "status": {"value": status}}
+        return models
 
 
 class ModelLoader:
@@ -655,20 +626,10 @@ class ModelLoader:
         self.quantization = quantization
         self._validate_args()
 
-    @staticmethod
-    def _parse_model_id(model_id: str) -> tuple[str, str, str | None]:
-        """
-        The repo, revision, and GGUF file if one is named, of `model_id`: ``'repo@revision'``, or
-        ``'repo@revision:file.gguf'`` for a GGUF file (see `process_model_name`).
-        """
-        repo_and_revision, gguf_file = split_model_id(model_id)
-        repo, revision = repo_and_revision.split("@", 1)
-        return repo, revision, gguf_file
-
     def load_model_and_processor(
         self, model_id: str, on_progress: Callable | None = None
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
-        """Loads the model `model_id` (see `_parse_model_id`) and its processor, its progress events going to
+        """Loads the model `model_id` (see `parse_model_id`) and its processor, its progress events going to
         `on_progress`."""
         logger.warning(f"Loading {model_id}")
         if on_progress is not None:
@@ -693,7 +654,7 @@ class ModelLoader:
         its process."""
         from transformers import AutoConfig, GenerationConfig
 
-        repo, revision, gguf_file = self._parse_model_id(model_id)
+        repo, revision, gguf_file = parse_model_id(model_id)
         config = AutoConfig.from_pretrained(
             repo, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
         )
@@ -707,7 +668,7 @@ class ModelLoader:
         """The processor (or tokenizer) of the model `model_id`."""
         from transformers import AutoProcessor
 
-        repo, revision, gguf_file = self._parse_model_id(model_id)
+        repo, revision, gguf_file = parse_model_id(model_id)
         kwargs = {"revision": revision, "trust_remote_code": self.trust_remote_code}
         if gguf_file is not None:  # a GGUF repo ships no tokenizer files: the vocabulary is in the file's metadata
             kwargs["gguf_file"] = gguf_file
@@ -756,7 +717,7 @@ class ModelLoader:
         """Load a model.
 
         Args:
-            model_id (`str`): The model (see `_parse_model_id`).
+            model_id (`str`): The model (see `parse_model_id`).
             tqdm_class (*optional*): tqdm subclass for progress bars during ``from_pretrained``.
             progress_callback (`Callable`, *optional*): Called with progress dicts during loading.
 
@@ -765,7 +726,7 @@ class ModelLoader:
         """
         from transformers import AutoConfig
 
-        repo, revision, gguf_file = self._parse_model_id(model_id)
+        repo, revision, gguf_file = parse_model_id(model_id)
 
         model_kwargs = {
             "revision": revision,
@@ -787,6 +748,10 @@ class ModelLoader:
         config = AutoConfig.from_pretrained(repo, **model_kwargs)
 
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        decision_model = decision_model_class(model_id)
+        if decision_model is not None:
+            return decision_model.from_pretrained(repo, **model_kwargs)
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM

@@ -46,13 +46,15 @@ from transformers.cli.serving.utils import (
     Modality,
     ModelNotServedError,
     ToolCall,
+    answer_questions,
     build_response_parser,
+    canonical_model_id,
+    decision_pipeline,
     get_gen_models,
     get_response_template,
     parse_assistant_message,
+    parse_model_id,
     response_events_to_chunks,
-    split_model_id,
-    split_revision,
 )
 from transformers.testing_utils import (
     require_audio,
@@ -437,7 +439,7 @@ class TestGenerativeModelList(unittest.TestCase):
             self.addCleanup(model_manager.shutdown)
             # What loading `org/a` and a local checkpoint leaves in the manager.
             for name in ("org/a@main", local_path):
-                model_manager.loaded_models[name] = TimedModel(MagicMock(), timeout_seconds=-1)
+                model_manager.engines[name] = MagicMock(running=True)
 
             models = model_manager.list_models()
             statuses = {model["id"]: model["status"]["value"] for model in models}
@@ -448,9 +450,9 @@ class TestGenerativeModelList(unittest.TestCase):
 
     def test_list_models_of_a_pinned_server(self):
         # A server pinned to one model lists that model alone, whatever the Hub cache holds.
-        with patch.object(ModelManager, "_load_processor"), patch.object(ModelManager, "_load_model"):
-            model_manager = ModelManager(force_model="org/model")
-        self.addCleanup(model_manager.shutdown)
+        model_manager = ModelManager()
+        model_manager.force_model = "org/model"
+        model_manager.engines["org/model@main"] = MagicMock(running=True)
 
         models = model_manager.list_models()
 
@@ -598,6 +600,25 @@ class TestGetEngine(unittest.TestCase):
 
 
 class TestModelLoader(unittest.TestCase):
+    def test_local_path_with_at_symbol(self):
+        # The `@` of an existing local path is part of the path, not a revision.
+        with tempfile.TemporaryDirectory(prefix="ckpt@1000_") as local_path:
+            self.assertEqual(canonical_model_id(local_path), local_path)
+            self.assertEqual(parse_model_id(local_path), (local_path, None, None))
+
+    def test_parse_model_id(self):
+        self.assertEqual(parse_model_id("org/model"), ("org/model", None, None))
+        self.assertEqual(parse_model_id("org/model@refs/pr/12"), ("org/model", "refs/pr/12", None))
+        self.assertEqual(parse_model_id("org/model@dev:weights.gguf"), ("org/model", "dev", "weights.gguf"))
+        # The colon of a local path is part of the path, not a GGUF file.
+        self.assertEqual(parse_model_id("/runs/run:1/ckpt"), ("/runs/run:1/ckpt", None, None))
+        self.assertEqual(parse_model_id("/runs/run:1/ckpt:weights.gguf"), ("/runs/run:1/ckpt", None, "weights.gguf"))
+
+    def test_canonical_model_id(self):
+        self.assertEqual(canonical_model_id("org/model"), "org/model@main")
+        self.assertEqual(canonical_model_id("org/model@dev"), "org/model@dev")
+        self.assertEqual(canonical_model_id("org/model:weights.gguf"), "org/model@main:weights.gguf")
+
     def test_quantization_config_4bit(self):
         cfg = ModelLoader(quantization="bnb-4bit").get_quantization_config()
         self.assertTrue(cfg.load_in_4bit)
@@ -745,7 +766,7 @@ class TestAppRoutes(unittest.TestCase):
     def setUpClass(cls):
         cls.model_manager = MagicMock(spec=ModelManager)
         cls.model_manager.is_dead = False
-        cls.model_manager.get_gen_models.return_value = [
+        cls.model_manager.list_models.return_value = [
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
@@ -854,11 +875,10 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
         model = tiny_qwen2(tokenizer)
         decision_config = DecisionConfig(temperature={"noul": 1.5})
-        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
         request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
-        pipe = handler._pipeline("x", model, tokenizer)
-        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
-        answers, input_tokens = handler._answer(pipe, request)
+        pipe = decision_pipeline(model, tokenizer, decision_config)
+        self.assertIs(decision_pipeline(model, tokenizer, decision_config), pipe)
+        answers, input_tokens = answer_questions(model, tokenizer, request, decision_config)
         expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
         self.assertEqual(answers, expected)
         self.assertGreater(input_tokens, 0)
@@ -873,7 +893,7 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as repo:
             DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
             model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
-            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+            pipe = decision_pipeline(model, tokenizer, None)
         self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
         self.assertEqual(pipe.decision_config.chat_template, template)
 
@@ -893,8 +913,7 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
                 json.dumps({"codes": ["A", "B"], "temperature": 2.0}), encoding="utf-8"
             )
             save_file({"weight": torch.randn(2, 16)}, f"{repo}/readout.safetensors", metadata={"format": "pt"})
-            manager = ModelManager(device="cpu")
-            model, _ = manager.load_model_and_processor(manager.process_model_name(repo))
+            model, _ = ModelLoader(device="cpu").load_model_and_processor(canonical_model_id(repo))
             decide = pipeline("decision", model=repo, device="cpu")
         self.assertIsInstance(model, JevForDecision)
         self.assertIsInstance(decide.model, JevForDecision)

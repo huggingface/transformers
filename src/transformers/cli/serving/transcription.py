@@ -120,11 +120,10 @@ class TranscriptionHandler:
         return await self._non_streaming(engine, audio_inputs)
 
     @staticmethod
-    @requires(backends=("librosa",))
     def _prepare_audio_inputs(file_bytes: bytes, audio_processor: "ProcessorMixin") -> dict:
         """Load audio bytes and convert to model inputs."""
         sampling_rate = audio_processor.feature_extractor.sampling_rate
-        audio_array, _ = librosa.load(io.BytesIO(file_bytes), sr=sampling_rate, mono=True)
+        audio_array = load_audio(base64.b64encode(file_bytes).decode("ascii"), sampling_rate=sampling_rate)
         return dict(audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt"))
 
     async def _non_streaming(self, engine: "EngineClient", audio_inputs: dict) -> JSONResponse:

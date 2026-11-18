@@ -25,6 +25,7 @@ import queue
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from huggingface_hub import scan_cache_dir
@@ -44,8 +45,12 @@ if TYPE_CHECKING:
         GenerationConfig,
         PretrainedConfig,
         PreTrainedModel,
+        PreTrainedTokenizerFast,
+        ProcessorMixin,
     )
+    from transformers.decision import DecisionConfig
     from transformers.generation.continuous_batching import ContinuousBatchingManager
+    from transformers.pipelines import DecisionPipeline
 
     from .model_manager import EngineClient, ModelManager
 
@@ -57,28 +62,29 @@ logger = logging.get_logger(__name__)
 X_REQUEST_ID = "x-request-id"
 
 
-def split_model_id(model_id: str) -> tuple[str, str | None]:
-    """Split the GGUF file off a model name: `"org/model:weights.gguf"` -> `("org/model", "weights.gguf")`.
+def parse_model_id(model_id: str) -> tuple[str, str | None, str | None]:
+    """Split a model name, `repo[@revision][:file.gguf]`, into its repo, revision and GGUF file:
+    `"org/model@dev:weights.gguf"` -> `("org/model", "dev", "weights.gguf")`.
 
-    Only a `.gguf` file after the last colon counts. Any other colon is part of the name, as in a local
+    Only a `.gguf` file after the last colon counts as one. An existing local path is the repo as it is: it has no
+    revision, and an `@` or a colon in it is part of the path.
     """
-    name, colon, gguf_file = model_id.rpartition(":")
-    names_gguf_file = bool(colon) and gguf_file.endswith(".gguf")
-    if not names_gguf_file:
-        return model_id, None
-    return name, gguf_file
+    repo, colon, gguf_file = model_id.rpartition(":")
+    if not colon or not gguf_file.endswith(".gguf"):
+        repo, gguf_file = model_id, None
+    if os.path.exists(repo):
+        return repo, None, gguf_file
+    repo, _, revision = repo.partition("@")
+    return repo, revision or None, gguf_file
 
 
-def split_revision(model_id_and_revision: str) -> tuple[str, str | None]:
-    """Split the revision off a model name: `"org/model@dev"` -> `("org/model", "dev")`.
-
-    An existing local path has no revision, and an `@` in it is part of the path:
-    `"/tmp/ckpt@1000"` -> `("/tmp/ckpt@1000", None)`.
-    """
-    if os.path.exists(model_id_and_revision):
-        return model_id_and_revision, None
-    model_id, _, revision = model_id_and_revision.partition("@")
-    return model_id, revision or None
+def canonical_model_id(model_id: str) -> str:
+    """The one name a model goes by: `repo@revision` for a Hub repo (`@main` by default), an existing local path as
+    it is, then `:file.gguf` if it names a GGUF file."""
+    repo, revision, gguf_file = parse_model_id(model_id)
+    if not os.path.exists(repo):
+        repo = f"{repo}@{revision or 'main'}"
+    return repo if gguf_file is None else f"{repo}:{gguf_file}"
 
 
 def model_owner(model_id: str) -> str:
@@ -135,15 +141,6 @@ def get_gen_models(cache_dir: str | None = None) -> list[dict]:
                 )
 
     return generative_models
-
-
-def process_model_name(model_id: str) -> str:
-    """Canonicalize to `'repo@revision'` format, or `'repo@revision:file.gguf'` for a GGUF file. Defaults to
-    `@main`."""
-    repo, gguf_file = split_model_id(model_id)
-    if "@" not in repo:
-        repo = f"{repo}@main"
-    return repo if gguf_file is None else f"{repo}:{gguf_file}"
 
 
 class Modality(enum.Enum):
@@ -468,6 +465,7 @@ def build_response_parser(
     processor,
     config: "PretrainedConfig",
     input_ids,
+    tools=None,
 ) -> "ResponseParser | None":
     """Build a streaming :class:`ResponseParser` for the current generation.
 
@@ -484,7 +482,7 @@ def build_response_parser(
     if template is None:
         return None
     tokenizer = getattr(processor, "tokenizer", processor)
-    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids))
+    return ResponseParser(template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools)
 
 
 def _normalize_tool_call(value: dict) -> ToolCall:
@@ -524,6 +522,7 @@ def parse_assistant_message(
     generated_ids,
     input_ids,
     cleaned_content: str = "",
+    tools=None,
 ) -> tuple[str, str | None, list[ToolCall] | None]:
     """Parse a full assistant message into ``(content, reasoning, tool_calls)``.
 
@@ -539,7 +538,9 @@ def parse_assistant_message(
     if template is None:
         return cleaned_content, None, None
     tokenizer = getattr(processor, "tokenizer", processor)
-    parsed = tokenizer.parse_response(generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids))
+    parsed = tokenizer.parse_response(
+        generated_ids, template, prefix=_decode_prefix(tokenizer, input_ids), tools=tools
+    )
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
@@ -689,7 +690,7 @@ class GenerateRunner:
         threading.Thread(target=self._process_requests, name="generate", daemon=True).start()
 
     def generate(self, request_id: str, inputs: dict, gen_config: "GenerationConfig", stream: bool) -> None:
-        def generate_tokens(model: "PreTrainedModel", streamer: Any = None) -> list[int]:
+        def generate_tokens(model: "PreTrainedModel", processor: Any, streamer: Any = None) -> list[int]:
             seed = gen_config.__dict__.pop("seed", None)  # the request's (see `BaseHandler._build_generation_config`)
             if seed is not None:
                 set_torch_seed(seed)
@@ -699,7 +700,7 @@ class GenerateRunner:
             kwargs = {
                 **model_inputs,
                 "generation_config": gen_config,
-                "tokenizer": self.processor,
+                "tokenizer": processor,
                 "streamer": streamer,
             }
             # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default: text only
@@ -726,9 +727,11 @@ class GenerateRunner:
             if stream:
                 kwargs["streamer"] = _TokenStreamer(request_id, self.send_results, self.cancelled_request_ids)
             try:
-                result = function(self.model, *args, **kwargs)
+                result = function(self.model, self.processor, *args, **kwargs)
             except _GenerationCancelled:
                 result = None
+            except ValueError as error:  # the request's fault: crosses as one, for a 400
+                result = ValueError(str(error))
             except Exception as error:
                 logger.exception("A request failed")
                 result = RuntimeError(f"{type(error).__name__}: {error}")  # as text: any error crosses to the server
@@ -855,11 +858,57 @@ class CBGenerateRunner(GenerateRunner):
             return results
 
 
-def transcribe(model: "PreTrainedModel", inputs: dict, streamer=None) -> list[int]:
+def transcribe(model: "PreTrainedModel", processor: Any, inputs: dict, streamer=None) -> list[int]:
     """Runs in the model's process (see `EngineClient.submit`): the audio's transcription, as token ids."""
     inputs = {name: value.to(model.device) for name, value in inputs.items()}
     inputs["input_features"] = inputs["input_features"].to(model.dtype)
     return model.generate(**inputs, streamer=streamer)[0].tolist()
+
+
+def decision_model_class(model_id: str) -> "type[PreTrainedModel] | None":
+    """The decision model of a checkpoint shipping its head next to its weights, as in `pipeline("decision")`, read
+    from its config files. `None` (the class its config names) for any other model."""
+    from transformers.models.auto.modeling_auto import MODEL_FOR_DECISION_MAPPING
+
+    repo, revision, _ = parse_model_id(model_id)
+    model_classes = list(dict.fromkeys(MODEL_FOR_DECISION_MAPPING.values()))
+    for model_class in model_classes:
+        if model_class.checkpoint_config(repo, revision=revision)[0] is not None:
+            return model_class
+    return None
+
+
+def decision_pipeline(
+    model: "PreTrainedModel",
+    processor: "ProcessorMixin | PreTrainedTokenizerFast",
+    decision_config: "DecisionConfig | None",
+) -> "DecisionPipeline":
+    """The decision pipeline of the model, built once and kept on it."""
+    from transformers import ProcessorMixin
+    from transformers.pipelines import DecisionPipeline
+
+    if not hasattr(model, "decision_pipeline"):
+        model.decision_pipeline = DecisionPipeline(
+            model=model,
+            tokenizer=getattr(processor, "tokenizer", processor),
+            processor=processor if isinstance(processor, ProcessorMixin) else None,
+            decision_config=decision_config,
+        )
+    return model.decision_pipeline
+
+
+def answer_questions(
+    model: "PreTrainedModel",
+    processor: "ProcessorMixin | PreTrainedTokenizerFast",
+    request: dict[str, Any],
+    decision_config: "DecisionConfig | None",
+) -> tuple[dict[str, Any], int]:
+    """Runs in the model's process (see `EngineClient.submit`): the pipeline's answers to the request's questions, and
+    the number of input tokens."""
+    pipe = decision_pipeline(model, processor, decision_config)
+    model_inputs = pipe.preprocess(request)
+    answers = pipe.postprocess(pipe.forward(model_inputs))
+    return answers, sum(inputs["input_ids"].shape[-1] for inputs, _ in model_inputs["prompts"])
 
 
 # The server's generation settings
@@ -958,7 +1007,8 @@ class BaseHandler:
         """The request's model's engine (see `ModelManager.get_engine`). Sets the body's model to the one served."""
         engine = self.model_manager.get_engine(body.get("model"))
         # `<repo>:<file>.gguf` names both the repository and the weights to read out of it: the model's id keeps both
-        body["model"], _ = split_model_id(body.get("model") or self.model_manager.force_model)
+        repo, revision, _ = parse_model_id(body.get("model") or self.model_manager.force_model)
+        body["model"] = repo if revision is None else f"{repo}@{revision}"
         return engine
 
     def _chat_template_kwargs(self, body: dict) -> dict:

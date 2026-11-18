@@ -124,18 +124,18 @@ class ChatCompletionHandler(BaseHandler):
 
         streaming = body.get("stream")
         if streaming:
-            return self._streaming(request_id, engine, inputs, gen_config)
+            return self._streaming(request_id, engine, inputs, gen_config, tools=body.get("tools"))
         else:
-            return await self._non_streaming(request_id, engine, inputs, gen_config)
+            return await self._non_streaming(request_id, engine, inputs, gen_config, tools=body.get("tools"))
 
     # ----- streaming -----
 
     def _streaming(
-        self, request_id: str, engine: "EngineClient", inputs: dict, gen_config: "GenerationConfig"
+        self, request_id: str, engine: "EngineClient", inputs: dict, gen_config: "GenerationConfig", tools=None
     ) -> StreamingResponse:
         """Stream tokens as SSE, decoded by a `Detokenizer`."""
         processor, model_id = engine.processor, engine.model_id
-        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"])
+        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
         queue, streamer = engine.generate_streaming(inputs, gen_config, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
@@ -225,6 +225,7 @@ class ChatCompletionHandler(BaseHandler):
         engine: "EngineClient",
         inputs: dict,
         gen_config: "GenerationConfig",
+        tools=None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         processor, model_id = engine.processor, engine.model_id
@@ -239,7 +240,12 @@ class ChatCompletionHandler(BaseHandler):
         )
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor, engine.model_config, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
+            processor,
+            engine.model_config,
+            generated_ids,
+            input_ids=inputs["input_ids"],
+            cleaned_content=content,
+            tools=tools,
         )
         tool_calls = None
         if parsed_tool_calls:

@@ -497,7 +497,8 @@ class ResponseHandler(BaseHandler):
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE), decoded by a `Detokenizer`."""
         processor, model_id = engine.processor, engine.model_id
-        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"])
+        tools = self._normalize_tools(body.get("tools"))
+        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
         queue, streamer = engine.generate_streaming(inputs, gen_config, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
@@ -597,7 +598,12 @@ class ResponseHandler(BaseHandler):
         content, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor, engine.model_config, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
+            processor,
+            engine.model_config,
+            generated_ids,
+            input_ids=inputs["input_ids"],
+            cleaned_content=content,
+            tools=self._normalize_tools(body.get("tools")),
         )
 
         output_items = []
