@@ -493,7 +493,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
@@ -559,21 +559,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             image_newline=self.image_newline,
             vision_aspect_ratio=vision_aspect_ratio,
         )
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = torch.cat(image_features, dim=0)
+        image_outputs.split_sizes = feature_lens
 
-        return image_outputs
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="All images' features as one tensor; `get_image_features` gives them per image.")
-    def get_image_embeddings(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
-            Actual image size of each images (H, W).
-        """
-        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
-        image_outputs.pooler_output = torch.cat(image_outputs.pooler_output)
         return image_outputs
 
     @merge_with_config_defaults
@@ -582,7 +570,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
@@ -626,6 +614,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
         vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     @merge_with_config_defaults
@@ -672,7 +664,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -682,7 +674,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -690,7 +684,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
@@ -699,7 +693,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.flatten(0, 1).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(video_features, torch.Tensor):
+                video_features = torch.cat(video_features, dim=0)
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -828,37 +824,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
-        )
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        vision_aspect_ratio: str | None = None,
-        batch_num_images: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
-            Actual image size of each images (H, W).
-        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processing image features. The default value is "anyres_max_9".
-        batch_num_images (`torch.LongTensor`, *optional*):
-            Number of images in each sample.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            vision_aspect_ratio=vision_aspect_ratio,
-            batch_num_images=batch_num_images,
-            **kwargs,
         )
 
 

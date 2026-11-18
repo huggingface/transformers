@@ -1203,7 +1203,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV4DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     # V4 ships eager-only. The non-eager backends are off for the following reasons:
     #
     #   * FlashAttention 2 / 3 cap the head dim at 256; V4's `head_dim=512`

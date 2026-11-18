@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -398,7 +398,6 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlama3VisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -430,7 +429,6 @@ def get_pixel_unshuffle_indices_and_weights(
         column_low, column_high, column_weight = taps(width, width // merge_size)
         rows = torch.stack([row_low, row_low, row_high, row_high], dim=-1)[:, None]
         columns = torch.stack([column_low, column_high, column_low, column_high], dim=-1)[None]
-        # Raster position to merge-block order
         block_index = (rows // merge_size * (width // merge_size) + columns // merge_size) * merge_size**2
         index = block_index + rows % merge_size * merge_size + columns % merge_size
         row_weights = torch.stack([1 - row_weight, 1 - row_weight, row_weight, row_weight], dim=-1)[:, None]
@@ -573,7 +571,7 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 
 @auto_docstring
-class VideoLlama3Model(VideoLlama3PreTrainedModel):
+class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -605,26 +603,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
-            **kwargs,
-        )
-
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
-        """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
+            return_dict=True,
             **kwargs,
         )
 
@@ -639,8 +618,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
@@ -654,27 +631,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-            The spatial downsampling ratio of each image feature.
-        """
-        vision_outputs = self.get_image_embeddings(
-            pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
-        )
-        image_embeds = vision_outputs.pooler_output
-        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
-        vision_outputs.pooler_output = torch.split(image_embeds, split_sizes.tolist())
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // image_merge_sizes**2
         return vision_outputs
 
     def get_placeholder_mask(
@@ -862,7 +819,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
     video_hidden_states: torch.Tensor | None = None
 
 
-class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
+class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _can_compile_fullgraph = False
@@ -874,61 +831,9 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
 
         self.post_init()
 
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`VideoLlama3Model.get_data_dependent_inputs`]."""
         return self.model.get_data_dependent_inputs(*args, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

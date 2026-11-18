@@ -541,7 +541,7 @@ class Granite4VisionModel(LlavaNextModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
@@ -597,7 +597,7 @@ class Granite4VisionModel(LlavaNextModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, packed_features))
+            all_features.append((llm_layer, torch.cat(packed_features, dim=0)))
 
         # Spatial features: extract 4 offset groups from a single vision layer
         spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
@@ -615,27 +615,22 @@ class Granite4VisionModel(LlavaNextModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, packed_group))
+            all_features.append((llm_layer, torch.cat(packed_group, dim=0)))
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
             hidden_states=vision_outputs.hidden_states,
+            split_sizes=torch.tensor([len(features) for features in packed_group], device=spatial_feature.device),
         )
 
-    @can_return_tuple
-    @auto_docstring(custom_intro="Each layer's deepstack features for all images as one tensor.")
-    def get_image_embeddings(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
-            Actual image size of each images (H, W).
-        """
-        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
-        image_outputs.deepstack_features = [
-            (layer, torch.cat(features)) for layer, features in image_outputs.deepstack_features
+    @staticmethod
+    def split_modality_outputs(outputs):
+        """Splits each `(layer, features)` deepstack pair per image by `split_sizes`."""
+        split_sizes = outputs.split_sizes.tolist()
+        outputs.deepstack_features = [
+            (layer, torch.split(features, split_sizes)) for layer, features in outputs.deepstack_features
         ]
-        return image_outputs
+        return outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -666,7 +661,7 @@ class Granite4VisionModel(LlavaNextModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,

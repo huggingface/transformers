@@ -171,7 +171,6 @@ class GlmImageConfig(PreTrainedConfig):
         "vision_config": GlmImageVisionConfig,
         "vq_config": GlmImageVQVAEConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -680,12 +679,6 @@ class GlmImageModel(Glm4vModel):
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
-    def get_video_features(self):
-        raise AttributeError("Not needed for GlmImage")
-
-    def get_video_embeddings(self):
-        raise AttributeError("Not needed for GlmImage")
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -867,6 +860,9 @@ class GlmImageModel(Glm4vModel):
         )
 
         return outputs
+
+    def get_video_embeddings(self):
+        raise AttributeError("Not needed for GlmImage")
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):

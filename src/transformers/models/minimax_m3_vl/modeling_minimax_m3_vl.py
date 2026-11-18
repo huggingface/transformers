@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -674,7 +674,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -1347,7 +1346,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
-class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
+class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
     config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):
@@ -1357,20 +1356,24 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
         self.post_init()
 
+    @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        image_features = vision_outputs.pooler_output
-        split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_features, split_sizes)
+        # Return the raw vision-tower output (so callers can inspect hidden states /
+        # attentions) while stashing the projected + spatially-merged features —
+        # ready to scatter into the text embeddings — in `pooler_output`.
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = image_features
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1494,28 +1497,6 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
-        # Return the raw vision-tower output (so callers can inspect hidden states /
-        # attentions) while stashing the projected + spatially-merged features —
-        # ready to scatter into the text embeddings — in `pooler_output`.
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
-        vision_outputs.pooler_output = image_features
-        return vision_outputs
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
     def get_video_embeddings(
@@ -1524,21 +1505,11 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        # Video frames flow through the same vision pipeline as images (the tower is
-        # grid-agnostic); only the placeholder token they scatter into differs.
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
-class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
+class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: MiniMaxM3VLConfig
@@ -1551,10 +1522,6 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(self, pixel_values, image_grid_thw, **kwargs) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1650,18 +1617,6 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             image_hidden_states=outputs.image_hidden_states,
             video_hidden_states=outputs.video_hidden_states,
         )
-
-    @auto_docstring
-    def get_image_embeddings(self, pixel_values, image_grid_thw, **kwargs):
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_embeddings(self, pixel_values_videos, video_grid_thw, **kwargs):
-        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 __all__ = [

@@ -48,18 +48,18 @@ class OmniASRModelTester(ALMModelTester):
     audio_config_class = OmniASRAudioConfig
     audio_mask_key = "padding_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("seq_length", 20)
-        kwargs.setdefault("feat_seq_length", 80)
-        kwargs.setdefault("conv_dim", [16, 16])
-        kwargs.setdefault("conv_kernel", [5, 3])
-        kwargs.setdefault("conv_stride", [3, 2])
-        kwargs.setdefault("num_conv_pos_embeddings", 8)
-        kwargs.setdefault("num_conv_pos_embedding_groups", 2)
-        kwargs.setdefault("audio_token_id", 0)
-        kwargs.setdefault("layerdrop", 0.0)
-        kwargs.setdefault("head_dim", 8)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "seq_length": 20,
+        "feat_seq_length": 80,
+        "conv_dim": [16, 16],
+        "conv_kernel": [5, 3],
+        "conv_stride": [3, 2],
+        "num_conv_pos_embeddings": 8,
+        "num_conv_pos_embedding_groups": 2,
+        "audio_token_id": 0,
+        "layerdrop": 0.0,
+        "head_dim": 8,
+    }
 
     def create_audio_features(self, batch_size: int | None = None):
         # OmniASR is fed the raw waveform, not mel features.

@@ -97,7 +97,6 @@ class MuseSparkTextConfig(PreTrainedConfig):
     """
 
     model_type = "muse_spark_text"
-    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.mlp.pre_expert_proj": "rowwise_split_input",

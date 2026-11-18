@@ -25,6 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -38,7 +39,7 @@ from ...masking_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1261,7 +1262,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
         "Gemma4VisionPatchEmbedder",
         "Gemma4AudioLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 
@@ -1923,7 +1923,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     language modeling head.
     """
 )
-class Gemma4Model(Gemma3nModel):
+class Gemma4Model(Gemma3nModel, MultimodalMixin):
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma4Config):
@@ -1956,8 +1956,6 @@ class Gemma4Model(Gemma3nModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
         """
@@ -1967,29 +1965,10 @@ class Gemma4Model(Gemma3nModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        vision_outputs.pooler_output = pooler_output
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True, **kwargs)
-        pooler_output = vision_outputs.pooler_output
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
-        non_pad_mask = (image_position_ids != -1).all(dim=-1)
-        split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
         return vision_outputs
 
     @can_return_tuple
@@ -2002,8 +1981,6 @@ class Gemma4Model(Gemma3nModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
             on a separate video axis, so that videos of different lengths can be batched together.
@@ -2026,42 +2003,17 @@ class Gemma4Model(Gemma3nModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        vision_outputs.pooler_output = pooler_output
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_position_ids: torch.LongTensor | None = None,
-        num_frames_per_video: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
-            The frames of every video in the batch, concatenated along the frame axis rather than stacked
-            on a separate video axis, so that videos of different lengths can be batched together.
-        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
-            2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
-            Passed through to the vision encoder for positional embedding computation.
-        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
-            Number of frames belonging to each video, used to split the flat frame sequence back per video.
-        """
-        vision_outputs = self.get_video_embeddings(
-            pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True, **kwargs
-        )
-        pooler_output = vision_outputs.pooler_output
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
-        non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
-        num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared
-        split_sizes = [
-            int(video_frames.sum())
-            for video_frames in torch.split(num_tokens_per_frame, num_frames_per_video.tolist())
-        ]
-
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        video_index = torch.repeat_interleave(
+            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
+            num_frames_per_video.to(tokens_per_frame.device),
+            output_size=len(tokens_per_frame),
+        )
+        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
+            0, video_index, tokens_per_frame
+        )
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2333,7 +2285,7 @@ class Gemma4Model(Gemma3nModel):
     head.
     """
 )
-class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
+class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration, MultimodalMixin, GenerationMixin):
     base_model_prefix = "model"
 
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
@@ -2434,34 +2386,6 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             shared_kv_states=outputs.shared_kv_states,
             router_logits=outputs.router_logits,
         )
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
-            Passed through to the vision encoder for positional embedding computation.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_position_ids, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
-            Passed through to the vision encoder for positional embedding computation.
-        """
-        return self.model.get_image_features(pixel_values, image_position_ids, **kwargs)
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

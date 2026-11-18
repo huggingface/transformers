@@ -34,7 +34,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -177,7 +177,6 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
 
     model_type = "hunyuan_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     ignore_keys_at_rope_validation = {
         "alpha",
         "beta_fast",
@@ -1232,35 +1231,20 @@ class HunYuanVLModel(Qwen2VLModel):
         self.rope_deltas = rope_deltas
         return rope_positions
 
-    def get_video_features(self, **super_kwargs):
-        raise AttributeError("Model doesn't support videos")
-
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output[0]
-        return image_outputs
-
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        # Include row separators and image boundary tokens in each split.
-        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
+            -1
+        )
+        image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
         return image_outputs
 
     def get_placeholder_mask(
@@ -1359,7 +1343,7 @@ class HunYuanVLModel(Qwen2VLModel):
 
 
 @auto_docstring
-class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixin):
+class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -1371,32 +1355,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.vocab_size = config.text_config.vocab_size
         self.post_init()
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor`):
-            Flat per-patch pixel features produced by the image processor.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor`):
-            Flat per-patch pixel features produced by the image processor.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`HunYuanVLModel.get_data_dependent_inputs`]."""
