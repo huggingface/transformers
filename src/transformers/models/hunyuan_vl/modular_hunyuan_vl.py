@@ -1225,12 +1225,11 @@ class HunYuanVLModel(Qwen2VLModel):
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output[0]
+        merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
+            -1
+        )
+        image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
         return image_outputs
-
-    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
-        """The number of features of each image: its merged rows, each with a newline, and its begin and end tokens."""
-        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        return (merged_h * (merged_w + 1) + 2).tolist()
 
     def get_placeholder_mask(
         self,

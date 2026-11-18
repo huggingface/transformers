@@ -592,6 +592,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // image_merge_sizes**2
         return vision_outputs
 
     def get_placeholder_mask(
@@ -741,12 +742,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel, MultimodalMixin):
             image_merge_sizes=video_merge_sizes,
             **kwargs,
         )
-
-    def get_image_split_sizes(
-        self, pixel_values=None, image_grid_thw=None, image_merge_sizes=None, **kwargs
-    ) -> list[int]:
-        """The number of features of each image: its patches, merged by its own merge size."""
-        return (image_grid_thw.prod(-1) // image_merge_sizes**2).tolist()
 
 
 @auto_docstring(

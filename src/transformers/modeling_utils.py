@@ -960,11 +960,9 @@ class ModuleUtilsMixin:
 class MultimodalMixin:
     """
     `get_image_features` and `get_video_features` from a model's flat `get_image_embeddings` and `get_video_embeddings`,
-    split per image or video by `get_image_split_sizes` and `get_video_split_sizes`. A model with a head reaches its
-    base model's.
+    split per image or video by the `split_sizes` they return. A model with a head reaches its base model's.
     """
 
-    config: PreTrainedConfig
     model: "MultimodalMixin"
 
     def get_image_embeddings(self, *args, **kwargs):
@@ -973,28 +971,19 @@ class MultimodalMixin:
     def get_video_embeddings(self, *args, **kwargs):
         return self.model.get_video_embeddings(*args, **kwargs)
 
-    def get_image_split_sizes(self, pixel_values, image_grid_thw: torch.Tensor, **kwargs) -> list[int]:
-        """The number of features of each image: its patches, merged by `spatial_merge_size`."""
-        return (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
-
-    def get_video_split_sizes(self, pixel_values_videos, video_grid_thw: torch.Tensor, **kwargs) -> list[int]:
-        """The number of features of each video: its patches, merged by `spatial_merge_size`."""
-        return (video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
-
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
         """Each image's features, from `get_image_embeddings`."""
-        outputs = self.get_image_embeddings(*args, return_dict=True, **kwargs)
-        return _split_modality_outputs(outputs, self.get_image_split_sizes(*args, **kwargs))
+        return _split_modality_outputs(self.get_image_embeddings(*args, return_dict=True, **kwargs))
 
     @can_return_tuple
     def get_video_features(self, *args, **kwargs):
         """Each video's features, from `get_video_embeddings`."""
-        outputs = self.get_video_embeddings(*args, return_dict=True, **kwargs)
-        return _split_modality_outputs(outputs, self.get_video_split_sizes(*args, **kwargs))
+        return _split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
 
 
-def _split_modality_outputs(outputs, split_sizes: list[int]):
+def _split_modality_outputs(outputs):
+    split_sizes = outputs.split_sizes.tolist()
     outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
     if getattr(outputs, "deepstack_features", None) is not None:
         outputs.deepstack_features = [torch.split(features, split_sizes) for features in outputs.deepstack_features]

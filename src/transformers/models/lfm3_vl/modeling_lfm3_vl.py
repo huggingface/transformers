@@ -556,6 +556,7 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
         image_outputs.pooler_output = image_features
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return image_outputs
 
     def get_placeholder_mask(

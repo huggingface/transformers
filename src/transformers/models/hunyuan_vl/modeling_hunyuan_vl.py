@@ -978,7 +978,9 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return video_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -993,6 +995,10 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output[0]
+        merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
+            -1
+        )
+        image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
         return image_outputs
 
     def get_placeholder_mask(
@@ -1117,11 +1123,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
             attentions=outputs.attentions,
             image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
         )
-
-    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
-        """The number of features of each image: its merged rows, each with a newline, and its begin and end tokens."""
-        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        return (merged_h * (merged_w + 1) + 2).tolist()
 
 
 @auto_docstring

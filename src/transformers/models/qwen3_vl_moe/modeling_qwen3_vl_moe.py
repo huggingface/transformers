@@ -1125,6 +1125,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel, MultimodalMixin):
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
             pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
         )
+        vision_output.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_output
 
     def get_placeholder_mask(

@@ -1409,6 +1409,9 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
+        merge_size = self.config.vision_config.spatial_merge_size
+        frames, height, width = image_grid_thw.unbind(-1)
+        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1581,12 +1584,6 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
             **kwargs,
         )
         return outputs
-
-    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
-        """The number of features of each image: each frame's merged rows, each with a newline."""
-        merge_size = self.config.vision_config.spatial_merge_size
-        frames, height, width = image_grid_thw.unbind(-1)
-        return (frames * (height // merge_size) * (width // merge_size + 1)).tolist()
 
     @can_return_tuple
     @auto_docstring

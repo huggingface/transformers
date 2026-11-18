@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -611,12 +612,8 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
+        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
         return vision_outputs
-
-    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
-        """The number of features of each image or video: its patches pooled over time, merged by the kernel."""
-        kernel_height, kernel_width = self.vision_tower.merge_kernel_size
-        return (image_grid_thw[:, 1:].prod(-1) // (kernel_height * kernel_width)).tolist()
 
     @auto_docstring
     def get_video_embeddings(

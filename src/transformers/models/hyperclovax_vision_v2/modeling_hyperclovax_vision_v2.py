@@ -95,6 +95,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.pooler_output)
         vision_outputs.pooler_output = image_embeds
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     def get_placeholder_mask(
@@ -241,10 +242,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
             The tensors corresponding to the input videos.
         """
         return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
-
-    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
-        """The number of features of each image: its patches, merged by `spatial_merge_size`."""
-        return (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
 
 
 @auto_docstring

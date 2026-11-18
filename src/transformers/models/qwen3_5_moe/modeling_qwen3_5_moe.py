@@ -1549,7 +1549,9 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return video_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1561,7 +1563,9 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return image_outputs
 
     def get_placeholder_mask(
         self,

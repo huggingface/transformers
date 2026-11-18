@@ -89,12 +89,16 @@ class BaseModelOutputWithPooling(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        split_sizes (`torch.LongTensor` of shape `(num_images,)`, *optional*):
+            The number of `pooler_output` rows of each image or video, when `pooler_output` holds all of them as one
+            sequence.
     """
 
     last_hidden_state: torch.Tensor | None = None
     pooler_output: torch.Tensor | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
+    split_sizes: torch.LongTensor | None = None
 
 
 @dataclass

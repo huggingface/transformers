@@ -1132,7 +1132,9 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        video_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return video_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1148,6 +1150,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel, MultimodalMixin):
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     def get_placeholder_mask(
