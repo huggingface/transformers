@@ -39,7 +39,6 @@ from ...utils import (
     can_return_tuple,
     is_torch_available,
     logging,
-    torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.import_utils import requires
@@ -53,8 +52,9 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..auto import AutoConfig
-from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoder, Qwen2AudioEncoderLayer
+from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoderLayer
 from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor
+from ..voxtral.modeling_voxtral import VoxtralEncoder
 from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
 
@@ -581,7 +581,7 @@ class MossTranscribeDiarizePreTrainedModel(AudioFlamingo3PreTrainedModel):
     The MOSS-Transcribe-Diarize audio model, which is a Whisper encoder.
     """
 )
-class MossTranscribeDiarizeAudioModel(Qwen2AudioEncoder):
+class MossTranscribeDiarizeAudioModel(VoxtralEncoder):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`MossTranscribeDiarizeAudioLayer`].
@@ -609,47 +609,6 @@ class MossTranscribeDiarizeAudioModel(Qwen2AudioEncoder):
 
     def _get_feat_extract_output_lengths(self, input_lengths):
         raise AttributeError("Not needed for MossTranscribeDiarize")
-
-    def forward(
-        self,
-        input_features,
-        attention_mask=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
-            [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
-        attention_mask (`torch.Tensor`, *optional*):
-            MossTranscribeDiarize does not support masking of the `input_features`, this argument is preserved for
-            compatibility, but it is not used.
-        """
-        expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
-        torch_compilable_check(
-            input_features.shape[-1] == expected_seq_length,
-            f"MossTranscribeDiarize expects the mel input features to be of length {expected_seq_length}, but found {input_features.shape[-1]}. Make sure to pad the input mel features to {expected_seq_length}.",
-        )
-
-        input_features = input_features.to(dtype=self.conv1.weight.dtype, device=self.conv1.weight.device)
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
-        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-
-        embed_pos = self.embed_positions.weight
-        hidden_states = (inputs_embeds + embed_pos).to(inputs_embeds.dtype)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        for idx, encoder_layer in enumerate(self.layers):
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-            )
-
-        hidden_states = self.layer_norm(hidden_states)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=hidden_states,
-        )
 
 
 @auto_docstring
