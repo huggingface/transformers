@@ -695,16 +695,6 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
     """
     set_seed(1234)
     onnx_inputs = get_leaf_tensors(inputs)
-    # [Temporary] experiment B (torch 2.15 capture debug): ONNX Runtime on CPU only, so it never allocates CUDA memory.
-    # If whisper's natural failures (cuMemFree / cuMemFreeHost / cuCtxSynchronize inside the capture) disappear, the
-    # objects freed mid-capture are ONNX Runtime's CUDA resources.
-    import onnxruntime as ort
-
-    onnx_inputs = {k: v.cpu() if isinstance(v, torch.Tensor) else v for k, v in onnx_inputs.items()}
-    if onnx_program._inference_session is None:
-        onnx_program.initialize_inference_session(
-            lambda model: ort.InferenceSession(model, providers=["CPUExecutionProvider"])
-        )
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
     return {name: torch.as_tensor(value) for name, value in zip(onnx_names, onnx_outputs)}
