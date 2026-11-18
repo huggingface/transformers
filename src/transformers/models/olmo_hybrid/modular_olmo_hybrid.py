@@ -353,7 +353,10 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Reads "we have cached conv/recurrent state to continue from". Single-token vs multi-token
         # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
         # below, each of which gates on `seq_len == 1` locally.
-        recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0) if use_cache else None
+        if use_cache:
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            recurrent_state = None
 
         mixed_qkv = torch.cat(
             [
