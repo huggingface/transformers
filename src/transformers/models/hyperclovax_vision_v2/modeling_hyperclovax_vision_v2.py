@@ -54,14 +54,16 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
     _can_compile_fullgraph = False
 
     def __init__(self, config: HyperCLOVAXVisionV2Config):
         super().__init__(config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.vision_model = AutoModel.from_config(config.vision_config)
         self.projector = nn.Linear(config.vision_config.out_hidden_size, config.text_config.hidden_size)
-        self.language_model = AutoModel.from_config(config.text_config)
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     @accepts_precomputed_kwargs(modality="video")
@@ -158,20 +160,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
-        r"""
-        pixel_values (`torch.Tensor`, *optional*):
-            Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
-            A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
-            In the input token sequence, each image position should contain `config.image_token_id`.
-        pixel_values_videos (`torch.Tensor`, *optional*):
-            Pixel values of input videos, with the same format as `pixel_values`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width dimensions of the feature grid for each image.
-            Each row contains `[temporal, height, width]` grid counts.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width dimensions of the feature grid for each video.
-        """
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -212,6 +201,12 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+        # Differ from Qwen: vision encoder uses 2D rotary positional embeddings (2D-RoPE)
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -221,6 +216,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
+
         return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             cache=outputs.cache,
