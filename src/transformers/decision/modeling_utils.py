@@ -114,6 +114,8 @@ class DecisionMixin:
         `Question.answer` turns into answers.
         """
         decision_config = decision_config or self.decision_config
+        if any(question.allow_null for question in decision_questions):
+            raise ValueError("This decision head does not predict null scores.")
         inputs = {"input_ids": input_ids, **kwargs, "return_dict": True}
         num_options = torch.tensor([[len(question.options) for question in decision_questions]])
         question_types = [Question.questions_types.index(question.type) for question in decision_questions]
@@ -132,4 +134,4 @@ class DecisionMixin:
         )
 
 
-__all__ = ["DecisionMixin"]
+__all__ = ["DecisionMixin", "process_scores"]

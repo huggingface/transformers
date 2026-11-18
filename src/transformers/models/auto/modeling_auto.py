@@ -2175,6 +2175,7 @@ MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
         ("clef", "ClefForDecision"),
         ("gemma4", "JevForDecision"),
         ("jev", "JevForDecision"),
+        ("jeva", "JevaForDecision"),
         ("kev", "KevForDecision"),
         ("qwen2", ("JevForDecision", "ClefForDecision")),
         ("qwen3_5", ("JevForDecision", "ClefForDecision")),

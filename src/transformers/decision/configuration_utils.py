@@ -32,11 +32,9 @@ class DecisionConfig:
     Settings of a decision model, saved as `decision.json` (and its chat template as `decision_template.jinja`).
 
     Args:
-        labels (`dict[str, list[str] | None]`, *optional*):
+        labels (`dict[str, list[str] or None]`, *optional*):
             Single-token labels of the options per question type, for heads that read them from the logits. Defaults to
-            `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise, which caps the number of options. `None` for a type
-            declares a head that reads any number of options of that type (e.g. one that pools their spans): its
-            questions have no labels and no cap.
+            `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise. Use `None` for heads with arbitrary option counts.
         temperature (`dict[str, float]`, *optional*):
             Temperature per question type, applied to the option scores before the softmax. Defaults to 1.
         calibration (`dict[str, float]`, *optional*):

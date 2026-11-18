@@ -154,7 +154,7 @@ class DecisionPipelineTest(unittest.TestCase):
             render(self.tokenizer, request, config)
 
     def test_labels_none_lifts_the_cap(self):
-        # Heads that read spans declare no labels: any number of options, and the template gets no labels
+        # Heads that read spans declare no labels: any number of options, numbered in the template
         config = DecisionConfig(
             labels={"noul": None, "choice": None, "score": None},
             chat_template="{% for q in questions %}{{ q.name }}{{ q.labels|length }}<|mark|>{% endfor %}",
@@ -166,7 +166,8 @@ class DecisionPipelineTest(unittest.TestCase):
         }
         (prompt,) = render(self.tokenizer, {"state": "s", "questions": questions}, config)
         self.assertEqual([len(question.options) for question in prompt.questions], [40, 30, 2])
-        self.assertEqual([question.labels for question in prompt.questions], [[], [], []])
+        expected = [[str(index) for index in range(width)] for width in (40, 30, 2)]
+        self.assertEqual([question.labels for question in prompt.questions], expected)
         # Only the types it lists: the others keep their default labels and cap
         config = DecisionConfig(labels={"choice": None}, chat_template="{{ question.name }}<|mark|>")
         questions = {"rate": {"type": "score", "criteria": [f"level {index}" for index in range(27)]}}

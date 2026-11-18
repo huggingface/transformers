@@ -648,12 +648,10 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     def test_decide_is_the_mixins_and_helpers_stay_private(self):
         # The output splits into the scores of each question like the tensor that `DecisionMixin.decide` reads
         import transformers
-        import transformers.decision
         from transformers.decision import DecisionMixin
 
         self.assertIs(ClefForDecision.decide, DecisionMixin.decide)
         self.assertFalse(hasattr(transformers, "ClefDecisionOutput"))
-        self.assertNotIn("process_scores", dir(transformers.decision))
         torch.manual_seed(0)
         model = ClefForDecision(self.config).eval()
         prompt = self.prompts[0]
