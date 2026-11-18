@@ -26,7 +26,6 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_linear_attn_utils import causal_conv1d_forward
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
@@ -56,6 +55,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
+from ..mamba.modeling_mamba import causal_conv1d_forward
 
 
 @auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")

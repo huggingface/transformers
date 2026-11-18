@@ -44,7 +44,6 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -83,6 +82,7 @@ from ..glmga.image_processing_glmga import GlmgaImageProcessor, GlmgaImageProces
 from ..glmga.image_processing_pil_glmga import GlmgaImageProcessorPil
 from ..glmga.video_processing_glmga import GlmgaVideoProcessor, GlmgaVideoProcessorInitKwargs
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP

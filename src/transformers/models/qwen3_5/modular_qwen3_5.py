@@ -27,7 +27,6 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_linear_attn_utils import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -45,6 +44,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import AutoModel
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
