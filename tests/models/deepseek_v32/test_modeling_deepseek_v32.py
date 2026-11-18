@@ -158,10 +158,8 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         # compilations (unreachable, in reference cycles) can be finalized by an automatic GC pass *inside* the capture:
         # `CompiledKernel.__del__` -> `cuModuleUnload` is not allowed during a capture and invalidates it
         # ("operation failed due to a previous error during capture"). torch >= 2.15 no longer collects by default.
-        # (`torch.compiler.config` may not be imported on older torch, and the flag only exists from torch 2.9)
-        compiler_config = getattr(torch.compiler, "config", None)
-        if hasattr(compiler_config, "force_cudagraph_gc"):
-            self.enterContext(compiler_config.patch(force_cudagraph_gc=True))
+        if hasattr(torch.compiler.config, "force_cudagraph_gc"):
+            self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
     def test_model_rope_scaling_frequencies(self):
