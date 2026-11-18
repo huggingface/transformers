@@ -72,24 +72,26 @@ class Gemma4UnifiedTextModelTester(CausalLMModelTester):
         base_model_class = Gemma4UnifiedTextModel
         causal_lm_class = Gemma4UnifiedForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 4  # override to correctly test sharing cache pattern
-        self.num_kv_shared_layers = 2  # important to override
-        self.layer_types = [
-            "sliding_attention",
-            "full_attention",
-            "sliding_attention",
-            "full_attention",
-        ]  # similarly we want to test sharing on both types
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
-            if layer_type == "full_attention"
-        }  # gemma4 use a different head_dim for full and sliding layers
-
+    small_config_overrides = {
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
         # Test if bidirectional image mask path works
-        self.use_bidirectional_attention = "vision"
+        "use_bidirectional_attention": "vision",
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
+            if layer_type == "full_attention"
+        }
+        return values
 
 
 @require_torch
