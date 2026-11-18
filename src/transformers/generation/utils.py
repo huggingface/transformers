@@ -1209,10 +1209,11 @@ class GenerationMixin(ContinuousMixin):
 
             # Flat outputs from `get_*_embeddings` are repeated per item, so split them first
             for modality, outputs in mm_encoder_output.items():
-                if getattr(outputs, "split_sizes", None) is not None and isinstance(
-                    outputs.pooler_output, torch.Tensor
+                if getattr(outputs, "split_sizes", None) is not None and not isinstance(
+                    outputs.pooler_output, (tuple, list)
                 ):
-                    mm_encoder_output[modality] = MultimodalMixin.split_modality_outputs(outputs)
+                    split = getattr(self.base_model, "split_modality_outputs", MultimodalMixin.split_modality_outputs)
+                    mm_encoder_output[modality] = split(outputs)
             model_kwargs["mm_encoder_outputs"] = self._expand_multimodal_outputs(
                 input_ids,
                 mm_encoder_output,

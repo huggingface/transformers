@@ -497,26 +497,6 @@ class Lfm3VlModel(Qwen2VLModel):
     """
 )
 class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    @auto_docstring
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_patches, in_channels * temporal_patch_size * patch_size**2)`):
-            The flattened patches of every image, grouped by merge block.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            The temporal, height and width dimensions of the patch grid of each image.
-        """
-        return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_patches, in_channels * temporal_patch_size * patch_size**2)`):
-            The flattened patches of every video, grouped by merge block.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            The temporal, height and width dimensions of the patch grid of each video.
-        """
-        return super().get_video_features(**super_kwargs)
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

@@ -1367,14 +1367,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
-    @auto_docstring
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_video_features(**super_kwargs)
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

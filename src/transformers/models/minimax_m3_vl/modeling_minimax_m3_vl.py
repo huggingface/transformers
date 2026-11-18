@@ -1357,6 +1357,26 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
         self.post_init()
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.Tensor,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        # Return the raw vision-tower output (so callers can inspect hidden states /
+        # attentions) while stashing the projected + spatially-merged features —
+        # ready to scatter into the text embeddings — in `pooler_output`.
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
+        vision_outputs.pooler_output = image_features
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
+        return vision_outputs
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
@@ -1478,26 +1498,6 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        # Return the raw vision-tower output (so callers can inspect hidden states /
-        # attentions) while stashing the projected + spatially-merged features —
-        # ready to scatter into the text embeddings — in `pooler_output`.
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
-        vision_outputs.pooler_output = image_features
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
-        return vision_outputs
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
     def get_video_embeddings(
@@ -1510,11 +1510,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
-class MiniMaxM3SparseForConditionalGeneration(
-    MiniMaxM3VLPreTrainedModel,
-    GenerationMixin,
-    MultimodalMixin,
-):
+class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: MiniMaxM3VLConfig

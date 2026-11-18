@@ -964,6 +964,7 @@ class MultimodalMixin:
     """
 
     model: "MultimodalMixin"
+    base_model: "MultimodalMixin"
 
     def get_image_embeddings(self, *args, **kwargs):
         return self.model.get_image_embeddings(*args, **kwargs)
@@ -985,12 +986,14 @@ class MultimodalMixin:
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
         """Each image's features, from `get_image_embeddings`."""
-        return self.split_modality_outputs(self.get_image_embeddings(*args, return_dict=True, **kwargs))
+        outputs = self.get_image_embeddings(*args, return_dict=True, **kwargs)
+        return getattr(self.base_model, "split_modality_outputs", self.split_modality_outputs)(outputs)
 
     @can_return_tuple
     def get_video_features(self, *args, **kwargs):
         """Each video's features, from `get_video_embeddings`."""
-        return self.split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
+        outputs = self.get_video_embeddings(*args, return_dict=True, **kwargs)
+        return getattr(self.base_model, "split_modality_outputs", self.split_modality_outputs)(outputs)
 
 
 class EmbeddingAccessMixin:

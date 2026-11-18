@@ -748,6 +748,40 @@ class Molmo2Model(Molmo2PreTrainedModel, MultimodalMixin):
         self.language_model = Molmo2TextModel(config.text_config)
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring(
+        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
+        "one `(num_image_tokens, hidden_size)` tensor for all images."
+    )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_token_pooling: torch.Tensor,
+        image_grids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_shape = None
+        if pixel_values.dim() == 4:
+            image_shape = pixel_values.shape[:3]
+            pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
+
+        image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
+        image_features = torch.cat(
+            [
+                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
+                for layer in self.config.adapter_config.vision_feature_layer
+            ],
+            dim=-1,
+        )
+
+        if image_shape is not None:
+            image_features = image_features.reshape(*image_shape, -1)
+        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        image_outputs.pooler_output = pooled_features
+        image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        return image_outputs
+
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
@@ -866,40 +900,6 @@ class Molmo2Model(Molmo2PreTrainedModel, MultimodalMixin):
             attentions=outputs.attentions,
             image_hidden_states=image_features,
         )
-
-    @can_return_tuple
-    @filter_output_hidden_states
-    @auto_docstring(
-        custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
-        "one `(num_image_tokens, hidden_size)` tensor for all images."
-    )
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_token_pooling: torch.Tensor,
-        image_grids: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        image_shape = None
-        if pixel_values.dim() == 4:
-            image_shape = pixel_values.shape[:3]
-            pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
-
-        image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
-        image_features = torch.cat(
-            [
-                image_outputs.hidden_states[layer + 1 if layer >= 0 else layer]
-                for layer in self.config.adapter_config.vision_feature_layer
-            ],
-            dim=-1,
-        )
-
-        if image_shape is not None:
-            image_features = image_features.reshape(*image_shape, -1)
-        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
-        image_outputs.pooler_output = pooled_features
-        image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
-        return image_outputs
 
     @can_return_tuple
     @auto_docstring(

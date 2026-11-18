@@ -1971,9 +1971,6 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
         vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
         return vision_outputs
 
-    def get_image_features(self):
-        raise AttributeError("Not needed: `MultimodalMixin` splits `get_image_embeddings`")
-
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_embeddings(
@@ -2389,9 +2386,6 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration, Multimodal
             shared_kv_states=outputs.shared_kv_states,
             router_logits=outputs.router_logits,
         )
-
-    def get_image_features(self):
-        raise AttributeError("Not needed: `MultimodalMixin` splits `get_image_embeddings`")
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

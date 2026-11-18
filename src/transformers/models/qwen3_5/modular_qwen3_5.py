@@ -632,12 +632,6 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     input_modalities = ("image", "video", "text")
 
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        return super().get_video_features(**super_kwargs)
-
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        return super().get_image_features(**super_kwargs)
-
 
 class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
     config: Qwen3_5TextConfig

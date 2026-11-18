@@ -35,7 +35,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -1562,7 +1562,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
 
 
 @auto_docstring
-class Dots3NoteModel(Dots3NotePreTrainedModel):
+class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "audio", "text")
@@ -1578,7 +1578,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
@@ -1591,8 +1591,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
             **kwargs,
         )
 
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        outputs.pooler_output = outputs.pooler_output.split(split_sizes)
+        outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
         return outputs
 
     @can_return_tuple
@@ -1674,22 +1673,26 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("image") is not None:
-            image_embeddings = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeddings = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_embeddings, torch.Tensor):
+                image_embeddings = torch.cat(image_embeddings, dim=0)
             image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeddings, self.config.image_token_id
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeddings.to(inputs_embeds))
 
         if pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("video") is not None:
-            video_embeddings = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeddings = mm_encoder_outputs["video"].pooler_output
+            if not isinstance(video_embeddings, torch.Tensor):
+                video_embeddings = torch.cat(video_embeddings, dim=0)
             video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, video_embeddings, self.config.video_token_id
             )
@@ -1715,17 +1718,21 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring
-class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixin):
+class Dots3NoteForConditionalGeneration(
+    Dots3NotePreTrainedModel,
+    GenerationMixin,
+    MultimodalMixin,
+):
     input_modalities = ("image", "video", "audio", "text")
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}

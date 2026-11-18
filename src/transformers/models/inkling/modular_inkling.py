@@ -31,7 +31,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1122,7 +1122,7 @@ class InklingVisionModel(InklingPreTrainedModel):
     The Base Inkling model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
-class InklingModel(InklingPreTrainedModel):
+class InklingModel(InklingPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     input_modalities = ("image", "text", "audio")
@@ -1137,10 +1137,15 @@ class InklingModel(InklingPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_tower(pixel_values=pixel_values, **kwargs)
+        image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
+        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
+            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects discretized dMel bin tokens into the language model space.")
@@ -1247,10 +1252,13 @@ class InklingModel(InklingPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
             )
@@ -1306,7 +1314,7 @@ class InklingModel(InklingPreTrainedModel):
     The Base Inkling model which consists of a vision backbone and a language model without language modeling head.,
     """
 )
-class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
+class InklingForConditionalGeneration(InklingPreTrainedModel, MultimodalMixin, GenerationMixin):
     # `embed` and `unembed` are separate tensors in the checkpoints, never tied
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "rowwise_split_input"}
@@ -1322,10 +1330,6 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         # unpadded_vocab_size in forward, like sglang
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
-        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

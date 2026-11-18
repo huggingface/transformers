@@ -32,7 +32,7 @@ from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
 from ...utils.deprecation import deprecate_kwarg
@@ -958,7 +958,7 @@ class JanusVQVAEHead(nn.Module):
     The Janus model which consists of a siglip vision backbone, a Llama language model and a VQ model.
     """
 )
-class JanusModel(JanusPreTrainedModel):
+class JanusModel(JanusPreTrainedModel, MultimodalMixin):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
@@ -982,12 +982,16 @@ class JanusModel(JanusPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1042,10 +1046,13 @@ class JanusModel(JanusPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1070,7 +1077,7 @@ class JanusModel(JanusPreTrainedModel):
         )
 
 
-class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
+class JanusForConditionalGeneration(JanusPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("image", "text")
     _can_compile_fullgraph = True

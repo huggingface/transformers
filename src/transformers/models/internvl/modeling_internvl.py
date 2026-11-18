@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.deprecation import deprecate_kwarg
@@ -526,7 +526,7 @@ class InternVLModelOutputWithPast(BaseModelOutputWithPast):
     The InternVL model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class InternVLModel(InternVLPreTrainedModel):
+class InternVLModel(InternVLPreTrainedModel, MultimodalMixin):
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -541,7 +541,7 @@ class InternVLModel(InternVLPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
@@ -583,6 +583,10 @@ class InternVLModel(InternVLPreTrainedModel):
         vision_features = self.multi_modal_projector(vision_features)
         vision_outputs.pooler_output = vision_features
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -636,7 +640,7 @@ class InternVLModel(InternVLPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
@@ -645,6 +649,8 @@ class InternVLModel(InternVLPreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -702,6 +708,19 @@ class InternVLModel(InternVLPreTrainedModel):
 
         return vision_features
 
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(num_frames, channels, height, width)`):
+            The frames of the input videos, encoded like images.
+        """
+        return self.get_image_embeddings(pixel_values_videos, return_dict=True, **kwargs)
+
 
 @auto_docstring(
     custom_intro="""
@@ -738,7 +757,7 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
     The INTERNVL model which consists of a vision backbone and a language model.
     """
 )
-class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
+class InternVLForConditionalGeneration(InternVLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -750,21 +769,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

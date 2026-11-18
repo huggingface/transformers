@@ -21,6 +21,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     CONFIG_MAPPING,
@@ -530,6 +531,23 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="InstructBlipVideo only takes videos")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip(reason="InstructBlipVideo only takes videos")
+    def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip(reason="InstructBlipVideo only takes videos")
+    def test_get_image_features_pooler_output(self):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip(reason="InstructBlipVideo only takes videos")
+    def test_get_image_features_output(self, return_dict):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

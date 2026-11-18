@@ -19,10 +19,9 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationConfig, GenerationMixin
+from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import MultimodalMixin
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -102,7 +101,7 @@ class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
 
 
-class SmolVLMModel(Idefics3Model, MultimodalMixin):
+class SmolVLMModel(Idefics3Model):
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
@@ -184,9 +183,6 @@ class SmolVLMModel(Idefics3Model, MultimodalMixin):
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
         image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
         return image_outputs
-
-    def get_image_features(self):
-        raise AttributeError("Not needed for SmolVLM")
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -272,7 +268,7 @@ class SmolVLMModel(Idefics3Model, MultimodalMixin):
         )
 
 
-class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration, MultimodalMixin, GenerationMixin):
+class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
     def __init__(self, config: SmolVLMConfig):
@@ -331,9 +327,6 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration, Multimod
         >>> print(generated_texts)
         ```"""
         super().forward(**super_kwargs)
-
-    def get_image_features(self):
-        raise AttributeError("Not needed for SmolVLM")
 
 
 __all__ = [

@@ -1038,15 +1038,16 @@ def replace_class_node(
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
-    additional_bases = {base for base in all_new_bases.keys() if base != original_super_class}
+    # A base the parent already has is listed again, not a replacement: keep it out of the suffix matching below
+    original_bases = {get_full_attribute_name(k.value) for k in original_modeling_node.bases}
+    additional_bases = {
+        base for base in all_new_bases.keys() if base != original_super_class and base not in original_bases
+    }
     new_class_bases = []
     for original_base in original_modeling_node.bases:
         new_base = original_base
-        # we only potentially switch base for Name-based bases, not Attribute
-        if m.matches(original_base.value, m.Name()) and original_base.value.value in additional_bases:
-            # Listed again in the modular class: keep it, rather than let a base sharing its suffix replace it
-            additional_bases.discard(original_base.value.value)
-        elif m.matches(original_base.value, m.Name()):
+        # we only potentially switch base for Name-based bases, not Attribute, and keep the ones listed again
+        if m.matches(original_base.value, m.Name()) and original_base.value.value not in all_new_bases:
             original_base_name = original_base.value.value
             for additional_base_name in additional_bases:
                 suffix = common_partial_suffix(original_base_name, additional_base_name)
@@ -1061,7 +1062,6 @@ def replace_class_node(
         new_class_bases.append(new_base)
     # Add potential additional classes that may not be inherited as the parent does not use them, and that were not
     # already replaced above
-    original_bases = {get_full_attribute_name(k.value) for k in original_modeling_node.bases}
     new_class_bases.extend(
         [all_new_bases[added_base] for added_base in additional_bases if added_base not in original_bases]
     )

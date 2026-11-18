@@ -2176,32 +2176,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         self.post_init()
 
     @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
-
-    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.Tensor,

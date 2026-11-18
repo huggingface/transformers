@@ -2255,6 +2255,30 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         )
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return vision_outputs
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -2524,30 +2548,6 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         return audio_outputs
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
-        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        return vision_outputs
-
-    @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_embeddings(
         self,
@@ -2599,11 +2599,7 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
     head.
     """
 )
-class Gemma4ForConditionalGeneration(
-    Gemma4PreTrainedModel,
-    GenerationMixin,
-    MultimodalMixin,
-):
+class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

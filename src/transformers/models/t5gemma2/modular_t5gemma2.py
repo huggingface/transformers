@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -606,7 +606,7 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         )
 
 
-class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
+class T5Gemma2Encoder(T5Gemma2PreTrainedModel, MultimodalMixin):
     config: T5Gemma2EncoderConfig
 
     def __init__(
@@ -631,7 +631,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         # pixel_values: (batch_size, channels, height, width)
@@ -641,6 +641,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         image_features = self.multi_modal_projector(last_hidden_state)
         vision_outputs.pooler_output = image_features
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     def get_image_placeholder_mask(
@@ -693,7 +697,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
             inputs_embeds = self.text_model.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_embeddings(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_image_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -933,7 +937,7 @@ class T5Gemma2Model(T5Gemma2PreTrainedModel):
         )
 
 
-class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin):
+class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {
         "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",
     }
@@ -970,10 +974,10 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_encoder().get_image_features(pixel_values, **kwargs)
+        return self.get_encoder().get_image_embeddings(pixel_values, return_dict=True, **kwargs)
 
     @property
     def vision_tower(self):

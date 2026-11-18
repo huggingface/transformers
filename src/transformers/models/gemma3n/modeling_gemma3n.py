@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -1922,7 +1922,7 @@ class Gemma3nMultimodalEmbedder(nn.Module):
     language modeling head.
     """
 )
-class Gemma3nModel(Gemma3nPreTrainedModel):
+class Gemma3nModel(Gemma3nPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
@@ -1940,7 +1940,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -1958,6 +1958,10 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         last_hidden_state *= self.config.vision_config.hidden_size**0.5
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
 
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2094,10 +2098,13 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         # Merge text and images
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -2185,7 +2192,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
     head.
     """
 )
-class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
+class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -2197,10 +2204,6 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         self.model = Gemma3nModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
-        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

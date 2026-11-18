@@ -240,7 +240,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             image_outputs = model.get_image_features(pixel_values=inputs.pop("pixel_values"), return_dict=True)
             self.assertFalse(torch.equal(image_outputs.pooler_output[0], image_outputs.pooler_output[1]))
 
-            expected_image_features = image_outputs.pooler_output.repeat(expand_size, 1, 1)
+            expected_image_features = torch.stack(image_outputs.pooler_output).repeat(expand_size, 1, 1)
             inputs["mm_encoder_outputs"] = {"image": image_outputs}
             outputs = model.generate(
                 **inputs,
@@ -250,7 +250,7 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
                 **generation_kwargs,
             )
         # Image ouptut are expanded in-place as we passed it to generation with beam-search
-        torch.testing.assert_close(image_outputs.pooler_output, expected_image_features, rtol=0, atol=0)
+        torch.testing.assert_close(torch.stack(image_outputs.pooler_output), expected_image_features, rtol=0, atol=0)
         torch.testing.assert_close(outputs.logits[0], reference.logits[0], rtol=1e-4, atol=1e-5)
 
     def test_training(self):

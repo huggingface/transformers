@@ -1062,7 +1062,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
@@ -1094,7 +1094,8 @@ class Step3p7Model(DeepseekOcr2Model):
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=merged,
+            pooler_output=torch.cat(merged, dim=0),
+            split_sizes=torch.tensor([len(features) for features in merged], device=merged[0].device),
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )

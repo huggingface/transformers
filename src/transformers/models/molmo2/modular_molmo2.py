@@ -1495,7 +1495,7 @@ class Molmo2TextModel(LlamaModel):
     modeling head.
     """
 )
-class Molmo2Model(LlavaModel, MultimodalMixin):
+class Molmo2Model(LlavaModel):
     config: Molmo2Config
 
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
@@ -1540,9 +1540,6 @@ class Molmo2Model(LlavaModel, MultimodalMixin):
         image_outputs.pooler_output = pooled_features
         image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
         return image_outputs
-
-    def get_image_features(self):
-        raise AttributeError("Not needed for Molmo2")
 
     @can_return_tuple
     @auto_docstring(

@@ -449,18 +449,6 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
         ```"""
         super().forward(**super_kwargs)
 
-    def get_video_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
-        return super().get_video_features(**super_kwargs)
-
-    def get_image_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
-        return super().get_image_features(**super_kwargs)
-
 
 __all__ = [
     "Qwen3_5MoeConfig",

@@ -967,6 +967,32 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         )
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects raw pixel patches into language model space via the unified pipeline.")
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.embed_vision(pixel_values, image_position_ids, **kwargs)
+
+        # Strip padding patches before scattering into text sequence.
+        # Padding patches have position_ids == -1 on both axes.
+        # We only scatter non-padding patches into the placeholder token positions.
+        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
+
+        # Flatten valid patches: keep only non-padding patches across the batch
+        # The final output shape is (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[non_pad_mask]
+        vision_outputs.pooler_output = pooler_output
+        vision_outputs.split_sizes = non_pad_mask.sum(dim=-1)
+        return vision_outputs
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1215,32 +1241,6 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         )
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Projects raw pixel patches into language model space via the unified pipeline.")
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.embed_vision(pixel_values, image_position_ids, **kwargs)
-
-        # Strip padding patches before scattering into text sequence.
-        # Padding patches have position_ids == -1 on both axes.
-        # We only scatter non-padding patches into the placeholder token positions.
-        non_pad_mask = (image_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
-
-        # Flatten valid patches: keep only non-padding patches across the batch
-        # The final output shape is (total_valid_patches, text_hidden_size)
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]
-        vision_outputs.pooler_output = pooler_output
-        vision_outputs.split_sizes = non_pad_mask.sum(dim=-1)
-        return vision_outputs
-
-    @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
     def get_video_embeddings(
         self,
@@ -1354,11 +1354,7 @@ def create_masks_for_vision_model(
     head.
     """
 )
-class Gemma4UnifiedForConditionalGeneration(
-    Gemma4UnifiedPreTrainedModel,
-    GenerationMixin,
-    MultimodalMixin,
-):
+class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

@@ -43,7 +43,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -1398,7 +1398,7 @@ class DeepseekOcr2TextModel(DeepseekOcr2TextPreTrainedModel):
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
     """
 )
-class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
+class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
 
     def __init__(self, config: DeepseekOcr2Config):
@@ -1419,7 +1419,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
@@ -1467,7 +1467,8 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
         return DeepseekOcr2ModelOutputWithPooling(
             last_hidden_state=global_vision_outputs.last_hidden_state,
-            pooler_output=all_features,
+            pooler_output=torch.cat(all_features, dim=0),
+            split_sizes=torch.tensor([len(features) for features in all_features], device=all_features[0].device),
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
             **local_outputs,
@@ -1527,13 +1528,15 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -1558,7 +1561,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
 
 @auto_docstring
-class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, GenerationMixin):
+class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -1573,30 +1576,6 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
 
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_values_local: torch.Tensor | None = None,
-        num_local_patches: list[int] | torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
-            The tensors corresponding to the global view input images.
-        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
-            All local patches flattened across the batch, or `None` if no local views.
-        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
-            Number of local patches per image, e.g. `[6, 0, 4]`.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            pixel_values_local=pixel_values_local,
-            num_local_patches=num_local_patches,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring
