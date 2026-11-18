@@ -409,7 +409,6 @@ class BloomPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["BloomBlock"]
-    _skip_keys_device_placement = ["cache"]
     _can_compile_fullgraph = True
 
 

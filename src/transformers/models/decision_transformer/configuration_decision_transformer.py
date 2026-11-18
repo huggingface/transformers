@@ -55,7 +55,6 @@ class DecisionTransformerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "decision_transformer"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "max_position_embeddings": "n_positions",
         "num_attention_heads": "n_head",

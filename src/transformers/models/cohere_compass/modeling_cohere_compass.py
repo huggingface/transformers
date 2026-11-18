@@ -41,7 +41,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -380,7 +380,6 @@ class CohereCompassPreTrainedModel(PreTrainedModel):
         "CohereCompassDecoderLayer",
         "CohereCompassVisionBlock",
     ]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -980,7 +979,7 @@ class CohereCompassVisionModel(CohereCompassPreTrainedModel):
 
 
 @auto_docstring
-class CohereCompassModel(CohereCompassPreTrainedModel):
+class CohereCompassModel(CohereCompassPreTrainedModel, MultimodalMixin):
     """Vision-language base model that fuses the vision tower into the decoder and applies DeepStack residuals."""
 
     base_model_prefix = "model"
@@ -1150,21 +1149,7 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        All videos' features as one tensor; `get_video_features` splits them per video.
-        """
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -1175,29 +1160,11 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
             pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
         )
-        return vision_output
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        vision_output = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_output.pooler_output = torch.split(vision_output.pooler_output, split_sizes)
-        vision_output.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_output.deepstack_features
-        ]
+        vision_output.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_output
 
     def get_placeholder_mask(
@@ -1363,23 +1330,21 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            deepstack_image_embeds = [
-                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
-                for feat in mm_encoder_outputs["image"].deepstack_features
-            ]
+            deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
             if not isinstance(image_embeds, torch.Tensor):
                 image_embeds = torch.cat(image_embeds, dim=0)
+                deepstack_image_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1388,12 +1353,10 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            deepstack_video_embeds = [
-                feat if isinstance(feat, torch.Tensor) else torch.cat(feat, dim=0)
-                for feat in mm_encoder_outputs["video"].deepstack_features
-            ]
+            deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
             if not isinstance(video_embeds, torch.Tensor):
                 video_embeds = torch.cat(video_embeds, dim=0)
+                deepstack_video_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1453,7 +1416,7 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
     The CohereCompass model with a language modeling head, for image-text-to-text generation.
     """
 )
-class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, GenerationMixin):
+class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
@@ -1467,61 +1430,9 @@ class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, Genera
 
         self.post_init()
 
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
-
     def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
         r"""See [`CohereCompassModel.get_data_dependent_inputs`]."""
         return self.model.get_data_dependent_inputs(*args, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring(checkpoint="CohereLabs/North-Micro-Vision-Instruct")

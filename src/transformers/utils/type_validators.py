@@ -78,7 +78,7 @@ def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = No
 
 
 def device_validator(value: str | int | None = None):
-    possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
+    possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta", "supa"]
     if value is None:
         pass
     elif is_torch_available() and isinstance(value, torch.device):

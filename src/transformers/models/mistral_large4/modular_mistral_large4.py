@@ -606,7 +606,6 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     config: MistralLarge4Config
     input_modalities = ("image", "text")
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
@@ -748,7 +747,7 @@ class MistralLarge4Model(Mistral3Model):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
@@ -756,9 +755,10 @@ class MistralLarge4Model(Mistral3Model):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_features, torch.Tensor):
+                image_features = torch.cat(image_features, dim=0)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

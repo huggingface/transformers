@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -1351,7 +1351,7 @@ class Kosmos2ImageToTextProjection(nn.Module):
     KOSMOS-2 Model for generating text and image features. The model consists of a vision encoder and a language model.
     """
 )
-class Kosmos2Model(Kosmos2PreTrainedModel):
+class Kosmos2Model(Kosmos2PreTrainedModel, MultimodalMixin):
     config: Kosmos2Config
     main_input_name = "pixel_values"
 
@@ -1373,7 +1373,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
@@ -1401,6 +1401,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         vision_output.pooler_output = image_embeds
         vision_output.projection_attentions = projection_attentions
 
+        vision_output.split_sizes = vision_output.pooler_output.new_full(
+            vision_output.pooler_output.shape[:1], vision_output.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_output.pooler_output = vision_output.pooler_output.flatten(0, 1)
         return vision_output
 
     @can_return_tuple
@@ -1467,10 +1471,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
-            image_features = self.get_image_features(
+            image_features = self.get_image_embeddings(
                 pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True, **kwargs
             )
-            image_embeds = image_features.pooler_output
+            image_embeds = image_features.pooler_output.unflatten(0, (pixel_values.shape[0], -1))
             projection_attentions = image_features.projection_attentions
 
         outputs = self.text_model(

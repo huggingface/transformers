@@ -40,7 +40,6 @@ class Qwen2Config(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2"
-    keys_to_ignore_at_inference = ["cache"]
 
     # Default tensor parallel plan for base model `Qwen2`
     base_model_tp_plan = {

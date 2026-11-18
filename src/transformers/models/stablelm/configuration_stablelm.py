@@ -40,7 +40,6 @@ class StableLmConfig(PreTrainedConfig):
     ```"""
 
     model_type = "stablelm"
-    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 50304
     intermediate_size: int = 6912
