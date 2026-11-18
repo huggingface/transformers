@@ -3177,17 +3177,16 @@ class ModelTesterMixin(ExportTesterMixin):
                         return
                     # model might return non-tensors objects (e.g. Cache class)
                     elif isinstance(tuple_object, torch.Tensor):
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
+                        # Build the message only on failure: it runs several tensor ops and prints full tensors.
+                        if not torch.allclose(
+                            set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                        ):
+                            self.fail(
                                 "Tuple and dict output are not equal. Difference:"
                                 f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
                                 f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
                                 f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
+                            )
 
                 recursive_check(tuple_output, dict_output)
 
