@@ -214,11 +214,11 @@ class Inkling2LoopCrossPassMessages(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
         # TODO: inline?
-        num_core_layers = config.loop_config["core_end"] - config.loop_config["core_start"]
+        num_looped_layers = config.loop_config["core_end"] - config.loop_config["core_start"]
         # rows `2 * i` and `2 * i + 1` belong to core layer `i`: its query and MLP inputs in `queries`, its key and
         # value inputs in `kv_queries`
-        self.queries = nn.Parameter(torch.zeros(2 * num_core_layers, config.hidden_size))
-        self.kv_queries = nn.Parameter(torch.zeros(2 * num_core_layers, config.hidden_size))
+        self.queries = nn.Parameter(torch.zeros(2 * num_looped_layers, config.hidden_size))
+        self.kv_queries = nn.Parameter(torch.zeros(2 * num_looped_layers, config.hidden_size))
         self.norm = Inkling2LoopUnweightedRMSNorm()
 
     def forward(self, message_bank: torch.Tensor, loop_layer_idx: int) -> torch.Tensor:
@@ -256,7 +256,7 @@ class Inkling2LoopShortConvolution(Inkling2ShortConvolution):
             Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
             its own.
         """
-        # Only diff from Inkling2 is the cache_layer_idx
+        # Only difference from Inkling2 is the cache_layer_idx
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_dtype = hidden_states.dtype
@@ -307,7 +307,7 @@ class Inkling2LoopDynamicShortConvolution(Inkling2DynamicShortConvolution):
             Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
             its own.
         """
-        # Only diff from Inkling2 is the cache_layer_idx
+        # Only difference from Inkling2 is the cache_layer_idx
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_dtype = hidden_states.dtype
@@ -363,10 +363,8 @@ class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):
             Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
             pass through the loop core has its own.
         """
-        # Diff from Inkling2
+        # Different from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
-
-        # TODO: move this to Inkling2 which would also match the full attention class?
         key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
         value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
 
@@ -452,7 +450,7 @@ class Inkling2LoopFullAttention(Inkling2FullAttention):
             Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
             pass through the loop core has its own.
         """
-        # Diff from Inkling2
+        # Different from Inkling2
         cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
 
         input_shape = hidden_states.shape[:-1]
