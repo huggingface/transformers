@@ -58,6 +58,8 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         "hidden_act": "silu",
         "image_size": 8,
         "patch_size": 2,
+        "num_image_tokens": 4,
+        "num_image_patches": 16,
         "image_token_id": 4,
         "video_token_id": 9,
         "image_start_token_id": 5,
@@ -65,18 +67,10 @@ class Ovis2_5VisionText2TextModelTester(VLMModelTester):
         "video_start_token_id": 7,
         "video_end_token_id": 8,
         "vision_vocab_size": 12,
+        "vision_window_size": 8,
         "vision_hidden_act": "gelu_pytorch_tanh",
         "vision_max_position_embeddings": 1024,
     }
-
-    @classmethod
-    def get_small_config_defaults(cls, **kwargs):
-        overrides = {**cls.small_config_overrides, **kwargs}
-        patches_per_side = overrides["image_size"] // overrides["patch_size"]
-        overrides.setdefault("num_image_tokens", (patches_per_side // 2) ** 2)
-        overrides.setdefault("vision_window_size", overrides["image_size"])
-        overrides["num_image_patches"] = patches_per_side**2
-        return super().get_small_config_defaults(**overrides)
 
     @property
     def _special_token_ids(self):
