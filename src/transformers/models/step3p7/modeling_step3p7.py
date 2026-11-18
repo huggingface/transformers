@@ -35,19 +35,13 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    ModelOutput,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    torch_compilable_check,
-    torch_int,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -188,7 +182,12 @@ def apply_rotary_pos_emb_vision(
 
 
 class Step3p7VisionAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """Multi-headed attention with RoPE. Refer to papers:
+    - Attention is all you need:
+        https://huggingface.co/papers/1706.03762
+    - RoFormer: Enhanced Transformer with Rotary Position Embedding:
+        https://huggingface.co/papers/2104.09864
+    """
 
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
@@ -214,31 +213,44 @@ class Step3p7VisionAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        queries = self.q_proj(hidden_states).view(hidden_shape)
-        keys = self.k_proj(hidden_states).view(hidden_shape)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        batch_size, seq_length = hidden_states.shape[:-1]
 
-        cos, sin = position_embeddings
-        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
-        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
+        # Each of shape: [batch_size, seq_length, num_heads, head_dim]
+        query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+
+        # Apply positional embeddings
+        cos = position_embeddings[0].unsqueeze(0).float()
+        sin = position_embeddings[1].unsqueeze(0).float()
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        # Each of shape: [batch_size, num_heads, seq_length, head_dim]
+        query_states = query_states.permute(0, 2, 1, 3).contiguous()
+        key_states = key_states.permute(0, 2, 1, 3).contiguous()
+        value_states = value_states.permute(0, 2, 1, 3).contiguous()
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+
         attn_output, attn_weights = attention_interface(
             self,
-            queries,
-            keys,
-            values,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
-            scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scale,
+            is_causal=self.is_causal,
             **kwargs,
         )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+
+        attn_output = attn_output.permute(1, 0, 2, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
+        attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
+        attn_output = self.out_proj(attn_output)
+        attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
+        return attn_output, attn_weights
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
