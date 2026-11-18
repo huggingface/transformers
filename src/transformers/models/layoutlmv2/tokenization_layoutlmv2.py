@@ -655,14 +655,16 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                 else:
                     original_index = batch_index
                 labels_example = []
-                for id, offset, word_id in zip(
-                    sanitized_tokens["input_ids"][batch_index],
+                previous_word_id = None
+                for offset, word_id in zip(
                     sanitized_tokens["offset_mapping"][batch_index],
                     sanitized_encodings[batch_index].word_ids,
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if offset[0] == 0:
+                            # A word cut by an overflow window boundary continues at the start of the next window,
+                            # so a new word id alone doesn't mean it's the word's first token
+                            if word_id != previous_word_id and offset[0] == 0:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
@@ -671,6 +673,7 @@ class LayoutLMv2Tokenizer(TokenizersBackend):
                             labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
+                    previous_word_id = word_id
                 labels.append(labels_example)
 
             sanitized_tokens["labels"] = labels

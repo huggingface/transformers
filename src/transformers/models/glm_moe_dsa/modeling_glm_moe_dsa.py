@@ -101,7 +101,6 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -625,7 +624,6 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -641,7 +639,6 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GlmMoeDsaTopkRouter):

@@ -261,7 +261,6 @@ class Lfm3DecoderLayer(Lfm2DecoderLayer):
 
 
 class Lfm3PreTrainedModel(Lfm2PreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Lfm3RotaryEmbedding):

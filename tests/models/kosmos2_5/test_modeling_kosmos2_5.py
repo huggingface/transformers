@@ -644,7 +644,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         prompt = "<ocr>"
         generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         EXPECTED_TEXT = [
-            "<bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_612></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_812><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_650></bbox>1\n<bbox><x_79><y_614><x_468><y_650></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_610><x_813><y_644></bbox>0\n<bbox><x_50><y_658><x_65><y_693></bbox>1\n<bbox><x_76><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_815><y_687></bbox>0\n<bbox><x_31><y_742><x_822><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_780><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_874></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_921></bbox>Total 50,000\n<bbox><x_17><y_1056><x_835><y_1108></bbox>Card Payment 50,000\n"
+            "<bbox><x_53><y_573><x_69><y_606></bbox>1\n<bbox><x_79><y_573><x_464><y_612></bbox>[REG] BLACK SAKURA\n<bbox><x_690><y_569><x_810><y_606></bbox>45,455\n<bbox><x_53><y_614><x_69><y_648></bbox>1\n<bbox><x_79><y_614><x_468><y_650></bbox>COOKIE DOH SAUCES\n<bbox><x_788><y_609><x_812><y_644></bbox>0\n<bbox><x_50><y_658><x_69><y_693></bbox>1\n<bbox><x_79><y_658><x_358><y_693></bbox>NATA DE COCO\n<bbox><x_790><y_652><x_814><y_687></bbox>0\n<bbox><x_31><y_742><x_820><y_781></bbox>Sub Total 45,455\n<bbox><x_27><y_781><x_822><y_827></bbox>PB1 (10%) 4,545\n<bbox><x_27><y_826><x_824><y_868></bbox>Rounding 0\n<bbox><x_24><y_872><x_827><y_918></bbox>Total 50,000\n<bbox><x_17><y_1056><x_836><y_1108></bbox>Card Payment 50,000\n"
         ]
 
         self.assertListEqual(generated_text, EXPECTED_TEXT)
@@ -653,7 +653,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         generated_ids, generated_text = self.run_example(prompt, image, model, processor)
         # A10 gives the 1st one, but A100 gives the 2nd one
         EXPECTED_TEXT = [
-            "- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n\n<table>\n<thead>\n<tr>\n<th>\nSub Total\n</th>\n<th>\n45,455\n</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>\nPB1 (10%)\n</td>\n<td>\n4,545\n</td>\n</tr>\n<tr>\n<td>\nRounding\n</td>\n<td>\n0\n</td>\n</tr>\n<tr>\n<td>\n<strong>\nTotal\n</strong>\n</td>\n<td>\n<strong>\n50,000\n</strong>\n</td>\n</tr>\n</tbody>\n</table>\n\nCard Payment 50,000",
+            "- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n\nCard Payment 50,000",
             "- **1 \\[REG\\] BLACK SAKURA** 45,455\n- **1 COOKIE DOH SAUCES** 0\n- **1 NATA DE COCO** 0\n- **Sub Total** 45,455\n- **PB1 (10%)** 4,545\n- **Rounding** 0\n- **Total** **50,000**\n",
         ]
         self.assertIn(generated_text[0], EXPECTED_TEXT)

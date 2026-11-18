@@ -68,7 +68,6 @@ class PPFormulaNetPreTrainedModel(PreTrainedModel):
     # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
