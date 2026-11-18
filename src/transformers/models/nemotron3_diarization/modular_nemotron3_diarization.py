@@ -522,7 +522,6 @@ class Nemotron3DiarizationPreTrainedModel(PeAudioPreTrainedModel):
         "attentions": Nemotron3DiarizationAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Nemotron3DiarizationForAudioFrameClassification):

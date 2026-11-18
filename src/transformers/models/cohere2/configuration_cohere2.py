@@ -47,7 +47,6 @@ class Cohere2Config(PreTrainedConfig):
     """
 
     model_type = "cohere2"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

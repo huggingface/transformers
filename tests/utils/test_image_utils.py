@@ -860,6 +860,14 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
 
+    @require_vision
+    def test_get_image_size_pil(self):
+        # Test we can infer the size and channel dimension of a PIL image.
+        image = get_random_image(32, 64)
+        self.assertEqual(get_image_size(image), (32, 64))
+        # Channel dimension is ignored for PIL images
+        self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (32, 64))
+
     def test_infer_channel_dimension(self):
         # Test we fail with invalid input
         with pytest.raises(ValueError):

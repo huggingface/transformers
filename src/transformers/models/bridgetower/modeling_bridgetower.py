@@ -879,14 +879,12 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "hidden_states": BridgeTowerTextLayer,
         "attentions": BridgeTowerSelfAttention,
         "cross_attentions": BridgeTowerCrossAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         std = self.config.initializer_factor

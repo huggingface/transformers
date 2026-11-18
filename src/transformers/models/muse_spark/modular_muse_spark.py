@@ -36,7 +36,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilab
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_vision_interpolation_indices_and_weights
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
@@ -55,7 +54,6 @@ from ..muse_glimmer.modeling_muse_glimmer import (
     MuseGlimmerTextMLP,
     MuseGlimmerTextModel,
     MuseGlimmerVisionModel,
-    MuseGlimmerVisionPatchEmbedder,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -595,30 +593,6 @@ class MuseSparkTextModel(MuseGlimmerTextModel):
             last_hidden_state=hidden_states,
             cache=cache,
         )
-
-
-class MuseSparkVisionPatchEmbedder(MuseGlimmerVisionPatchEmbedder):
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
-
-        # Patch (h, w) reads the position table at (w, h): ref code passes
-        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw[:, [0, 2, 1]],
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-            padding=self.interpolation_padding,
-            kwargs=kwargs,
-        )
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseSparkVisionModel(MuseGlimmerVisionModel):
