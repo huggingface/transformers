@@ -20,6 +20,7 @@ import asyncio
 import json
 import socket
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -623,6 +624,38 @@ class TestModelManager(unittest.TestCase):
             self.assertEqual(resolve(None, "mps", continuous_batching=True), METAL_FLASH_ATTN)
             self.assertIsNone(resolve(None, "mps", continuous_batching=False))
             self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
+
+    def test_closed_loading_stream_unsubscribes(self):
+        # A client that disconnects mid-load stops receiving the load's events, and the load goes on for the others
+        release = threading.Event()
+
+        def load_model_and_processor(model_id_and_revision, progress_callback, tqdm_class, gguf_file):
+            progress_callback({"status": "loading"})
+            release.wait()
+
+        async def collect(stream):
+            return [event async for event in stream]
+
+        async def run():
+            mm = ModelManager()
+            first = mm.load_model_streaming("org/model@main")
+            await anext(first)  # the load is running
+            second = asyncio.create_task(collect(mm.load_model_streaming("org/model@main")))
+            await asyncio.sleep(0)  # the second request joins the load
+            await first.aclose()
+            subscribers = len(mm._loading_subscribers["org/model@main"])
+            release.set()
+            await second  # ends with the load
+            mm.shutdown()
+            return subscribers, mm._loading_subscribers
+
+        with patch.object(ModelManager, "load_model_and_processor", side_effect=load_model_and_processor):
+            try:
+                subscribers, remaining = asyncio.run(run())
+            finally:
+                release.set()
+        self.assertEqual(subscribers, 1)
+        self.assertEqual(remaining, {})
 
 
 class TestTimedModel(unittest.TestCase):

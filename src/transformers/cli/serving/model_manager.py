@@ -385,7 +385,6 @@ class ModelManager:
             `str`: SSE ``data: ...`` lines with progress updates.
         """
         mid = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already cached
         if mid in self.loaded_models:
@@ -393,69 +392,68 @@ class ModelManager:
             yield f"data: {json.dumps({'status': 'ready', 'model': mid, 'cached': True})}\n\n"
             return
 
-        # Case 2: load in progress -- join existing subscribers
-        if mid in self._loading_tasks:
-            self._loading_subscribers[mid].append(queue)
+        # Case 3: first request -- start the load. A request arriving while it runs (case 2) only subscribes below
+        if mid not in self._loading_tasks:
+            self._loading_subscribers[mid] = []
+            loop = asyncio.get_running_loop()
+
+            def enqueue(payload: dict):
+                msg = f"data: {json.dumps(payload)}\n\n"
+
+                def broadcast():
+                    for q in self._loading_subscribers.get(mid, []):
+                        q.put_nowait(msg)
+
+                loop.call_soon_threadsafe(broadcast)
+
+            tqdm_class = make_progress_tqdm_class(enqueue, mid)
+
+            def _tqdm_hook(factory, args, kwargs):
+                return tqdm_class(*args, **kwargs)
+
+            async def run_load():
+                try:
+                    # Install a global tqdm hook so the "Loading weights" bar in
+                    # core_model_loading.py (which uses logging.tqdm) routes through
+                    # our ProgressTqdm. The tqdm_class kwarg only covers download bars.
+                    previous_hook = logging.set_tqdm_hook(_tqdm_hook)
+                    try:
+                        await asyncio.to_thread(
+                            self.load_model_and_processor,
+                            model_id_and_revision,
+                            progress_callback=enqueue,
+                            tqdm_class=tqdm_class,
+                            gguf_file=gguf_file,
+                        )
+                    finally:
+                        logging.set_tqdm_hook(previous_hook)
+                except Exception as e:
+                    logger.error(f"Failed to load {mid}: {e}", exc_info=True)
+                    enqueue({"status": "error", "model": mid, "message": str(e)})
+                finally:
+
+                    def _send_sentinel():
+                        for q in self._loading_subscribers.pop(mid, []):
+                            q.put_nowait(None)
+                        self._loading_tasks.pop(mid, None)
+
+                    loop.call_soon_threadsafe(_send_sentinel)
+
+            self._loading_tasks[mid] = asyncio.create_task(run_load())
+
+        # Stream the load's events to this request, and unsubscribe when it ends or the client disconnects
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._loading_subscribers[mid].append(queue)
+        try:
             while True:
                 item = await queue.get()
                 if item is None:
                     break
                 yield item
-            return
-
-        # Case 3: first request -- start the load
-        self._loading_subscribers[mid] = [queue]
-        loop = asyncio.get_running_loop()
-
-        def enqueue(payload: dict):
-            msg = f"data: {json.dumps(payload)}\n\n"
-
-            def broadcast():
-                for q in self._loading_subscribers.get(mid, []):
-                    q.put_nowait(msg)
-
-            loop.call_soon_threadsafe(broadcast)
-
-        tqdm_class = make_progress_tqdm_class(enqueue, mid)
-
-        def _tqdm_hook(factory, args, kwargs):
-            return tqdm_class(*args, **kwargs)
-
-        async def run_load():
-            try:
-                # Install a global tqdm hook so the "Loading weights" bar in
-                # core_model_loading.py (which uses logging.tqdm) routes through
-                # our ProgressTqdm. The tqdm_class kwarg only covers download bars.
-                previous_hook = logging.set_tqdm_hook(_tqdm_hook)
-                try:
-                    await asyncio.to_thread(
-                        self.load_model_and_processor,
-                        model_id_and_revision,
-                        progress_callback=enqueue,
-                        tqdm_class=tqdm_class,
-                        gguf_file=gguf_file,
-                    )
-                finally:
-                    logging.set_tqdm_hook(previous_hook)
-            except Exception as e:
-                logger.error(f"Failed to load {mid}: {e}", exc_info=True)
-                enqueue({"status": "error", "model": mid, "message": str(e)})
-            finally:
-
-                def _send_sentinel():
-                    for q in self._loading_subscribers.pop(mid, []):
-                        q.put_nowait(None)
-                    self._loading_tasks.pop(mid, None)
-
-                loop.call_soon_threadsafe(_send_sentinel)
-
-        self._loading_tasks[mid] = asyncio.create_task(run_load())
-
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            yield item
+        finally:
+            subscribers = self._loading_subscribers.get(mid, [])
+            if queue in subscribers:  # already popped if the load finished
+                subscribers.remove(queue)
 
     def shutdown(self) -> None:
         """Delete all loaded models and free resources."""
