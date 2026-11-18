@@ -2593,12 +2593,13 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(
             source_patterns=r"_message_gate\.forget_weight", target_patterns=r"_message_gate.forget_gate_proj.weight"
         ),
-        # (2 * num_looped_layers, hidden_size) each, rows `2 * i` and `2 * i + 1` of core layer `i` hold its query and
-        # MLP queries in the first and its key and value queries in the second. Side by side, core layer `i` holds
-        # its query, key, MLP and value queries back to back.
+        # The original checkpoint stores two (2 * num_layers, hidden_dim) queries parameters:
+        # - middle_cycle_cross_pass_queries: contains query and mlp queries
+        # - middle_cycle_cross_pass_kv_queries: contains key and value queries
+        # We merge them into a single "query" param.
         WeightConverter(
             source_patterns=[r"middle_cycle_cross_pass_queries", r"middle_cycle_cross_pass_kv_queries"],
-            target_patterns=r"cross_pass_messages.queries",
+            target_patterns=r"message_input.query",
             operations=[Concatenate(dim=1)],
         ),
     ] + mapping["inkling2_text"].copy()

@@ -201,26 +201,29 @@ class Inkling2LoopMessageGate(nn.Module):
         return (1 - forget_gate) * hidden_states + message_gate * message
 
 
-class Inkling2LoopCrossPassMessages(nn.Module):
-    """Retrieves messages from the message bank (residual blocks from previous pass) using learned queries."""
+class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
+    """Retrieves messages from the block states of the previous block using learned queries."""
 
     def __init__(self, config: Inkling2LoopTextConfig):
-        super().__init__()
+        super().__init__(config)
         # 4 * num_loop_layers queries, shape is (2 * num_loop_layers, 2 * hidden_dim) because of original checkpoint shapes.
-        self.queries = nn.Parameter(
+        self.query = nn.Parameter(
             torch.zeros(
                 2 * (config.loop_config["core_end"] - config.loop_config["core_start"]), 2 * config.hidden_size
             )
         )
-        self.norm = Inkling2LoopUnweightedRMSNorm()
 
-    def forward(self, message_bank: torch.Tensor, loop_layer_idx: int) -> torch.Tensor:
-        bank_states = self.norm(message_bank.float())
-        hidden_size = bank_states.shape[-1]
+    def forward(
+        self, block_states: torch.Tensor, partial_block_states: torch.Tensor, loop_layer_idx: int
+    ) -> torch.Tensor:
+        stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
+        stacked_states = self.norm(stacked_states)
+
+        hidden_size = stacked_states.shape[-1]
         # 4 query states for query, key, mlp, and value queries
-        query_states = self.queries.view(-1, 4, hidden_size)[loop_layer_idx].float()
-        query_states = query_states.expand(*bank_states.shape[:-2], -1, -1)
-        return F.scaled_dot_product_attention(query_states, bank_states, bank_states, scale=hidden_size**-0.5)
+        query_states = self.query.view(-1, 4, hidden_size)[loop_layer_idx].float()
+        query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
+        return F.scaled_dot_product_attention(query_states, stacked_states, stacked_states, scale=hidden_size**-0.5)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
@@ -638,7 +641,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             )
 
         if messages is not None:
-            query_message, key_message, _, value_message = messages.unbind(-2)
+            query_message, key_message, mlp_message, value_message = messages.unbind(-2)
             query_hidden_states = self.q_message_gate(query_hidden_states, query_message)
             key_hidden_states = self.k_message_gate(key_hidden_states, key_message)
             value_hidden_states = self.v_message_gate(value_hidden_states, value_message)
@@ -665,7 +668,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         if messages is not None:
-            hidden_states = self.mlp_message_gate(hidden_states, messages[..., 2, :])
+            hidden_states = self.mlp_message_gate(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
             hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
@@ -695,7 +698,7 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
         "attention_input",
         "mlp_input",
         "final_input",
-        "cross_pass_messages",
+        "message_input",
         "message_gate_proj",
         "forget_gate_proj",
     ]
@@ -728,10 +731,8 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
             init.ones_(module.scale)
         elif isinstance(module, Inkling2LoopDynamicShortConvolution):
             init.zeros_(module.static_weight)
-        elif isinstance(module, Inkling2LoopBlockAttentionResidual):
+        elif isinstance(module, (Inkling2LoopBlockAttentionResidual, Inkling2LoopMessageAttentionResidual)):
             init.zeros_(module.query)
-        elif isinstance(module, Inkling2LoopCrossPassMessages):
-            init.zeros_(module.queries)
 
 
 @auto_docstring
@@ -748,7 +749,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
             else:
                 layer_class = Inkling2LoopSlidingDecoderLayer if is_sliding else Inkling2LoopFullDecoderLayer
             self.layers.append(layer_class(config, layer_idx))
-        self.cross_pass_messages = Inkling2LoopCrossPassMessages(config)
+        self.message_input = Inkling2LoopMessageAttentionResidual(config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -818,14 +819,17 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
             elif layer_idx == loop_layer_index_start:
                 num_pre_loop_blocks = pre_loop_block_states.shape[-2] + 1
-                message_bank = torch.cat(
-                    [block_states[..., num_pre_loop_blocks:, :], hidden_states.unsqueeze(-2)], dim=-2
-                )
+                previous_block_states = block_states[..., num_pre_loop_blocks:, :]
+                previous_hidden_states = hidden_states
                 hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
 
             messages = []
             if loop_idx > 0:
-                messages.append(self.cross_pass_messages(message_bank, layer_idx - loop_layer_index_start))
+                messages.append(
+                    self.message_input(
+                        previous_block_states, previous_hidden_states, layer_idx - loop_layer_index_start
+                    )
+                )
 
             new_hidden_states = decoder_layer(
                 hidden_states,
