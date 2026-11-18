@@ -14,7 +14,6 @@
 """PyTorch ESMC model."""
 
 import math
-from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -27,7 +26,6 @@ from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -37,16 +35,20 @@ from ...utils import (
 )
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..esm.modeling_esm import EsmClassificationHead, EsmForSequenceClassification, eager_attention_forward
+from ..esm.modeling_esm import (  # noqa: F401 -- eager_attention_forward is used by the inherited Olmo2Attention
+    EsmClassificationHead,
+    EsmForSequenceClassification,
+    eager_attention_forward,
+)
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaMLP,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
+    apply_rotary_pos_emb,  # noqa: F401 -- Llama's rope (not Olmo2's dtype-casting one) for the inherited attention
 )
 from ..nomic_bert.modeling_nomic_bert import NomicBertPreTrainedModel
+from ..olmo2.modeling_olmo2 import Olmo2Attention
 
 
 logger = logging.get_logger(__name__)
@@ -138,8 +140,8 @@ class EsmcMLP(LlamaMLP):
     pass
 
 
-class EsmcAttention(LlamaAttention):
-    """Multi-head self-attention with QK-LayerNorm and RoPE."""
+class EsmcAttention(Olmo2Attention):
+    """Multi-head self-attention with full-width QK-LayerNorm and RoPE."""
 
     def __init__(self, config: EsmcConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
@@ -147,44 +149,6 @@ class EsmcAttention(LlamaAttention):
         # Every released ESMC checkpoint carries q_norm/k_norm weights, so there is no flag for these.
         self.q_norm = EsmcLayerNorm(config.hidden_size, bias=False)
         self.k_norm = EsmcLayerNorm(config.hidden_size, bias=False)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states)).to(hidden_states.dtype)
-        key_states = self.k_norm(self.k_proj(hidden_states)).to(hidden_states.dtype)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights
 
 
 class EsmcLayer(LlamaDecoderLayer):
@@ -208,7 +172,7 @@ class EsmcLayer(LlamaDecoderLayer):
         residual = hidden_states
         attn_output, _ = self.self_attn(
             self.input_layernorm(hidden_states),
-            attention_mask,
+            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             **kwargs,
         )
