@@ -26,11 +26,17 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deepseek_v4.configuration_deepseek_v4 import DeepseekV4Config
@@ -485,6 +491,19 @@ class DeepseekV41GroupedLinear(DeepseekV4GroupedLinear):
     pass
 
 
+class DeepseekV41Float32Linear(nn.Linear):
+    """
+    A linear layer that computes in float32, whatever dtype its weight is stored in. The reference promotes the
+    pooling projections of the compressor like this.
+
+    The promotion happens in here rather than in the compressor, because offloaded weights (`device_map="auto"`
+    on a machine the model does not fit on) are only loaded while the module that owns them runs.
+    """
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return F.linear(hidden_states.float(), self.weight.float())
+
+
 class DeepseekV41Compressor(nn.Module):
     """
     Pools every `compress_ratio` consecutive tokens into one KV latent with a learned softmax gate. With a
@@ -498,10 +517,14 @@ class DeepseekV41Compressor(nn.Module):
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
         super().__init__()
         self.compress_ratio = config.compress_ratios[layer_idx]
-        self.kv_proj = nn.Linear(config.hidden_size, config.head_dim, bias=False)
-        self.gate_proj = (
-            nn.Linear(config.hidden_size, config.head_dim, bias=False) if self.compress_ratio > 1 else None
-        )
+        if self.compress_ratio > 1:
+            # Several tokens per group, which are pooled in float32
+            self.kv_proj = DeepseekV41Float32Linear(config.hidden_size, config.head_dim, bias=False)
+            self.gate_proj = DeepseekV41Float32Linear(config.hidden_size, config.head_dim, bias=False)
+        else:
+            # One token per group, so no gate and no pooling
+            self.kv_proj = nn.Linear(config.hidden_size, config.head_dim, bias=False)
+            self.gate_proj = None
         self.kv_norm = DeepseekV41RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, cache_layer: DeepseekV41CacheLayer | None = None) -> torch.Tensor:
@@ -510,8 +533,7 @@ class DeepseekV41Compressor(nn.Module):
             return self.kv_norm(self.kv_proj(hidden_states))
 
         # The reference promotes the pooling weights to float32, and pools in float32 too
-        kv = F.linear(hidden_states.float(), self.kv_proj.weight.float())
-        gate = F.linear(hidden_states.float(), self.gate_proj.weight.float())
+        kv, gate = self.kv_proj(hidden_states), self.gate_proj(hidden_states)
         if cache_layer is not None:
             kv, gate = cache_layer.update_pooling_buffer(kv, gate, self.compress_ratio)
         else:
@@ -702,7 +724,6 @@ class DeepseekV41Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]],
-        position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         cache: Cache | None = None,
         shared_states: dict[str, torch.Tensor] | None = None,
@@ -725,10 +746,12 @@ class DeepseekV41Attention(nn.Module):
         # The compressed entries go after the window on the KV axis. The model built the mask for the window
         # only, so we extend it with the entries that each query selected.
         compressed_kv, selected = self.get_compressed_kv(
-            hidden_states, q_residual, position_ids, (cos, sin), cache, shared_states
+            hidden_states, q_residual, kwargs.get("position_ids"), (cos, sin), cache, shared_states
         )
         if compressed_kv is not None:
-            kv = torch.cat([kv, compressed_kv.unsqueeze(1).to(kv.dtype)], dim=2)
+            # With a device map, the layer that made the compressed KV may sit on another device
+            compressed_kv, selected = compressed_kv.to(kv.device, kv.dtype), selected.to(kv.device)
+            kv = torch.cat([kv, compressed_kv.unsqueeze(1)], dim=2)
             compressed_mask = torch.zeros_like(selected, dtype=attention_mask.dtype)
             compressed_mask = compressed_mask.masked_fill(~selected, torch.finfo(attention_mask.dtype).min)
             attention_mask = torch.cat([attention_mask, compressed_mask.unsqueeze(1)], dim=-1)
@@ -799,13 +822,15 @@ class DeepseekV41KVSharedIndexedAttention(DeepseekV41KVSharedAttention):
         cache: Cache | None,
         shared_states: dict[str, torch.Tensor],
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        # With a device map, the layers that made the index keys and the candidates may sit on another device
+        candidates = shared_states.get("candidates")
         shared_states["selected"], shared_states["candidates"] = self.indexer(
             hidden_states,
             q_residual,
-            shared_states["index_keys"],
+            shared_states["index_keys"].to(hidden_states.device),
             position_ids,
             position_embeddings,
-            shared_states.get("candidates"),
+            candidates.to(hidden_states.device) if candidates is not None else None,
         )
         return shared_states["compressed_kv"], shared_states["selected"]
 
@@ -1246,22 +1271,62 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         return hidden_states.to(dtype), mlp_pre
 
 
+def vision_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    **kwargs,
+):
+    # Plain attention. The eager function of the language model adds an attention sink, which the vision encoder
+    # does not have.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+    attn_weights = F.softmax(attn_weights, dim=-1)
+    attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    return attn_output.transpose(1, 2).contiguous(), attn_weights
+
+
 class DeepseekV41VisionAttention(nn.Module):
     """Bidirectional attention over the patches of one image, with 2D RoPE."""
 
     def __init__(self, config: DeepseekV41VisionConfig):
         super().__init__()
+        self.config = config
         self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
         self.qkv_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
-    def forward(self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         num_patches = hidden_states.shape[0]
         query, key, value = self.qkv_proj(hidden_states).view(num_patches, 3, self.num_heads, self.head_dim).unbind(1)
         query, key = _apply_vision_rotary(query, cos, sin), _apply_vision_rotary(key, cos, sin)
-        attn_output = F.scaled_dot_product_attention(query.transpose(0, 1), key.transpose(0, 1), value.transpose(0, 1))
-        return self.o_proj(attn_output.transpose(0, 1).reshape(num_patches, -1))
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, vision_eager_attention_forward
+        )
+        # The attention functions take a batch, which here is the one image
+        attn_output, attn_weights = attention_interface(
+            self,
+            query.transpose(0, 1).unsqueeze(0),
+            key.transpose(0, 1).unsqueeze(0),
+            value.transpose(0, 1).unsqueeze(0),
+            attention_mask=None,
+            scaling=self.scaling,
+            is_causal=False,
+        )
+        # Only eager attention returns the weights
+        attn_weights = attn_weights.squeeze(0) if attn_weights is not None else None
+        return self.o_proj(attn_output.reshape(num_patches, -1)), attn_weights
 
 
 def _apply_vision_rotary(hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
@@ -1291,7 +1356,8 @@ class DeepseekV41VisionLayer(GradientCheckpointingLayer):
         self.mlp = DeepseekV41VisionMLP(config)
 
     def forward(self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states + self.self_attn(self.layer_norm1(hidden_states), cos, sin)
+        attn_output, _ = self.self_attn(self.layer_norm1(hidden_states), cos, sin)
+        hidden_states = hidden_states + attn_output
         return hidden_states + self.mlp(self.layer_norm2(hidden_states))
 
 
@@ -1314,12 +1380,16 @@ class DeepseekV41MultiModalProjector(nn.Module):
         return self.linear_2(F.gelu(self.linear_1(image_features)))
 
 
+@auto_docstring
 class DeepseekV41PreTrainedModel(PreTrainedModel):
     config: DeepseekV41Config
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV41DecoderLayer", "DeepseekV41VisionLayer"]
+    # The layers write into `shared_states` for the layers after them, so the device hooks must hand every
+    # layer the same dict rather than a copy of it moved to the layer's device
+    _skip_keys_device_placement = ["cache", "shared_states"]
     # Eager only, for the same reasons as DeepSeek-V4: the head dim of 512 is above what FlashAttention
     # supports, SDPA has no attention sink, and the compressed entries are added to the KV axis inside the
     # attention, after the mask was built.
@@ -1394,6 +1464,12 @@ class DeepseekV41VisionModel(DeepseekV41PreTrainedModel):
     config: DeepseekV41VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    # Unlike the language model, the vision encoder has plain attention with no sink
+    _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": DeepseekV41VisionLayer,
+        "attentions": DeepseekV41VisionAttention,
+    }
 
     def __init__(self, config: DeepseekV41VisionConfig):
         super().__init__(config)
@@ -1413,7 +1489,8 @@ class DeepseekV41VisionModel(DeepseekV41PreTrainedModel):
         freqs = freqs.flatten(1)
         return freqs.cos().unsqueeze(1), freqs.sin().unsqueeze(1)
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, height: int, width: int, **kwargs: Unpack[TransformersKwargs]
@@ -1457,6 +1534,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1534,7 +1612,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 pre,
                 engram_hash_ids=(
                     engram_hash_ids[:, :, self.config.engram_layer_ids.index(layer_idx)]
-                    if layer.engram is not None
+                    if layer_idx in self.config.engram_layer_ids
                     else None
                 ),
                 engram_mask=engram_mask,
@@ -1612,37 +1690,59 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
     def set_engram_token_map(self, tokenizer_or_token_map):
         self.language_model.set_engram_token_map(tokenizer_or_token_map)
 
-    def get_image_features(self, pixel_values: torch.Tensor, image_grid_hw: torch.Tensor) -> torch.Tensor:
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="""
+        Encodes the images and lays each one out as the language model reads it: a start embedding, then the rows
+        of image tokens with a newline embedding after each row, then an end embedding. The `pooler_output` has
+        one entry per image, of shape `(num_image_positions, hidden_size)`.
         """
-        Encodes the images and lays each one out as the language model reads it: a start embedding, then the
-        rows of image tokens with a newline embedding after each row, then an end embedding.
-
-        Args:
-            pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
-                The flattened patches of all the images, one image after the other.
-            image_grid_hw (`torch.Tensor` of shape `(num_images, 2)`):
-                The height and width of each image's patch grid.
-
-        Returns:
-            `torch.Tensor` of shape `(total_image_tokens, hidden_size)`: The embeddings of all the image
-            positions in the prompt, in order.
+    )
+    def get_image_features(
+        self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
+            The flattened patches of all the images, one image after the other.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
+            The height and width of each image's patch grid.
         """
-        image_features = []
         grids = image_grid_hw.tolist()
         patches_per_image = pixel_values.split([height * width for height, width in grids])
+        vision_outputs, image_features = [], []
         for patches, (height, width) in zip(patches_per_image, grids):
-            hidden_states = self.vision_tower(patches, height, width).last_hidden_state
-            tokens = self.multi_modal_projector(hidden_states, height, width)
+            outputs = self.vision_tower(patches, height, width, return_dict=True, **kwargs)
+            tokens = self.multi_modal_projector(outputs.last_hidden_state, height, width)
             # The projector rounds a partial square up, so the token grid is the patch grid divided by the ratio
             num_rows = -(-height // self.multi_modal_projector.downsample_ratio)
             rows = tokens.view(num_rows, -1, tokens.shape[-1])
             newlines = self.image_newline.to(tokens.dtype).expand(num_rows, 1, -1)
             rows = torch.cat([rows, newlines], dim=1).flatten(0, 1)
-            image_features += [self.image_start.to(tokens.dtype)[None], rows, self.image_end.to(tokens.dtype)[None]]
-        return torch.cat(image_features)
+            image_start, image_end = self.image_start.to(tokens.dtype)[None], self.image_end.to(tokens.dtype)[None]
+            image_features.append(torch.cat([image_start, rows, image_end]))
+            vision_outputs.append(outputs)
+
+        # The vision encoder ran one image at a time, so we put its outputs back in the layout of `pixel_values`:
+        # the patches of all the images, one image after the other
+        hidden_states, attentions = None, None
+        if vision_outputs[0].hidden_states is not None:
+            # `output_hidden_states` can select layers, which leaves the other ones as None
+            per_layer = zip(*(outputs.hidden_states for outputs in vision_outputs))
+            hidden_states = tuple(torch.cat(layer) if layer[0] is not None else None for layer in per_layer)
+        if vision_outputs[0].attentions is not None:
+            # A patch only attends to its own image, so the weights of a layer are one block per image
+            per_layer = zip(*(outputs.attentions for outputs in vision_outputs))
+            attentions = tuple(torch.stack([torch.block_diag(*head) for head in zip(*layer)]) for layer in per_layer)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=torch.cat([outputs.last_hidden_state for outputs in vision_outputs]),
+            pooler_output=tuple(image_features),
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1671,14 +1771,16 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         if pixel_values is not None:
             if image_mask is None:
                 raise ValueError("`input_ids` are needed to find where the images go in the prompt.")
-            image_features = self.get_image_features(pixel_values, image_grid_hw)
-            num_image_tokens = int(image_mask.sum())
-            if num_image_tokens != image_features.shape[0]:
-                raise ValueError(
-                    f"The prompt has {num_image_tokens} image tokens, but the images take up "
-                    f"{image_features.shape[0]} tokens (grids: {image_grid_hw.tolist()})."
-                )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = self.get_image_features(pixel_values, image_grid_hw, return_dict=True).pooler_output
+            image_features = torch.cat(image_features).to(inputs_embeds.device, inputs_embeds.dtype)
+            num_image_tokens = image_mask.sum()
+            torch_compilable_check(
+                num_image_tokens == image_features.shape[0],
+                lambda: (
+                    f"The prompt has {int(num_image_tokens)} image tokens, but the images take up "
+                    f"{image_features.shape[0]} tokens (`image_grid_hw`: {image_grid_hw})."
+                ),
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask.unsqueeze(-1), image_features)
 
         return self.language_model(
@@ -1728,6 +1830,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
