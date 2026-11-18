@@ -227,7 +227,21 @@ class ClefConfig(PreTrainedConfig):
             raise ValueError(f"`rlcd_samples` must be at least 2, got {self.rlcd_samples}.")
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+        # The config of a loaded backbone keeps its attention implementation, which `super().__post_init__` would set
+        # to the `attn_implementation` of Clef (None when it is not given)
+        backbone_configs = []
+        if isinstance(self.text_config, PreTrainedConfig) and kwargs.get("attn_implementation") is None:
+            backbone_configs = [self.text_config]
+            for backbone_config in backbone_configs:  # with its own sub-configs, as the setter recurses into them
+                backbone_configs += [
+                    subconfig
+                    for key in backbone_config.sub_configs
+                    if isinstance(subconfig := getattr(backbone_config, key, None), PreTrainedConfig)
+                ]
+        backbone_attention = [backbone_config._attn_implementation for backbone_config in backbone_configs]
         super().__post_init__(**kwargs)
+        for backbone_config, attention in zip(backbone_configs, backbone_attention):
+            backbone_config._attn_implementation_internal = attention
         # The output embeddings of the model are its input embeddings when its config ties them
         self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 

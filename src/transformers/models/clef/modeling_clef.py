@@ -567,9 +567,20 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
     accepts_loss_kwargs = False  # the loss is a mean over the questions of the batch, not over tokens
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config: ClefConfig):
+    def __init__(self, config: ClefConfig, model: PreTrainedModel | None = None):
+        r"""
+        model (`PreTrainedModel`, *optional*):
+            An already loaded backbone. Otherwise, initialize it from `config.text_config`.
+        """
         super().__init__(config)
-        self.model = AutoModel.from_config(config.text_config)
+        if model is None:
+            self.model = AutoModel.from_config(config.text_config)
+        else:
+            # `post_init` initializes the modules not marked as initialized: none of the given backbone, whether
+            # `from_pretrained` marked them or its weights were set otherwise
+            for module in model.modules():
+                module._is_hf_initialized = True
+            self.model = model
         # A backbone whose position embeddings have a padding index (the RoBERTa family) numbers the positions of its
         # tokens itself, from `input_ids`, after that index: positions counted from the attention mask would be shifted
         self._positions_from_input_ids = any(

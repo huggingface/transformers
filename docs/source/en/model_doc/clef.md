@@ -68,6 +68,21 @@ model.model.load_state_dict(AutoModel.from_pretrained("answerdotai/ModernBERT-ba
 decide = pipeline("decision", model=model, tokenizer=AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base"))
 ```
 
+A new head can also be built around a backbone that is already loaded, given as `model`: it is used as it is, with its weights, precision and attention implementation, and the new head is in float32 (move the model to the device of the backbone, and run a backbone in half precision under autocast, see [Converting checkpoints](#converting-checkpoints)).
+
+```python
+from transformers import AutoModel, ClefConfig, ClefForDecision
+
+backbone = AutoModel.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
+config = ClefConfig(
+    text_config=backbone.config,
+    backbone_hidden_size=backbone.config.hidden_size,
+    global_pooling="first",
+    prompt_style="plain",
+)
+model = ClefForDecision(config, model=backbone)  # `model.model` is `backbone`
+```
+
 UltraBERT ([`UltrabertModel`], for example `dmis-lab/UltraBERT-150M`) works the same way, with `global_pooling="first"` and `prompt_style="plain"`. Its rotary positions and its alternating local and global attention layers keep the scores of a prompt the same alone, in a batch, and with left or right padding, including prompts longer than its local attention window. Its tokenizer has no `[CLS]` token, and its padding, beginning and end of sequence tokens are the same `<|endoftext|>`: the plain prompt starts with that token and ends with its `<|sep|>` separator. It has no causal language modeling head class, so the model has no `lm_head`. A checkpoint that wraps an UltraBERT in remote code (`model_type: "ultrabert"` with another architecture and an `auto_map`, such as a reranker whose weights are stored as `backbone.<name>`) does not load its weights into a native [`UltrabertModel`] with `AutoModel` (they would all be newly initialized, with only a warning): convert it with `convert_clef_weights_to_hf.py` (see [Converting checkpoints](#converting-checkpoints)), which strips the prefix, loads the backbone strictly and adds a new decision head.
 
 ## Training

@@ -45,7 +45,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import AutoModelForDecision, ClefForDecision
+    from transformers import AutoModel, AutoModelForDecision, ClefForDecision
     from transformers.activations import ACT2FN
     from transformers.modeling_layers import GradientCheckpointingLayer
     from transformers.models.clef.modeling_clef import ClefDecisionOutput
@@ -1018,6 +1018,134 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertEqual(ClefConfig.decision_config({"joint_head_config": {}}, {}), decision_config)
         self.assertEqual(model._tied_weights_keys, {"lm_head.weight": "model.embed_tokens.weight"})
         self.assertIs(model.lexical_embeddings(), model.lm_head.weight)
+
+    def given_backbone(self, backbone="causal", how="constructed", dtype=None, **config_kwargs):
+        """
+        A tiny backbone with random weights, a Qwen2 (`causal`) or a BERT (`encoder`): built and given its weights by
+        hand (`constructed`), built on the meta device first (`meta`, whose modules are not marked as initialized), or
+        loaded with `from_pretrained` (`loaded`), in `dtype` (float32 by default).
+        """
+        dtype = dtype or torch.float32
+        if backbone == "causal":
+            text_config = copy.deepcopy(self.config.text_config)
+        else:
+            text_config = BertConfig(
+                vocab_size=len(self.encoder_tokenizer()),
+                hidden_size=self.config.backbone_hidden_size,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+            )
+        for key, value in config_kwargs.items():
+            setattr(text_config, key, value)
+        torch.manual_seed(0)
+        if how == "meta":
+            with torch.device("meta"):
+                model = AutoModel.from_config(text_config)
+            model = model.to_empty(device="cpu")
+        else:
+            model = AutoModel.from_config(text_config)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.copy_(torch.randn_like(parameter))
+        if how == "loaded":
+            with tempfile.TemporaryDirectory() as directory:
+                model.save_pretrained(directory)
+                model = AutoModel.from_pretrained(directory, dtype=dtype)
+        return model.to(dtype).eval()
+
+    def given_backbone_config(self, backbone, head_type="joint", **kwargs):
+        """The config of a tiny Clef around `backbone`, the instance of `given_backbone`."""
+        encoder = {} if backbone.config.model_type == "qwen2" else {"global_pooling": "first", "prompt_style": "plain"}
+        return ClefConfig(
+            text_config=backbone.config, head_type=head_type, cosine_width=8, **self.tiny_sizes, **encoder, **kwargs
+        )
+
+    def test_given_backbone_is_used_as_it_is(self):
+        # The given backbone is the model's, not a copy, and nothing of it is initialized again; it keeps its dtype and
+        # the head is in float32
+        for backbone_type in ("causal", "encoder"):
+            for how, dtype in (("constructed", torch.float32), ("meta", torch.float64), ("loaded", torch.float64)):
+                for head_type in ("joint", "cosine"):
+                    with self.subTest(backbone=backbone_type, how=how, head_type=head_type):
+                        backbone = self.given_backbone(backbone_type, how, dtype)
+                        before = {name: tensor.clone() for name, tensor in backbone.state_dict().items()}
+                        model = ClefForDecision(self.given_backbone_config(backbone, head_type), model=backbone)
+                        self.assertIs(model.model, backbone)
+                        after = backbone.state_dict()
+                        self.assertEqual(list(after), list(before))
+                        for name, tensor in before.items():
+                            self.assertTrue(torch.equal(after[name], tensor), name)
+                        self.assertEqual(backbone.dtype, dtype)
+                        for name, parameter in model.named_parameters():
+                            if not name.startswith(("model.", "lm_head.")):
+                                self.assertEqual(parameter.dtype, torch.float32, name)
+                        # What the model derives from its backbone
+                        self.assertFalse(model._positions_from_input_ids)
+                        if head_type == "cosine":
+                            self.assertEqual(model._tied_weights_keys, {})
+                        elif backbone_type == "causal":
+                            self.assertEqual(model._tied_weights_keys, {"lm_head.weight": "model.embed_tokens.weight"})
+                        else:
+                            self.assertEqual(
+                                model._tied_weights_keys, {"lm_head.weight": "model.embeddings.word_embeddings.weight"}
+                            )
+        # A backbone of the RoBERTa family numbers its positions itself, from the given model too
+        roberta_config = AutoConfig.for_model(
+            "roberta", vocab_size=99, hidden_size=24, intermediate_size=32, num_hidden_layers=1, num_attention_heads=2
+        )
+        roberta = AutoModel.from_config(roberta_config)
+        model = ClefForDecision(self.given_backbone_config(roberta, "cosine"), model=roberta)
+        self.assertTrue(model._positions_from_input_ids)
+
+    def test_given_backbone_ties_the_lexical_prior(self):
+        # The joint head on a causal backbone that ties its embeddings: the language modeling head of the lexical prior
+        # is the input embeddings of the given backbone, as after `from_pretrained`
+        for how in ("constructed", "loaded"):
+            with self.subTest(how=how):
+                backbone = self.given_backbone("causal", how, tie_word_embeddings=True)
+                embeddings = backbone.get_input_embeddings().weight
+                before = embeddings.clone()
+                model = ClefForDecision(self.given_backbone_config(backbone), model=backbone)
+                self.assertIs(model.lm_head.weight, model.model.get_input_embeddings().weight)
+                self.assertIs(model.lm_head.weight, embeddings)
+                self.assertIs(model.lexical_embeddings(), embeddings)
+                self.assertTrue(torch.equal(embeddings, before))
+
+    def test_given_backbone_round_trip(self):
+        inputs = self.collate(self.ragged_prompts())
+        for backbone_type in ("causal", "encoder"):
+            for head_type in ("joint", "cosine"):
+                with self.subTest(backbone=backbone_type, head_type=head_type):
+                    backbone = self.given_backbone(backbone_type)
+                    # Eager for the backbone and the head, as the model reloads
+                    config = self.given_backbone_config(backbone, head_type, attn_implementation="eager")
+                    model = ClefForDecision(config, model=backbone).eval()
+                    with torch.no_grad():
+                        logits = model(**inputs).logits
+                    with tempfile.TemporaryDirectory() as directory:
+                        model.save_pretrained(directory)
+                        reloaded = ClefForDecision.from_pretrained(directory, attn_implementation="eager").eval()
+                    self.assertEqual(type(reloaded.model), type(backbone))
+                    with torch.no_grad():
+                        torch.testing.assert_close(reloaded(**inputs).logits, logits, atol=0, rtol=0)
+
+    def test_given_backbone_keeps_its_attention_implementation(self):
+        for backbone_type in ("causal", "encoder"):
+            for how in ("constructed", "loaded"):
+                with self.subTest(backbone=backbone_type, how=how):
+                    backbone = self.given_backbone(backbone_type, how)
+                    backbone.set_attn_implementation("eager")  # not the default, sdpa
+                    model = ClefForDecision(self.given_backbone_config(backbone), model=backbone)
+                    self.assertEqual(model.model.config._attn_implementation, "eager")
+                    self.assertIs(model.config.text_config, backbone.config)
+                    # The head runs its own attention, sdpa by default
+                    self.assertEqual(model.config._attn_implementation, "sdpa")
+        # An `attn_implementation` given to the config of Clef still sets the backbone's, as it does without one
+        backbone = self.given_backbone()
+        backbone.set_attn_implementation("eager")
+        ClefForDecision(self.given_backbone_config(backbone, attn_implementation="sdpa"), model=backbone)
+        self.assertEqual(backbone.config._attn_implementation, "sdpa")
 
     def test_invalid_pooling_and_prompt_style(self):
         with self.assertRaises(ValueError):
