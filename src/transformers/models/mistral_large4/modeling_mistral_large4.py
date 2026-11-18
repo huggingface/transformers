@@ -22,6 +22,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -45,7 +46,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_mistral_large4 import MistralLarge4Config, MistralLarge4TextConfig
@@ -1010,6 +1011,21 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        inputs = self.vision_tower.get_data_dependent_inputs(pixel_values, image_sizes)
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
+        )
+        return {f"image_{name}": value for name, value in inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     @merge_with_config_defaults
     @can_return_tuple
     @select_hidden_states("vision_feature_layer")
@@ -1203,6 +1219,10 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
         return self.model.get_image_embeddings(
             pixel_values=pixel_values, image_sizes=image_sizes, vision_feature_layer=vision_feature_layer, **kwargs
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`MistralLarge4Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 __all__ = [

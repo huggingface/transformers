@@ -872,6 +872,22 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
+    @merge_with_config_defaults
+    def get_data_dependent_inputs(self, feature_lens: torch.LongTensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `feature_lens` with data-dependent ops: the chunks' `chunk_lengths` and
+        `chunk_index`, the non-padding frames' `valid_indices`, the pooling's `pool_indices`, and the attention's
+        `cu_seqlens` and `max_seqlen`."""
+        chunk_lengths = get_audio_chunk_lengths(feature_lens, self.n_window)
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths)
+        return {
+            "chunk_lengths": chunk_lengths,
+            "chunk_index": get_audio_chunk_index(chunk_lengths),
+            "valid_indices": get_valid_indices(chunk_lengths),
+            "pool_indices": get_pool_indices(feature_lens),
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
+        }
+
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -1244,6 +1260,31 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         input_tensor = input_tensor[window_index, :, :]
         input_tensor = input_tensor.reshape(seq_len, -1)
         return input_tensor
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        the full attention's `cu_seqlens` and `max_seqlen`, and the window attention's `window_index`,
+        `cu_window_seqlens` and `max_window_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        )
+        return {
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "max_window_seqlen": max_window_seqlen,
+        }
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1704,6 +1745,31 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         self.rope_deltas = None
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        feature_attention_mask: torch.LongTensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
+        and the audio encoder's (see [`Qwen2_5OmniAudioEncoder.get_data_dependent_inputs`]) with the real mel
+        frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.visual.get_data_dependent_inputs(grid_thw)
+                inputs.update({f"{prefix}{name}": value for name, value in tower_inputs.items()})
+        if feature_attention_mask is not None:
+            audio_feature_lengths = feature_attention_mask.sum(-1)
+        if audio_feature_lengths is not None:
+            audio_inputs = self.audio_tower.get_data_dependent_inputs(audio_feature_lengths)
+            if feature_attention_mask is not None:
+                audio_inputs["frame_indices"] = get_audio_frame_indices(feature_attention_mask)
+            inputs.update({f"audio_{name}": value for name, value in audio_inputs.items()})
+        return inputs
+
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
@@ -2046,6 +2112,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
             The length of feature shape of each audio in LLM.
         """
         return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Qwen2_5OmniThinkerModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

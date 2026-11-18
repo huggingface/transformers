@@ -18,10 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -38,7 +38,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig
@@ -395,6 +400,22 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
+    @merge_with_config_defaults
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `input_features_mask` with data-dependent ops: the windowed attention's
+        `cu_seqlens` and `max_seqlen`, and the non-padding frames' `valid_indices`."""
+        chunk_lengths = input_features_mask.view(input_features_mask.shape[0], -1, self.n_window * 2).sum(-1)
+        chunk_lengths = chunk_lengths.reshape(-1).to(torch.long)
+        feature_lens = input_features_mask.sum(-1).to(torch.long)
+        cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": get_max_seqlen(cu_seqlens, self.config),
+            "valid_indices": get_valid_indices(
+                chunk_lengths, self.n_window, int(self._post_cnn_length(torch.tensor(self.n_window * 2)))
+            ),
+        }
+
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
@@ -505,6 +526,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
         self.multi_modal_projector = Qwen3ASRMultiModalProjector(config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
@@ -601,6 +623,14 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
         )
+
+    def get_data_dependent_inputs(self, input_features_mask: torch.Tensor | None = None, **kwargs) -> dict[str, Any]:
+        """The audio encoder's data-dependent inputs (see [`Qwen3ASREncoder.get_data_dependent_inputs`]), prefixed
+        `audio_`, as `get_audio_features` takes them."""
+        if input_features_mask is None:
+            return {}
+        inputs = self.audio_tower.get_data_dependent_inputs(input_features_mask)
+        return {f"audio_{name}": value for name, value in inputs.items()}
 
 
 @auto_docstring(
@@ -709,6 +739,10 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Qwen3ASRModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 @auto_docstring(

@@ -20,6 +20,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -43,7 +44,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrain
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    can_return_tuple,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_cu_seqlens,
@@ -962,6 +969,31 @@ class MuseSparkVisionModel(MuseSparkPreTrainedModel):
         hidden_states = hidden_states[shuffle_index.to(hidden_states.device)]
         return hidden_states.view(-1, factor * factor, dim).permute(0, 2, 1).reshape(-1, dim * factor * factor)
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the full and window attention's
+        `cu_seqlens`, `window_index` and `cu_window_seqlens`, the position table's `interp_indices` and
+        `interp_weights`, the rotary `position_ids` and the merger's `pixel_shuffle_index`."""
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        interp_indices, interp_weights = self.patch_embedder.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=self.spatial_merge_size, kwargs=kwargs)
+        pixel_shuffle_index = get_vision_pixel_shuffle_index(grid_thw, self.merge_size, kwargs=kwargs)
+        return {
+            "cu_seqlens": cu_seqlens,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "position_ids": position_ids,
+            "pixel_shuffle_index": pixel_shuffle_index,
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -1271,8 +1303,16 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @can_return_tuple
-    @auto_docstring
+    def get_data_dependent_inputs(self, image_grid_thw: torch.LongTensor | None = None, **kwargs) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`MuseSparkVisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
+        `get_image_embeddings` takes them."""
+        if image_grid_thw is None:
+            return {}
+        tower_inputs = self.vision_tower.get_data_dependent_inputs(image_grid_thw)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -1291,6 +1331,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_embeddings(
@@ -1561,6 +1602,10 @@ class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, MultimodalMixi
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`MuseSparkModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(

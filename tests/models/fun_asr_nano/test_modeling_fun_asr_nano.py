@@ -90,6 +90,10 @@ class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     pipeline_model_mapping = {"audio-text-to-text": FunAsrNanoForConditionalGeneration} if is_torch_available() else {}
     model_split_percents = [0.5, 0.9]
 
+    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     @unittest.skip(
         reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "
         "are replaced when input features are provided."

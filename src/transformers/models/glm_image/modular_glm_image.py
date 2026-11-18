@@ -14,6 +14,7 @@
 
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -469,6 +470,23 @@ class GlmImageModel(Glm4vModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`GlmImageVisionModel.get_data_dependent_inputs`]) for the source images, prefixed `image_`,
+        as `get_image_features` takes them."""
+        if image_grid_thw is None:
+            return {}
+        source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+        if source_grids.shape[0] == 0:
+            return {}
+        tower_inputs = self.visual.get_data_dependent_inputs(source_grids)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -876,6 +894,10 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             The temporal, height and width of each source image's patch grid.
         """
         return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`GlmImageModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @auto_docstring
     def get_image_features(
