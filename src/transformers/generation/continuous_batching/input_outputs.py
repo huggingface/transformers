@@ -549,11 +549,11 @@ class ContinuousBatchingIOs:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
         # Linear attention layers take no mask: the model looks their entry up, so it has to exist
-        if self.attention_mask is not None and LINEAR_ATTENTION in self.cache.cache_allocators:
+        if self.attention_mask is not None and LINEAR_ATTENTION in self.cache.layer_groups:
             kwargs["attention_mask"][LINEAR_ATTENTION] = None
 
         # The masking utils expect a single tensor if the model has only one layer type
-        if len(self.cache.cache_allocators) == 1 and self.attention_mask is not None:
+        if len(self.cache.layer_groups) == 1 and self.attention_mask is not None:
             kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
 
         return kwargs
