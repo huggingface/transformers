@@ -651,11 +651,15 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
+        if pixel_values is not None and pixel_values_videos is not None:
+            raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
             )
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is not None and mm_encoder_outputs.get("video") is not None:
+            raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 

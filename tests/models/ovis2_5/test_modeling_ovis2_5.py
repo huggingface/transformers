@@ -172,61 +172,6 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(outputs.logits.shape[:2], inputs["input_ids"].shape)
         self.assertTrue(torch.isfinite(outputs.logits).all())
 
-    @parameterized.expand([("videos", False), ("mixed", True)])
-    def test_multiple_visual_inputs(self, _, include_image):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Ovis2_5ForConditionalGeneration(config).to(torch_device).eval()
-        model.generation_config.eos_token_id = None
-        tokens_per_frame = self.model_tester.num_image_tokens
-        tokens = [1, config.video_start_token_id] + [config.video_token_id] * tokens_per_frame
-        tokens += [config.video_end_token_id]
-        if include_image:
-            tokens += [config.image_start_token_id] + [config.image_token_id] * tokens_per_frame
-            tokens += [config.image_end_token_id]
-        else:
-            inputs.pop("pixel_values")
-            inputs.pop("image_grid_thw")
-        tokens += [config.video_start_token_id] + [config.video_token_id] * (2 * tokens_per_frame)
-        tokens += [config.video_end_token_id, 3]
-        batch_size = self.model_tester.batch_size
-        grid_size = self.model_tester.image_size // self.model_tester.patch_size
-        inputs["input_ids"] = torch.tensor([tokens] * batch_size, device=torch_device)
-        inputs["attention_mask"] = torch.ones_like(inputs["input_ids"])
-        inputs["pixel_values_videos"] = self.model_tester.create_pixel_values(batch_size=3 * batch_size)
-        inputs["video_grid_thw"] = torch.tensor(
-            [[1, grid_size, grid_size], [2, grid_size, grid_size]] * batch_size, device=torch_device
-        )
-        cached_inputs = {
-            key: value for key, value in inputs.items() if "pixel_values" not in key and "grid_thw" not in key
-        }
-        poolers = {}
-        with torch.no_grad():
-            expected_logits = model(**inputs, use_cache=False).logits
-            for modality, pixel_key, grid_key in [
-                ("image", "pixel_values", "image_grid_thw"),
-                ("video", "pixel_values_videos", "video_grid_thw"),
-            ]:
-                if pixel_key in inputs:
-                    features = getattr(model, f"get_{modality}_features")(
-                        **{pixel_key: inputs[pixel_key], grid_key: inputs[grid_key]}, return_dict=True
-                    )
-                    poolers[modality] = features.pooler_output
-            self.assertEqual(
-                [feature.shape[0] for feature in poolers["video"]],
-                [tokens_per_frame, 2 * tokens_per_frame] * batch_size,
-            )
-            for num_beams in (1, 2):
-                cached_inputs["mm_encoder_outputs"] = {
-                    modality: BaseModelOutputWithPooling(pooler_output=features)
-                    for modality, features in poolers.items()
-                }
-                logits = model(**cached_inputs, use_cache=False).logits
-                torch.testing.assert_close(logits, expected_logits, rtol=0, atol=0)
-                generation_kwargs = {"max_new_tokens": 2, "num_beams": num_beams, "do_sample": False}
-                expected_ids = model.generate(**inputs, **generation_kwargs)
-                cached_ids = model.generate(**cached_inputs, **generation_kwargs)
-                self.assertListEqual(cached_ids.tolist(), expected_ids.tolist())
-
 
 @slow
 @require_torch_accelerator

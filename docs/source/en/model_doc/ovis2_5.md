@@ -36,6 +36,8 @@ original repositories still use legacy processor metadata. Weight names are mapp
 ## Usage
 
 > [!WARNING]
+> Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
+>
 > The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
 > Transformers generation API.
 
