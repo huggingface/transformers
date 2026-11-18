@@ -34,7 +34,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrain
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    can_return_tuple,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (

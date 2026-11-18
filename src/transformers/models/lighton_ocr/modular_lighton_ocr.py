@@ -218,17 +218,19 @@ class LightOnOcrModel(Mistral3Model):
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor | list,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
-        image_features = image_outputs.last_hidden_state
-        image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
-
+        image_outputs.pooler_output = self.vision_projection(
+            image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
+        )
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
         image_outputs.split_sizes = (
-            torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
         ).prod(dim=-1)
-        image_outputs.pooler_output = image_features
         return image_outputs
 
     @can_return_tuple

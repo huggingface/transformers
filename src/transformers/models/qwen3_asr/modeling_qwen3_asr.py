@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -278,6 +279,30 @@ def _get_feat_extract_output_lengths(input_lengths, n_window=50):
     return ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
 
 
+def get_valid_indices(
+    chunk_lengths: torch.Tensor, n_window: int, max_len_after_cnn: int | None = None, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after CNN extraction, or pop `"valid_indices"` from `kwargs` if precomputed.
+
+    Args:
+        chunk_lengths: `(num_chunks,)` pre-CNN chunk lengths.
+        n_window: half the chunk size (in raw frames).
+        max_len_after_cnn: length of each chunk after the CNN, for chunks padded to a fixed length; the longest
+            chunk's by default.
+        kwargs: optional caller kwargs — if it contains `"valid_indices"` it is popped and returned.
+
+    Returns:
+        `(total_valid,)` flat indices into the `(num_chunks * max_len_after_cnn)` grid.
+    """
+    if kwargs is not None and (valid_indices := kwargs.pop("valid_indices", None)) is not None:
+        return valid_indices
+    feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths, n_window)
+    if max_len_after_cnn is None:
+        max_len_after_cnn = feature_lens_after_cnn.max().item()
+    mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
+    return mask.flatten().nonzero().squeeze(-1)
+
+
 def get_audio_cu_seqlens(
     chunk_lengths: torch.Tensor,
     feature_lens: torch.Tensor,
@@ -419,11 +444,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         conv_out += self.positional_embedding.positional_embedding[:time_steps].to(conv_out.dtype)
 
         # Select only valid (non-padding) post-CNN positions into a flat packed sequence
-        chunk_post_cnn_lens = self._post_cnn_length(
-            input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1).reshape(-1).to(torch.long)
-        )
-        valid_mask = torch.arange(time_steps, device=input_features.device) < chunk_post_cnn_lens.unsqueeze(1)
-        valid_indices = valid_mask.flatten().nonzero().squeeze(-1)
+        valid_indices = get_valid_indices(chunk_lengths, self.n_window, time_steps, kwargs=kwargs)
         hidden_states = torch.index_select(conv_out.reshape(-1, conv_out.shape[-1]), 0, valid_indices)
 
         for encoder_layer in self.layers:

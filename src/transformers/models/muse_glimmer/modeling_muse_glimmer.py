@@ -46,6 +46,7 @@ from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -694,10 +695,15 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
         """
         embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
 
-        # Patch (h, w) reads the position table at (w, h): ref code passes
-        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw[:, [0, 2, 1]],
+        interp_indices, interp_weights = self.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
+        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
+        return embeddings + pos_embeds.to(embeddings.dtype)
+
+    def get_interpolation_inputs(self, grid_thw: torch.Tensor, kwargs: dict | None = None):
+        """The position table's interpolation indices and weights for each patch, or `kwargs`' when precomputed."""
+        return get_vision_interpolation_indices_and_weights(
+            grid_thw,
             num_grid_per_side=self.num_grid_per_side,
             mode=self.interpolation_mode,
             align_corners=self.interpolation_align_corners,
@@ -705,9 +711,6 @@ class MuseGlimmerVisionPatchEmbedder(nn.Module):
             padding=self.interpolation_padding,
             kwargs=kwargs,
         )
-        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseGlimmerVisionRotaryEmbedding(nn.Module):
@@ -768,31 +771,6 @@ class MuseGlimmerVisionRotaryEmbedding(nn.Module):
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)
         return torch.cat([freq_hw, freq_hw], dim=-1)
-
-
-def get_vision_pixel_shuffle_index(
-    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
-    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
-    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
-        return index
-    indices = []
-    offset = 0
-    for frames, height, width in grid_thw.tolist():
-        frames, height, width = int(frames), int(height), int(width)
-        permutation = torch.arange(height * width, device=grid_thw.device)
-        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
-        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
-        if frames > 1:
-            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
-            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
-            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
-        indices.append(permutation + offset)
-        offset += frames * height * width
-    return torch.cat(indices, dim=0)
 
 
 @auto_docstring

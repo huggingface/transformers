@@ -48,6 +48,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -676,6 +677,58 @@ class MuseSparkTextModel(MuseSparkPreTrainedModel):
         )
 
 
+class MuseSparkVisionPatchEmbedder(nn.Module):
+    def __init__(self, config: MuseSparkVisionConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.patch_embedding = nn.Linear(
+            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
+        )
+        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
+        # FIXME: only if square images - vision utils don't yet support non-square
+        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
+        self.num_grid_per_side = config.pos_emb_height
+        # muse_spark resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
+        self.interpolation_mode = "bilinear"
+        self.interpolation_align_corners = False
+        self.interpolation_padding = "zeros"
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+                The tensors corresponding to the input images.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
+        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
+
+        interp_indices, interp_weights = self.get_interpolation_inputs(grid_thw, kwargs=kwargs)
+        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
+        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
+        return embeddings + pos_embeds.to(embeddings.dtype)
+
+    def get_interpolation_inputs(self, grid_thw: torch.Tensor, kwargs: dict | None = None):
+        """The position table's interpolation indices and weights for each patch, or `kwargs`' when precomputed."""
+        # Patch (h, w) reads the position table at (w, h): ref code passes
+        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
+        return get_vision_interpolation_indices_and_weights(
+            grid_thw[:, [0, 2, 1]],
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            padding=self.interpolation_padding,
+            kwargs=kwargs,
+        )
+
+
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -813,54 +866,6 @@ class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class MuseSparkVisionPatchEmbedder(nn.Module):
-    def __init__(self, config: MuseSparkVisionConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.patch_embedding = nn.Linear(
-            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
-        )
-        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
-        # FIXME: only if square images - vision utils don't yet support non-square
-        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
-        self.num_grid_per_side = config.pos_emb_height
-        # muse_spark resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
-        self.interpolation_mode = "bilinear"
-        self.interpolation_align_corners = False
-        self.interpolation_padding = "zeros"
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
-        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
-
-        # Patch (h, w) reads the position table at (w, h): ref code passes
-        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw[:, [0, 2, 1]],
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-            padding=self.interpolation_padding,
-            kwargs=kwargs,
-        )
-        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        return embeddings + pos_embeds.to(embeddings.dtype)
-
-
 class MuseSparkVisionRotaryEmbedding(nn.Module):
     """
     Simple axial 2D rope with same freqs used for H and W grids. The freqs are
@@ -919,31 +924,6 @@ class MuseSparkVisionRotaryEmbedding(nn.Module):
         freq_h, freq_w = freq[:, 0], freq[:, 1]
         freq_hw = torch.cat([freq_h, freq_w], dim=-1)
         return torch.cat([freq_hw, freq_hw], dim=-1)
-
-
-def get_vision_pixel_shuffle_index(
-    grid_thw: torch.Tensor, merge_size: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index that groups each `merge_size x merge_size` spatial block (per frame/image) into
-    `merge_size**2` consecutive rows for `pixel_shuffle` to fold into the channel dim. Popped from
-    `kwargs` when precomputed, so the encoder avoids a per-image `grid_thw.tolist()` loop under export.
-    """
-    if kwargs is not None and (index := kwargs.pop("pixel_shuffle_index", None)) is not None:
-        return index
-    indices = []
-    offset = 0
-    for frames, height, width in grid_thw.tolist():
-        frames, height, width = int(frames), int(height), int(width)
-        permutation = torch.arange(height * width, device=grid_thw.device)
-        permutation = permutation.view(height // merge_size, merge_size, width // merge_size, merge_size)
-        permutation = permutation.permute(0, 2, 1, 3).reshape(-1)
-        if frames > 1:
-            # offset the permutation per frame so it indexes into the flattened `(frames*height*width)` sequence
-            frame_offsets = (torch.arange(frames, device=grid_thw.device) * height * width).view(frames, 1)
-            permutation = (permutation.unsqueeze(0) + frame_offsets).reshape(-1)
-        indices.append(permutation + offset)
-        offset += frames * height * width
-    return torch.cat(indices, dim=0)
 
 
 @auto_docstring
