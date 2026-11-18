@@ -329,6 +329,8 @@ class Ovis2_5VisionEmbeddings(MiniCPMV4_6VisionEmbeddings):
             grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
                 Temporal, height, and width patch-grid dimensions for each packed image or video.
         """
+        # MiniCPM uses nearest-position lookup; Ovis needs bicubic positions in spatial-merge order.
+        # Casting weights to the position table's dtype preserves the checkpoint's low-precision numerics.
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw,
             self.num_grid_per_side,
