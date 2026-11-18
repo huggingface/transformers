@@ -126,6 +126,7 @@ def render_import_structure(import_structure: IMPORT_STRUCTURE_T, indent: str = 
     deterministic, and every collection gets a trailing comma so `ruff format` leaves it exploded one item per line.
     """
     lines = [f"{indent}_import_structure = {{"]
+
     # `sorted()` on the backend names puts `frozenset()` (no requirements) first
     for backends in sorted(import_structure, key=sorted):
         if backends:
@@ -133,11 +134,14 @@ def render_import_structure(import_structure: IMPORT_STRUCTURE_T, indent: str = 
         else:
             backends_repr = "frozenset()"
         lines.append(f"{indent}    {backends_repr}: {{")
+
         for module_name in sorted(import_structure[backends], key=natural_sort_key):
             lines.append(f'{indent}        "{module_name}": {{')
             lines.extend(f'{indent}            "{name}",' for name in sorted(import_structure[backends][module_name]))
             lines.append(f"{indent}        }},")
+
         lines.append(f"{indent}    }},")
+
     lines.append(f"{indent}}}")
     return "\n".join(lines) + "\n"
 
