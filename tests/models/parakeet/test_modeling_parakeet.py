@@ -650,6 +650,26 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_generate_max_symbols_per_step(self):
+        # A joint head that always predicts a non-blank token with duration 0 would stall on the first encoder frame
+        # forever; `max_symbols_per_step` must force a one-frame advance after that many emissions.
+        config, input_features, _ = self.model_tester.prepare_config_and_inputs()
+        model = ParakeetForTDT(config).to(torch_device).eval()
+        model.generation_config.decoder_start_token_id = config.blank_token_id  # as set by convert_nemo_to_hf.py
+        with torch.no_grad():
+            model.joint.head.weight.zero_()
+            model.joint.head.bias.zero_()
+            model.joint.head.bias[0] = 1.0  # non-blank token 0
+            model.joint.head.bias[config.vocab_size + config.durations.index(0)] = 1.0  # duration 0
+
+        max_symbols = config.max_symbols_per_step
+        encoder_len = self.model_tester.output_seq_length
+        outputs = model.generate(input_features, max_new_tokens=4 * max_symbols * encoder_len)
+
+        # Every encoder frame is consumed, with exactly `max_symbols` tokens emitted on each.
+        self.assertTrue((outputs.durations.sum(-1) == encoder_len).all())
+        self.assertEqual(outputs.sequences.shape[1] - 1, max_symbols * encoder_len)
+
     @unittest.skip(reason="ParakeetForTDT does not use inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
