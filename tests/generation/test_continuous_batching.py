@@ -50,6 +50,7 @@ from transformers.generation.continuous_batching.cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from transformers.generation.continuous_batching.continuous_api import (
@@ -317,6 +318,29 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(second_output.generated_tokens, [101, 102])
         self.assertEqual(second_output.logprobs, [-1.01, -1.02])
         self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_mla_allocator_returns_contiguous_latents(self):
+        """The latents read back from the cache go through the projections of the model, and some linear layers
+        (the fp8 ones for instance) only accept contiguous inputs."""
+        config = SimpleNamespace(kv_lora_rank=6, qk_rope_head_dim=2)
+        allocator = MLACacheAllocator(
+            index=0,
+            config=config,  # type: ignore
+            num_key_value_heads=1,
+            cache_dtype=torch.float16,
+            page_size=4,
+            layer_indices=[0, 1],
+            allow_block_sharing=True,
+        )
+        _setup_cache_pool([allocator], num_sectors=2)
+        kv_latent = torch.randn(3, 1, 6, dtype=torch.float16)
+        rotated_key = torch.randn(3, 1, 2, dtype=torch.float16)
+        index = 2 * allocator.write_trash_index + torch.arange(3)  # the first rows after the two trash sectors
+        for layer_idx in (0, 1):
+            cached_kv_latent, cached_rotated_key = allocator.update(kv_latent, rotated_key, layer_idx, index, index)
+            self.assertTrue(cached_kv_latent.is_contiguous() and cached_rotated_key.is_contiguous())
+            torch.testing.assert_close(cached_kv_latent, kv_latent)
+            torch.testing.assert_close(cached_rotated_key, rotated_key)
 
     def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
         state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
