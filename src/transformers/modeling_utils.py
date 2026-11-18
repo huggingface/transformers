@@ -964,6 +964,10 @@ class MultimodalMixin:
     base model's.
     """
 
+    config: PreTrainedConfig
+    input_modalities: str | list[str]
+    model: "MultimodalMixin"
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         modalities = (
@@ -983,11 +987,11 @@ class MultimodalMixin:
     def get_video_embeddings(self, *args, **kwargs):
         return self.model.get_video_embeddings(*args, **kwargs)
 
-    def get_image_split_sizes(self, pixel_values=None, image_grid_thw=None, **kwargs) -> list[int]:
+    def get_image_split_sizes(self, pixel_values, image_grid_thw: torch.Tensor, **kwargs) -> list[int]:
         """The number of features of each image: its patches, merged by `spatial_merge_size`."""
         return (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
 
-    def get_video_split_sizes(self, pixel_values_videos=None, video_grid_thw=None, **kwargs) -> list[int]:
+    def get_video_split_sizes(self, pixel_values_videos, video_grid_thw: torch.Tensor, **kwargs) -> list[int]:
         """The number of features of each video: its patches, merged by `spatial_merge_size`."""
         return (video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
 
