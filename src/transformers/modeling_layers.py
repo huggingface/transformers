@@ -17,7 +17,7 @@ import copy
 import os
 import re
 import sys
-from functools import partial
+from functools import partial, wraps
 from typing import TYPE_CHECKING
 
 import torch
@@ -38,6 +38,7 @@ from .modeling_utils import LoadStateDictConfig, PreTrainedModel, _get_resolved_
 from .models.auto import AutoModel
 from .processing_utils import Unpack
 from .utils import ContextManagers, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from .utils.deprecation import deprecate_kwarg
 from .utils.loading_report import log_state_dict_report
 
 
@@ -79,36 +80,48 @@ class GradientCheckpointingLayer(nn.Module):
     # same states). Writers must leave it `False`, otherwise the cache is updated a second time on the backward replay.
     _can_checkpoint_with_cache = False
 
-    def __call__(self, *args, **kwargs):
-        if self.gradient_checkpointing and self.training:
-            do_warn = False
-            layer_name = self.__class__.__name__
-            message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # We checkpoint `forward` instead of `__call__` so module hooks (e.g. FSDP2's) stay outside the checkpoint.
+        # Otherwise they would run a second time when the backward pass recomputes the layer.
+        forward = cls.forward
 
-            if "use_cache" in kwargs and kwargs["use_cache"]:
-                kwargs["use_cache"] = False
-                message += " `use_cache=False`,"
-                do_warn = True
+        @wraps(forward)
+        def forward_with_checkpointing(self, *args, **kwargs):
+            # Subclasses of a layer are wrapped too (e.g. the `FSDP<Layer>` class that FSDP2 creates), so a `forward`
+            # can be wrapped more than once. Only the outermost wrapper checkpoints.
+            is_outermost = type(self).forward is forward_with_checkpointing
+            if self.gradient_checkpointing and self.training and is_outermost:
+                do_warn = False
+                layer_name = self.__class__.__name__
+                message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
 
-            if not self._can_checkpoint_with_cache:
-                # different names for the same thing in different layers
-                if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
-                    kwargs["past_key_values"] = None
-                    message += " `past_key_values=None`,"
+                if "use_cache" in kwargs and kwargs["use_cache"]:
+                    kwargs["use_cache"] = False
+                    message += " `use_cache=False`,"
                     do_warn = True
 
-                if "layer_past" in kwargs and kwargs["layer_past"] is not None:
-                    kwargs["layer_past"] = None
-                    message += " `layer_past=None`,"
-                    do_warn = True
+                if not self._can_checkpoint_with_cache:
+                    # different names for the same thing in different layers
+                    if "cache" in kwargs and kwargs["cache"] is not None:
+                        kwargs["cache"] = None
+                        message += " `cache=None`,"
+                        do_warn = True
 
-            # warn if anything was changed
-            if do_warn:
-                message = message.rstrip(",") + "."
-                logger.warning_once(message)
+                    if "layer_past" in kwargs and kwargs["layer_past"] is not None:
+                        kwargs["layer_past"] = None
+                        message += " `layer_past=None`,"
+                        do_warn = True
 
-            return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
-        return super().__call__(*args, **kwargs)
+                # warn if anything was changed
+                if do_warn:
+                    message = message.rstrip(",") + "."
+                    logger.warning_once(message)
+
+                return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
+            return forward(self, *args, **kwargs)
+
+        cls.forward = forward_with_checkpointing
 
 
 @auto_docstring
@@ -125,6 +138,7 @@ class GenericForSequenceClassification:
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -132,7 +146,7 @@ class GenericForSequenceClassification:
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -142,7 +156,7 @@ class GenericForSequenceClassification:
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -180,7 +194,7 @@ class GenericForSequenceClassification:
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
@@ -205,6 +219,7 @@ class GenericForQuestionAnswering:
     def set_input_embeddings(self, value):
         getattr(self, self.base_model_prefix).embed_tokens = value
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -212,7 +227,7 @@ class GenericForQuestionAnswering:
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
@@ -222,7 +237,7 @@ class GenericForQuestionAnswering:
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
@@ -272,6 +287,7 @@ class GenericForTokenClassification:
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -279,7 +295,7 @@ class GenericForTokenClassification:
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -289,7 +305,7 @@ class GenericForTokenClassification:
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -328,6 +344,7 @@ class MtpLayer(nn.Module):
         self.mtp_block = decoder_layer_cls(config, layer_idx)
         self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps) if use_post_norm else None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         inputs_embeds: torch.Tensor,
@@ -335,7 +352,7 @@ class MtpLayer(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor | None,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Some checkpoints (e.g. Inkling :eyes:) order the projection input as [hidden, embeds] instead
@@ -349,7 +366,7 @@ class MtpLayer(nn.Module):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         if self.use_post_norm:
@@ -446,7 +463,7 @@ class MtpModel(PreTrainedModel):
             "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
-            "past_key_values": mtp_cache,
+            "cache": mtp_cache,
             "position_ids": position_ids,
             # Force the mask function to look at this current idx in the mtp_cache to account for positions offset of mtp layers
             "layer_idx": layer_idx,
@@ -588,7 +605,7 @@ class MtpModel(PreTrainedModel):
             last_hidden_states,
             position_embeddings=position_embeddings,
             position_ids=position_ids,
-            past_key_values=mtp_cache,
+            cache=mtp_cache,
             **masks,
             **kwargs,
         )

@@ -209,7 +209,7 @@ class FalconH1ModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -227,7 +227,7 @@ class FalconH1ModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -261,20 +261,45 @@ class FalconH1ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
             torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
+
+    def create_and_check_gated_rms_norm_batched_cached_decoding(self, config, input_ids, *args):
+        """
+        With `mamba_rms_norm=True`, a batched single-token cached step must give the same hidden states
+        as the uncached forward pass, and must keep its `[batch_size, 1, hidden_size]` shape.
+        """
+        input_ids = input_ids.to(torch_device)
+        # The gate is applied in a different place depending on `mamba_norm_before_gate`, so we check both
+        for norm_before_gate in (True, False):
+            config.mamba_rms_norm = True
+            config.mamba_norm_before_gate = norm_before_gate
+            model = FalconH1Model(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                full_out = model(input_ids, use_cache=False).last_hidden_state
+                prefill = model(input_ids[:, :-1], use_cache=True)
+                step_out = model(input_ids[:, -1:], cache=prefill.cache, use_cache=True).last_hidden_state
+
+            self.parent.assertEqual(step_out.shape, (input_ids.shape[0], 1, config.hidden_size))
+            self.parent.assertTrue(
+                torch.allclose(full_out[:, -1:], step_out, atol=1e-4, rtol=1e-4),
+                msg=f"Max diff: {(full_out[:, -1:] - step_out).abs().max().item():.6f}",
+            )
 
     def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
         """
@@ -356,6 +381,10 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    def test_gated_rms_norm_batched_cached_decoding(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gated_rms_norm_batched_cached_decoding(*config_and_inputs)
 
     def test_kwargs_reach_mamba2_mixer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

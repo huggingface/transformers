@@ -811,6 +811,47 @@ class TestAttentionKernelRegistration(TestCasePlus):
             except Exception as e:
                 print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
+    def test_lazy_import_flash_attention_retries_failed_kernel_load(self):
+        import transformers.modeling_flash_attention_utils as fa_utils
+
+        kernel_obj = types.SimpleNamespace(flash_attn_varlen_func=lambda *a, **k: None)
+        attn_impl = "org/model"
+        # The first load fails (e.g. a network error), the second one succeeds
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.get_kernel",
+                side_effect=[RuntimeError("transient error"), kernel_obj],
+            ),
+            # Restore the loaded flash attention functions to avoid leaking them across tests
+            patch.multiple(
+                fa_utils,
+                _loaded_implementation=fa_utils._loaded_implementation,
+                _flash_fn=fa_utils._flash_fn,
+                _flash_varlen_fn=fa_utils._flash_varlen_fn,
+                _flash_with_kvcache_fn=fa_utils._flash_with_kvcache_fn,
+                _pad_fn=fa_utils._pad_fn,
+                _unpad_fn=fa_utils._unpad_fn,
+                _process_flash_kwargs_fn=fa_utils._process_flash_kwargs_fn,
+                _process_with_kvcache_kwargs_fn=fa_utils._process_with_kvcache_kwargs_fn,
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "transient error"):
+                fa_utils.lazy_import_flash_attention(attn_impl)
+            self.assertNotIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+
+            # The failed load is not cached: the kernel is loaded and registered on the next call
+            fa_utils.lazy_import_flash_attention(attn_impl)
+            self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+            # Cleanup registration to avoid leaking functions across tests
+            try:
+                ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
+            try:
+                ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
+
     def test_add_to_mapping_local(self):
         repo_path = "/abs/path/kernel"
         compatible_mapping = {}

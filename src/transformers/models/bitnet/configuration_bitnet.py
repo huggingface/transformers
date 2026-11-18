@@ -38,7 +38,7 @@ class BitNetConfig(PreTrainedConfig):
     """
 
     model_type = "bitnet"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     default_theta = 500000.0
 
     vocab_size: int = 128256

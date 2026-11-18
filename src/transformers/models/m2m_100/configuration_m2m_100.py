@@ -39,7 +39,7 @@ class M2M100Config(PreTrainedConfig):
     ```"""
 
     model_type = "m2m_100"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
