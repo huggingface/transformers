@@ -500,6 +500,7 @@ class HYV4VLModel(Qwen2VLModel):
         return position_ids, mrope_position_deltas
 
     @can_return_tuple
+    @auto_docstring
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -508,41 +509,20 @@ class HYV4VLModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
+        merge_size = self.config.vision_config.spatial_merge_size
+        frames, height, width = image_grid_thw.unbind(-1)
+        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
         return vision_outputs
 
     @can_return_tuple
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-        # Each merged row carries one extra newline token
-        merge = self.config.vision_config.spatial_merge_size
-        split_sizes = image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes.tolist())
-        return vision_outputs
-
-    @can_return_tuple
+    @auto_docstring
     def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        # Same implementation as for images
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @can_return_tuple
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring

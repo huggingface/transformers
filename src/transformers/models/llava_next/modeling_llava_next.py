@@ -262,7 +262,6 @@ def get_pack_index_per_image(
             num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                 image_size, config.image_grid_pinpoints, config.vision_config.image_size
             )
-            # The high-resolution patches as one grid, unpadded, a newline closing each row
             grid_index = torch.arange(offset + tokens_per_patch, offset + num_patches * tokens_per_patch)
             grid_index = grid_index.view(num_patch_height, num_patch_width, grid_size, grid_size)
             grid_index = grid_index.permute(0, 2, 1, 3).reshape(1, num_patch_height * grid_size, -1)

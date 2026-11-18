@@ -1520,9 +1520,6 @@ class Molmo2Model(LlavaModel):
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        All images' features as one tensor; `get_image_features` splits them per image.
-        """
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]
@@ -1578,7 +1575,9 @@ class Molmo2Model(LlavaModel):
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
-        return self.get_image_embeddings(pixel_values_videos, video_token_pooling, image_grids, **kwargs)
+        return self.get_image_embeddings(
+            pixel_values_videos, video_token_pooling, image_grids, return_dict=True, **kwargs
+        )
 
     @auto_docstring(
         custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is a "

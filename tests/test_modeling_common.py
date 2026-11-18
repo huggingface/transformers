@@ -4491,8 +4491,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches
-        eager, under flash attention, whose varlen kernel takes packed sequence lengths as tensors."""
+        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches eager."""
         tested = False
         for model_class in self.all_model_classes:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4509,14 +4508,13 @@ class ModelTesterMixin(ExportTesterMixin):
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            data_dependent_inputs = model.get_data_dependent_inputs(**inputs)
+            data_dependent_inputs = model.base_model.get_data_dependent_inputs(**inputs)
             for modality in ("image", "video", "audio"):
-                encoder = getattr(model, f"get_{modality}_embeddings", None) or getattr(
-                    model, f"get_{modality}_features", None
+                encoder = getattr(model.base_model, f"get_{modality}_embeddings", None) or getattr(
+                    model.base_model, f"get_{modality}_features", None
                 )
                 if encoder is None:
                     continue
-                # Its named arguments, and the modality's other inputs when it takes `**kwargs`
                 parameters = inspect.signature(encoder).parameters
                 takes_kwargs = any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
                 encoder_inputs = {
@@ -5946,7 +5944,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_video_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6024,7 +6022,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
                 continue
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6065,7 +6063,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6107,7 +6105,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()

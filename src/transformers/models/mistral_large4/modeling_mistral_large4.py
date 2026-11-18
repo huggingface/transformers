@@ -828,7 +828,6 @@ def get_merge_index(
     block = torch.arange(merge_size, device=device)
     merge_index, offset = [], 0
     for height, width in (torch.as_tensor(image_sizes) // patch_size).tolist():
-        # Each block's top-left patch, plus the offsets of the patches within a block
         rows = torch.arange(height // merge_size, device=device)[:, None] * merge_size
         columns = torch.arange(width // merge_size, device=device)[None, :] * merge_size
         within = (block[:, None] * width + block[None, :]).flatten()

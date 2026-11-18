@@ -776,7 +776,22 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def get_audio_features(self, input_features, input_features_mask, padding_mask, **kwargs):
+    @auto_docstring
+    def get_audio_features(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        padding_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
+            Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
+            `input_features`. Used to compute each chunk's valid encoder-output length.
+        padding_mask (`torch.Tensor` of shape `(batch_size, max_audio_length)`):
+            Mask marking each audio sample's valid raw-audio length, one row per sample. Used with
+            `config.audio_chunk_size` to recover `audio_chunk_mapping`.
+        """
         return self.model.get_audio_features(input_features, input_features_mask, padding_mask, **kwargs)
 
     @can_return_tuple

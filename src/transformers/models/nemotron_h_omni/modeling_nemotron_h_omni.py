@@ -215,7 +215,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         image_grid_hw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        """All images' features as one tensor; `get_image_features` splits them per image."""
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+
+        pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size**2)`):
+            Flattened patches of all images, concatenated.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
+            Patch grid `(height, width)` of each image.
+        """
         torch_compilable_check(
             image_grid_hw.prod(-1).sum() == pixel_values.shape[0],
             lambda: f"`pixel_values` holds {pixel_values.shape[0]} patches but `image_grid_hw` describes "
