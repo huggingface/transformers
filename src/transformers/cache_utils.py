@@ -1517,6 +1517,8 @@ class Cache:
             not (is_dummy or is_linear or (is_sliding and only_non_sliding))
             for is_linear, is_sliding, is_dummy in zip(self.is_linear, self.is_sliding, self.is_dummy)
         ]
+        if not any(is_offloaded):
+            return
         try:
             # Try to find the next offloaded layer, starting at `layer_idx`
             layer_idx = layer_idx + is_offloaded[layer_idx:].index(True)
