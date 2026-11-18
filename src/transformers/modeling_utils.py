@@ -965,21 +965,7 @@ class MultimodalMixin:
     """
 
     config: PreTrainedConfig
-    input_modalities: str | list[str]
     model: "MultimodalMixin"
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        modalities = (
-            cls.input_modalities if isinstance(cls.input_modalities, (tuple, list)) else (cls.input_modalities,)
-        )
-        for modality in ("image", "video"):
-            if modality in modalities:
-                continue
-            for name in (f"get_{modality}_embeddings", f"get_{modality}_features", f"get_{modality}_split_sizes"):
-                owner = next(klass for klass in cls.__mro__ if name in klass.__dict__)
-                if owner is MultimodalMixin:
-                    setattr(cls, name, _MissingModality())
 
     def get_image_embeddings(self, *args, **kwargs):
         return self.model.get_image_embeddings(*args, **kwargs)
@@ -1006,13 +992,6 @@ class MultimodalMixin:
         """Each video's features, from `get_video_embeddings`."""
         outputs = self.get_video_embeddings(*args, return_dict=True, **kwargs)
         return _split_modality_outputs(outputs, self.get_video_split_sizes(*args, **kwargs))
-
-
-class _MissingModality:
-    """Hides a `MultimodalMixin` getter: `hasattr` is false on the class and on its instances."""
-
-    def __get__(self, instance, owner=None):
-        raise AttributeError
 
 
 def _split_modality_outputs(outputs, split_sizes: list[int]):
