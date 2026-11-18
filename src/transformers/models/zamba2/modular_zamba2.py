@@ -572,11 +572,6 @@ class Zamba2ForCausalLM(ZambaForCausalLM):
 
 
 class Zamba2ForSequenceClassification(ZambaForSequenceClassification):
-    def __init__(self, config: Zamba2Config):
-        super().__init__(config)
-        self.model = Zamba2Model(config)
-        self.post_init()
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
