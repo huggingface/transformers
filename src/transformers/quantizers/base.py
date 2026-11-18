@@ -391,9 +391,13 @@ class HfQuantizer(ABC):
         """
         return {}
 
+    # An engine with its own kernels (e.g. vLLM) takes the checkpoint's tensors as they are: no load op, no
+    # `checkpoint_renames`. Only the model's conversions run
+    load_serialized = False
+
     def get_load_operation(self):
         """The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"""
-        if not self.pre_quantized:
+        if not self.pre_quantized or self.load_serialized:
             return None
         dequantize = getattr(self.quantization_config, "dequantize", False)
         return self.get_load_operations().get("dequantize" if dequantize else "deserialize")

@@ -446,7 +446,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.renamers = {}
         for quantizer in self.all_quantizers:
             names = quantizer.checkpoint_renames
-            if quantizer.pre_quantized and names:
+            if quantizer.pre_quantized and names and not quantizer.load_serialized:
                 renamer = re.compile("|".join(f"(?P<p{i}>.*\\.{n.replace('*', '.*')})" for i, n in enumerate(names)))
                 self.renamers[quantizer] = (renamer, list(names.values()))
 
