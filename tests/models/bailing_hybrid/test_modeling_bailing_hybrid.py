@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Ling 3 / Bailing MoE V3 model."""
 
+import json
 import re
 import tempfile
 import unittest
@@ -119,12 +120,31 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                 list(outputs.attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len]
             )
 
+    def test_swiglu_config_defaults_and_aliases(self):
+        config = self.model_tester.get_config()
+        for alias, name in (
+            ("experts_swiglu_limits", "expert_swiglu_limit_list"),
+            ("shared_experts_swiglu_limits", "share_expert_swiglu_limit_list"),
+        ):
+            with self.subTest(alias=alias):
+                self.assertEqual(getattr(config, alias), [0] * config.num_hidden_layers)
+                values = config.to_dict()
+                values.pop(name)
+                values[alias] = [0, 2.5]
+                aliased = BailingHybridConfig.from_dict(values)
+                self.assertEqual(getattr(aliased, name), [0, 2.5])
+                self.assertEqual(aliased.to_dict()[name], [0, 2.5])
+                self.assertNotIn(alias, aliased.to_dict())
+                values[alias] = [1]
+                with self.assertRaisesRegex(ValueError, "one limit per decoder layer"):
+                    BailingHybridConfig.from_dict(values)
+
     def test_swiglu_limits_per_layer_and_round_trip(self):
         config = self.model_tester.get_config()
         config.first_k_dense_replace = 0
         config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
-        config.expert_swiglu_limit_list = [0, 2.5]
-        config.share_expert_swiglu_limit_list = [1.5, 0]
+        config.experts_swiglu_limits = [0, 2.5]
+        config.shared_experts_swiglu_limits = [1.5, 0]
         config = BailingHybridConfig.from_dict(config.to_dict())
         model = BailingHybridForCausalLM(config)
         for layer, expert_limit, shared_limit in zip(model.model.layers, [float("inf"), 2.5], [1.5, float("inf")]):
@@ -133,9 +153,15 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             model.save_pretrained(directory)
+            with open(f"{directory}/config.json", encoding="utf-8") as file:
+                saved_config = json.load(file)
+            self.assertEqual(saved_config["expert_swiglu_limit_list"], [0, 2.5])
+            self.assertEqual(saved_config["share_expert_swiglu_limit_list"], [1.5, 0])
+            self.assertNotIn("experts_swiglu_limits", saved_config)
+            self.assertNotIn("shared_experts_swiglu_limits", saved_config)
             reloaded = BailingHybridForCausalLM.from_pretrained(directory)
-        self.assertEqual(reloaded.config.expert_swiglu_limit_list, [0, 2.5])
-        self.assertEqual(reloaded.config.share_expert_swiglu_limit_list, [1.5, 0])
+        self.assertEqual(reloaded.config.experts_swiglu_limits, [0, 2.5])
+        self.assertEqual(reloaded.config.shared_experts_swiglu_limits, [1.5, 0])
         self.assertEqual(reloaded.model.layers[1].mlp.experts.limit, 2.5)
         self.assertEqual(reloaded.model.layers[0].mlp.shared_experts.limit, 1.5)
 
@@ -212,6 +238,7 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         gate_up = torch.tensor([[2.0, -2.0, 3.0, -3.0]])
         gate, up = gate_up.chunk(2, dim=-1)
         for layer, limit in zip(model.model.layers, [float("inf"), 1.5]):
+            self.assertTrue(layer.mlp.experts.limit_after_act)
             self.assertEqual(layer.mlp.experts.limit, limit)
             expected = torch.nn.functional.silu(gate).clamp(max=limit) * up.clamp(-limit, limit)
             torch.testing.assert_close(layer.mlp.experts._apply_gate(gate_up), expected, rtol=0, atol=0)

@@ -142,7 +142,8 @@ class BailingHybridRotaryEmbedding(nn.Module):
 class BailingHybridExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    _fp8_experts_clamp_after_activation = True
+    # Declare the clipping order for replacement expert implementations.
+    limit_after_act = True
 
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
@@ -837,10 +838,10 @@ class BailingHybridMoE(nn.Module):
         self.shared_experts = BailingHybridMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-        if config.expert_swiglu_limit_list is not None:
-            self.experts.limit = config.expert_swiglu_limit_list[layer_idx] or float("inf")
-        if config.share_expert_swiglu_limit_list is not None:
-            self.shared_experts.limit = config.share_expert_swiglu_limit_list[layer_idx] or float("inf")
+        expert_limit = config.experts_swiglu_limits[layer_idx]
+        shared_limit = config.shared_experts_swiglu_limits[layer_idx]
+        self.experts.limit = expert_limit if expert_limit > 0 else float("inf")
+        self.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states

@@ -125,6 +125,8 @@ class BailingHybridConfig(DeepseekV3Config):
         "num_experts_per_tok": "num_experts_per_token",
         "n_shared_experts": "num_shared_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
+        "experts_swiglu_limits": "expert_swiglu_limit_list",
+        "shared_experts_swiglu_limits": "share_expert_swiglu_limit_list",
     }
 
     vocab_size: int = 157184
@@ -179,10 +181,6 @@ class BailingHybridConfig(DeepseekV3Config):
     rope_interleave = AttributeError()
 
     def __post_init__(self, **kwargs):
-        for name in ("expert_swiglu_limit_list", "share_expert_swiglu_limit_list"):
-            limits = getattr(self, name)
-            if limits is not None and len(limits) != self.num_hidden_layers:
-                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
         self.linear_head_dim = self.head_dim
         self.linear_num_heads = self.num_attention_heads
         self.linear_conv_kernel_dim = self.short_conv_kernel_size
@@ -201,6 +199,13 @@ class BailingHybridConfig(DeepseekV3Config):
             self.rope_parameters = {"rope_type": "default", "rope_theta": self.rope_theta}
 
         super().__post_init__(**kwargs)
+
+        for name in ("experts_swiglu_limits", "shared_experts_swiglu_limits"):
+            limits = getattr(self, name)
+            if limits is None:
+                setattr(self, name, [0] * self.num_hidden_layers)
+            elif len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
 
 
 class BailingHybridRMSNorm(LlamaRMSNorm):
@@ -419,10 +424,10 @@ class BailingHybridTopkRouter(DeepseekV3TopkRouter):
 class BailingHybridMoE(DeepseekV3MoE):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config)
-        if config.expert_swiglu_limit_list is not None:
-            self.experts.limit = config.expert_swiglu_limit_list[layer_idx] or float("inf")
-        if config.share_expert_swiglu_limit_list is not None:
-            self.shared_experts.limit = config.share_expert_swiglu_limit_list[layer_idx] or float("inf")
+        expert_limit = config.experts_swiglu_limits[layer_idx]
+        shared_limit = config.shared_experts_swiglu_limits[layer_idx]
+        self.experts.limit = expert_limit if expert_limit > 0 else float("inf")
+        self.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):

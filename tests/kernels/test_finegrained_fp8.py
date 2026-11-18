@@ -70,7 +70,7 @@ class FinegrainedFp8GatingTest(unittest.TestCase):
                     swiglu_alpha=alpha,
                 )
                 experts = fg.FP8Experts(config)
-                experts._fp8_experts_clamp_after_activation = after_activation
+                experts.limit_after_act = after_activation
                 if alpha is not None:
                     clipped_gate = gate.clamp(max=limit)
                     expected = clipped_gate * torch.sigmoid(alpha * clipped_gate) * (up.clamp(-limit, limit) + 1)

@@ -711,7 +711,7 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    _fp8_experts_clamp_after_activation = False
+    limit_after_act = False
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
 
@@ -803,7 +803,7 @@ class FP8Experts(nn.Module):
             up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
-        elif self._fp8_experts_clamp_after_activation:
+        elif self.limit_after_act:
             return self.act_fn(gate).clamp(max=self.limit) * up.clamp(min=-self.limit, max=self.limit)
         elif self.limit is not None:
             gate = gate.clamp(max=self.limit)
@@ -982,8 +982,8 @@ def replace_with_fp8_linear(
                     expert_dtype=quantization_config.expert_dtype,
                 )
                 # Preserve layer-specific post-activation clipping when replacing the expert module.
-                if getattr(module, "_fp8_experts_clamp_after_activation", False):
-                    new_module._fp8_experts_clamp_after_activation = True
+                if getattr(module, "limit_after_act", False):
+                    new_module.limit_after_act = True
                     new_module.limit = module.limit
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.

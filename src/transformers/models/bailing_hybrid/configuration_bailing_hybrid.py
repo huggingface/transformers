@@ -91,6 +91,8 @@ class BailingHybridConfig(PreTrainedConfig):
         "num_experts_per_tok": "num_experts_per_token",
         "n_shared_experts": "num_shared_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
+        "experts_swiglu_limits": "expert_swiglu_limit_list",
+        "shared_experts_swiglu_limits": "share_expert_swiglu_limit_list",
     }
 
     vocab_size: int = 157184
@@ -144,10 +146,6 @@ class BailingHybridConfig(PreTrainedConfig):
     mtp_loss_scaling_factor: float | int = 0.0
 
     def __post_init__(self, **kwargs):
-        for name in ("expert_swiglu_limit_list", "share_expert_swiglu_limit_list"):
-            limits = getattr(self, name)
-            if limits is not None and len(limits) != self.num_hidden_layers:
-                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
         self.linear_head_dim = self.head_dim
         self.linear_num_heads = self.num_attention_heads
         self.linear_conv_kernel_dim = self.short_conv_kernel_size
@@ -170,6 +168,13 @@ class BailingHybridConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
+
+        for name in ("experts_swiglu_limits", "shared_experts_swiglu_limits"):
+            limits = getattr(self, name)
+            if limits is None:
+                setattr(self, name, [0] * self.num_hidden_layers)
+            elif len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
 
 
 __all__ = ["BailingHybridConfig"]

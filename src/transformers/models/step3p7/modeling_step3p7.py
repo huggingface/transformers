@@ -540,7 +540,8 @@ class Step3p7MLP(nn.Module):
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    _fp8_experts_clamp_after_activation = True
+    # Declare the clipping order for replacement expert implementations.
+    limit_after_act = True
 
     def __init__(self, config, swiglu_limit=None):
         super().__init__()

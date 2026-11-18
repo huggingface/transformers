@@ -839,7 +839,8 @@ class Step3p7MLP(DeepseekV4MLP):
 
 @no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
-    _fp8_experts_clamp_after_activation = True
+    # Declare the clipping order for replacement expert implementations.
+    limit_after_act = True
 
     def __init__(self, config, swiglu_limit=None):
         super().__init__(config)
