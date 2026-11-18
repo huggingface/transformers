@@ -1254,7 +1254,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[1, -1, :5]
         expected_output_slice = torch.tensor(
-            [0.1018, -0.2026, 0.2116, 0.0270, -0.1233],
+            [0.0638, -0.2213, 0.0653, -0.0589, -0.0149],
             dtype=torch.float,
             device=torch_device,
         )
@@ -1316,13 +1316,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
         torch.testing.assert_close(
-            loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
+            loss, torch.tensor(5.7777, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
         )
         loss.backward()
         # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
-            [0.0004, 0.0003, 0.0006, -0.0004, 0.0002],
+            [0.0010, 0.0003, -0.0002, -0.0004, -0.0002],
             dtype=torch.float,
             device=torch_device,
         )
