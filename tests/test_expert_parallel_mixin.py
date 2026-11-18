@@ -55,6 +55,7 @@ EP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # VLM
     "glm4v_moe",
 }
+EP_DISTRIBUTED_TEST_MODEL_TYPES = None
 
 
 # =============================================================================

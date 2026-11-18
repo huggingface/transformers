@@ -46,7 +46,12 @@ class PhimoeConfig(PreTrainedConfig):
 
     model_type = "phimoe"
     keys_to_ignore_at_inference = ["cache"]
-    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+    }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

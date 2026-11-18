@@ -54,9 +54,8 @@ if is_torch_available():
 
 class GraniteMoeHybridModelTester(BambaModelTester):
     config_class = GraniteMoeHybridConfig
-    if is_torch_available():
-        model_class = GraniteMoeHybridModel
-        for_causal_lm_class = GraniteMoeHybridForCausalLM
+    model_class = GraniteMoeHybridModel
+    causal_lm_class = GraniteMoeHybridForCausalLM
 
     def __init__(
         self,
@@ -67,7 +66,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
     ):
         super().__init__(parent)
         self.shared_intermediate_size = shared_intermediate_size
-        self.layer_types = layer_types
+        self.layer_types = ["linear_attention", "full_attention"]
         self.use_cache = use_cache
 
     def _update_layer_configs(self):

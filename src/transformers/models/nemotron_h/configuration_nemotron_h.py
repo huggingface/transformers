@@ -82,7 +82,13 @@ class NemotronHConfig(PreTrainedConfig):
 
     model_type = "nemotron_h"
     attribute_map = {"layer_types": "layers_block_type", "num_local_experts": "n_routed_experts"}
-    base_model_tp_plan = {"embeddings": "embedding_rowwise"}
+    base_model_tp_plan = {
+        "embeddings": "embedding_rowwise",
+        "layers.*.mixer.q_proj": "colwise",
+        "layers.*.mixer.k_proj": "colwise",
+        "layers.*.mixer.v_proj": "colwise",
+        "layers.*.mixer.o_proj": "rowwise",
+    }
     base_model_ep_plan = {
         "layers.*.mixer.experts.up_proj": "grouped_gemm",
         "layers.*.mixer.experts.down_proj": "grouped_gemm",

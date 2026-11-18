@@ -48,6 +48,8 @@ if is_torch_available():
 
 
 class NemotronHModelTester:
+    causal_lm_class = NemotronHForCausalLM
+
     def __init__(
         self,
         parent,

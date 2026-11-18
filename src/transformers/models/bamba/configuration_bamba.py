@@ -43,7 +43,15 @@ class BambaConfig(PreTrainedConfig):
     """
 
     model_type = "bamba"
-    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise",
+    }
     attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["cache"]
 

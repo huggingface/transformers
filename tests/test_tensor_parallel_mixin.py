@@ -72,6 +72,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "qwen2_audio",
     "voxtral",
 }
+TP_DISTRIBUTED_TEST_MODEL_TYPES = None
 
 
 # =============================================================================
