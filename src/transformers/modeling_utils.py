@@ -966,7 +966,6 @@ class ModalityFeaturesMixin:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # A model without a modality has none of its getters
         modalities = (
             cls.input_modalities if isinstance(cls.input_modalities, (tuple, list)) else (cls.input_modalities,)
         )
