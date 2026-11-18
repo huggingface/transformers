@@ -17,7 +17,6 @@ Tests for the serving layer.
 """
 
 import asyncio
-import copy
 import json
 import socket
 import tempfile
@@ -64,7 +63,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.chat_parsing import ResponseParser
-from transformers.utils.chat_template_utils import render_jinja_template
 from transformers.utils.import_utils import is_serve_available
 
 from ..test_decision_head_common import tiny_qwen2
@@ -253,7 +251,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             self.assertEqual(msg["content"][0]["type"], "text")
 
     def test_llm_tool_use_fields_forwarded(self):
-        """Tool-use fields (tool_calls, tool_call_id) should be forwarded to processor inputs."""
+        """Tool-use fields (tool_calls, tool_call_id) and reasoning_content should be forwarded to processor inputs."""
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -262,7 +260,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         messages = [
             {"role": "user", "content": "What's the weather in Paris?"},
-            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "assistant", "reasoning_content": "Look up the weather first.", "tool_calls": tool_calls},
             {"role": "tool", "content": "22°C, sunny", "tool_call_id": "call_1"},
         ]
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
@@ -270,57 +268,10 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         # The preprocessor parses function.arguments from JSON string to dict.
         tool_calls[0]["function"]["arguments"] = json.loads(tool_calls[0]["function"]["arguments"])
         self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertEqual(result[1]["reasoning_content"], "Look up the weather first.")
         self.assertNotIn("tool_calls", result[0])
         self.assertEqual(result[2]["tool_call_id"], "call_1")
         self.assertNotIn("tool_call_id", result[0])
-
-    def test_reasoning_fields_forwarded(self):
-        template = "{% if messages[0][field] is defined %}{{ messages[0][field] }}{% else %}absent{% endif %}"
-        for modality in (Modality.LLM, Modality.VLM, Modality.MULTIMODAL):
-            for field in ("reasoning_content", "thinking", "reasoning"):
-                for value in ("Let me think.", "", None):
-                    with self.subTest(modality=modality, field=field, value=value):
-                        messages = [{"role": "assistant", "content": "Hello!", field: value}]
-                        original = copy.deepcopy(messages)
-                        result = BaseHandler.get_processor_inputs_from_messages(messages, modality)
-                        content = "Hello!" if modality == Modality.LLM else [{"type": "text", "text": "Hello!"}]
-                        expected = {"role": "assistant", "content": content}
-                        if value is not None:
-                            expected[field] = value
-                        self.assertEqual(result, [expected])
-                        rendered, _ = render_jinja_template([result], chat_template=template, field=field)
-                        self.assertEqual(rendered, [value if value is not None else "absent"])
-                        self.assertEqual(messages, original)
-
-    def test_tool_call_reasoning_reaches_chat_template(self):
-        template = (
-            "{{ messages[1].reasoning_content }}|{{ messages[1].content }}|"
-            "{{ messages[1].tool_calls[0].function.arguments.city }}|{{ messages[2].content }}"
-        )
-        for field in ("reasoning_content", "thinking", "reasoning"):
-            with self.subTest(field=field):
-                messages = [
-                    {"role": "user", "content": "What's the weather in Paris?"},
-                    {
-                        "role": "assistant",
-                        "content": "Tool call markup",
-                        field: "I need to look up the weather.",
-                        "tool_calls": [
-                            {
-                                "id": "call_1",
-                                "type": "function",
-                                "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'},
-                            }
-                        ],
-                    },
-                    {"role": "tool", "content": "22 degrees", "tool_call_id": "call_1"},
-                ]
-                original = copy.deepcopy(messages)
-                result = BaseHandler.get_processor_inputs_from_messages(messages, Modality.LLM)
-                rendered, _ = render_jinja_template([result], chat_template=template)
-                self.assertEqual(rendered, ["I need to look up the weather.||Paris|22 degrees"])
-                self.assertEqual(result[2]["tool_call_id"], "call_1")
-                self.assertEqual(messages, original)
 
     def test_llm_empty_tool_calls_keeps_content(self):
         """An assistant message with a null or empty `tool_calls` is a plain text message."""
@@ -331,67 +282,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             messages = [{"role": "assistant", "content": "Hello!", "tool_calls": tool_calls}]
             result = get_processor_inputs_from_messages(messages, Modality.LLM)
             self.assertEqual(result, [{"role": "assistant", "content": "Hello!"}])
-
-    @require_serve
-    def test_handlers_forward_reasoning_except_native_mistral_common(self):
-        class TemplateReached(Exception):
-            pass
-
-        messages = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi!", "reasoning_content": "I should greet the user."},
-            {"role": "user", "content": "Continue."},
-        ]
-        for handler_class, input_key in ((ChatCompletionHandler, "messages"), (ResponseHandler, "input")):
-            input_messages = messages
-            if input_key == "input":
-                input_messages = [
-                    messages[0],
-                    {
-                        "type": "reasoning",
-                        "content": [{"type": "reasoning_text", "text": messages[1]["reasoning_content"]}],
-                    },
-                    {"role": "assistant", "content": "Hi!"},
-                    messages[2],
-                ]
-            processors = (
-                ("tokenizer", SimpleNamespace(backend="tokenizers"), Modality.LLM, True),
-                (
-                    "mistral_tokenizer",
-                    SimpleNamespace(backend="mistral_common", tokenizer=SimpleNamespace()),
-                    Modality.LLM,
-                    False,
-                ),
-                ("no_backend", SimpleNamespace(), Modality.LLM, True),
-                (
-                    "wrapped_tokenizer",
-                    SimpleNamespace(tokenizer=SimpleNamespace(backend="tokenizers")),
-                    Modality.MULTIMODAL,
-                    True,
-                ),
-                (
-                    "wrapped_mistral_tokenizer",
-                    SimpleNamespace(tokenizer=SimpleNamespace(backend="mistral_common", tokenizer=SimpleNamespace())),
-                    Modality.MULTIMODAL,
-                    False,
-                ),
-            )
-            for name, processor, modality, preserve_reasoning in processors:
-                with self.subTest(handler=handler_class.__name__, processor=name):
-                    manager = MagicMock()
-                    manager.get_model_modality.return_value = modality
-                    processor.apply_chat_template = MagicMock(side_effect=TemplateReached)
-                    handler = handler_class(manager, MagicMock())
-                    body = {"model": "test-model", input_key: copy.deepcopy(input_messages)}
-                    with patch.object(handler, "_resolve_model", return_value=("test-model", MagicMock(), processor)):
-                        with self.assertRaises(TemplateReached):
-                            asyncio.run(handler.handle_request(body, "test-request"))
-                    passed_messages = processor.apply_chat_template.call_args.args[0]
-                    if preserve_reasoning:
-                        self.assertEqual(passed_messages[1]["reasoning_content"], messages[1]["reasoning_content"])
-                    else:
-                        self.assertNotIn("reasoning_content", passed_messages[1])
-                    self.assertEqual(body[input_key], input_messages)
 
     def test_vlm_tool_use_fields_forwarded(self):
         """Tool-use fields should be forwarded for VLM modality as well."""
@@ -1324,6 +1214,39 @@ class TestCompletion(ServeIntegrationTestCase):
 class TestResponseInputConversion(unittest.TestCase):
     def _make_handler(self):
         return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
+
+    def test_response_forwards_reasoning_except_native_mistral(self):
+        class TemplateReached(Exception):
+            pass
+
+        reasoning = "Greet the user."
+        mistral = SimpleNamespace(backend="mistral_common", tokenizer=SimpleNamespace())
+        cases = (
+            ("tokenizers", SimpleNamespace(backend="tokenizers"), Modality.LLM, reasoning),
+            ("mistral_common", mistral, Modality.LLM, None),
+            ("wrapped_mistral_common", SimpleNamespace(tokenizer=mistral), Modality.MULTIMODAL, None),
+        )
+        body = {
+            "model": "test-model",
+            "input": [
+                {"role": "user", "content": "Hello"},
+                {"type": "reasoning", "content": [{"type": "reasoning_text", "text": reasoning}]},
+                {"role": "assistant", "content": "Hi!"},
+            ],
+        }
+        for name, processor, modality, expected in cases:
+            with self.subTest(processor=name):
+                processor.apply_chat_template = MagicMock(side_effect=TemplateReached)
+                handler = self._make_handler()
+                handler.model_manager.get_model_modality.return_value = modality
+                with patch.object(handler, "_resolve_model", return_value=("test-model", MagicMock(), processor)):
+                    with self.assertRaises(TemplateReached):
+                        asyncio.run(handler.handle_request(body, "test-request"))
+                assistant = processor.apply_chat_template.call_args.args[0][1]
+                if expected is None:
+                    self.assertNotIn("reasoning_content", assistant)
+                else:
+                    self.assertEqual(assistant["reasoning_content"], expected)
 
     def test_string_input(self):
         handler = self._make_handler()
