@@ -21,6 +21,7 @@ Output files written to --output-dir (default: current directory):
   new_failing_tests_YYYY_MM_DD.json           only new failures vs prev run, no trace
   new_failing_tests_with_trace_YYYY_MM_DD.json  only new failures vs prev run, with trace
   failing_tests_categories_YYYY_MM_DD.json    failing tests grouped by root-cause error
+  job_results.json                            run metadata + per-job status, test counts and failures
 
 Failures are grouped by job, keyed by the real job name (matrix shards are kept
 as separate jobs). Each job entry looks like:
@@ -73,6 +74,7 @@ from analyze_gh_wf_runs import (  # noqa: E402
     apply_plugin,
     classify_by_scanning_log,
     extract_failures_with_errors,
+    extract_test_counts,
 )
 
 
@@ -199,19 +201,24 @@ def get_previous_run(current_run_id, workflow, repo=REPO, token=None):
 # ---------------------------------------------------------------------------
 
 
-def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
+def collect_run_failures(run_id, repo=REPO, token=None, plugin=None, with_job_results=False):
     """
     Fetch all job logs for a workflow run and parse pytest failures.
 
-    Only fetches logs for jobs that did *not* succeed (skips successful jobs to
-    avoid downloading large logs unnecessarily).
+    Only fetches logs for jobs that failed, plus (with `with_job_results`) the successful
+    ones, to get their test counts.
 
     Returns:
-        (jobs_meta, grouped_failures)
+        (jobs_meta, grouped_failures, job_results)
         - jobs_meta: list of raw job dicts from the API
         - grouped_failures: dict  job_name ->
               list of {"test": str, "short_error": str, "trace": str}
           Tests are deduplicated within each job.
+        - job_results: dict  job_name -> {"status", "job_link", "passed", "failed", "errors", "skipped"}
+          (empty without `with_job_results`). "status" is "passed", "failed", or "no_summary" for a
+          failed job without pytest's final line (killed, setup failure, or log unavailable), which
+          then has an "error" (its first "##[error]" line) instead of the test counts. Successful jobs
+          without pytest's final line (e.g. setup jobs) are left out.
     """
     if plugin is None:
         plugin = TracePlugin()
@@ -220,20 +227,34 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
     print(f"  Run {run_id}: {len(jobs)} jobs found", file=sys.stderr)
 
     grouped = defaultdict(list)
+    job_results = {}
 
     for job in jobs:
         conclusion = job.get("conclusion") or "unknown"
-        # Only fetch logs for jobs that actually ran and failed.
-        # Skip success (no failures), skipped (never ran), and unknown (still
-        # running — e.g. the report job itself querying its own run).
-        if conclusion != "failure":
+        # Only fetch logs for jobs that actually ran and failed (and, with `with_job_results`, succeeded).
+        # Skip skipped (never ran) and unknown (still running — e.g. the report job itself querying its own run).
+        if conclusion != "failure" and not (with_job_results and conclusion == "success"):
             continue
 
         job_name = job["name"]
         print(f"  [{conclusion}] {job_name}", file=sys.stderr)
 
         log = fetch_job_log(job["id"], repo=repo, token=token)
-        if not log:
+
+        if with_job_results:
+            counts = extract_test_counts(log) if log else None
+            if counts is not None:
+                status = "passed" if conclusion == "success" else "failed"
+                job_results[job_name] = {"status": status, "job_link": job.get("html_url"), **counts}
+            elif conclusion == "failure":
+                error = next((line for line in log.splitlines() if "##[error]" in line), "") if log else ""
+                job_results[job_name] = {
+                    "status": "no_summary",
+                    "job_link": job.get("html_url"),
+                    "error": error.split("##[error]", 1)[1].strip() if error else "(log unavailable)",
+                }
+
+        if conclusion != "failure" or not log:
             continue
 
         failures = extract_failures_with_errors(log)
@@ -260,7 +281,7 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
                 }
             )
 
-    return jobs, dict(grouped)
+    return jobs, dict(grouped), job_results
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +439,48 @@ def _format_jobs(grouped, job_urls, with_trace):
         }
         for job_name, items in sorted(grouped.items())
     }
+
+
+def write_job_results(run, previous_run, job_results, current_grouped, previous_grouped, output_dir):
+    """
+    Write job_results.json: the run's metadata and, per job, its status, test counts and failures
+    (like `model_results.json` of the daily CI). Used by `ci_report_notify.py`.
+    """
+    new_grouped = compute_new_failures(current_grouped, previous_grouped)
+    jobs = {}
+    for job_name, result in sorted(job_results.items()):
+        jobs[job_name] = {
+            **result,
+            "new_failures": len(new_grouped.get(job_name, [])),
+            "failures": [
+                {"line": item["test"], "trace": item["short_error"]} for item in current_grouped.get(job_name, [])
+            ],
+        }
+
+    path = os.path.join(output_dir, "job_results.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "run": {
+                    "id": str(run["id"]),
+                    "url": run["html_url"],
+                    "number": run["run_number"],
+                    "workflow": run["name"],
+                    "event": run["event"],
+                    "branch": run["head_branch"],
+                    "head_sha": run["head_sha"],
+                    "created_at": run["created_at"],
+                },
+                "previous_run": {"id": str(previous_run["id"]), "url": previous_run["html_url"]}
+                if previous_run
+                else None,
+                "jobs": jobs,
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+    print(f"Wrote {path}", file=sys.stderr)
 
 
 def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, previous_grouped, output_dir):
@@ -587,7 +650,9 @@ def main():
     # Collect failures for the current run
     # ------------------------------------------------------------------
     print(f"\n=== Current run: {args.run_id} ===", file=sys.stderr)
-    current_jobs, current_grouped = collect_run_failures(args.run_id, repo=args.repo, token=token, plugin=plugin)
+    current_jobs, current_grouped, job_results = collect_run_failures(
+        args.run_id, repo=args.repo, token=token, plugin=plugin, with_job_results=True
+    )
     job_urls = {job["name"]: job.get("html_url") for job in current_jobs}
     total = sum(len(v) for v in current_grouped.values())
     print(f"  Total unique failures: {total}", file=sys.stderr)
@@ -605,7 +670,7 @@ def main():
             file=sys.stderr,
         )
         print(f"\n=== Previous run: {prev_id} ===", file=sys.stderr)
-        _, previous_grouped = collect_run_failures(prev_id, repo=args.repo, token=token)
+        _, previous_grouped, _ = collect_run_failures(prev_id, repo=args.repo, token=token)
         prev_total = sum(len(v) for v in previous_grouped.values())
         print(f"  Total previous failures: {prev_total}", file=sys.stderr)
     else:
@@ -627,6 +692,9 @@ def main():
         previous_grouped,
         args.output_dir,
     )
+    run = _api_get(f"https://api.github.com/repos/{args.repo}/actions/runs/{args.run_id}", token=token)
+    if run is not None:
+        write_job_results(run, previous_run, job_results, current_grouped, previous_grouped, args.output_dir)
     print("\nDone.", file=sys.stderr)
 
 
