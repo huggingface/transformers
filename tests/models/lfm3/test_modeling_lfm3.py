@@ -49,6 +49,10 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
 
+    @unittest.skip("The causal_conv1d kernels only serve LFM3's conv width of 7 in half precision")
+    def test_kernels_can_load_without_crashing(self):
+        pass
+
     def test_attention_outputs(self):
         """LFM3 records attentions for the full and sliding attention layers, not for the conv layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
