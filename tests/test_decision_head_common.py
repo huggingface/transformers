@@ -20,7 +20,6 @@ from types import SimpleNamespace
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.testing_utils import torch_device
 
 
 if is_torch_available():
@@ -116,8 +115,10 @@ def check_decision(
     """The answers to the request of `decision_test.json` (probabilities in order, or `noul`) match `expected`."""
     test = json.loads(Path(hf_hub_download(decision_repo, "decision_test.json")).read_bytes())
     # By default the original checkpoint, which the decision files are converted from
+    # The checkpoints are larger than the CI accelerators: offload the layers that don't fit to the CPU
+    placement = {} if "device_map" in pipeline_kwargs else {"device_map": "auto"}
     decide = pipeline(
-        "decision", model=model or test["model"], decision_config=decision_repo, device=torch_device, **pipeline_kwargs
+        "decision", model=model or test["model"], decision_config=decision_repo, **placement, **pipeline_kwargs
     )
     answers = decide(test["request"])
     for name, value in expected.items():
