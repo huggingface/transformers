@@ -1114,7 +1114,6 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "Emu3DecoderLayer",
     ]
-    _skip_keys_device_placement = ["cache", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

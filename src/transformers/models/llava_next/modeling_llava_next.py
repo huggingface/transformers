@@ -227,7 +227,6 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True

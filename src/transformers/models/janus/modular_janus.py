@@ -180,7 +180,6 @@ class JanusPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["JanusVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

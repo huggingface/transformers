@@ -659,7 +659,6 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer", "Dots3NoteTextDecoderLayer", "Dots3NoteVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -1119,7 +1118,6 @@ class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1487,7 +1485,6 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

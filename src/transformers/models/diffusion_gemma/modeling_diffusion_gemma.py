@@ -826,7 +826,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_sdpa = True
     _supports_flex_attn = True

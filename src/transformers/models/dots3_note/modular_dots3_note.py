@@ -418,7 +418,6 @@ class Dots3NoteConfig(PreTrainedConfig):
         "vision_config": Dots3NoteVisionConfig,
         "audio_config": Dots3NoteAudioConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | Dots3NoteTextConfig | None = None
     vision_config: dict | Dots3NoteVisionConfig | None = None

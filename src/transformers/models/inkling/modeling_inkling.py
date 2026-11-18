@@ -614,7 +614,6 @@ class InklingPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InklingDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     # The relative position bias flows through the attention interface as a `position_bias` (duh)
     # kwarg that only the eager path consumes; other backends need a score_mod/kernel
     _supports_flash_attn = False

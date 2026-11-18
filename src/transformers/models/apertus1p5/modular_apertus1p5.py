@@ -308,7 +308,6 @@ class Apertus1p5Config(PreTrainedConfig):
     ```"""
 
     model_type = "apertus1p5"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "text_config": Apertus1p5TextConfig,
         "vision_config": Apertus1p5VisionTokenizerConfig,
@@ -561,7 +560,6 @@ class Apertus1p5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True

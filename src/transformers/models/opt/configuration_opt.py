@@ -49,7 +49,6 @@ class OPTConfig(PreTrainedConfig):
     ```"""
 
     model_type = "opt"
-    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 50272
     hidden_size: int = 768

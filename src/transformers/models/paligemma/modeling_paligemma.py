@@ -107,7 +107,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
-    _skip_keys_device_placement = ["cache"]
     _can_compile_fullgraph = False
     _supports_flash_attn = True
     _supports_sdpa = True

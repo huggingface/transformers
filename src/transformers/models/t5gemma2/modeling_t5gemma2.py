@@ -640,7 +640,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
 
     # Mask creation is incompatible
     # FA due to non-default creation / SWA

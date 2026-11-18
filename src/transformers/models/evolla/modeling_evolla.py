@@ -1243,7 +1243,6 @@ class EvollaPreTrainedModel(PreTrainedModel):
         "EvollaSequenceCompressorResampler",
         "EvollaSequenceAlignerCrossAttention",
     ]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # see dependency on `EvollaSequenceCompressorResampler`
     _supports_sdpa = True
     _supports_flex_attn = False  # see dependency on `EvollaSequenceCompressorResampler`
