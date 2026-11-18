@@ -41,7 +41,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -942,7 +942,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
 
 
 @auto_docstring
-class Qwen3VLMoeModel(ModalityFeaturesMixin, Qwen3VLMoePreTrainedModel):
+class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1426,7 +1426,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-class Qwen3VLMoeForConditionalGeneration(ModalityFeaturesMixin, Qwen3VLMoePreTrainedModel, GenerationMixin):
+class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

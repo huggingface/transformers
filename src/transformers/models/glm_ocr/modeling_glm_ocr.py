@@ -35,7 +35,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -801,7 +801,7 @@ class GlmOcrTextModel(GlmOcrPreTrainedModel):
 
 
 @auto_docstring
-class GlmOcrModel(ModalityFeaturesMixin, GlmOcrPreTrainedModel):
+class GlmOcrModel(GlmOcrPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1172,7 +1172,7 @@ class GlmOcrModel(ModalityFeaturesMixin, GlmOcrPreTrainedModel):
         return outputs
 
 
-class GlmOcrForConditionalGeneration(ModalityFeaturesMixin, GlmOcrPreTrainedModel, GenerationMixin):
+class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

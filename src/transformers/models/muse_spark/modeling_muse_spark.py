@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -1268,7 +1268,7 @@ class MuseSparkVisionAdapter(nn.Module):
 
 
 @auto_docstring
-class MuseSparkModel(ModalityFeaturesMixin, MuseSparkPreTrainedModel):
+class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
     input_modalities = ("image", "video", "text")
 
     def __init__(self, config: MuseSparkConfig):
@@ -1571,7 +1571,7 @@ class MuseSparkModel(ModalityFeaturesMixin, MuseSparkPreTrainedModel):
 
 
 @auto_docstring
-class MuseSparkForConditionalGeneration(ModalityFeaturesMixin, MuseSparkPreTrainedModel, GenerationMixin):
+class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, MultimodalMixin, GenerationMixin):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")

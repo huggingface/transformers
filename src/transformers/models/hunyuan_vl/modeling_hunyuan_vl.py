@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -827,7 +827,7 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
     The HunYuanVL model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class HunYuanVLModel(ModalityFeaturesMixin, HunYuanVLPreTrainedModel):
+class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1131,7 +1131,7 @@ class HunYuanVLModel(ModalityFeaturesMixin, HunYuanVLPreTrainedModel):
 
 
 @auto_docstring
-class HunYuanVLForConditionalGeneration(ModalityFeaturesMixin, HunYuanVLPreTrainedModel, GenerationMixin):
+class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}

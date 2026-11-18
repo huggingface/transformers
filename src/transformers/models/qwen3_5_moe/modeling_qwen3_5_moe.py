@@ -41,7 +41,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1378,7 +1378,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
 
 
 @auto_docstring
-class Qwen3_5MoeModel(ModalityFeaturesMixin, Qwen3_5MoePreTrainedModel):
+class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1921,7 +1921,7 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
         )
 
 
-class Qwen3_5MoeForConditionalGeneration(ModalityFeaturesMixin, Qwen3_5MoePreTrainedModel, GenerationMixin):
+class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

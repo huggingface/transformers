@@ -47,7 +47,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -1889,7 +1889,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
 
 
 @auto_docstring
-class Glm5NextModel(ModalityFeaturesMixin, Glm5NextPreTrainedModel):
+class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -2149,7 +2149,7 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class Glm5NextForConditionalGeneration(ModalityFeaturesMixin, Glm5NextPreTrainedModel, GenerationMixin):
+class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, MultimodalMixin, GenerationMixin):
     """
     Main Glm5Next conditional generation class.
     """

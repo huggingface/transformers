@@ -24,7 +24,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -50,7 +50,7 @@ class HyperCLOVAXVisionV2PreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class HyperCLOVAXVisionV2Model(ModalityFeaturesMixin, HyperCLOVAXVisionV2PreTrainedModel):
+class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -251,7 +251,7 @@ class HyperCLOVAXVisionV2Model(ModalityFeaturesMixin, HyperCLOVAXVisionV2PreTrai
 
 @auto_docstring
 class HyperCLOVAXVisionV2ForConditionalGeneration(
-    ModalityFeaturesMixin, HyperCLOVAXVisionV2PreTrainedModel, GenerationMixin
+    HyperCLOVAXVisionV2PreTrainedModel, MultimodalMixin, GenerationMixin
 ):
     """
     Main EXAONE 4.5 conditional generation class.

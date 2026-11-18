@@ -45,7 +45,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1289,7 +1289,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
 
 
 @auto_docstring
-class Qwen3_5Model(ModalityFeaturesMixin, Qwen3_5PreTrainedModel):
+class Qwen3_5Model(Qwen3_5PreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1742,7 +1742,7 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
     config: Qwen3_5Config
 
 
-class Qwen3_5ForConditionalGeneration(ModalityFeaturesMixin, Qwen3_5PreTrainedModel, GenerationMixin):
+class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

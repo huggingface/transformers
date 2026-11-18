@@ -45,7 +45,7 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1667,7 +1667,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2_5OmniThinkerModel(ModalityFeaturesMixin, Qwen2_5OmniPreTrainedModelForConditionalGeneration):
+class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration, MultimodalMixin):
     config: Qwen2_5OmniThinkerConfig
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^token2wav"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
@@ -1967,7 +1967,7 @@ class Qwen2_5OmniThinkerModel(ModalityFeaturesMixin, Qwen2_5OmniPreTrainedModelF
 
 
 class Qwen2_5OmniThinkerForConditionalGeneration(
-    ModalityFeaturesMixin, Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin
+    Qwen2_5OmniPreTrainedModelForConditionalGeneration, MultimodalMixin, GenerationMixin
 ):
     config: Qwen2_5OmniThinkerConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}

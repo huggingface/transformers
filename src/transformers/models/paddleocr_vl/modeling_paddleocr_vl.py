@@ -44,7 +44,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -950,7 +950,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
 
 @auto_docstring
-class PaddleOCRVLModel(ModalityFeaturesMixin, PaddleOCRVLPreTrainedModel):
+class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1290,7 +1290,7 @@ class PaddleOCRVLModel(ModalityFeaturesMixin, PaddleOCRVLPreTrainedModel):
         return outputs
 
 
-class PaddleOCRVLForConditionalGeneration(ModalityFeaturesMixin, PaddleOCRVLPreTrainedModel, GenerationMixin):
+class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]

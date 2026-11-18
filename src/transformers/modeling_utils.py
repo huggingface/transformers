@@ -957,7 +957,7 @@ class ModuleUtilsMixin:
         return total_params
 
 
-class ModalityFeaturesMixin:
+class MultimodalMixin:
     """
     `get_image_features` and `get_video_features` from a model's flat `get_image_embeddings` and `get_video_embeddings`,
     split per image or video by `get_image_split_sizes` and `get_video_split_sizes`. A model with a head reaches its
@@ -974,7 +974,7 @@ class ModalityFeaturesMixin:
                 continue
             for name in (f"get_{modality}_embeddings", f"get_{modality}_features", f"get_{modality}_split_sizes"):
                 owner = next(klass for klass in cls.__mro__ if name in klass.__dict__)
-                if owner is ModalityFeaturesMixin:
+                if owner is MultimodalMixin:
                     setattr(cls, name, _MissingModality())
 
     def get_image_embeddings(self, *args, **kwargs):
@@ -1005,7 +1005,7 @@ class ModalityFeaturesMixin:
 
 
 class _MissingModality:
-    """Hides a `ModalityFeaturesMixin` getter: `hasattr` is false on the class and on its instances."""
+    """Hides a `MultimodalMixin` getter: `hasattr` is false on the class and on its instances."""
 
     def __get__(self, instance, owner=None):
         raise AttributeError

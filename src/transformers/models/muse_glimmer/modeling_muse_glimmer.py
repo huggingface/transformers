@@ -31,7 +31,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -893,7 +893,7 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 
 @auto_docstring
-class MuseGlimmerModel(ModalityFeaturesMixin, MuseGlimmerPreTrainedModel):
+class MuseGlimmerModel(MuseGlimmerPreTrainedModel, MultimodalMixin):
     input_modalities = ("image", "video", "text")
 
     def __init__(self, config: MuseGlimmerConfig):
@@ -1082,7 +1082,7 @@ class MuseGlimmerModel(ModalityFeaturesMixin, MuseGlimmerPreTrainedModel):
 
 
 @auto_docstring
-class MuseGlimmerForConditionalGeneration(ModalityFeaturesMixin, MuseGlimmerPreTrainedModel, GenerationMixin):
+class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

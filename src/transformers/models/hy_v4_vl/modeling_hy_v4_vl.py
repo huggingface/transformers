@@ -39,7 +39,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1218,7 +1218,7 @@ class HYV4VLTextModel(HYV4VLPreTrainedModel):
 
 
 @auto_docstring
-class HYV4VLModel(ModalityFeaturesMixin, HYV4VLPreTrainedModel):
+class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1608,7 +1608,7 @@ class HYV4VLModel(ModalityFeaturesMixin, HYV4VLPreTrainedModel):
 
 
 @auto_docstring
-class HYV4VLForConditionalGeneration(ModalityFeaturesMixin, HYV4VLPreTrainedModel, GenerationMixin):
+class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}

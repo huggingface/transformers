@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
@@ -474,7 +474,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
 
 
 @auto_docstring
-class Kimi_K25Model(ModalityFeaturesMixin, Kimi_K25PreTrainedModel):
+class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
         self.vision_tower = Kimi_K25VisionModel._from_config(config.vision_config)

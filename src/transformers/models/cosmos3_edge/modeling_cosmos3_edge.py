@@ -32,7 +32,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -757,7 +757,7 @@ class Cosmos3EdgePatchMerger(nn.Module):
 
 
 @auto_docstring
-class Cosmos3EdgeModel(ModalityFeaturesMixin, Cosmos3EdgePreTrainedModel):
+class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     accepts_loss_kwargs = False
     config: Cosmos3EdgeConfig
@@ -1142,12 +1142,11 @@ class Cosmos3EdgeModel(ModalityFeaturesMixin, Cosmos3EdgePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 @auto_docstring
-class Cosmos3EdgeForConditionalGeneration(ModalityFeaturesMixin, Cosmos3EdgePreTrainedModel, GenerationMixin):
+class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Cosmos3EdgeConfig

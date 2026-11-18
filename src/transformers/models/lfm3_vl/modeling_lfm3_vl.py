@@ -30,7 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -519,7 +519,7 @@ class Lfm3VlCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 
 @auto_docstring
-class Lfm3VlModel(ModalityFeaturesMixin, Lfm3VlPreTrainedModel):
+class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -696,7 +696,7 @@ class Lfm3VlModel(ModalityFeaturesMixin, Lfm3VlPreTrainedModel):
     The LFM3_VL model which consists of a vision backbone and a language model.
     """
 )
-class Lfm3VlForConditionalGeneration(ModalityFeaturesMixin, Lfm3VlPreTrainedModel, GenerationMixin):
+class Lfm3VlForConditionalGeneration(Lfm3VlPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

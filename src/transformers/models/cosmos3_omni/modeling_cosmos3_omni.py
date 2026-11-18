@@ -27,7 +27,7 @@ import torch.nn as nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -95,7 +95,7 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
 
 
 @auto_docstring
-class Cosmos3OmniModel(ModalityFeaturesMixin, Cosmos3OmniPreTrainedModel):
+class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -507,7 +507,7 @@ class Cosmos3OmniModel(ModalityFeaturesMixin, Cosmos3OmniPreTrainedModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
-class Cosmos3OmniForConditionalGeneration(ModalityFeaturesMixin, Cosmos3OmniPreTrainedModel, GenerationMixin):
+class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

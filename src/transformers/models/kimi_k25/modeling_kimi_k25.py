@@ -30,7 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -586,7 +586,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
 
 
 @auto_docstring
-class Kimi_K25Model(ModalityFeaturesMixin, Kimi_K25PreTrainedModel):
+class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
         self.vision_tower = Kimi_K25VisionModel._from_config(config.vision_config)
@@ -766,7 +766,7 @@ class Kimi_K25Model(ModalityFeaturesMixin, Kimi_K25PreTrainedModel):
 
 
 @auto_docstring
-class Kimi_K25ForConditionalGeneration(ModalityFeaturesMixin, Kimi_K25PreTrainedModel, GenerationMixin):
+class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

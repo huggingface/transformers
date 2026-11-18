@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -957,7 +957,7 @@ class CohereCompassVisionModel(CohereCompassPreTrainedModel):
 
 
 @auto_docstring
-class CohereCompassModel(ModalityFeaturesMixin, CohereCompassPreTrainedModel):
+class CohereCompassModel(CohereCompassPreTrainedModel, MultimodalMixin):
     """Vision-language base model that fuses the vision tower into the decoder and applies DeepStack residuals."""
 
     base_model_prefix = "model"
@@ -1376,7 +1376,7 @@ class CohereCompassModel(ModalityFeaturesMixin, CohereCompassPreTrainedModel):
     The CohereCompass model with a language modeling head, for image-text-to-text generation.
     """
 )
-class CohereCompassForConditionalGeneration(ModalityFeaturesMixin, CohereCompassPreTrainedModel, GenerationMixin):
+class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208

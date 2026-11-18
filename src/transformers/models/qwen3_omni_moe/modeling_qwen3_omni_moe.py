@@ -45,7 +45,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, ModalityFeaturesMixin, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -1749,7 +1749,7 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen3OmniMoeThinkerModel(ModalityFeaturesMixin, Qwen3OmniMoePreTrainedModelForConditionalGeneration):
+class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGeneration, MultimodalMixin):
     config: Qwen3OmniMoeThinkerConfig
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
     _no_split_modules = [
@@ -2165,7 +2165,7 @@ def load_balancing_loss_func(
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(
-    ModalityFeaturesMixin, Qwen3OmniMoePreTrainedModelForConditionalGeneration, GenerationMixin
+    Qwen3OmniMoePreTrainedModelForConditionalGeneration, MultimodalMixin, GenerationMixin
 ):
     config: Qwen3OmniMoeThinkerConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
