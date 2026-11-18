@@ -829,7 +829,6 @@ class ZambaPreTrainedModel(PreTrainedModel):
         "attentions": ZambaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         super()._init_weights(module)

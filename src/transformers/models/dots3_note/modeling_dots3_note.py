@@ -132,7 +132,6 @@ class Dots3NoteTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -679,7 +678,6 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         r"^model\.(language_model\.)?mtp\.",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteTextTopkRouter):
@@ -900,7 +898,6 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1234,7 +1231,6 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1501,7 +1497,6 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteVisionTopKRouter):
@@ -1541,16 +1536,8 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` with data-dependent operations (host syncs, loops over
-        images): the rotary `position_ids` of the patches, and the attention's `cu_seqlens` and `max_seqlen`.
-        Passed back to the forward, they keep `torch.compile` and `torch.export` free of those operations. Those
-        already in `kwargs` are returned as they are; only the config is read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width dimensions of feature shape for each image.
-        """
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        and the attention's `cu_seqlens` and `max_seqlen`."""
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}

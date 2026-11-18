@@ -77,6 +77,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "HunYuanVLForConditionalGeneration": (
             "Dynamically pools image embeddings based on THW and has packed attention."
         ),
+        "HYV4VLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HYV4VLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -485,6 +489,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerModel": "Shifted-window (Swin) backbone exceeds the 1000s test timeout under dynamic shapes.",
         "MaskFormerForInstanceSegmentation": "Same `timeout` as `MaskFormerModel`.",
+        "SwinModel": "Shifted-window attention exceeds the 1000s test timeout under dynamic shapes.",
+        "SwinBackbone": "Same `timeout` as `SwinModel`.",
+        "SwinForImageClassification": "Same `timeout` as `SwinModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` as `SwinModel`.",
+        "Swinv2Model": "Same `timeout` as `SwinModel`.",
+        "Swinv2Backbone": "Same `timeout` as `SwinModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` as `SwinModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` as `SwinModel`.",
         "Mask2FormerModel": "Deformable-attention pixel decoder exceeds the 1000s test timeout under dynamic shapes.",
         "Mask2FormerForUniversalSegmentation": "Same `timeout` as `Mask2FormerModel`.",
         "GroundingDinoModel": "Deformable-attention encoder exceeds the 1000s test timeout under dynamic shapes.",

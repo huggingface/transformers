@@ -198,7 +198,6 @@ class DeepseekVLHybridAligner(nn.Module):
 
 
 class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

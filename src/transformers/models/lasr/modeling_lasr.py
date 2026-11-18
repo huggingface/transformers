@@ -105,7 +105,6 @@ class LasrEncoderRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -563,25 +562,23 @@ class LasrEncoder(LasrPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
 class LasrCTCGenerateOutput(ModelOutput):
-    """
-    Outputs of Lasr CTC model generation.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
-            Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
-            each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
+    r"""
+    sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+        The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
+        if all batches finished early due to the `eos_token_id`.
+    logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
+        Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
+        at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
+        each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
+    attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
+        Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+        `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+    hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
+        Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+        `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor
