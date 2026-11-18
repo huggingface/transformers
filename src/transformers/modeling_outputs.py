@@ -78,6 +78,8 @@ class BaseModelOutputWithPooling(ModelOutput):
             through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
             the classification token after processing through a linear layer and a tanh activation function. The linear
             layer weights are trained from the next sentence prediction (classification) objective during pretraining.
+            Multimodal models' `get_image_features` and `get_video_features` return a tuple instead, with each image's or
+            video's features, split by `split_sizes`.
         hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -95,7 +97,7 @@ class BaseModelOutputWithPooling(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    pooler_output: torch.Tensor | None = None
+    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     split_sizes: torch.LongTensor | None = None
