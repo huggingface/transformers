@@ -213,22 +213,18 @@ class Step3p7VisionAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
-        batch_size, seq_length = hidden_states.shape[:-1]
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # Each of shape: [batch_size, seq_length, num_heads, head_dim]
-        query_states = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        key_states = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
-        value_states = self.v_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Apply positional embeddings
         cos = position_embeddings[0].unsqueeze(0).float()
         sin = position_embeddings[1].unsqueeze(0).float()
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        # Each of shape: [batch_size, num_heads, seq_length, head_dim]
-        query_states = query_states.permute(0, 2, 1, 3).contiguous()
-        key_states = key_states.permute(0, 2, 1, 3).contiguous()
-        value_states = value_states.permute(0, 2, 1, 3).contiguous()
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -246,10 +242,8 @@ class Step3p7VisionAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.permute(1, 0, 2, 3).contiguous()  # [seq_length, batch_size, num_heads, head_dim]
-        attn_output = attn_output.view(seq_length, batch_size, -1)  # [seq_length, batch_size, embedding_dim]
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
-        attn_output = attn_output.permute(1, 0, 2).contiguous()  # [batch_size, seq_length, embedding_dim]
         return attn_output, attn_weights
 
 
