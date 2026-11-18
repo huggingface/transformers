@@ -20,15 +20,25 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoConfig, AutoTokenizer, BertConfig, ClefConfig, is_torch_available, pipeline
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    BertConfig,
+    ClefConfig,
+    is_torch_available,
+    pipeline,
+)
 from transformers.decision import Question
 from transformers.testing_utils import require_torch
+from transformers.utils import is_peft_available
 
 from ...test_decision_head_common import render
 
@@ -52,12 +62,12 @@ CAUSAL_PACKAGE = {
         class TinySparkConfig(PretrainedConfig):
             model_type = "tinyspark"
 
-            def __init__(self, vocab_size=32, dim=24, n_layers=2, max_seq_len=1024, **kwargs):
+            def __init__(self, vocab_size=32, dim=24, n_layers=2, max_seq_len=1024, tie_word_embeddings=True, **kwargs):
                 self.vocab_size = vocab_size
                 self.dim = dim
                 self.n_layers = n_layers
                 self.max_seq_len = max_seq_len
-                self.tie_word_embeddings = True
+                self.tie_word_embeddings = tie_word_embeddings
                 super().__init__(**kwargs)
     """,
     "core.py": """
@@ -219,15 +229,76 @@ HEAD_SIZES = {
 }
 
 
-def write_package(directory, kind, vocab_size):
-    """The code and `config.json` of a synthetic package in `directory`, without weights."""
-    files, auto_map = (CAUSAL_PACKAGE, CAUSAL_AUTO_MAP) if kind == "causal" else (ENCODER_PACKAGE, ENCODER_AUTO_MAP)
+# The causal package with a language modeling head of its own (untied) that returns its `hidden_states` when asked,
+# without `**kwargs`: its hidden states are the last of them, with no `backbone_hidden_module`
+CAUSAL_HIDDEN_STATES_MODELING = """
+    import torch
+    from torch import nn
+    from transformers import PreTrainedModel
+    from transformers.generation import GenerationMixin
+    from transformers.modeling_outputs import CausalLMOutputWithPast
+
+    from .configuration_tinyspark import TinySparkConfig
+    from .core import Core
+
+
+    class TinySparkForCausalLM(PreTrainedModel, GenerationMixin):
+        config_class = TinySparkConfig
+        base_model_prefix = "model"
+        _no_split_modules = []
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.model = Core(config)
+            self.lm_head = nn.Linear(config.dim, config.vocab_size, bias=False)
+            self.post_init()
+
+        def _init_weights(self, module):
+            pass
+
+        def get_input_embeddings(self):
+            return self.model.embed
+
+        def get_output_embeddings(self):
+            return self.lm_head
+
+        def forward(self, input_ids, attention_mask=None, use_cache=None, output_hidden_states=False, return_dict=True):
+            if not getattr(self, "_buffers_ok", False):
+                self.model.gain.copy_(torch.linspace(1.0, 0.5, self.model.gain.shape[0]))
+                self._buffers_ok = True
+            hidden_states = self.model(input_ids, return_hidden=True)
+            all_hidden_states = (self.model.embed(input_ids), hidden_states) if output_hidden_states else None
+            return CausalLMOutputWithPast(logits=self.lm_head(hidden_states), hidden_states=all_hidden_states)
+"""
+
+
+def write_package(directory, kind, vocab_size, model_type=None, variant=False):
+    """
+    The code and `config.json` of a synthetic package in `directory`, without weights: `kind` is `causal`, `encoder` or
+    `causal_hidden_states`, of `model_type` (the package's own by default), and its code computes otherwise when
+    `variant`.
+    """
+    causal = kind != "encoder"
+    files, auto_map = (dict(CAUSAL_PACKAGE), CAUSAL_AUTO_MAP) if causal else (dict(ENCODER_PACKAGE), ENCODER_AUTO_MAP)
+    if kind == "causal_hidden_states":
+        files["modeling_tinyspark.py"] = CAUSAL_HIDDEN_STATES_MODELING
+    default_type = "tinyspark" if causal else "tinyenc"
+    model_type = model_type or default_type
     for name, code in files.items():
-        Path(directory, name).write_text(textwrap.dedent(code).lstrip(), encoding="utf-8")
-    model_type = "tinyspark" if kind == "causal" else "tinyenc"
-    sizes = {"dim": 24, "n_layers": 2} if kind == "causal" else {"hidden_size": 24, "num_hidden_layers": 2}
+        code = textwrap.dedent(code).lstrip().replace(f'model_type = "{default_type}"', f'model_type = "{model_type}"')
+        if variant:
+            code = code.replace("torch.tanh(layer(", "torch.sin(layer(")
+        Path(directory, name).write_text(code, encoding="utf-8")
+    sizes = {"dim": 24, "n_layers": 2} if causal else {"hidden_size": 24, "num_hidden_layers": 2}
+    if kind == "causal_hidden_states":
+        sizes["tie_word_embeddings"] = False
     config = {"model_type": model_type, "auto_map": auto_map, "vocab_size": vocab_size, **sizes}
     Path(directory, "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+
+def unique_model_type(base):
+    """A `model_type` that nothing in the process has registered: its config stays deferred until loaded."""
+    return f"{base}{uuid.uuid4().hex[:8]}"
 
 
 def package_modules(directory) -> list[str]:
@@ -258,12 +329,12 @@ class ClefRemoteBackboneTest(unittest.TestCase):
     def folder(self, name):
         return tempfile.mkdtemp(prefix=f"{name}-", dir=self.root)  # a new module name for its dynamic module
 
-    def package(self, kind):
+    def package(self, kind, model_type=None, variant=False, source=None):
         """A synthetic package with random weights in a new folder, and its backbone loaded from it."""
-        tokenizer = self.tokenizer if kind == "causal" else self.encoder_tokenizer
-        source = self.folder(f"{kind}-package")
-        write_package(source, kind, len(tokenizer))
-        auto_class = AutoModelForCausalLM if kind == "causal" else AutoModel
+        tokenizer = self.encoder_tokenizer if kind == "encoder" else self.tokenizer
+        source = source or self.folder(f"{kind}-package")
+        write_package(source, kind, len(tokenizer), model_type, variant)
+        auto_class = AutoModel if kind == "encoder" else AutoModelForCausalLM
         config = AutoConfig.from_pretrained(source, trust_remote_code=True)
         torch.manual_seed(0)
         backbone = auto_class.from_config(config, trust_remote_code=True)
@@ -278,6 +349,9 @@ class ClefRemoteBackboneTest(unittest.TestCase):
         if kind == "causal":
             style = {"global_pooling": "last", "prompt_style": "chatml", "backbone_hidden_module": "model.final_norm"}
             size = backbone.config.dim
+        elif kind == "causal_hidden_states":
+            style = {"global_pooling": "last", "prompt_style": "chatml"}
+            size = backbone.config.dim
         else:
             style = {"global_pooling": "first", "prompt_style": "plain"}
             size = backbone.config.hidden_size
@@ -285,13 +359,13 @@ class ClefRemoteBackboneTest(unittest.TestCase):
             text_config=backbone.config, backbone_hidden_size=size, head_type=head_type, **HEAD_SIZES, **style
         )
 
-    def model(self, kind="causal", head_type="joint"):
-        source, backbone = self.package(kind)
+    def model(self, kind="causal", head_type="joint", **package_kwargs):
+        source, backbone = self.package(kind, **package_kwargs)
         return source, ClefForDecision(self.clef_config(backbone, kind, head_type), model=backbone)
 
     def inputs(self, model, kind):
         """A batch of the prompts of the request rendered twice, right-padded (the causal package refuses left)."""
-        tokenizer = self.tokenizer if kind == "causal" else self.encoder_tokenizer
+        tokenizer = self.encoder_tokenizer if kind == "encoder" else self.tokenizer
         (prompt,) = render(tokenizer, self.request, model.decision_config)
         prompts = [prompt.inputs, {**prompt.inputs, "input_ids": prompt.inputs["input_ids"][:, :]}]
         length = prompt.inputs["input_ids"].shape[-1]
@@ -314,7 +388,7 @@ class ClefRemoteBackboneTest(unittest.TestCase):
     def save(self, model, kind):
         folder = self.folder(f"saved-{kind}-{model.config.head_type}")
         model.save_pretrained(folder)
-        (self.tokenizer if kind == "causal" else self.encoder_tokenizer).save_pretrained(folder)
+        (self.encoder_tokenizer if kind == "encoder" else self.tokenizer).save_pretrained(folder)
         return folder
 
     def test_build_forward_backward(self):
@@ -427,7 +501,7 @@ class ClefRemoteBackboneTest(unittest.TestCase):
                 "ClefForDecision(config)": lambda **kwargs: ClefForDecision(config),
             }}
             for loader, load in loaders.items():
-                for flag in ({{}}, {{"trust_remote_code": False}}):
+                for flag in ({{}}, {{"trust_remote_code": False}}, {{"trust_remote_code": "true"}}, {{"trust_remote_code": 1}}):
                     try:
                         load(**flag)
                     except ValueError as error:
@@ -460,18 +534,25 @@ class ClefRemoteBackboneTest(unittest.TestCase):
         _, model = self.model("encoder", "joint")
         folder = self.save(model, "encoder")
         ClefForDecision.from_pretrained(folder, trust_remote_code=True)
-        for flag in ({}, {"trust_remote_code": False}):
+        # `True` itself, not any true value
+        for flag in ({}, {"trust_remote_code": False}, {"trust_remote_code": "true"}, {"trust_remote_code": 1}):
             with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
                 ClefForDecision.from_pretrained(folder, **flag)
             with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
                 AutoModelForDecision.from_pretrained(folder, **flag)
 
     def test_backbone_from_the_hub_keeps_its_repository(self):
-        # A backbone loaded from the Hub (its `_name_or_path` a repository id): the references name the repository and
-        # no code is copied; the config of the model in memory is unchanged
+        # A backbone loaded from the Hub: its `_name_or_path` a repository id and its classes imported from the dynamic
+        # module of that repository (simulated: their module named as transformers names those of the Hub). The
+        # references name the repository and no code is copied; the config of the model in memory is unchanged
         _, model = self.model("causal", "cosine")
         model.config.text_config._name_or_path = "someone/tiny-spark"
-        folder = self.save(model, "causal")
+        hub_module = "transformers_modules.someone.tiny_hyphen_spark.0123456789abcdef"
+        with (
+            mock.patch.object(type(model.config.text_config), "__module__", f"{hub_module}.configuration_tinyspark"),
+            mock.patch.object(type(model.model), "__module__", f"{hub_module}.modeling_tinyspark"),
+        ):
+            folder = self.save(model, "causal")
         saved = json.loads(Path(folder, "config.json").read_text(encoding="utf-8"))["text_config"]["auto_map"]
         self.assertEqual(saved, {key: f"someone/tiny-spark--{value}" for key, value in CAUSAL_AUTO_MAP.items()})
         self.assertEqual(model.config.text_config.auto_map, CAUSAL_AUTO_MAP)
@@ -523,3 +604,242 @@ class ClefRemoteBackboneTest(unittest.TestCase):
         Path(source, "joint_head_config.json").write_text(json.dumps({}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "defined by its own code"):
             ClefForDecision.from_pretrained(source, trust_remote_code=True)
+
+    # Fix round 1 of the review of the first commit
+
+    def test_native_type_without_automodel_never_prompts_nor_runs(self):
+        # C1: a native `model_type` that has no `AutoModel` class (`trocr`) with an `auto_map` to code in the folder.
+        # In a new process with "y" on stdin: every loader raises, nothing asks, the code never runs
+        backbone = AutoModel.from_config(
+            BertConfig(
+                vocab_size=len(self.encoder_tokenizer),
+                hidden_size=24,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+            )
+        )
+        model = ClefForDecision(
+            ClefConfig(
+                text_config=backbone.config,
+                backbone_hidden_size=24,
+                global_pooling="first",
+                prompt_style="plain",
+                head_type="cosine",
+                **HEAD_SIZES,
+            ),
+            model=backbone,
+        )
+        folder = self.save(model, "encoder")
+        canary = self.root / "canary.txt"
+        Path(folder, "evil.py").write_text(
+            f"open({str(canary)!r}, 'w').write('ran')\nfrom transformers import PreTrainedModel as EvilModel\n",
+            encoding="utf-8",
+        )
+        config = json.loads(Path(folder, "config.json").read_text(encoding="utf-8"))
+        config["text_config"] = {
+            "model_type": "trocr",
+            "auto_map": {"AutoModel": "evil.EvilModel"},
+            "_name_or_path": folder,
+            "vocab_size": len(self.encoder_tokenizer),
+            "d_model": 24,
+        }
+        Path(folder, "config.json").write_text(json.dumps(config), encoding="utf-8")
+        script = textwrap.dedent(
+            f"""
+            from transformers import AutoModelForDecision, ClefForDecision, pipeline
+
+            folder = {folder!r}
+            loaders = {{
+                "ClefForDecision": lambda **kwargs: ClefForDecision.from_pretrained(folder, **kwargs),
+                "AutoModelForDecision": lambda **kwargs: AutoModelForDecision.from_pretrained(folder, **kwargs),
+                "pipeline": lambda **kwargs: pipeline("decision", model=folder, device="cpu", **kwargs),
+            }}
+            for loader, load in loaders.items():
+                for flag in ({{}}, {{"trust_remote_code": False}}):
+                    try:
+                        load(**flag)
+                    except ValueError as error:
+                        print("RAISED", loader, flag, "AutoModel" in str(error))
+                    else:
+                        print("LOADED", loader, flag)
+            """
+        )
+        environment = {**os.environ, "HF_MODULES_CACHE": str(self.root / "modules"), "TRANSFORMERS_VERBOSITY": "error"}
+        result = subprocess.run(
+            [sys.executable, "-c", script], input="y\n" * 20, capture_output=True, text=True, env=environment
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        self.assertFalse(canary.exists(), "the code of the auto_map ran")
+        self.assertNotIn("[y/N]", result.stdout + result.stderr)
+        self.assertEqual(result.stdout.count("RAISED"), 6, result.stdout)
+        self.assertEqual(result.stdout.count("True\n"), 6, result.stdout)  # Clef's message, about `AutoModel`
+
+    def test_hook_reads_the_forward_of_its_own_thread(self):
+        # C2: two forwards of one model at once, in two threads, read through `backbone_hidden_module`. A barrier on
+        # entering the backbone holds both until both hooks are registered: each gets its own hidden states
+        _, backbone = self.package("causal")
+        model = ClefForDecision(self.clef_config(backbone, "causal", "cosine"), model=backbone).eval()
+        prompts = [torch.tensor([[5, 6, 7, 8]]), torch.tensor([[9, 10, 11, 12]])]
+        with torch.no_grad():
+            backbone(prompts[0])  # its buffers, built on its first forward
+            expected = [backbone.model(input_ids, return_hidden=True) for input_ids in prompts]
+        barrier = threading.Barrier(2, timeout=30)
+
+        def wait(module, args):
+            barrier.wait()  # returns nothing: the arguments of the forward are unchanged
+
+        handle = backbone.register_forward_pre_hook(wait)
+        results, errors = [None, None], []
+
+        def run(index):
+            try:
+                with torch.no_grad():
+                    results[index] = model.backbone_hidden_states(prompts[index])
+            except Exception as error:  # noqa: BLE001
+                errors.append(error)
+
+        try:
+            for _ in range(5):
+                threads = [threading.Thread(target=run, args=(index,)) for index in range(2)]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+                self.assertFalse(errors, errors)
+                for result, states in zip(results, expected):
+                    torch.testing.assert_close(result, states, rtol=0, atol=0)
+        finally:
+            handle.remove()
+        self.assertFalse(backbone.model.final_norm._forward_hooks)
+
+    def test_same_model_type_other_code(self):
+        # C3: two checkpoints whose backbones have one `model_type` and different code, in one process: each loader
+        # runs the code of the checkpoint it loads, in either order
+        model_type = unique_model_type("tinyspark")
+        folders, expected = {}, {}
+        for version, variant in (("v1", False), ("v2", True)):
+            _, model = self.model("causal", "cosine", model_type=model_type, variant=variant)
+            model.eval()
+            inputs, _ = self.inputs(model, "causal")
+            with torch.no_grad():
+                expected[version] = model(**inputs).logits
+            folders[version] = self.save(model, "causal")
+        self.assertFalse(torch.allclose(expected["v1"], expected["v2"]))  # the two codes differ
+        loaders = {
+            "ClefForDecision": ClefForDecision.from_pretrained,
+            "AutoModelForDecision": AutoModelForDecision.from_pretrained,
+            "pipeline": lambda folder, **kwargs: pipeline("decision", model=folder, device="cpu", **kwargs).model,
+        }
+        for first, second in (("v1", "v2"), ("v2", "v1")):
+            for name, load in loaders.items():
+                with self.subTest(first=first, second=second, loader=name):
+                    # The classes of the other checkpoint are the registered ones when this one loads
+                    ClefForDecision.from_pretrained(folders[first], trust_remote_code=True)
+                    loaded = load(folders[second], trust_remote_code=True).eval()
+                    with torch.no_grad():
+                        torch.testing.assert_close(loaded(**inputs).logits, expected[second], rtol=0, atol=0)
+
+    def test_relative_backbone_saved_twice_stays_self_contained(self):
+        # I1: a backbone loaded from a relative path `a/b`, saved, reloaded from another directory and saved again:
+        # still self-contained, never a reference to a repository `a/b` of the Hub
+        cwd = os.getcwd()
+        relative = Path("relative", "tinyspark")
+        (self.root / relative).mkdir(parents=True)
+        elsewhere = self.folder("elsewhere")
+        try:
+            os.chdir(self.root)
+            _, backbone = self.package("causal", source=str(relative))
+            self.assertEqual(backbone.config._name_or_path, str(relative))
+            model = ClefForDecision(self.clef_config(backbone, "causal", "cosine"), model=backbone).eval()
+            inputs, _ = self.inputs(model, "causal")
+            with torch.no_grad():
+                logits = model(**inputs).logits
+            first = self.save(model, "causal")
+            os.chdir(elsewhere)
+            second = self.folder("second")
+            ClefForDecision.from_pretrained(first, trust_remote_code=True).save_pretrained(second)
+        finally:
+            os.chdir(cwd)
+        for folder in (first, second):
+            saved = json.loads(Path(folder, "config.json").read_text(encoding="utf-8"))["text_config"]["auto_map"]
+            self.assertEqual(saved, CAUSAL_AUTO_MAP, folder)
+            for name in CAUSAL_PACKAGE:
+                self.assertTrue(Path(folder, name).is_file(), (folder, name))
+        reloaded = ClefForDecision.from_pretrained(second, trust_remote_code=True).eval()
+        with torch.no_grad():
+            torch.testing.assert_close(reloaded(**inputs).logits, logits, rtol=0, atol=0)
+
+    @unittest.skipUnless(is_peft_available(), "needs peft")
+    def test_adapter_folder_needs_the_flag(self):
+        # I2: an adapter folder (no `config.json`) of a model on a backbone of its own code: it loads with the flag
+        # when nothing is registered, and is refused without it once the classes are registered
+        from peft import LoraConfig, get_peft_model
+
+        _, model = self.model("causal", "cosine", model_type=unique_model_type("tinyspark"))
+        model.eval()
+        inputs, _ = self.inputs(model, "causal")
+        base = self.save(model, "causal")
+        peft_model = get_peft_model(model, LoraConfig(target_modules=["question_projection"], r=2))
+        with torch.no_grad():
+            for name, parameter in peft_model.named_parameters():
+                if "lora_B" in name:
+                    parameter.copy_(torch.randn_like(parameter))
+            logits = peft_model(**inputs).logits
+        peft_model.peft_config["default"].base_model_name_or_path = base
+        adapter = self.folder("adapter")
+        peft_model.save_pretrained(adapter)
+        self.assertFalse(Path(adapter, "config.json").exists())
+        for flag in ({}, {"trust_remote_code": False}):  # nothing registered: refused
+            with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
+                ClefForDecision.from_pretrained(adapter, **flag)
+        loaded = ClefForDecision.from_pretrained(adapter, trust_remote_code=True).eval()
+        with torch.no_grad():
+            torch.testing.assert_close(loaded(**inputs).logits, logits, rtol=0, atol=0)
+        for flag in ({}, {"trust_remote_code": False}, {"trust_remote_code": "true"}):  # now registered
+            with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
+                ClefForDecision.from_pretrained(adapter, **flag)
+
+    def test_deferred_config_through_auto_and_pipeline_first(self):
+        # I3: `AutoModelForDecision` and `pipeline` first in the process (the config of the backbone deferred, then
+        # rebuilt from the loaded code), on the causal package that returns its `hidden_states` and has a language
+        # modeling head of its own: no `backbone_hidden_module`, the hidden states are the last of `hidden_states`, and
+        # the lexical prior reads the output embeddings
+        loaders = {
+            "AutoModelForDecision": lambda folder: AutoModelForDecision.from_pretrained(
+                folder, trust_remote_code=True, output_loading_info=True
+            ),
+            "pipeline": lambda folder: (
+                pipeline("decision", model=folder, trust_remote_code=True, device="cpu").model,
+                None,
+            ),
+        }
+        for name, load in loaders.items():
+            for head_type in ("joint", "cosine"):
+                with self.subTest(loader=name, head_type=head_type):
+                    model_type = unique_model_type("tinyspark")
+                    _, model = self.model("causal_hidden_states", head_type, model_type=model_type)
+                    model.eval()
+                    self.assertIsNone(model.config.backbone_hidden_module)
+                    self.assertIs(model.lexical_embeddings(), model.model.lm_head.weight)
+                    self.assertIsNot(model.lexical_embeddings(), model.model.get_input_embeddings().weight)
+                    input_ids = torch.tensor([[5, 6, 7, 8]])
+                    with torch.no_grad():
+                        torch.testing.assert_close(
+                            model.backbone_hidden_states(input_ids),
+                            model.model.model(input_ids, return_hidden=True),
+                            rtol=0,
+                            atol=0,
+                        )
+                    inputs, _ = self.inputs(model, "causal_hidden_states")
+                    with torch.no_grad():
+                        logits = model(**inputs).logits
+                    folder = self.save(model, "causal_hidden_states")
+                    self.assertIsInstance(AutoConfig.from_pretrained(folder).text_config, dict)  # deferred
+                    loaded, info = load(folder)
+                    if info is not None:
+                        for key in ("missing_keys", "unexpected_keys", "mismatched_keys", "error_msgs"):
+                            self.assertFalse(info[key], key)
+                    self.assertEqual(loaded.config.text_config.model_type, model_type)
+                    with torch.no_grad():
+                        torch.testing.assert_close(loaded.eval()(**inputs).logits, logits, rtol=0, atol=0)

@@ -11,9 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextvars
 import inspect
+import json
 import math
 import os
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,8 +36,9 @@ from ...loss.loss_clef import check_clef_label_shapes, clef_label_errors, raise_
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import CONFIG_NAME, ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.peft_utils import find_adapter_config_file
 from ..auto import AutoConfig, AutoModel, AutoModelForCausalLM
 from ..auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ..clip.modeling_clip import CLIPMLP
@@ -314,6 +318,29 @@ def _is_repo_id(name: str) -> bool:
     except HFValidationError:
         return False
     return "/" in name
+
+
+def _hub_repository(*classes: type, name: str) -> str | None:
+    """
+    `name` when it is a repository of the Hub that the code of `classes` was imported from, else `None`. The dynamic
+    modules of the Hub are `transformers_modules.<org>.<repo>.<commit>.<module>`, those of a folder
+    `transformers_modules.<folder>.<hash>.<module>`: the module tells where the code came from, whatever `name` says.
+    """
+    from ...dynamic_module_utils import TRANSFORMERS_DYNAMIC_MODULE_NAME, _sanitize_module_name
+
+    if not name or os.path.isdir(name) or not _is_repo_id(name):
+        return None
+    prefix = ".".join([TRANSFORMERS_DYNAMIC_MODULE_NAME, *map(_sanitize_module_name, name.split("/"))]) + "."
+    if all(
+        cls.__module__.startswith(prefix) and cls.__module__.count(".") == prefix.count(".") + 1 for cls in classes
+    ):
+        return name
+    return None
+
+
+# Whether the `ClefForDecision.from_pretrained` running in this context was given `trust_remote_code=True`, and what
+# it loads (`None` outside of it): the backbone of a checkpoint's own code is built only then, whatever is registered
+_FROM_PRETRAINED_TRUSTS_REMOTE_CODE = contextvars.ContextVar("clef_from_pretrained_trusts_remote_code", default=None)
 
 
 def pool_spans(
@@ -841,10 +868,15 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
             kwargs = {key: value for key, value in kwargs.items() if key in parameters}
         module_name = self.config.backbone_hidden_module
         if module_name is not None:
-            outputs = []
-            handle = self.model.get_submodule(module_name).register_forward_hook(
-                lambda module, args, output: outputs.append(output[0] if isinstance(output, tuple) else output)
-            )
+            # The hook is on a module shared by the forwards of every thread (and by the replicas of `DataParallel`,
+            # which run in threads of their own): it keeps the outputs of the forward of this thread only
+            outputs, thread = [], threading.get_ident()
+
+            def keep(module, args, output):
+                if threading.get_ident() == thread:
+                    outputs.append(output[0] if isinstance(output, tuple) else output)
+
+            handle = self.model.get_submodule(module_name).register_forward_hook(keep)
             try:
                 self.model(input_ids=input_ids, **kwargs)
             finally:
@@ -955,8 +987,19 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         """
         backbone_code = ClefConfig.backbone_code(text_config)
         if backbone_code is None:
-            return AutoModel.from_config(text_config)
+            # A model type of transformers: its class of transformers. Its `auto_map`, if any, is never followed, so
+            # nothing prompts nor runs (a type without an `AutoModel` class would otherwise ask on stdin to run it)
+            if getattr(text_config, "auto_map", None) and type(text_config) not in AutoModel._model_mapping:
+                raise ValueError(
+                    f"The backbone {text_config.model_type!r} is a model type of transformers that has no `AutoModel` "
+                    f"class. Clef does not run the code its `auto_map` names for a model type of transformers "
+                    f"({text_config.auto_map}): use a backbone with an `AutoModel` class."
+                )
+            return AutoModel.from_config(text_config, trust_remote_code=False)
         _, auto_class = ClefForDecision._backbone_auto_class(backbone_code, text_config)
+        loading = _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.get()
+        if loading is not None and not loading[0]:  # in `from_pretrained` without the flag
+            raise ValueError(ClefForDecision._refusal(text_config, loading[1]))
         if isinstance(text_config, dict) or type(text_config) not in auto_class._model_mapping:
             model_type = text_config.get("model_type") if isinstance(text_config, dict) else text_config.model_type
             raise ValueError(
@@ -966,6 +1009,24 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 "`ClefForDecision(config, model=backbone)`."
             )
         return auto_class.from_config(text_config, trust_remote_code=False)  # the registered class
+
+    @classmethod
+    def _refusal(cls, text_config, source: str) -> str:
+        """The message of the refusal to load a backbone of its checkpoint's own code without `trust_remote_code=True`."""
+        backbone_code = ClefConfig.backbone_code(text_config)
+        model_type = text_config.get("model_type") if isinstance(text_config, dict) else text_config.model_type
+        references = [
+            reference
+            for name in ("AutoConfig", "AutoModel", "AutoModelForCausalLM")
+            if isinstance(reference := backbone_code.get(name), str)
+        ]
+        local = os.path.abspath(source) if source and os.path.isdir(source) else source or "the folder of the model"
+        origins = sorted({reference.split("--")[0] if "--" in reference else local for reference in references})
+        return (
+            f"The backbone of the Clef model {source} ({model_type!r}) is defined by code that is not part of "
+            f"transformers: {', '.join(references)}, from {', '.join(origins)}. Loading the model runs that code: "
+            "read it, then pass `trust_remote_code=True` to allow it."
+        )
 
     @classmethod
     def _load_backbone_code(cls, text_config, source, kwargs: dict) -> type[PreTrainedConfig]:
@@ -983,14 +1044,8 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
                 f"names no `AutoConfig` class ({backbone_code}): it cannot be rebuilt."
             )
         references = [backbone_code["AutoConfig"], backbone_code[key]]
-        local = os.path.abspath(source) if os.path.isdir(source) else source
-        origins = sorted({reference.split("--")[0] if "--" in reference else local for reference in references})
-        if kwargs.get("trust_remote_code") is not True:
-            raise ValueError(
-                f"The backbone of the Clef model {source} ({model_type!r}) is defined by code that is not part of "
-                f"transformers: {', '.join(references)}, from {', '.join(origins)}. Loading the model runs that code: "
-                "read it, then pass `trust_remote_code=True` to allow it."
-            )
+        if kwargs.get("trust_remote_code") is not True:  # `True` itself, not any true value
+            raise ValueError(cls._refusal(text_config, source))
         hub_kwargs = {
             name: kwargs[name]
             for name in ("cache_dir", "force_download", "proxies", "token", "revision", "local_files_only")
@@ -1015,30 +1070,53 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         """
         source = "" if pretrained_model_name_or_path is None else os.fspath(pretrained_model_name_or_path)
         code_revision = kwargs.pop("code_revision", None)
+        hub_kwargs = {
+            name: kwargs[name]
+            for name in ("cache_dir", "force_download", "proxies", "token", "revision", "local_files_only")
+            if name in kwargs
+        }
+        if "subfolder" in kwargs:
+            hub_kwargs["subfolder"] = kwargs["subfolder"]
         text_config = None
         if isinstance(config, ClefConfig):
             text_config = config.text_config
-        elif (
-            config is None and source
-        ):  # the raw config, which runs nothing, to find a backbone of remote code before loading
-            config_kwargs = {
-                name: kwargs[name]
-                for name in ("cache_dir", "force_download", "proxies", "token", "revision", "local_files_only")
-                if name in kwargs
-            }
-            if "subfolder" in kwargs:
-                config_kwargs["subfolder"] = kwargs["subfolder"]
-            config_dict, _ = PreTrainedConfig.get_config_dict(source, **config_kwargs)
+        elif config is None and source:  # the raw config, which runs nothing, to find a backbone of remote code
+            source = cls._base_model_of_adapter(source, hub_kwargs)
+            config_dict, _ = PreTrainedConfig.get_config_dict(source, **hub_kwargs)
             if config_dict.get("model_type") == ClefConfig.model_type:
                 text_config = config_dict.get("text_config")
         if ClefConfig.backbone_code(text_config) is not None:
             config_class = cls._load_backbone_code(text_config, source, {**kwargs, "code_revision": code_revision})
-            if isinstance(config, ClefConfig) and isinstance(config.text_config, dict):
-                config.text_config = config_class(**config.text_config)
+            if isinstance(config, ClefConfig) and type(config.text_config) is not config_class:
+                # A dict, or a config of the class that another checkpoint of the same `model_type` registered: the
+                # config of the code of this checkpoint
+                values = config.text_config if isinstance(config.text_config, dict) else config.text_config.to_dict()
+                config.text_config = config_class(**values)
                 config.tie_word_embeddings = config.tie_word_embeddings or getattr(
                     config.text_config, "tie_word_embeddings", False
                 )
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        # The backbone is built (`_backbone_from_config`) only with the flag, whatever is registered in the process
+        token = _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.set((kwargs.get("trust_remote_code") is True, source))
+        try:
+            return super().from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        finally:
+            _FROM_PRETRAINED_TRUSTS_REMOTE_CODE.reset(token)
+
+    @staticmethod
+    def _base_model_of_adapter(source: str, hub_kwargs: dict) -> str:
+        """
+        The folder or repository of the base model of an adapter folder without a `config.json` of its own, which
+        `PreTrainedModel.from_pretrained` loads in its place, else `source`.
+        """
+        if not is_peft_available() or (os.path.isdir(source) and os.path.isfile(os.path.join(source, CONFIG_NAME))):
+            return source
+        adapter_config = find_adapter_config_file(
+            source, **{key: value for key, value in hub_kwargs.items() if key != "force_download"}
+        )
+        if adapter_config is None or not os.path.isfile(adapter_config):
+            return source
+        base = json.loads(Path(adapter_config).read_text(encoding="utf-8")).get("base_model_name_or_path")
+        return base or source
 
     def save_pretrained(self, save_directory, *args, **kwargs):
         """
@@ -1053,10 +1131,13 @@ class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
         local = {
             key for key, reference in backbone_code.items() if isinstance(reference, str) and "--" not in reference
         }
-        repository = getattr(text_config, "_name_or_path", "") or ""
+        # Loaded from the Hub when the classes were imported from the repository its `_name_or_path` names, not
+        # merely when that name looks like one (a relative folder `a/b`)
+        repository = _hub_repository(
+            type(text_config), type(self.model), name=getattr(text_config, "_name_or_path", "") or ""
+        )
         auto_map = text_config.auto_map
-        if local and repository and not os.path.isdir(repository) and _is_repo_id(repository):
-            # Loaded from the Hub: the references name its repository
+        if local and repository is not None:  # the references name its repository
             text_config.auto_map = {
                 key: f"{repository}--{reference}" if key in local else reference for key, reference in auto_map.items()
             }
