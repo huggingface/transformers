@@ -380,6 +380,10 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "In this image, we see a statue of a woman holding a torch. This statue is located on a small island surrounded by water",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],
+                ("cuda", (8, 6)): [
+                    "In this image, we see the Statue of Liberty, a symbol of freedom and democracy. It stands on a small island in",
+                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
+                ],
             }
         ).get_expectation()
         self.assertListEqual(generated_texts, EXPECTED_TEXT_COMPLETION)

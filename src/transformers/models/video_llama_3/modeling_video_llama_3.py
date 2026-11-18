@@ -87,7 +87,6 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -410,20 +409,8 @@ class VideoLlama3PreTrainedModel(PreTrainedModel):
 def get_pixel_unshuffle_indices_and_weights(
     grid_thw: torch.Tensor, merge_sizes: torch.Tensor, kwargs: dict | None = None
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Gather indices and weights that downsample each frame's `(h, w)` patch grid to `(h // m, w // m)` like
-    `F.interpolate(mode="bilinear", align_corners=False)`, reading the patches in their `m x m` merge-block order, or
-    pop `"unshuffle_indices"`/`"unshuffle_weights"` from `kwargs` if both precomputed.
-
-    Args:
-        grid_thw: `(num_images_or_videos, 3)` — temporal, height and width of each entry's patch grid.
-        merge_sizes: `(num_images_or_videos,)` — the merge size `m` of each entry.
-        kwargs: optional caller kwargs — if it contains both `"unshuffle_indices"` and `"unshuffle_weights"` they
-            are popped and returned.
-
-    Returns:
-        `indices`: `(total_merged_tokens, 4)` long — the four patches each merged token interpolates.
-        `weights`: `(total_merged_tokens, 4)` float — their bilinear weights.
-    """
+    """Bilinear downsampling by each merge size, read in merge-block order, as 4-tap gather indices and weights, or
+    pops `"unshuffle_indices"`/`"unshuffle_weights"`."""
     if kwargs is not None:
         indices = kwargs.pop("unshuffle_indices", None)
         weights = kwargs.pop("unshuffle_weights", None)
@@ -433,7 +420,6 @@ def get_pixel_unshuffle_indices_and_weights(
     device = grid_thw.device
 
     def taps(size_in, size_out):
-        # The two source positions of `F.interpolate(mode="bilinear", align_corners=False)` and the second's weight
         source = ((torch.arange(size_out, device=device) + 0.5) * (size_in / size_out) - 0.5).clamp(min=0)
         low = source.long()
         return low, (low + 1).clamp(max=size_in - 1), source - low
@@ -444,7 +430,7 @@ def get_pixel_unshuffle_indices_and_weights(
         column_low, column_high, column_weight = taps(width, width // merge_size)
         rows = torch.stack([row_low, row_low, row_high, row_high], dim=-1)[:, None]
         columns = torch.stack([column_low, column_high, column_low, column_high], dim=-1)[None]
-        # Raster position to the patches' merge-block order: (block row, block column, row in block, column in block)
+        # Raster position to merge-block order
         block_index = (rows // merge_size * (width // merge_size) + columns // merge_size) * merge_size**2
         index = block_index + rows % merge_size * merge_size + columns % merge_size
         row_weights = torch.stack([1 - row_weight, 1 - row_weight, row_weight, row_weight], dim=-1)[:, None]
@@ -483,26 +469,15 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
-        kwargs: dict | None = None,
+        **kwargs,
     ):
-        """Each frame's patches, read in merge-block order, bilinearly downsampled by its merge size."""
         indices, weights = get_pixel_unshuffle_indices_and_weights(grid_thw, merge_sizes, kwargs=kwargs)
         return (hidden_states[indices].float() * weights[..., None]).sum(1).to(hidden_states.dtype)
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, merge_sizes: torch.Tensor, **kwargs) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `grid_thw` and `merge_sizes` with data-dependent operations: the
-        rotary `position_ids` of the patches, the attention's `cu_seqlens` and `max_seqlen`, and the pixel unshuffle's
-        `unshuffle_indices` and `unshuffle_weights`. Passed back to the
-        forward, they keep `torch.compile` and `torch.export` free of those operations. Those already in `kwargs` are
-        returned as they are; only the config is read.
-
-        Args:
-            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width dimensions of feature shape for each image.
-            merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
-                The spatial downsampling ratio of each image or video feature.
-        """
+        """What the forward derives from `grid_thw` and `merge_sizes` with data-dependent ops: the
+        rotary `position_ids` of the patches, the attention's `cu_seqlens` and `max_seqlen`, and the pixel
+        unshuffle's `unshuffle_indices` and `unshuffle_weights`."""
         position_ids = get_vision_position_ids(grid_thw, merge_sizes, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         unshuffle_indices, unshuffle_weights = get_pixel_unshuffle_indices_and_weights(grid_thw, merge_sizes)
@@ -546,7 +521,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
-        last_hidden_state = self.pixel_unshuffle(last_hidden_state, grid_thw, merge_sizes, kwargs=kwargs)
+        last_hidden_state = self.pixel_unshuffle(last_hidden_state, grid_thw, merge_sizes, **kwargs)
 
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
@@ -751,22 +726,9 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_merge_sizes: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from the processor's outputs with data-dependent operations: the vision
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
         model's (see [`VideoLlama3VisionModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
-        `get_image_embeddings` and `get_video_embeddings` take them. Passed back to the forward, they keep
-        `torch.compile` and `torch.export` free of those operations. Only the config is read.
-
-        Args:
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image.
-            image_merge_sizes (`torch.LongTensor` of shape `(num_images,)`, *optional*):
-                The spatial downsampling ratio of each image.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video.
-            video_merge_sizes (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
-                The spatial downsampling ratio of each video.
-        """
+        `get_image_embeddings` and `get_video_embeddings` take them."""
         inputs = {}
         modalities = (("image_", image_grid_thw, image_merge_sizes), ("video_", video_grid_thw, video_merge_sizes))
         for prefix, grid_thw, merge_sizes in modalities:

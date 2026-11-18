@@ -485,13 +485,13 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
     leaves = {path: openvino_input_value(tensor) for path, tensor in get_leaf_tensors(sample).items()}
-    # `beam_idx` reorders the cache's batch axis: read it off a cache tensor (not a sliding layer's 0-d counter), else
-    # a text input (the first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`).
+    # `beam_idx` reorders the cache's batch axis: read it off the highest-rank cache tensor, not a counter (a sliding
+    # layer's 0-d tensor, xLSTM's 1-d `seqlen_offset`) whose leading dim is not the batch, else off a text input (the
+    # first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`).
     batched = [path for path, value in leaves.items() if len(value.shape)]
-    batch_path = next(
-        (path for path in batched if path.startswith("cache.")),
-        next((name for name in BATCH_INPUTS if name in batched), batched[0] if batched else None),
-    )
+    cache_paths = [path for path in batched if path.startswith("cache.")]
+    text_path = next((name for name in BATCH_INPUTS if name in batched), batched[0] if batched else None)
+    batch_path = max(cache_paths, key=lambda path: len(leaves[path].shape), default=text_path)
     batch = leaves[batch_path].shape[0] if batch_path is not None else 1
 
     def port_value(name: str) -> Any:

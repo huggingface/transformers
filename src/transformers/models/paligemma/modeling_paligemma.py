@@ -124,6 +124,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the image and prompt prefix
+
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -294,6 +296,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the image and prompt prefix
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)

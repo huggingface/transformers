@@ -26,34 +26,14 @@ rendered properly in your Markdown viewer.
 
 [mBART](https://huggingface.co/papers/2001.08210) is a multilingual machine translation model that pretrains the entire translation model (encoder-decoder) unlike previous methods that only focused on parts of the model. The model is trained on a denoising objective which reconstructs the corrupted text. This allows mBART to handle the source language and the target text to translate to.
 
-[mBART-50](https://huggingface.co/paper/2008.00401) is pretrained on an additional 25 languages.
+[mBART-50](https://huggingface.co/papers/2008.00401) is pretrained on an additional 25 languages.
 
 You can find all the original mBART checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=mbart) organization.
 
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
-
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```python
-from transformers import pipeline
-
-
-pipeline = pipeline(
-    task="translation",
-    model="facebook/mbart-large-50-many-to-many-mmt",
-    src_lang="en_XX",
-    tgt_lang="fr_XX",
-    device=0,
-)
-print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
-```
-
-</hfoption>
-<hfoption id="AutoModel">
+The example below demonstrates how to translate text with the [`AutoModel`] class.
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -69,10 +49,6 @@ encoded_hi = tokenizer(article_en, return_tensors="pt").to(model.device)
 generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"], cache_implementation="static")
 print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ```
-
-</hfoption>
-</hfoptions>
-
 ## Notes
 
 - You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.

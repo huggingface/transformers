@@ -1,14 +1,15 @@
 """
-Generate vLLM CI failure report files from a GitHub Actions workflow run.
+Generate CI failure report files from a GitHub Actions workflow run (e.g. the vLLM and SGLang
+integration workflows).
 
 Fetches job logs via the GitHub REST API (no gh CLI dependency — works inside
 Docker containers that don't have gh installed). Imports log-parsing functions
 from analyze_gh_wf_runs.py, which must be in the same directory.
 
 Usage:
-  python utils/analyze_vllm_ci.py --run-id <RUN_ID> [--token <TOKEN>]
-                             [--output-dir <DIR>] [--repo <OWNER/REPO>]
-                             [--workflow <WORKFLOW_FILE>] [--plugin vllm]
+  python utils/analyze_ci_report.py --run-id <RUN_ID> --workflow <WORKFLOW_FILE>
+                                    [--token <TOKEN>] [--output-dir <DIR>]
+                                    [--repo <OWNER/REPO>] [--plugin vllm]
 
   --token   GitHub token with actions:read scope.
             Defaults to GITHUB_TOKEN env var. Without a token, only public repos
@@ -37,8 +38,9 @@ any of these show up):
     report then shows 0 failures for a red CI run. This already happened on the
     main run https://github.com/huggingface/transformers/actions/runs/41959891568
     (2026-11-05): all 13 jobs failed in "Install dependencies" (torch==2.14.0+cpu
-    could not be resolved). Possible fix: list such jobs with their job URL and
-    the last "##[error]" line.
+    could not be resolved). It also hits jobs killed before pytest prints its
+    summary (see the first gap of analyze_gh_wf_runs.py). Possible fix: list such
+    jobs with their job URL and the last "##[error]" line.
     The same applies to the *previous* (baseline) run: if its jobs failed this
     way, it has 0 parsed failures and every current failure is reported as new
     (e.g. run 42196234595 vs baseline 42154858517). Possible fix: warn (or skip
@@ -51,6 +53,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -74,7 +77,6 @@ from analyze_gh_wf_runs import (  # noqa: E402
 
 
 REPO = "huggingface/transformers"
-WORKFLOW_FILE = "vllm-ci-caller.yml"
 
 
 # ---------------------------------------------------------------------------
@@ -161,16 +163,20 @@ def fetch_job_log(job_id, repo=REPO, token=None):
         print(f"  URL error fetching log for job {job_id}: {e.reason}", file=sys.stderr)
         return ""
 
-    # Step 2: fetch the signed blob URL without any auth headers
-    try:
-        with urllib.request.urlopen(blob_url, timeout=120) as resp:
-            return resp.read().decode("utf-8", errors="replace")
-    except Exception as e:
-        print(f"  Error fetching log content for job {job_id}: {e}", file=sys.stderr)
-        return ""
+    # Step 2: fetch the signed blob URL without any auth headers. Retry: the blob storage can fail temporarily
+    # (e.g. "HTTP Error 503: Egress is over the account limit").
+    for attempt in range(1, 4):
+        try:
+            with urllib.request.urlopen(blob_url, timeout=120) as resp:
+                return resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            print(f"  Error fetching log content for job {job_id} (attempt {attempt}/3): {e}", file=sys.stderr)
+            if attempt < 3:
+                time.sleep(10)
+    return ""
 
 
-def get_previous_run(current_run_id, repo=REPO, workflow=WORKFLOW_FILE, token=None):
+def get_previous_run(current_run_id, workflow, repo=REPO, token=None):
     """
     Return the most recent *completed* workflow run on the main branch that is
     not the current run. Returns the run dict or None if not found.
@@ -291,6 +297,9 @@ _PYDANTIC_VALUE_ERROR_RE = re.compile(r"Value error, (.*?)(?: \[type=.*)?$", re.
 # c10 log prefix: "[rank0]:[F825 10:33:04.650907418 cpu_wna16.cpp:308] " -> "[cpu_wna16.cpp:308] "
 _C10_PREFIX_RE = re.compile(r"(?:\[rank\d+\]:)?\[[IWEF]\d{3,4} [\d:.]+ ([^\]]+)\]")
 
+# Header a trace plugin prepends to the pytest trace, e.g. "[vllm plugin] Subprocess ERROR lines for ...".
+_PLUGIN_HEADER_RE = re.compile(r"\[\w+ plugin\]")
+
 _MAX_ROOT_CAUSE_LEN = 300
 
 
@@ -310,7 +319,7 @@ def root_cause_error(item):
     trace, short_error = item["trace"], item["short_error"]
     exc_type, message = None, ""
 
-    if trace.startswith("[vllm plugin]"):
+    if _PLUGIN_HEADER_RE.match(trace):
         subprocess_lines = trace.split("\n--- pytest trace ---\n", 1)[0]
         for line in subprocess_lines.splitlines():
             m = _EXC_LINE_RE.match(line.rstrip())
@@ -532,7 +541,7 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate vLLM CI failure report files from a GitHub Actions workflow run."
+        description="Generate CI failure report files from a GitHub Actions workflow run."
     )
     parser.add_argument("--run-id", required=True, help="GitHub Actions workflow run ID")
     parser.add_argument(
@@ -552,8 +561,8 @@ def main():
     )
     parser.add_argument(
         "--workflow",
-        default=WORKFLOW_FILE,
-        help=f"Workflow file name used to find the previous run (default: {WORKFLOW_FILE})",
+        required=True,
+        help="Workflow file name (e.g. vllm-ci-caller.yml), used to find the previous run on main",
     )
     parser.add_argument(
         "--plugin",

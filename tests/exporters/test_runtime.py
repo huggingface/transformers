@@ -313,7 +313,12 @@ class ExportedModelTest(unittest.TestCase):
             exported.save_pretrained(directory)
             for name, runtime in (
                 ("fresh", exported.to(device)),
-                ("from_pretrained", ExportedModel.from_pretrained(directory, device=device)),
+                (
+                    "from_pretrained",
+                    ExportedModel.from_pretrained(
+                        directory, device=device, trust_remote_code=exporter.requires_trust_remote_code
+                    ),
+                ),
             ):
                 with self.subTest(name):
                     # Inputs the trace never saw are dropped, as when passing a processor's whole output.
@@ -534,7 +539,9 @@ class ExportedModelTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             torch.utils._pytree._deregister_pytree_node(DynamicCache)
-            outputs = ExportedModel.from_pretrained(directory, device="cpu")(**inputs)
+            outputs = ExportedModel.from_pretrained(
+                directory, device="cpu", trust_remote_code=exporter.requires_trust_remote_code
+            )(**inputs)
         self.assertIsInstance(outputs.cache, DynamicCache)
 
     @pytest.mark.torch_export_test

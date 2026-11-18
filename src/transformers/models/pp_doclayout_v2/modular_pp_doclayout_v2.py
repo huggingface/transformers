@@ -618,7 +618,6 @@ class PPDocLayoutV2TextEmbeddings(LayoutLMv3TextEmbeddings):
 
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

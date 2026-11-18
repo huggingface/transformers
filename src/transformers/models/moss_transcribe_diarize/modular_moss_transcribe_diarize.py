@@ -776,6 +776,9 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
+    def get_audio_features(self, input_features, input_features_mask, padding_mask, **kwargs):
+        return self.model.get_audio_features(input_features, input_features_mask, padding_mask, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

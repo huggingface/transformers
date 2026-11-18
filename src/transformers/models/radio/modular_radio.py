@@ -129,26 +129,25 @@ class RadioPatchEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         image_grid_hw: torch.LongTensor | None = None,
-        interpolation: tuple[torch.Tensor, torch.Tensor] | None = None,
         patch_index: torch.LongTensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         # temporally-packed video stacks `video_temporal_patch_size` frames along the channel dim
         if image_grid_hw is None and pixel_values.shape[1] != self.num_channels:
             return self.embed_video(pixel_values)
-        return self.embed_image(pixel_values, image_grid_hw, interpolation, patch_index)
+        return self.embed_image(pixel_values, image_grid_hw, patch_index, **kwargs)
 
     def embed_image(
         self,
         pixel_values: torch.Tensor,
         image_grid_hw: torch.LongTensor | None = None,
-        interpolation: tuple[torch.Tensor, torch.Tensor] | None = None,
         patch_index: torch.LongTensor | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         """Embed images, given either as a dense `(batch, channels, height, width)` batch or, when
-        `image_grid_hw` is set, as the concatenated patches of images with differing grids, whose position
-        embeddings are read with `interpolation`'s indices and weights and which are placed at `patch_index`."""
+        `image_grid_hw` is set, as the concatenated patches of images with differing grids, placed at `patch_index`."""
         if image_grid_hw is not None:
-            return self._embed_packed_patches(pixel_values, image_grid_hw, interpolation, patch_index)
+            return self._embed_packed_patches(pixel_values, image_grid_hw, patch_index, **kwargs)
         return self._embed_dense_patches(pixel_values, self.patch_projection)
 
     def embed_video(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -171,16 +170,15 @@ class RadioPatchEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         image_grid_hw: torch.LongTensor,
-        interpolation: tuple[torch.Tensor, torch.Tensor],
         patch_index: torch.LongTensor,
+        **kwargs,
     ) -> torch.Tensor:
-        """
-        Embeds the concatenated patches of images with differing grids into one `(1, total_length, hidden)` sequence:
-        each image's cls and register tokens, then its patches.
-        """
+        """Embeds the concatenated patches of images with differing grids into one `(1, total_length, hidden)` sequence."""
         patches = self.patch_projection(pixel_values)
-        # `_interpolate_position_embedding` at each patch, as a weighted gather from the table
-        indices, weights = interpolation
+        # The table resized to a square of each image's longest side, cropped to its grid
+        indices, weights = get_vision_interpolation_indices_and_weights(
+            F.pad(image_grid_hw, (1, 0), value=1), self.max_rows, resize_to_longest_side=True, kwargs=kwargs
+        )
         table = self.position_embedding.reshape(-1, self.position_embedding.shape[-1]).float()
         position_embedding = (table[indices] * weights[..., None]).sum(1)
         patches = patches + position_embedding.to(patches.dtype)
@@ -294,7 +292,6 @@ class RadioPreTrainedModel(PreTrainedModel):
         "attentions": RadioAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # Use `transformers.initialization` (not in-place `.data` ops) so the
         # framework's `_is_hf_initialized` guard skips already-loaded params.
@@ -357,17 +354,8 @@ class RadioModel(RadioPreTrainedModel):
     def get_data_dependent_inputs(
         self, pixel_values: torch.Tensor | None = None, image_grid_hw: torch.LongTensor | None = None, **kwargs
     ) -> dict[str, Any]:
-        r"""
-        The inputs the forward computes from `image_grid_hw` with data-dependent operations: with flash attention and
-        several packed images, the longest image sequence's `max_seqlen`. Passed back to the forward, it keeps
-        `torch.compile` and `torch.export` free of that host sync.
-
-        Args:
-            pixel_values (`torch.Tensor`, *optional*):
-                Unused, the images are read from `image_grid_hw`.
-            image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-                Patch grid `(height, width)` of each image in packed `pixel_values`.
-        """
+        """What the forward derives from `image_grid_hw` with data-dependent ops: with flash attention
+        and several packed images, the longest image sequence's `max_seqlen`."""
         if image_grid_hw is None:
             return {}
         indices, weights = get_vision_interpolation_indices_and_weights(
@@ -419,16 +407,12 @@ class RadioModel(RadioPreTrainedModel):
     ) -> RadioModelOutput:
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         pixel_values = self.input_conditioner(pixel_values.view(-1, num_channels, patch_size, patch_size))
-        # The table bilinearly resized to a square of each image's longest grid side, cropped to the grid
-        interpolation = get_vision_interpolation_indices_and_weights(
-            F.pad(image_grid_hw, (1, 0), value=1), self.embeddings.max_rows, resize_to_longest_side=True, kwargs=kwargs
-        )
         # Each patch's place in the packed sequence: after its own image's prefix tokens and those of the images before
         num_prefix_tokens = self.config.num_summary_tokens
         num_patches, sizes = pixel_values.shape[0], image_grid_hw.prod(-1)
         image_index = torch.arange(len(sizes), device=sizes.device).repeat_interleave(sizes, output_size=num_patches)
         patch_index = torch.arange(num_patches, device=sizes.device) + num_prefix_tokens * (image_index + 1)
-        hidden_states = self.embeddings(pixel_values.flatten(1), image_grid_hw, interpolation, patch_index)
+        hidden_states = self.embeddings(pixel_values.flatten(1), image_grid_hw, patch_index, **kwargs)
 
         sequence_lengths = sizes + num_prefix_tokens
         cu_seqlens = F.pad(sequence_lengths.cumsum(0), (1, 0)).to(torch.int32)

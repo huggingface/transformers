@@ -883,7 +883,6 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):

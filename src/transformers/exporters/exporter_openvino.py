@@ -120,6 +120,8 @@ class OpenVINOExporter(DynamoExporter):
     program_suffix = ".xml"
     program_prefix = "openvino_"
     decoder_writes_cross_cache = True
+    # OpenVINO IR is an XML graph and its binary weights, loading them runs no code
+    requires_trust_remote_code = False
 
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
