@@ -482,7 +482,9 @@ def _install_cuda_logs_c_callback(out_dir):
         return
     STACKS_PATH = os.path.join(out_dir, f"cuda_capture_conflict_stacks_{os.getpid()}.log")
     _stacks_file = open(STACKS_PATH, "w", encoding="utf-8")  # noqa: SIM115  (kept open for faulthandler)
-    faulthandler.register(signal.SIGUSR1, file=_stacks_file, all_threads=False, chain=False)
+    faulthandler.register(
+        signal.SIGUSR1, file=_stacks_file, all_threads=True, chain=False
+    )  # all_threads: the current thread may not hold the GIL (C++ code)
     cb_lib = ctypes.CDLL(lib_path)
     _cb_state["c_lib"] = cb_lib  # keep loaded
     try:
@@ -515,13 +517,18 @@ def _c_callback_hits():
 def _dump_capture_conflict_stacks(title):
     if _cb_state.get("c_lib") is not None:
         _stacks_file.flush()
-        log(f"{title}: C callback hits (capture-conflict messages) = {_c_callback_hits()}")
+        import signal
+
+        log(
+            f"{title}: C callback hits (capture-conflict messages) = {_c_callback_hits()}; "
+            f"SIGUSR1 handler now: {signal.getsignal(signal.SIGUSR1)!r}"
+        )
     if not STACKS_PATH or not os.path.exists(STACKS_PATH):
         log(f"===== {title}: no stacks file =====")
         return
     with open(STACKS_PATH, encoding="utf-8", errors="replace") as f:
         content = f.read()
-    log(f"===== {title} ({STACKS_PATH}, {len(content)} chars) =====\n{content[-40000:]}")
+    log(f"===== {title} ({STACKS_PATH}, {len(content)} chars, first 40000 shown) =====\n{content[:40000]}")
 
 
 _capture_trace_modes = []
