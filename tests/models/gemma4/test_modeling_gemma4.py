@@ -1010,9 +1010,6 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_model_text_only_multigpu(self):
-        """Accelerate destroys the input dict `shared_kv_states` if it's not passed as kwarg and part of
-        `_skip_keys_device_placement`, so test this to avoid regresions.
-        """
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
         inputs = tokenizer.apply_chat_template(

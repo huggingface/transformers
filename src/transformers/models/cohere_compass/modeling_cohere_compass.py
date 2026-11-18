@@ -379,7 +379,6 @@ class CohereCompassPreTrainedModel(PreTrainedModel):
         "CohereCompassDecoderLayer",
         "CohereCompassVisionBlock",
     ]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

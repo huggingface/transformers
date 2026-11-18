@@ -41,7 +41,6 @@ class HyperCLOVAXVisionV2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     # Both towers are built with `AutoModel.from_config` and register their own layers in `post_init`
     _no_split_modules = []
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

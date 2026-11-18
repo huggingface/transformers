@@ -171,7 +171,6 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
 
     model_type = "hunyuan_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     ignore_keys_at_rope_validation = {
         "alpha",
         "beta_fast",

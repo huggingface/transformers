@@ -415,8 +415,6 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
 class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     config: EmbeddingGemma2Config
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
-    # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
-    _skip_keys_device_placement = AttributeError()
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
