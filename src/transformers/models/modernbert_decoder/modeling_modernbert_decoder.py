@@ -361,7 +361,6 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
         "hidden_states": ModernBertDecoderLayer,
         "attentions": ModernBertDecoderAttention,
     }
-    _skip_keys_device_placement = ["cache"]
     _can_compile_fullgraph = True
 
     def _init_weights(self, module: nn.Module):

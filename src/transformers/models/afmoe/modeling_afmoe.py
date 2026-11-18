@@ -462,7 +462,6 @@ class AfmoePreTrainedModel(PreTrainedModel):
     config: AfmoeConfig
     base_model_prefix = "model"
     _no_split_modules = ["AfmoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,

@@ -42,12 +42,15 @@ class Ovis2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @property
     def video_sampling_expectations(self):
-        expectations = super().video_sampling_expectations
-        for expectation in expectations:
-            expectation["expected_dim"] = 0
-            # Each 240x320 fixture frame resizes to 416x544, yielding 26x34 patches.
-            expectation["output_length"] *= 884
-        return expectations
+        # Each 240x320 fixture frame resizes to 416x544, yielding 26x34 patches.
+        # The saved num_frames=8 also applies when num_frames is None or omitted.
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 3 * 884},
+            {"num_frames": None, "fps": 10, "expected_dim": 0, "output_length": 8 * 884},
+            {"do_sample_frames": False, "fps": 10, "expected_dim": 0, "output_length": 11 * 884},
+            {"do_sample_frames": False, "expected_dim": 0, "output_length": 11 * 884},
+            {"expected_dim": 0, "output_length": 8 * 884},
+        ]
 
     @require_torchcodec
     def test_apply_chat_template_video_frame_sampling(self):
