@@ -23,11 +23,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DeepseekV4Config,
     FineGrainedFP8Config,
     OPTForCausalLM,
 )
-from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -41,7 +39,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin, with_grad
 
 
 if is_torch_available():
@@ -82,15 +80,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
-    def test_megamoe_takes_over_the_experts_ep_rule(self):
-        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
-        config = DeepseekV4Config()
-        config._experts_implementation = "deepgemm_megamoe"
-        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
-        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
-        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
-
 
 @slow
 @require_accelerate
@@ -108,6 +97,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_OUTPUTS = {
         "Once upon a time, there was a little girl who loved to play",
         "Once upon a time, there was a man who was very rich.",
+        "Once upon a time, there was a man who was a very rich",
     }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
@@ -402,6 +392,11 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # deepgemm only has CUDA kernels, skip on other devices
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
+        if experts_implementation == "deepgemm":
+            from transformers.integrations.deepgemm import is_sm100
+
+            if is_sm100():
+                self.skipTest("DeepGEMM takes only UE8M0 scales on SM100, and this checkpoint's are float32")
 
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
@@ -430,6 +425,29 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
 
         # Only caring about this not crashing
         _ = model.generate(**model_inputs, max_new_tokens=24)
+
+    @parameterized.expand(["eager", "grouped_mm"])
+    @with_grad
+    def test_quantized_moe_backward(self, experts_implementation):
+        """
+        Checks that the FP8 layers pass the input gradient back through their dequantized weights, so adapters can
+        train on top of them: the gradient matches the one of the dequantized model
+        """
+        model_id = "hf-internal-testing/MiniMax-M2-Tiny-FP8"
+        input_ids = torch.arange(10, 74, device=self.device_map).unsqueeze(0)
+        grads = []
+        for kwargs in [
+            {"experts_implementation": experts_implementation},
+            {"quantization_config": FineGrainedFP8Config(dequantize=True)},
+        ]:
+            model = AutoModelForCausalLM.from_pretrained(model_id, device_map=self.device_map, **kwargs)
+            inputs_embeds = model.get_input_embeddings()(input_ids).detach().requires_grad_()
+            model(inputs_embeds=inputs_embeds, labels=input_ids).loss.backward()
+            grads.append(inputs_embeds.grad.float())
+
+        grad, expected = grads
+        # The FP8 forward also quantizes the activations, hence the tolerance
+        self.assertLess(((grad - expected).norm() / expected.norm()).item(), 0.1)
 
 
 @require_torch_accelerator
@@ -464,6 +482,41 @@ class FP8LinearTest(unittest.TestCase):
 
         x_ = linear(x)
         self.assertEqual(x_.shape, (1, 5, 256))
+
+    def test_linear_backward_goes_through_dequantized_weight(self):
+        """
+        Test that FP8Linear passes the input gradient through its dequantized weight, so adapters can train on top of it.
+        """
+        from transformers.integrations import FP8Linear
+
+        linear = FP8Linear(256, 384, block_size=(128, 128)).to(self.device)
+        linear.weight.data = torch.randn(384, 256).to(self.device, torch.float8_e4m3fn)
+        linear.weight_scale_inv.data = torch.rand(3, 2).to(self.device) + 0.5
+        x = torch.randn((1, 5, 256), dtype=torch.bfloat16).to(self.device).requires_grad_()
+
+        linear(x).sum().backward()
+
+        scale = linear.weight_scale_inv.repeat_interleave(128, dim=0).repeat_interleave(128, dim=1)
+        expected = torch.ones(1, 5, 384, device=self.device) @ (linear.weight.float() * scale)
+        torch.testing.assert_close(x.grad.float(), expected, rtol=1e-2, atol=1e-1)
+
+    def test_grouped_linear_backward_goes_through_dequantized_weight(self):
+        """
+        Test that FP8GroupedLinear passes the input gradient through its dequantized weight, group by group.
+        """
+        from transformers.integrations.finegrained_fp8 import FP8GroupedLinear
+
+        linear = FP8GroupedLinear(256, 512, n_groups=2, block_size=(128, 128)).to(self.device)
+        linear.weight.data = torch.randn(512, 256).to(self.device, torch.float8_e4m3fn)
+        linear.weight_scale_inv.data = torch.rand(4, 2).to(self.device) + 0.5
+        x = torch.randn((3, 2, 256), dtype=torch.bfloat16).to(self.device).requires_grad_()
+
+        linear(x).sum().backward()
+
+        scale = linear.weight_scale_inv.repeat_interleave(128, dim=0).repeat_interleave(128, dim=1)
+        weight = (linear.weight.float() * scale).view(2, 256, 256)
+        expected = torch.ones(3, 2, 1, 256, device=self.device) @ weight
+        torch.testing.assert_close(x.grad.float(), expected.squeeze(2), rtol=1e-2, atol=1e-1)
 
 
 class FP8EmbeddingTest(unittest.TestCase):
@@ -572,3 +625,28 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+
+class FP8ModulesToNotConvertTest(unittest.TestCase):
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_checkpoint_module_names_follow_weight_renamings(self):
+        # The checkpoint's `self_attn.f_a_proj` loads as `self_attn.forget_gate.f_a_proj`
+        from transformers import KimiLinearConfig, KimiLinearForCausalLM
+        from transformers.integrations.finegrained_fp8 import FP8Linear
+
+        config = KimiLinearConfig(
+            vocab_size=64, pad_token_id=0, bos_token_id=1, eos_token_id=2, hidden_size=64, intermediate_size=64,
+            num_hidden_layers=1, num_attention_heads=4, num_key_value_heads=4, layer_types=["linear_attention"],
+            mlp_layer_types=["dense"], linear_conv_kernel_dim=2, linear_head_dim=16, linear_num_heads=4,
+        )  # fmt: skip
+        quantization_config = FineGrainedFP8Config(
+            weight_block_size=(16, 16), modules_to_not_convert=["model.layers.0.self_attn.f_a_proj"]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            KimiLinearForCausalLM(config).save_pretrained(tmp)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmp, quantization_config=quantization_config, device_map="cpu"
+            )
+        forget_gate = model.model.layers[0].self_attn.forget_gate
+        self.assertNotIsInstance(forget_gate.f_a_proj, FP8Linear)
+        self.assertIsInstance(forget_gate.f_b_proj, FP8Linear)

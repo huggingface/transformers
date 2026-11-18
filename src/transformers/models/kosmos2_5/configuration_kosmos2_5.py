@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -27,7 +27,6 @@ logger = logging.get_logger(__name__)
 class Kosmos2_5TextConfig(PreTrainedConfig):
     model_type = "kosmos_2_5_text_model"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
         "hidden_size": "embed_dim",
@@ -110,8 +109,8 @@ class Kosmos2_5Config(PreTrainedConfig):
 
     model_type = "kosmos-2.5"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Kosmos2_5TextConfig),
-        "vision_config": SubConfigSpec(config_class=Kosmos2_5VisionConfig),
+        "text_config": Kosmos2_5TextConfig,
+        "vision_config": Kosmos2_5VisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

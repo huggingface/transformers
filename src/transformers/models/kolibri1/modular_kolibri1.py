@@ -156,7 +156,6 @@ class Kolibri1DecoderLayer(Glm4DecoderLayer):
 class Kolibri1PreTrainedModel(Qwen3MoePreTrainedModel):
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Kolibri1TopKRouter):

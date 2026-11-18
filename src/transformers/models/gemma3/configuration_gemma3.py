@@ -53,7 +53,6 @@ class Gemma3TextConfig(PreTrainedConfig):
     """
 
     model_type = "gemma3_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -199,7 +198,7 @@ class Gemma3Config(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3TextConfig),
+        "text_config": Gemma3TextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 

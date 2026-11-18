@@ -112,7 +112,7 @@ class GotOcr2Config(PreTrainedConfig):
                 "attention_dropout": 0.0,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=GotOcr2VisionConfig),
+        "vision_config": GotOcr2VisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

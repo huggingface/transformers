@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -39,7 +39,7 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     model_type = "cohere_compass_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -68,7 +68,6 @@ class CohereCompassTextConfig(PreTrainedConfig):
     """
 
     model_type = "cohere_compass_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -163,10 +162,9 @@ class CohereCompassConfig(PreTrainedConfig):
 
     model_type = "cohere_compass"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=CohereCompassVisionConfig),
-        "text_config": SubConfigSpec(config_class=CohereCompassTextConfig),
+        "vision_config": CohereCompassVisionConfig,
+        "text_config": CohereCompassTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

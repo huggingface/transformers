@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     Expectations,
     is_pipeline_test,
-    require_librosa,
+    require_audio,
     require_torch,
     require_vision,
     slow,
@@ -52,10 +52,116 @@ if is_torch_available():
 
 @is_pipeline_test
 @require_vision
-@require_librosa
+@require_audio
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+    def test_media_only_blip_image_text_output(self):
+        import torch
+        from PIL import Image
+
+        from transformers import AutoModelForMultimodalLM
+
+        model_id = "hf-internal-testing/tiny-random-BlipForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.float32).eval()
+        pipe = AnyToAnyPipeline(model=model, processor=processor, task="any-to-any", device=-1)
+        image = Image.new("RGB", (64, 64), "white")
+
+        for return_full_text in (False, True):
+            with self.subTest(return_full_text=return_full_text):
+                result = pipe(
+                    images=image,
+                    max_new_tokens=1,
+                    return_full_text=return_full_text,
+                )
+                self.assertEqual(len(result), 1)
+                self.assertIsNone(result[0]["input_text"])
+                self.assertIsInstance(result[0]["generated_text"], str)
+
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 2}
+
+        outputs = pipe(text=messages, return_tensors=True, generate_kwargs=kwargs)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
+    def test_string_assistant_prefill_full_text(self):
+        import copy
+
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "My answer is"},
+        ]
+        original = copy.deepcopy(messages)
+
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_max_new_tokens": 2,
+        }
+
+        new_text = pipe(
+            text=messages,
+            return_full_text=False,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        full_text = pipe(
+            text=messages,
+            return_full_text=True,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        self.assertEqual(full_text[-1]["role"], "assistant")
+        self.assertEqual(full_text[-1]["content"], "My answer is" + new_text)
+        self.assertEqual(messages, original)
+
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_num_beams": 2,
+            "thinker_num_return_sequences": 2,
+            "thinker_max_new_tokens": 2,
+        }
+
+        single = pipe(text="Hello", return_full_text=False, generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], return_full_text=False, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual(len(batched), 4)
+
+        # Test real audio generation through the full pipeline.
+        audio_outputs = pipe(
+            text="Hello",
+            generation_mode="audio",
+            generate_kwargs={
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 4,
+                "talker_do_sample": False,
+                "talker_max_new_tokens": 10,
+            },
+        )
+        self.assertEqual(len(audio_outputs), 1)
+        self.assertIsInstance(audio_outputs[0]["generated_audio"], np.ndarray)
 
     # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
     # So we add them all in signature

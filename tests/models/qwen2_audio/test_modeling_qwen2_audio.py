@@ -17,19 +17,17 @@ import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
-import librosa
-
 from transformers import (
     AutoProcessor,
     Qwen2AudioConfig,
-    Qwen2AudioEncoderConfig,
     Qwen2AudioForConditionalGeneration,
     Qwen2AudioModel,
-    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
+    is_librosa_available,
+    require_librosa,
     require_torch,
     slow,
     torch_device,
@@ -37,6 +35,9 @@ from transformers.testing_utils import (
 
 from ...alm_tester import ALMModelTest, ALMModelTester
 
+
+if is_librosa_available():
+    import librosa
 
 if is_torch_available():
     import torch
@@ -46,8 +47,7 @@ class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
     base_model_class = Qwen2AudioModel
     conditional_generation_class = Qwen2AudioForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = Qwen2AudioEncoderConfig
+
     audio_mask_key = "feature_attention_mask"
 
     def __init__(self, parent, **kwargs):
@@ -82,6 +82,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
 
 @require_torch
+@require_librosa
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)

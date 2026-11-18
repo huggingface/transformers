@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import unittest
 from functools import cached_property
 
@@ -649,6 +650,18 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertIsNotNone(outputs.auxiliary_outputs)
             self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.decoder_layers - 1)
+
+    def test_encoder_heads_init_like_detection_heads(self):
+        # The original deep-copies the initialized `class_embed` / `bbox_embed` into the encoder heads
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = LwDetrForObjectDetection(config)
+        bias_value = -math.log((1 - 0.01) / 0.01)
+        torch.testing.assert_close(model.class_embed.bias, torch.full_like(model.class_embed.bias, bias_value))
+        for class_head in model.model.enc_out_class_embed:
+            torch.testing.assert_close(class_head.bias, model.class_embed.bias)
+        for bbox_head in model.model.enc_out_bbox_embed:
+            self.assertTrue(torch.all(bbox_head.layers[-1].weight == 0))
+            self.assertTrue(torch.all(bbox_head.layers[-1].bias == 0))
 
 
 @require_torch

@@ -43,7 +43,6 @@ class CanaryDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "canary_decoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 16384
     hidden_size: int = 1024
@@ -108,7 +107,6 @@ class CanaryConfig(PreTrainedConfig):
     """
 
     model_type = "canary"
-    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
         "encoder_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -120,7 +118,7 @@ class CanaryConfig(PreTrainedConfig):
                 "layerdrop": 0.0,
             },
         ),
-        "decoder_config": SubConfigSpec(config_class=CanaryDecoderConfig),
+        "decoder_config": CanaryDecoderConfig,
     }
 
     encoder_config: dict | PreTrainedConfig | None = None

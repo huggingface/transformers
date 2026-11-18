@@ -19,9 +19,7 @@ import numpy as np
 
 from transformers import (
     AutoProcessor,
-    LlamaConfig,
     VoxtralConfig,
-    VoxtralEncoderConfig,
     VoxtralForConditionalGeneration,
     VoxtralModel,
     is_torch_available,
@@ -47,8 +45,6 @@ class VoxtralModelTester(ALMModelTester):
     config_class = VoxtralConfig
     base_model_class = VoxtralModel
     conditional_generation_class = VoxtralForConditionalGeneration
-    text_config_class = LlamaConfig
-    audio_config_class = VoxtralEncoderConfig
 
     def __init__(self, parent, **kwargs):
         # seq_length 35 = BOS + 30 audio + 4 text (keeps column -2 text-only for resize test).
@@ -165,7 +161,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = Expectations(
             {
                 (None, None): ['The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos. Here\'s a breakdown:\n\n1. **Initial Reaction**: One person (let\'s call him A) is surprised to see the other person (let\'s call him B) has a tattoo. A asks if B has a tattoo, and B confirms.\n\n2. **Tattoo Description**: B then asks A what his tattoo says, and A responds with "sweet." This exchange is repeated multiple times, with B asking A what his tattoo says, and A always responding with "sweet."\n\n3. **Misunderstanding**: B seems to be genuinely curious about the meaning of the tattoo, but A is either not paying attention or not understanding the question. This leads to a series of repetitive responses from A.\n\n4. **Clarification**: Eventually, B clarifies that he wants to know what A\'s tattoo says, not what A thinks B\'s tattoo says. A then realizes his mistake and apologizes.\n\n5. **Final Answer**: B then asks A what his tattoo says, and A finally responds with "dude," which is the actual meaning of his tattoo.\n\n6. **Final Joke**: B then jokes that A\'s tattoo says "sweet," which is a play on words, as "sweet" can also mean "good" or "nice."\n\nThroughout the conversation, there\'s a lot of repetition and misunderstanding, which adds to the humor. The final joke about the tattoo saying "sweet" is a clever twist on the initial confusion.'],
-                ("cuda", 8): ['The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos. Here\'s a breakdown:\n\n1. **Initial Reaction**: One person (let\'s call him A) is surprised to see the other person (let\'s call him B) has a tattoo.\n2. **Curiosity**: A asks B what his tattoo says, and B responds with "sweet."\n3. **Repetition**: This exchange is repeated multiple times, with A asking about B\'s tattoo and B responding with "sweet."\n4. **Clarification**: Eventually, B clarifies that A\'s tattoo says "dude" and A\'s says "sweet."\n5. **Final Insult**: B calls A an "idiot" for not understanding the joke.\n\nThe humor comes from the repetition of the word "sweet" and the misunderstanding of the tattoos\' meanings. The final insult adds a touch of frustration to the exchange.'],
+                ("cuda", (8, 6)): ["The audio is a humorous exchange between two individuals, likely friends or acquaintances, about tattoos. Here's a breakdown:\n\n1. **Initial Reaction**: One person (let's call him A) notices the other person (B) has a tattoo and is surprised.\n2. **Curiosity**: A asks B what his tattoo says, and B responds with \"sweet.\"\n3. **Repetition**: This exchange is repeated multiple times, with A asking what B's tattoo says, and B always responding with \"sweet.\"\n4. **Clarification**: Eventually, A realizes that B is just repeating the word \"sweet\" and not actually answering the question. A then clarifies that B's tattoo says \"dude.\"\n5. **Final Insult**: A then calls B an \"idiot\" for not understanding the question.\n\nThe humor comes from the repetition of the word \"sweet\" and the confusion it causes, as well as the final insult. The conversation is lighthearted and playful, with no serious intent or meaning behind the tattoo discussion."],
             }
         ).get_expectation()
         # fmt: on
@@ -205,7 +201,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 (None, None): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He acknowledges the diverse perspectives and conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."],
                 ("xpu", None): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He emphasizes the importance of self-government and active citizenship, encouraging listeners to engage in their communities and participate in democracy. The president expresses his optimism about the country's future and his commitment to continuing to serve as a citizen. He concludes the speech with a heartfelt thank you and a blessing for the United States."],
-                ("cuda", 8): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He expresses gratitude for the conversations he had with the public, which kept him honest and inspired. The president discusses various achievements, such as economic recovery, healthcare improvements, and scientific advancements. He also emphasizes the importance of self-government and citizen participation in maintaining democracy. Obama concludes by expressing optimism about the country's future and his commitment to working alongside the American people as a citizen."],
+                ("cuda", (8, 6)): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the goodness, resilience, and hope of the American people. He acknowledges the diverse perspectives and conversations he had with the American people, which kept him honest, inspired, and motivated. The president also emphasizes the importance of self-government and active citizenship, encouraging listeners to engage in the democratic process beyond election years. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."],
             }
         )
         # fmt: on
@@ -245,9 +241,16 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is the American League Championship.'
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): [
+                    'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is the American League Championship.'
+                ],
+                ("cuda", (8, 6)): [
+                    'What sport and what nursery rhyme are referenced?The audio references both a nursery rhyme and a baseball game. The nursery rhyme is "Mary Had a Little Lamb," and the baseball game is a playoff between the Baltimore Orioles and the Oakland Athletics.'
+                ],
+            }
+        ).get_expectation()
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow
@@ -337,9 +340,9 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona, Spain.",
                     'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is the Mariners, and the commentator is excited about their chances to win the championship.\n- **Emotional Tone**: The commentator is enthusiastic and surprised, using phrases like "I don\'t believe it" and "my, oh my" to express their excitement.\n- **Game Moment**: The play involves a throw to the plate that is described as "late," indicating a close call or a potential error.\n\nThe audio captures the thrill and tension of a high-stakes baseball moment.',
                 ],
-                ("cuda", 8): [
-                    "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona, Spain.",
-                    'What can you tell me about this audio?This audio is a commentary of a baseball game, specifically a home run hit by Edgar Martinez. Here are some key points:\n\n- **Game Context**: The game is likely a playoff or championship game, as the commentator mentions the American League Championship.\n- **Play Description**: Edgar Martinez hits a home run, which is described as a "line drive" and a "base hit."\n- **Team Involvement**: The team is likely the Seattle Mariners, as the commentator refers to them as the "Mariners" and mentions the "American League Championship."\n- **Emotional Reaction**: The commentator expresses disbelief and excitement, using phrases like "I don\'t believe it" and "my, oh my."\n- **Game Outcome**: The game is still ongoing, as the commentator mentions that the Mariners are "going to play" for the championship.\n\nThe audio captures the thrill and excitement of a pivotal moment in a baseball game.',
+                ("cuda", (8, 6)): [
+                    "Who's speaking in the speach and what city's weather is being discussed?The speaker in the speech is Barack Obama, and the weather being discussed is in Barcelona.",
+                    "What can you tell me about this audio?In this audio, a baseball game is being described. Here are some key points:\n\n- **Pitcher**: The pitcher is 0-1, meaning he has not yet struck out the batter.\n- **Batter**: The batter is Edgar Martinez.\n- **Play**: The pitcher swings and hits a line drive that goes over the left fielder's line for a home run.\n- **Outfield**: Junior is in third base, and the throw to the plate is late, allowing the runner to advance.\n- **Result**: The Mariners are going to play for the American League Championship.\n- **Emotion**: The commentator expresses disbelief and excitement, saying \"I don't believe it\" and \"It just continues. My, oh my!\"",
                 ],
             }
         ).get_expectation()
@@ -399,7 +402,7 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = Expectations(
             {
                 (None, None): ['Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a political speech by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation with no political context.'],
-                ("cuda", 8): ['Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker is excited to see the tattoo and asks what it says. The other friend repeatedly says "sweet" in response, leading to a playful exchange. The speaker then realizes the joke and says "your tattoo says dude, your tattoo says sweet, got it?" The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation with no political context.'],
+                ("cuda", (8, 6)): ["Describe briefly what you can hear.The audio begins with the speaker delivering a farewell address in Chicago, reflecting on his eight years as president and expressing gratitude to the American people. The audio then transitions to a weather report, stating that it was 35 degrees in Barcelona the previous day, but the temperature would drop to minus 20 degrees the following day.Ok, now compare this new audio with the previous one.The new audio is a humorous conversation between two friends, one of whom has a tattoo. The speaker asks the other what their tattoo says, and the other responds with \"sweet\" repeatedly, leading to a playful exchange. The speaker then reveals that the other's tattoo actually says \"dude\" and \"sweet,\" which the other friend finds amusing. The previous audio was a farewell address by a president, reflecting on his time in office and expressing gratitude to the American people. The new audio is a casual, light-hearted conversation between friends, with no political or serious content."],
             }
         ).get_expectation()
         # fmt: on

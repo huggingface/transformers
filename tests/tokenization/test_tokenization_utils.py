@@ -32,12 +32,14 @@ from transformers import (
     ProphetNetTokenizer,
     PythonBackend,
     TensorType,
+    TokenizersBackend,
     TokenSpan,
     is_tokenizers_available,
 )
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
     CaptureStderr,
+    require_jinja,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -143,6 +145,21 @@ class TokenizerUtilsTest(unittest.TestCase):
         tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
+
+    @require_torch
+    def test_batch_encoding_empty_values_default_to_int64(self):
+        import torch
+
+        for value in ([], [[]], [[], []], [[[]], [[]]]):
+            batch = BatchEncoding({"input_ids": value})
+            self.assertEqual(batch.convert_to_tensors(tensor_type="np")["input_ids"].dtype, np.int64)
+            batch = BatchEncoding({"input_ids": value})
+            self.assertEqual(batch.convert_to_tensors(tensor_type="pt")["input_ids"].dtype, torch.int64)
+
+        batch = BatchEncoding({"input_ids": [[], [0.5]]})
+        self.assertEqual(batch.convert_to_tensors(tensor_type="np")["input_ids"].dtype, object)
+        batch = BatchEncoding({"values": [[0.5, 1.5]]})
+        self.assertEqual(batch.convert_to_tensors(tensor_type="pt")["values"].dtype, torch.float32)
 
     def test_padding_accepts_tensors(self):
         features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
@@ -294,6 +311,16 @@ class TokenizerUtilsTest(unittest.TestCase):
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
 
+    @require_tokenizers
+    def test_model_input_names_not_shared_between_instances(self):
+        tokenizer_1 = TokenizersBackend(tokenizer_object=Tokenizer(WordPiece(unk_token="[UNK]")))
+        tokenizer_2 = TokenizersBackend(tokenizer_object=Tokenizer(WordPiece(unk_token="[UNK]")))
+
+        tokenizer_1.model_input_names.append("pixel_values")
+        self.assertIn("pixel_values", tokenizer_1.model_input_names)
+        self.assertNotIn("pixel_values", tokenizer_2.model_input_names)
+        self.assertNotIn("pixel_values", TokenizersBackend.model_input_names)
+
     def test_vocab_file_in_config_does_not_escape_repo(self):
         # Regression test for path traversal (CWE-22): a vocab-file argument injected into
         # `tokenizer_config.json` must not override the repository-resolved path nor be opened
@@ -400,6 +427,43 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+
+    @require_jinja
+    @require_tokenizers
+    def test_apply_chat_template_assistant_mask_left_truncation(self):
+        vocab = ["[UNK]", "user", "assistant", "hello", "first", "reply", "question", "last", "answer"]
+        backend = Tokenizer(tokenizers.models.WordLevel({word: i for i, word in enumerate(vocab)}, unk_token="[UNK]"))
+        backend.pre_tokenizer = tokenizers.pre_tokenizers.WhitespaceSplit()
+        tokenizer = TokenizersBackend(tokenizer_object=backend, truncation_side="left")
+        template = (
+            "{% for message in messages %}{{ message['role'] }} "
+            "{% if message['role'] == 'assistant' %}"
+            "{% generation %}{{ message['content'] }}{% endgeneration %}"
+            "{% else %}{{ message['content'] }}{% endif %}{{ ' ' }}{% endfor %}"
+        )
+        conversation = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "first reply"},
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "last answer"},
+            {"role": "user", "content": "hello"},
+        ]
+        for max_length, expected_mask in [
+            (9, [1, 1, 0, 0, 0, 1, 1, 0, 0]),
+            (8, [1, 0, 0, 0, 1, 1, 0, 0]),
+            (6, [0, 0, 1, 1, 0, 0]),
+            (4, [1, 1, 0, 0]),
+        ]:
+            with self.subTest(max_length=max_length):
+                output = tokenizer.apply_chat_template(
+                    conversation,
+                    chat_template=template,
+                    return_dict=True,
+                    return_assistant_tokens_mask=True,
+                    truncation=True,
+                    max_length=max_length,
+                )
+                self.assertEqual(output["assistant_masks"], expected_mask)
 
     def test_apply_chat_template_sanitize_control_tokens(self):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")

@@ -47,6 +47,7 @@ from .tokenization_utils_base import (
     generate_merges,
 )
 from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
+from .utils.chat_template_utils import encode_marked_chat
 
 
 logger = logging.get_logger(__name__)
@@ -1069,6 +1070,23 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer.encode_special_tokens != split_special_tokens:
             self._tokenizer.encode_special_tokens = split_special_tokens
 
+        if kwargs.get("sanitize_control_tokens"):  # marked by `mark_control_tokens`, see `apply_chat_template`
+            post_processor = self._tokenizer.post_processor
+            if add_special_tokens and post_processor is not None and post_processor.num_special_tokens_to_add(False):
+                raise NotImplementedError("`sanitize_control_tokens=True` needs a template that writes special tokens")
+            input_ids = [encode_marked_chat(self, chat) for chat in batch_text_or_text_pairs]
+            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
+                side = self.truncation_side
+                input_ids = [ids[:max_length] if side == "right" else ids[-max_length:] for ids in input_ids]
+            return self.pad(
+                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
+                padding=padding_strategy,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_attention_mask=return_attention_mask,
+                return_tensors=return_tensors,
+            )
         # Direct rust backend call
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
@@ -1386,6 +1404,44 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Some other TypeError, re-raise it
                 raise
 
+    @staticmethod
+    def _tokenizer_json_has_byte_level(
+        pretrained_model_name_or_path: str | os.PathLike[str],
+        cache_dir: str | os.PathLike[str] | None = None,
+        force_download: bool = False,
+        proxies: dict[str, str] | None = None,
+        token: bool | str | None = None,
+        revision: str | None = None,
+        local_files_only: bool = False,
+        subfolder: str = "",
+        **kwargs,
+    ) -> bool:
+        """Return whether `tokenizer.json` declares a ByteLevel pre_tokenizer or decoder.
+
+        Used when Hub `tokenizer_class` is `LlamaTokenizer` but the serialized tokenizer is
+        byte-level, so AutoTokenizer loads with `TokenizersBackend` instead.
+        """
+        resolved_file = cached_file(
+            pretrained_model_name_or_path,
+            TOKENIZER_FILE,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            token=token,
+            revision=revision,
+            local_files_only=local_files_only,
+            subfolder=subfolder,
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+            _commit_hash=kwargs.get("_commit_hash"),
+        )
+        if resolved_file is None:
+            return False
+
+        with open(resolved_file, encoding="utf-8") as reader:
+            return '"ByteLevel"' in reader.read()
+
     @classmethod
     def _patch_mistral_regex(
         cls,
@@ -1454,7 +1510,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) < version.parse("5.0.0"):
+                if not transformers_version or version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
                         and transformers_model_type is not None
@@ -1468,7 +1524,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
+                else:
                     return tokenizer
 
                 mistral_config_detected = True

@@ -330,6 +330,9 @@ def _init_weights(self, module):
 
 Always initialize weights through the `transformers.initialization` helpers. In-place operations such as `module.bias.zero_()` or anything that touches `module.weight.data` bypass `_is_hf_initialized` that flags which parameters are already loaded. [`~PreTrainedModel.from_pretrained`] runs `_init_weights` after loading the checkpoint, so in-place operations silently overwrite the loaded weights with random values. This is enforced for Transformers models by the [TRF012](./modeling_rules#trf012) rule.
 
+> [!WARNING]
+> During [`~PreTrainedModel.from_pretrained`], models are usually initialized on the `meta` device. The loader recreates non-persistent buffers as empty tensors, so values assigned in `__init__` aren't preserved. Initialize these buffers in `_init_weights` so they have the correct values after loading. For an example, see how BERT initializes its position IDs and token type IDs.
+
 The initialization scheme can look different if you need to adapt it to your model. A submodule with its own `reset_parameters` method can call it directly. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers. The call is safe because [`~PreTrainedModel.from_pretrained`] patches the underlying `torch.nn.init` functions to respect the `_is_hf_initialized` flag while it runs `_init_weights`, so loaded weights aren't overwritten.
 
 ```py
@@ -549,7 +552,7 @@ If you do need to implement a new image processor, each model has two processor 
 - `image_processing_<model>.py`: the **default** torchvision-backed processor (`<Model>ImageProcessor`), inheriting from [`TorchvisionBackend`]. This replaces the old "fast" processor.
 - `image_processing_pil_<model>.py`: the PIL/NumPy alternative processor (`<Model>ImageProcessorPil`), inheriting from [`PilBackend`]. This replaces the old "slow" processor.
 
-The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings. Refer to the [IMAGE_PROCESSOR_REFACTORING_GUIDE.md](https://github.com/huggingface/transformers/blob/main/IMAGE_PROCESSOR_REFACTORING_GUIDE.md) for a step-by-step walkthrough and complete examples.
+The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings.
 
 Add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well.
 

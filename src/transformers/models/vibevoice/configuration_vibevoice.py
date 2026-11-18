@@ -76,7 +76,7 @@ class VibeVoiceConfig(PreTrainedConfig):
     model_type = "vibevoice"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
-        "diffusion_head_config": SubConfigSpec(config_class=VibeVoiceDiffusionHeadConfig),
+        "diffusion_head_config": VibeVoiceDiffusionHeadConfig,
         "semantic_model_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="vibevoice_acoustic_tokenizer_encoder",

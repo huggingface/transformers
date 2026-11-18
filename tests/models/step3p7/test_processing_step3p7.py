@@ -58,10 +58,6 @@ class Step3p7ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             do_convert_rgb=True,
         )
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     @unittest.skip(
         "The real stepfun-ai/Step-3.7-Flash chat template uses a `fromjson` Jinja filter for tool-call "
         "arguments, which `chat_template_utils.py`'s renderer doesn't register (only `tojson` is). Pre-existing "

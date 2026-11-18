@@ -28,7 +28,7 @@ from ..pocket_tts.modeling_pocket_tts import (
 from .generation_gradium_phonon_tts import GradiumPhononTTSGenerationMixin
 
 
-@auto_docstring(checkpoint="eustlb/gradium-phonon-tts")
+@auto_docstring(checkpoint="gradium/phonon-31m-en")
 @strict
 class GradiumPhononTTSFlowHeadConfig(PocketTTSFlowHeadConfig):
     r"""
@@ -58,7 +58,7 @@ class GradiumPhononTTSFlowHeadConfig(PocketTTSFlowHeadConfig):
     condition_dim: int = positive_int_field(default=768)
 
 
-@auto_docstring(checkpoint="eustlb/gradium-phonon-tts")
+@auto_docstring(checkpoint="gradium/phonon-31m-en")
 @strict
 class GradiumPhononTTSConfig(PocketTTSConfig):
     r"""

@@ -138,7 +138,7 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ],
         ]
 
-        # No explicit `return_tensors`: `FunAsrNanoProcessorKwargs._defaults` makes it `"pt"`.
+        # No explicit `return_tensors`: `FunAsrNanoProcessor.text_kwargs` makes it `"pt"`.
         inputs = processor.apply_chat_template(
             conversation, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
         )

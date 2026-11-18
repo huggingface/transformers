@@ -24,15 +24,7 @@
 # limitations under the License.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
-
-
-class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 class PaddleOCRVLProcessor(ProcessorMixin):
@@ -50,7 +42,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
 
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
-    valid_processor_kwargs = PaddleOCRVLProcessorKwargs
+
+    return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
@@ -62,5 +55,7 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
         return self.image_token * num_tokens
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["PaddleOCRVLProcessor"]
