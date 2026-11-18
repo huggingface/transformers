@@ -1104,6 +1104,20 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
 
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        pixel_values = pixel_values.type(self.visual.dtype)
+        image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return image_outputs
+
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
@@ -1260,7 +1274,6 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
-    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1281,8 +1294,7 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         ):
             image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
 
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        vision_outputs = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
 
@@ -1330,6 +1342,19 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of each source image's patch grid.
+        """
+        return self.model.get_image_embeddings(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(

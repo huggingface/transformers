@@ -626,6 +626,21 @@ class Granite4VisionModel(LlavaNextModel):
             hidden_states=vision_outputs.hidden_states,
         )
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Each layer's deepstack features for all images as one tensor.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        """
+        image_outputs = self.get_image_features(pixel_values, image_sizes, return_dict=True, **kwargs)
+        image_outputs.deepstack_features = [
+            (layer, torch.cat(features)) for layer, features in image_outputs.deepstack_features
+        ]
+        return image_outputs
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

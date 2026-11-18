@@ -962,6 +962,26 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
         return hidden_states
 
 
+def get_vision_temporal_slice_index(
+    grid_thw: torch.Tensor, spatial_merge_size: int, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Pairs each video's even and odd frames (an image's frame with itself), or pops `"temporal_slice_index"`."""
+    if kwargs is not None and (index := kwargs.pop("temporal_slice_index", None)) is not None:
+        return index
+    pairs, offset = [], 0
+    for frames, height, width in grid_thw.tolist():
+        spatial_size = height * width // spatial_merge_size**2
+        tokens = torch.arange(spatial_size, device=grid_thw.device)
+        # An odd last frame is dropped
+        for even in range(0, 2 * (frames // 2), 2) if frames > 1 else [0]:
+            odd = even + 1 if frames > 1 else even
+            pairs.append(
+                torch.stack([offset + even * spatial_size + tokens, offset + odd * spatial_size + tokens], -1)
+            )
+        offset += frames * spatial_size
+    return torch.cat(pairs)
+
+
 class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__()
@@ -983,77 +1003,15 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
         self.mlp = nn.Linear(self.spatial_dim, self.out_dim)
         self.after_norm = Ernie4_5_VLMoeRMSNorm(self.out_dim, config.text_config.rms_norm_eps)
 
-    def _temporal_slicing(self, hidden_states, grid_thw):
-        """
-        Slices along the temporal dimension in even/odd patterns (usually if we have a video input)
-        or duplicates along temporal dimension (usually if we have an image input).
-
-        Example:
-            Video input with temporal pattern of [1, -1, 2, -2, 3, -3]
-                > Even input [1, 2, 3], odd input [-1, -2, -3]
-                > Reorderd via slices to [1, 2, 3, -1, -2, -3]
-            Image input with temporal pattern [1]
-                > Duplicate input [1], [1]
-                > Reordered to [1, 1]
-
-        NOTE: This is hard-coded for `temporal_merge_size == 2` and won't work otherwise.
-        """
-        # Calculating offsets on spatial dim (based on flattened tensors)
-        grid_t, grid_hw = grid_thw[:, 0], grid_thw[:, 1:]
-        grid_hw_after_conv = grid_hw.prod(-1) // (self.spatial_merge_size**2)
-
-        # Calculating offsets on batch dim (based on flattened tensors)
-        tokens_per_img_or_vid = (grid_thw.prod(-1) // (self.spatial_merge_size**2)).flatten()
-        batch_offsets = torch.empty(tokens_per_img_or_vid.size(), dtype=tokens_per_img_or_vid.dtype)
-        batch_offsets[0] = 0
-        batch_offsets[1:] = tokens_per_img_or_vid.cumsum(dim=0)[:-1]
-
-        first_slice_offsets = []
-        second_slice_offsets = []
-        for temporal_size, spatial_size, batch_offset in zip(grid_t, grid_hw_after_conv, batch_offsets):
-            # Depending on temporal, we may interleave:
-            #   - Images have temporal == 1 --> same offsets (duplicate "frame" image)
-            #   - Videos have temporal > 1 --> different offsets (even, odd)
-            first_offset_range = range(0, temporal_size, 2)
-            second_offset_range = range(1 if temporal_size > 1 else 0, temporal_size, 2)
-
-            for temporal_offset_even, temporal_offset_odd in zip(first_offset_range, second_offset_range):
-                first_slice_offsets.append(
-                    torch.arange(
-                        batch_offset + (temporal_offset_even) * spatial_size,
-                        batch_offset + (temporal_offset_even + 1) * spatial_size,
-                    )
-                )
-                second_slice_offsets.append(
-                    torch.arange(
-                        batch_offset + (temporal_offset_odd) * spatial_size,
-                        batch_offset + (temporal_offset_odd + 1) * spatial_size,
-                    )
-                )
-
-        # Input: [1, -1, 2, -2, 3, -3] or [1]
-        # Indices: [0, 2, 4] (even) or [0] (duplicate)
-        first_slice_offsets = torch.cat(first_slice_offsets, dim=-1).to(hidden_states.device)
-        # Indices: [1, 3, 5] (odd) or [0] (duplicate)
-        second_slice_offsets = torch.cat(second_slice_offsets, dim=-1).to(hidden_states.device)
-
-        # Output: [1, 2, 3, -1, -2, -3] or [1, 1]
-        return torch.concat(
-            [
-                torch.index_select(hidden_states, dim=0, index=first_slice_offsets),
-                torch.index_select(hidden_states, dim=0, index=second_slice_offsets),
-            ],
-            dim=-1,
-        )
-
-    def forward(self, hidden_states, grid_thw):
+    def forward(self, hidden_states, grid_thw, **kwargs):
         # image spatial
         # reshape imitates convolution via linear projection
         hidden_states = hidden_states.reshape([-1, hidden_states.shape[-1] * (self.spatial_merge_size**2)])
         hidden_states = self.spatial_linear(hidden_states)
 
         # video temporal
-        hidden_states = self._temporal_slicing(hidden_states, grid_thw)
+        temporal_slice_index = get_vision_temporal_slice_index(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        hidden_states = hidden_states[temporal_slice_index].flatten(1)
         hidden_states = self.temporal_linear(hidden_states)
 
         # final mlp
@@ -1249,7 +1207,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
-        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
+        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw, **kwargs)
         video_outputs.pooler_output = video_embeds
         video_outputs.split_sizes = (
             video_grid_thw.prod(-1)
@@ -1268,7 +1226,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
-        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
+        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_embeds
         image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return image_outputs

@@ -21,6 +21,7 @@
 from itertools import accumulate
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -32,6 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
+from ...vision_utils import get_vision_pixel_shuffle_index
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_nemotron_h_omni import NemotronH_Omni_Reasoning_V3_Config
 
@@ -190,6 +192,46 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
 
     @can_return_tuple
     @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_hw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        All images' features as one tensor; `get_image_features` splits them per image.
+
+        pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size**2)`):
+            Flattened patches of all images, concatenated.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
+            Patch grid `(height, width)` of each image.
+        """
+        torch_compilable_check(
+            image_grid_hw.prod(-1).sum() == pixel_values.shape[0],
+            lambda: f"`pixel_values` holds {pixel_values.shape[0]} patches but `image_grid_hw` describes "
+            f"{int(image_grid_hw.prod(-1).sum())}",
+        )
+        merge_size = int(1 / self.config.downsample_ratio)
+        pixel_shuffle_index = get_vision_pixel_shuffle_index(
+            F.pad(image_grid_hw, (1, 0), value=1), merge_size, kwargs=kwargs
+        )
+        pixel_values = pixel_values.to(dtype=self.vision_model.dtype)
+        vision_outputs = self.vision_model(pixel_values, image_grid_hw=image_grid_hw, **kwargs)
+
+        image_features = vision_outputs.features
+        if self.vision_final_layernorm is not None:
+            image_features = self.vision_final_layernorm(image_features)
+        image_features = image_features[pixel_shuffle_index].reshape(-1, merge_size**2 * image_features.shape[-1])
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=vision_outputs.last_hidden_state,
+            pooler_output=self.multi_modal_projector(image_features),
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+        )
+
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -202,35 +244,10 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
             Patch grid `(height, width)` of each image.
         """
-        torch_compilable_check(
-            image_grid_hw.prod(-1).sum() == pixel_values.shape[0],
-            lambda: f"`pixel_values` holds {pixel_values.shape[0]} patches but `image_grid_hw` describes "
-            f"{int(image_grid_hw.prod(-1).sum())}",
-        )
-        pixel_values = pixel_values.to(dtype=self.vision_model.config.torch_dtype)
-        vision_outputs = self.vision_model(pixel_values, image_grid_hw=image_grid_hw, **kwargs)
-
-        image_features = vision_outputs.features
-        if self.vision_final_layernorm is not None:
-            image_features = self.vision_final_layernorm(image_features)
-        image_features = image_features.split(image_grid_hw.prod(-1).tolist())
-        image_features = torch.cat(
-            [
-                self.pixel_shuffle(
-                    features.view(1, grid_height, grid_width, -1), scale_factor=self.config.downsample_ratio
-                ).flatten(0, 2)
-                for features, (grid_height, grid_width) in zip(image_features, image_grid_hw.tolist())
-            ]
-        )
+        image_outputs = self.get_image_embeddings(pixel_values, image_grid_hw, return_dict=True, **kwargs)
         split_sizes = (image_grid_hw.prod(-1) // 2**2).tolist()
-        pooler_output = torch.split(self.multi_modal_projector(image_features), split_sizes)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=pooler_output,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-        )
+        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -259,7 +276,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             pixel_values_videos = pixel_values_videos.reshape(1, -1, temporal_patch_size * num_channels, height, width)
 
         num_videos, num_tubelets = pixel_values_videos.shape[:2]
-        pixel_values_videos = pixel_values_videos.flatten(0, 1).to(dtype=self.vision_model.config.torch_dtype)
+        pixel_values_videos = pixel_values_videos.flatten(0, 1).to(dtype=self.vision_model.dtype)
         vision_outputs = self.vision_model(pixel_values_videos, **kwargs)
         patch_size = self.vision_model.patch_size
         grid_height, grid_width = (side // patch_size for side in pixel_values_videos.shape[-2:])
@@ -423,7 +440,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_hw, return_dict=True, **kwargs
             )
 
@@ -431,9 +448,10 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             mm_encoder_outputs["video"] = self.get_video_features(pixel_values_videos, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            if not isinstance(image_embeds, torch.Tensor):
+                image_embeds = torch.cat(image_embeds, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 

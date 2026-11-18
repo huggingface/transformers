@@ -295,6 +295,69 @@ def unpad_image(tensor, original_size):
     return unpadded_tensor
 
 
+def get_pack_index_per_image(
+    image_sizes: torch.Tensor, config: LlavaNextVideoConfig, vision_feature_select_strategy: str
+) -> list[torch.Tensor]:
+    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them."""
+    grid_size = config.vision_config.image_size // config.vision_config.patch_size
+    tokens_per_patch = grid_size**2 + (vision_feature_select_strategy == "full")
+    image_num_patches = [
+        image_size_to_num_patches(image_size, config.image_grid_pinpoints, config.vision_config.image_size)
+        for image_size in image_sizes
+    ]
+    newline_index = sum(image_num_patches) * tokens_per_patch
+    pack_index, offset = [], 0
+    for image_size, num_patches in zip(image_sizes, image_num_patches):
+        image_index = [torch.arange(offset, offset + tokens_per_patch)]
+        if num_patches > 1:
+            num_patch_height, num_patch_width = get_anyres_image_grid_shape(
+                image_size, config.image_grid_pinpoints, config.vision_config.image_size
+            )
+            grid_index = torch.arange(offset + tokens_per_patch, offset + num_patches * tokens_per_patch)
+            grid_index = grid_index.view(num_patch_height, num_patch_width, grid_size, grid_size)
+            grid_index = grid_index.permute(0, 2, 1, 3).reshape(1, num_patch_height * grid_size, -1)
+            grid_index = unpad_image(grid_index, image_size)[0]
+            newlines = torch.full((grid_index.shape[0], 1), newline_index)
+            image_index.append(torch.cat([grid_index, newlines], dim=-1).flatten())
+        else:
+            image_index.append(torch.tensor([newline_index]))
+        pack_index.append(torch.cat(image_index).to(image_sizes.device))
+        offset += num_patches * tokens_per_patch
+    return pack_index
+
+
+def get_pack_index(
+    image_sizes: torch.Tensor,
+    config: LlavaNextVideoConfig,
+    vision_feature_select_strategy: str,
+    kwargs: dict | None = None,
+) -> torch.Tensor:
+    """All images' packed feature indices, or pops `"pack_index"`."""
+    if kwargs is not None and (pack_index := kwargs.pop("pack_index", None)) is not None:
+        return pack_index
+    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy))
+
+
+def get_patch_index(
+    pixel_values: torch.Tensor, image_sizes: torch.Tensor, config: LlavaNextVideoConfig, kwargs: dict | None = None
+) -> torch.Tensor:
+    """The patches each image was cut into, in `pixel_values` flattened over its first two dimensions, or pops
+    `"patch_index"`."""
+    if kwargs is not None and (patch_index := kwargs.pop("patch_index", None)) is not None:
+        return patch_index
+    patch_slots = torch.arange(pixel_values.shape[1], device=pixel_values.device)
+    image_num_patches = [
+        image_size_to_num_patches(image_size, config.image_grid_pinpoints, config.vision_config.image_size)
+        for image_size in image_sizes
+    ]
+    return torch.cat(
+        [
+            patch_slots[:num_patches] + index * pixel_values.shape[1]
+            for index, num_patches in enumerate(image_num_patches)
+        ]
+    )
+
+
 @auto_docstring(
     custom_intro="""
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
@@ -390,6 +453,65 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     @can_return_tuple
     @select_hidden_states("vision_feature_layer")
     @auto_docstring(
+        custom_intro="All images' packed features as one tensor; `get_image_features` splits them per image."
+    )
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
+            The tensors corresponding to the input images.
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+            Actual image size of each images (H, W).
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
+        """
+        pack_index = get_pack_index(image_sizes, self.config, vision_feature_select_strategy, kwargs=kwargs)
+        if pixel_values.dim() == 5:
+            # stacked if input is (batch_size, num_patches, num_channels, height, width)
+            pixel_values = pixel_values.flatten(0, 1)[
+                get_patch_index(pixel_values, image_sizes, self.config, kwargs=kwargs)
+            ]
+        elif pixel_values.dim() != 4:
+            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
+            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
+
+        image_outputs = self.vision_tower(
+            pixel_values,
+            return_dict=True,
+            **kwargs,
+        )
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
+        if vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+
+        # NOTE we only support multimodal_patch_merge_type == "spatial_unpad"
+        image_features = self.multi_modal_projector(selected_image_feature).flatten(0, 1)
+        image_newline = self.image_newline.to(image_features.device, image_features.dtype)
+        image_outputs.pooler_output = torch.cat([image_features, image_newline[None]])[
+            pack_index.to(image_features.device)
+        ]
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
@@ -413,49 +535,19 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`
         """
-        # ! infer image_num_patches from image_sizes
-        image_num_patches = [
-            image_size_to_num_patches(
-                image_size=imsize,
-                grid_pinpoints=self.config.image_grid_pinpoints,
-                patch_size=self.config.vision_config.image_size,
-            )
-            for imsize in image_sizes
-        ]
-        if pixel_values.dim() == 5:
-            # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(_pixel_values_list, dim=0)
-        elif pixel_values.dim() != 4:
-            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
-
-        image_outputs = self.vision_tower(
+        if vision_feature_select_strategy is None:
+            vision_feature_select_strategy = self.config.vision_feature_select_strategy
+        pack_index = get_pack_index_per_image(image_sizes, self.config, vision_feature_select_strategy)
+        image_outputs = self.get_image_embeddings(
             pixel_values,
+            image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            pack_index=torch.cat(pack_index),
             return_dict=True,
             **kwargs,
         )
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        if vision_feature_select_strategy == "default":
-            selected_image_feature = selected_image_feature[:, 1:]
-        image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = torch.split(image_features, image_num_patches, dim=0)
-
-        image_features, feature_lens = self.pack_image_features(
-            image_features,
-            image_sizes,
-            vision_feature_select_strategy,
-            image_newline=self.image_newline,
-        )
-        image_outputs.pooler_output = image_features
-
+        image_outputs.pooler_output = list(torch.split(image_outputs.pooler_output, [len(i) for i in pack_index]))
         return image_outputs
 
     def get_placeholder_mask(
@@ -668,6 +760,23 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             image_sizes=image_sizes,
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
+        )
+
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_embeddings(
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            **kwargs,
         )
 
     @merge_with_config_defaults
