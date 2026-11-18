@@ -217,7 +217,7 @@ class LongcatFlashMoE(nn.Module):
             identity_weights = topk_weights.masked_fill(~identity_mask, 0.0).sum(dim=-1, keepdim=True)
             identity_output = hidden_states * identity_weights
 
-            # Spread across the full range of experts to minimize comms costs in all-to-all
+            # Spread across the full range of experts to minimize comms costs on one rank
             dummy_indices = (topk_indices - self.num_routed_experts) * self.num_routed_experts // self.zero_expert_num
             topk_indices = torch.where(identity_mask, dummy_indices, topk_indices)
             topk_weights = topk_weights.masked_fill(identity_mask, 0.0)
