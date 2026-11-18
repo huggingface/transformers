@@ -438,6 +438,30 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         batch = collator(features)
         self.assertEqual(batch["labels"].shape, (1, 5))
 
+    def test_empty_examples_do_not_add_extra_labels(self):
+        """An empty example has no first token to replace with the separator."""
+        features = [
+            {"input_ids": []},
+            {"input_ids": [10, 11]},
+            {"input_ids": []},
+            {"input_ids": [20, 21, 22]},
+        ]
+        for return_tensors in ["pt", "np"]:
+            collator = DataCollatorWithFlattening(return_tensors=return_tensors)
+            batch = collator(features)
+
+            self.assertEqual(batch["input_ids"].shape, (1, 5))
+            self.assertEqual(batch["labels"].shape, batch["input_ids"].shape)
+            self.assertEqual(batch["labels"][0].tolist(), [-100, 11, -100, 21, 22])
+
+        # The same rule applies when labels are supplied explicitly.
+        with_labels = [
+            {"input_ids": [], "labels": []},
+            {"input_ids": [10, 11], "labels": [100, 101]},
+        ]
+        batch = DataCollatorWithFlattening(return_tensors="pt")(with_labels)
+        self.assertEqual(batch["labels"][0].tolist(), [-100, 101])
+
     def test_numpy_output(self):
         """Test flattening with NumPy output."""
         collator = DataCollatorWithFlattening(return_tensors="np")

@@ -1344,9 +1344,15 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 # Convert to list if tensor
                 if hasattr(labels, "tolist"):
                     labels = labels.tolist()
-                batch["labels"] += [separator_id] + labels[1:]
+                # An empty example has no first token to replace with the separator.
+                # Adding one anyway makes labels longer than input_ids and breaks the
+                # model's batch-size check.
+                if labels:
+                    batch["labels"] += [separator_id] + labels[1:]
             else:
-                batch["labels"] += [separator_id] + input_ids[1:]
+                # Same for the implicit labels built from input_ids.
+                if input_ids:
+                    batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
                 batch["position_ids"] += [self.position_ids_start + i for i in range(len(input_ids))]
             if self.return_seq_idx:
