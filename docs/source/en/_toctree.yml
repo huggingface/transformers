@@ -747,6 +747,8 @@
         title: HYV3
       - local: model_doc/hy_v4
         title: HYV4
+      - local: model_doc/hy_v4_vl
+        title: HYV4VL
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/internlm3
@@ -773,6 +775,8 @@
         title: Kolibri1
       - local: model_doc/laguna
         title: Laguna
+      - local: model_doc/lara_mini
+        title: Lara Mini
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -1237,6 +1241,10 @@
         title: Nemotron ASR Streaming
       - local: model_doc/neucodec
         title: NeuCodec
+      - local: model_doc/omniasr
+        title: Omnilingual ASR
+      - local: model_doc/omniasr_ctc
+        title: Omnilingual ASR CTC
       - local: model_doc/parakeet
         title: Parakeet
       - local: model_doc/pe_audio
@@ -1285,6 +1293,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/wavtokenizer
+        title: WavTokenizer
       - local: model_doc/whisper
         title: Whisper
       - local: model_doc/xcodec
@@ -1319,6 +1329,8 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/apertus1p5
+        title: Apertus 1.5
       - local: model_doc/aria
         title: Aria
       - local: model_doc/audioflamingo3

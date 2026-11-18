@@ -561,7 +561,6 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(Wav2Vec2ConformerSelfAttention, index=1, layer_name="encoder"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

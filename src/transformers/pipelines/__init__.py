@@ -1143,6 +1143,14 @@ def pipeline(
             **hub_kwargs,
             **model_kwargs,
         )
+        # A single-device `device_map` sets no `hf_device_map`, so pass the model's device to skip the `device = 0`
+        # fallback in `Pipeline.__init__`
+        if (
+            device is None
+            and model_kwargs.get("device_map") is not None
+            and getattr(model, "hf_device_map", None) is None
+        ):
+            device = model.device
 
     if pipeline_class is None:
         raise RuntimeError("Failed to resolve a pipeline class.")

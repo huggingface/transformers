@@ -91,7 +91,6 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
 
         return emb.to(torch.get_default_dtype())
 
-    @torch.no_grad()
     def forward(self, position_ids: torch.Tensor | None = None, cache_length: int = 0):
         bsz, seq_len = position_ids.size()
         position_ids = position_ids + self.offset
