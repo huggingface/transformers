@@ -808,9 +808,11 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
-        # Inference mode is thread-local: run the generation loop in the caller's
+        # Inference mode is thread-local: run the generation loop with the same inference mode as the caller
         use_inference_mode = torch.is_inference_mode_enabled()
-        self._generation_thread = threading.Thread(target=self._run_generation_loop, args=(use_inference_mode,))
+        self._generation_thread = threading.Thread(
+            target=self._run_generation_loop, kwargs={"use_inference_mode": use_inference_mode}
+        )
         self._generation_thread.start()
 
     def stop(
@@ -1108,49 +1110,48 @@ class ContinuousBatchingManager:
     def _run_generation_loop(self, use_inference_mode: bool) -> None:
         """Main processing loop running in the background thread, in the caller's inference mode."""
         batch_processor = None
-        inference_mode = torch.inference_mode(use_inference_mode)
-        inference_mode.__enter__()
 
-        # Everything is inside this try / except / finally block so we can handle critical errors gracefully
-        try:
-            # Scope the device for the generation loop (thread-scoped)
-            if self.model.device.type == "cuda" and self.model.device.index is not None:
-                torch.cuda.set_device(self.model.device)
+        with torch.inference_mode(use_inference_mode):
+            # Everything is inside this try / except / finally block so we can handle critical errors gracefully
+            try:
+                # Scope the device for the generation loop (thread-scoped)
+                if self.model.device.type == "cuda" and self.model.device.index is not None:
+                    torch.cuda.set_device(self.model.device)
 
-            # Start the generation loop
-            batch_processor = self._create_batch_processor()
-            self.batch_processor = batch_processor  # register the batch processor for main thread access
-            self.current_batch = 0
+                # Start the generation loop
+                batch_processor = self._create_batch_processor()
+                self.batch_processor = batch_processor  # register the batch processor for main thread access
+                self.current_batch = 0
 
-            # If using the async API, we bootstrap the first batch w/out update
-            if batch_processor.use_async_batching:
-                while self._generation_loop_body(batch_processor, bootstrapping=True):
+                # If using the async API, we bootstrap the first batch w/out update
+                if batch_processor.use_async_batching:
+                    while self._generation_loop_body(batch_processor, bootstrapping=True):
+                        pass
+
+                # The loop continues until a stop signal has been broadcasted in the TP group
+                while self._generation_loop_body(batch_processor, bootstrapping=False):
                     pass
 
-            # The loop continues until a stop signal has been broadcasted in the TP group
-            while self._generation_loop_body(batch_processor, bootstrapping=False):
-                pass
+                # In async mode, the last batch's results are still in flight: switch to the right IO pair and process
+                # them. Also happens for a hard stop, since the results are already available on the device
+                if isinstance(batch_processor.inputs_and_outputs, ContinuousBatchingAsyncIOs):
+                    async_ios = batch_processor.inputs_and_outputs
+                    async_ios.current_pair = 1 - async_ios.current_pair
+                    batch_processor.update_batch()
 
-            # In async mode, the last batch's results are still in flight: switch to the right IO pair and process them
-            # Also happens for a hard stop, since the results are already available on the device
-            if isinstance(batch_processor.inputs_and_outputs, ContinuousBatchingAsyncIOs):
-                batch_processor.inputs_and_outputs.current_pair = 1 - batch_processor.inputs_and_outputs.current_pair
-                batch_processor.update_batch()
+                # This should be a no-op unless a user asked for a hard stop
+                error = RuntimeError(
+                    f"Generation loop finished before this request completed w/ {self.background_thread_status.tp_status = }"
+                )
+                self._fail_all_remaining_requests(error, batch_processor)
 
-            # This should be a no-op unless a user asked for a hard stop
-            error = RuntimeError(
-                f"Generation loop finished before this request completed w/ {self.background_thread_status.tp_status = }"
-            )
-            self._fail_all_remaining_requests(error, batch_processor)
-
-        # All exceptions are caught here so we can shut down the thread and TP group as gracefully as possible
-        except Exception as e:
-            logger.error(f"Error in generation loop: {e}", exc_info=True)
-            self._handle_critical_error(e, batch_processor)
-        finally:
-            self.background_thread_status.mark_as_stopped()
-            inference_mode.__exit__(None, None, None)
-            logger.info("Generation loop finished and background thread exited successfully.")
+            # All exceptions are caught here so we can shut down the thread and TP group as gracefully as possible
+            except Exception as e:
+                logger.error(f"Error in generation loop: {e}", exc_info=True)
+                self._handle_critical_error(e, batch_processor)
+            finally:
+                self.background_thread_status.mark_as_stopped()
+                logger.info("Generation loop finished and background thread exited successfully.")
 
     def _generation_step(self) -> None:
         """Perform a single generation step. This is mostly cuda graphed"""
