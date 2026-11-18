@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any
 
 import torch
 from torch import nn
@@ -24,7 +25,7 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -129,6 +130,21 @@ class Mistral3PreTrainedModel(LlavaPreTrainedModel):
 
 
 class Mistral3Model(LlavaModel):
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        inputs = self.vision_tower.get_data_dependent_inputs(pixel_values, image_sizes)
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
+        )
+        return {f"image_{name}": value for name, value in inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     @merge_with_config_defaults
     @can_return_tuple
     @select_hidden_states("vision_feature_layer")
@@ -230,6 +246,10 @@ class Mistral3Model(LlavaModel):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Mistral3Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring

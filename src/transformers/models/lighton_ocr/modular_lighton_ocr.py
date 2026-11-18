@@ -29,12 +29,14 @@ from ...processing_utils import (
 )
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoConfig, AutoModel
 from ..mistral3.modeling_mistral3 import (
     Mistral3ForConditionalGeneration,
     Mistral3Model,
     Mistral3ModelOutputWithPast,
     Mistral3MultiModalProjector,
+    get_merge_index,
 )
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
@@ -215,6 +217,21 @@ class LightOnOcrModel(Mistral3Model):
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
+    ) -> dict[str, torch.Tensor]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        encoder's (see [`PixtralVisionModel.get_data_dependent_inputs`]) and the patch merger's `merge_index`,
+        prefixed `image_`, as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        inputs = self.vision_encoder.get_data_dependent_inputs(pixel_values, image_sizes)
+        inputs["merge_index"] = get_merge_index(
+            image_sizes, self.config.vision_config.patch_size, self.config.spatial_merge_size
+        )
+        return {f"image_{name}": value for name, value in inputs.items()}
+
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(

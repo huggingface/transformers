@@ -19,6 +19,7 @@
 """PyTorch Qwen2.5-VL model."""
 
 import itertools
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -235,6 +236,31 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         input_tensor = input_tensor[window_index, :, :]
         input_tensor = input_tensor.reshape(seq_len, -1)
         return input_tensor
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        the full attention's `cu_seqlens` and `max_seqlen`, and the window attention's `window_index`,
+        `cu_window_seqlens` and `max_window_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            spatial_merge_size=self.spatial_merge_size,
+            window_size=self.window_size,
+            patch_size=self.patch_size,
+            kwargs=kwargs,
+        )
+        max_window_seqlen = get_max_seqlen(
+            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        )
+        return {
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+            "max_window_seqlen": max_window_seqlen,
+        }
 
     @merge_with_config_defaults
     @capture_outputs

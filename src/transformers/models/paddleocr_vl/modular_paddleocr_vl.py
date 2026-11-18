@@ -18,6 +18,7 @@
 # limitations under the License.
 
 import math
+from typing import Any
 
 import numpy as np
 import torch
@@ -615,6 +616,28 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the position table's `interp_indices` and
+        `interp_weights`, the rotary `position_ids` and the attention's `cu_seqlens` and `max_seqlen`."""
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            num_grid_per_side=self.embeddings.num_grid_per_side,
+            mode=self.embeddings.interpolation_mode,
+            align_corners=self.embeddings.interpolation_align_corners,
+            spatial_merge_size=1,
+            kwargs=kwargs,
+        )
+        # PaddleOCR merges patches in the projector, after the encoder, so the rotary positions are plain (row, col)
+        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "position_ids": position_ids,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+        }
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
@@ -662,6 +685,10 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """The vision transformer's (see [`PaddleOCRVisionTransformer.get_data_dependent_inputs`])."""
+        return self.vision_model.get_data_dependent_inputs(grid_thw, **kwargs)
 
     def forward(
         self,

@@ -82,6 +82,10 @@ class OmniASRModelTester(ALMModelTester):
 class OmniASRForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     model_tester_class = OmniASRModelTester
 
+    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     @unittest.skip(
         reason="Like other audio LMs (Voxtral, Qwen3 ASR) inputs_embeds corresponding to audio tokens are replaced when input values are provided."
     )

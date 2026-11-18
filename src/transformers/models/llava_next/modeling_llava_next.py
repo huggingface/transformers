@@ -15,6 +15,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -31,7 +32,7 @@ from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoModel
 from .configuration_llava_next import LlavaNextConfig
@@ -399,6 +400,29 @@ class LlavaNextModel(LlavaNextPreTrainedModel, MultimodalMixin):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
+    def get_data_dependent_inputs(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from `image_sizes` with data-dependent ops: the patches each image was cut into
+        (`patch_index`) and how their features are packed (`pack_index`), prefixed `image_`, as
+        `get_image_embeddings` takes them."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        if vision_feature_select_strategy is None:
+            vision_feature_select_strategy = self.config.vision_feature_select_strategy
+        inputs = {
+            "image_pack_index": get_pack_index(image_sizes, self.config, vision_feature_select_strategy),
+            "image_pack_sizes": get_pack_sizes(image_sizes, self.config, vision_feature_select_strategy),
+        }
+        if pixel_values.dim() == 5:
+            inputs["image_patch_index"] = get_patch_index(pixel_values, image_sizes, self.config)
+        return inputs
+
+    @accepts_precomputed_kwargs(modality="image")
     @merge_with_config_defaults
     @can_return_tuple
     @select_hidden_states("vision_feature_layer")
@@ -582,6 +606,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, MultimodalMixi
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`LlavaNextModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple
