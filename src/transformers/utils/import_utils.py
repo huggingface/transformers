@@ -641,13 +641,7 @@ def is_torch_tpu_available(check_device: bool = False) -> bool:
 @lru_cache
 @_make_compile_constant
 def is_torch_supa_available(check_device: bool = False) -> bool:
-    """
-    Checks if `supa` is available through the `torch_supa` package, which registers Biren SUPA accelerators via
-    PyTorch's out-of-tree device backend mechanism (`PrivateUse1`, renamed to `supa`).
-
-    This helper is a pure query: it never imports `torch_supa` itself and never patches `torch`, so it stays
-    cheap and side-effect free on machines without Biren hardware.
-    """
+    """Check whether the current PyTorch accelerator is an available Biren  SUPA device."""
     if not is_torch_available() or not _is_package_available("torch_supa")[0]:
         return False
 
@@ -655,6 +649,7 @@ def is_torch_supa_available(check_device: bool = False) -> bool:
 
     accelerator = get_current_accelerator()
     return accelerator is not None and accelerator.type == "supa" and torch.accelerator.is_available()
+
 
 @lru_cache
 @_make_compile_constant
