@@ -1923,7 +1923,7 @@ The stream ends with exactly one terminal event, `ready` (success) or `error` (f
 
 ## Timeout
 
-`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading.
+`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading. Each model runs in a process of its own, so the server's process stays free to handle HTTP, tokenize prompts and decode tokens while it generates; unloading a model stops its process.
 
 ```shell
 transformers serve --model-timeout 400
@@ -2320,6 +2320,14 @@ print(second.output_text)
 
 </hfoption>
 </hfoptions>
+
+## API servers
+
+The API server is the process that handles HTTP, renders and tokenizes prompts, and decodes and streams answers, on one CPU core. When it becomes the limit, with many concurrent clients of a small or fast model, run several with `--api-server-count`. They need a model on the command line, which they share: it's loaded once, in its own process, and their requests are batched together there.
+
+```sh
+transformers serve Qwen/Qwen2.5-0.5B-Instruct --continuous-batching --api-server-count 2
+```
 
 ## Port forwarding
 

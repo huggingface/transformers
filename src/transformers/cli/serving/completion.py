@@ -35,11 +35,13 @@ if is_serve_available():
     from openai.types.completion_create_params import CompletionCreateParamsBase
 
 
-from .utils import BaseGenerateManager, BaseHandler, _StreamError
+from .utils import BaseHandler, _StreamError
 
 
 if TYPE_CHECKING:
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import GenerationConfig
+
+    from .model_manager import EngineClient
 
 
 class TransformersTextCompletionCreateParams(CompletionCreateParamsBase, total=False):
@@ -90,46 +92,34 @@ class CompletionHandler(BaseHandler):
         if not isinstance(prompt, str):
             raise HTTPException(status_code=400, detail="prompt must be a string.")
 
-        model_id, model, processor = self._resolve_model(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        use_cb = self.generation_state.use_continuous_batching(model, modality)
-        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
-        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-
-        tokenizer = getattr(processor, "tokenizer", processor)
+        engine = self._get_engine(body)
+        use_cb = engine.use_cb
+        logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
+        tokenizer = getattr(engine.processor, "tokenizer", engine.processor)
         inputs = tokenizer(prompt, return_tensors=None if use_cb else "pt")
-        if not use_cb:
-            inputs = inputs.to(model.device)
-
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
-        if use_cb:
-            gen_manager.init_cb(model, gen_config)
+        gen_config = self._build_generation_config(body, engine.generation_config, use_cb=use_cb)
 
         suffix = body.get("suffix")
         streaming = body.get("stream")
 
         if streaming:
-            return self._streaming(request_id, model, processor, model_id, inputs, gen_config, gen_manager, suffix)
+            return self._streaming(request_id, engine, inputs, gen_config, suffix)
         else:
-            return await self._non_streaming(
-                request_id, model, processor, model_id, inputs, gen_config, gen_manager, suffix
-            )
+            return await self._non_streaming(request_id, engine, inputs, gen_config, suffix)
 
     # ----- streaming -----
 
     def _streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
         gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
         suffix: str | None = None,
     ) -> "StreamingResponse":
         """Stream tokens as SSE."""
-        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        model_id = engine.model_id
+        queue, streamer = engine.generate_streaming(inputs, gen_config)
         input_ids = inputs["input_ids"]
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
 
@@ -182,18 +172,14 @@ class CompletionHandler(BaseHandler):
     async def _non_streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
         gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
         suffix: str | None = None,
     ) -> "JSONResponse":
         """Run generation and return a JSONResponse."""
-        text, input_len, generated_ids = await gen_manager.generate_non_streaming(
-            model, processor, inputs, gen_config, request_id=request_id
-        )
+        model_id = engine.model_id
+        text, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
 
         if suffix is not None:
             text = text + suffix

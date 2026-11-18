@@ -56,9 +56,7 @@ if is_serve_available():
 
 
 from .utils import (
-    BaseGenerateManager,
     BaseHandler,
-    Modality,
     ReasoningText,
     ToolCall,
     _StreamError,
@@ -68,7 +66,9 @@ from .utils import (
 
 
 if TYPE_CHECKING:
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import GenerationConfig
+
+    from .model_manager import EngineClient
 
 
 logger = logging.get_logger(__name__)
@@ -375,93 +375,19 @@ class ResponseHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        model_id, model, processor = self._resolve_model(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        use_cb = self.generation_state.use_continuous_batching(model, modality)
-        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
-        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-
-        # Two-step input conversion (chat completions skips step 1 since messages are already standard):
-        # 1. Normalize Responses API input (string/list/dict + instructions) → standard messages list
-        # 2. Transform message content for the HF processor (VLM image handling, text joining, etc.)
-        messages = self._normalize_input(body)
-        processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
-
-        has_video = any(
-            c.get("type") == "video"
-            for msg in processor_inputs
-            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
-        )
-
-        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
-        # Merge order (later wins): custom default -> server default → request-level kwargs.
-        chat_template_kwargs: dict = {}
-        if has_video:
-            chat_template_kwargs["num_frames"] = 32
-        chat_template_kwargs.update(self.chat_template_kwargs)
-        chat_template_kwargs.update(body.get("chat_template_kwargs") or {})
-        # updates the flat tool structure to the one expected by the `apply_chat_template` method.
-        tools = self._normalize_tools(body.get("tools"))
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=tools,
-            return_tensors=None if use_cb else "pt",
-            return_dict=True,
-            tokenize=True,
-            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
-            **chat_template_kwargs,
-        )
-        if not use_cb:
-            inputs = inputs.to(model.device)  # type: ignore[union-attr]
-
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
-        # TODO: remove when CB supports per-request generation config
-        if use_cb:
-            gen_manager.init_cb(model, gen_config)
+        engine = self._get_engine(body)
+        use_cb = engine.use_cb
+        logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
+        # The Responses API's input (a string, items, instructions) as chat messages, then rendered like a chat's
+        inputs = self.render_messages(engine, self._normalize_input(body), body)
+        gen_config = self._build_generation_config(body, engine.generation_config, use_cb=use_cb)
         streaming = body.get("stream", True)
         if streaming:
-            return self._streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                body,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=tools,
-            )
+            return self._streaming(request_id, engine, body, inputs, gen_config)
         else:
-            return await self._non_streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                body,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=tools,
-            )
+            return await self._non_streaming(request_id, engine, body, inputs, gen_config)
 
     # ----- input conversion -----
-
-    @staticmethod
-    def _normalize_tools(tools: list[dict] | None) -> list[dict] | None:
-        """Normalize Responses API tool definitions for ``apply_chat_template``.
-
-        The Responses API uses a flat format: ``{"type": "function", "name": ..., "parameters": ...}``
-        while ``apply_chat_template`` expects a nested format:
-        ``{"type": "function", "function": {"name": ..., "parameters": ...}}``.
-        Already-nested tools are passed through unchanged.
-        """
-        if not tools:
-            return tools
-        return [
-            {"type": "function", "function": {k: v for k, v in t.items() if k != "type"}} if "function" not in t else t
-            for t in tools
-        ]
 
     @staticmethod
     def _normalize_input(body: dict) -> list[dict]:
@@ -564,25 +490,15 @@ class ResponseHandler(BaseHandler):
     def _streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         body: dict,
         inputs: dict,
         gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
-        tools=None,
     ) -> StreamingResponse:
-        """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
-        response_parser = build_response_parser(processor, model, inputs["input_ids"], tools=tools)
-        queue, streamer = gen_manager.generate_streaming(
-            model,
-            processor,
-            inputs,
-            gen_config,
-            request_id=request_id,
-            response_parser=response_parser,
-        )
+        """Generate a streaming Responses API reply (SSE), decoded by a `Detokenizer`."""
+        processor, model_id = engine.processor, engine.model_id
+        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"])
+        queue, streamer = engine.generate_streaming(inputs, gen_config, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
@@ -671,27 +587,17 @@ class ResponseHandler(BaseHandler):
     async def _non_streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         body: dict,
         inputs: dict,
         gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
-        tools=None,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
-        content, input_len, generated_ids = await gen_manager.generate_non_streaming(
-            model, processor, inputs, gen_config, request_id=request_id
-        )
+        processor, model_id = engine.processor, engine.model_id
+        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor,
-            model,
-            generated_ids,
-            input_ids=inputs["input_ids"],
-            cleaned_content=content,
-            tools=tools,
+            processor, engine.model_config, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
         )
 
         output_items = []

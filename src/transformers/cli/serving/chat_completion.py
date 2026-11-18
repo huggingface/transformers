@@ -14,7 +14,7 @@
 """
 Handler for the /v1/chat/completions endpoint.
 
-Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
+Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
 import asyncio
@@ -45,9 +45,7 @@ if is_serve_available():
 
 
 from .utils import (
-    BaseGenerateManager,
     BaseHandler,
-    Modality,
     ReasoningText,
     ToolCall,
     _StreamError,
@@ -57,7 +55,9 @@ from .utils import (
 
 
 if TYPE_CHECKING:
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import GenerationConfig
+
+    from .model_manager import EngineClient
 
 
 class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
@@ -116,90 +116,27 @@ class ChatCompletionHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        model_id, model, processor = self._resolve_model(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        use_cb = self.generation_state.use_continuous_batching(model, modality)
-        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
-        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-        processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
-
-        has_video = any(
-            c.get("type") == "video"
-            for msg in processor_inputs
-            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
-        )
-        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
-        # Merge order (later wins): custom default -> server default → request-level kwargs.
-        chat_template_kwargs: dict = {}
-        if has_video:
-            chat_template_kwargs["num_frames"] = 32
-        chat_template_kwargs.update(self.chat_template_kwargs)
-        chat_template_kwargs.update(body.get("chat_template_kwargs", {}))
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=body.get("tools"),
-            return_tensors=None if use_cb else "pt",
-            return_dict=True,
-            tokenize=True,
-            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
-            **chat_template_kwargs,
-        )
-        if not use_cb:
-            inputs = inputs.to(model.device)  # type: ignore[union-attr]
-
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
-        # TODO: remove when CB supports per-request generation config
-        if use_cb:
-            gen_manager.init_cb(model, gen_config)
+        engine = self._get_engine(body)
+        use_cb = engine.use_cb
+        logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
+        inputs = self.render_messages(engine, body["messages"], body)
+        gen_config = self._build_generation_config(body, engine.generation_config, use_cb=use_cb)
 
         streaming = body.get("stream")
         if streaming:
-            return self._streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=body.get("tools"),
-            )
+            return self._streaming(request_id, engine, inputs, gen_config)
         else:
-            return await self._non_streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=body.get("tools"),
-            )
+            return await self._non_streaming(request_id, engine, inputs, gen_config)
 
     # ----- streaming -----
 
     def _streaming(
-        self,
-        request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
-        inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
-        tools=None,
+        self, request_id: str, engine: "EngineClient", inputs: dict, gen_config: "GenerationConfig"
     ) -> StreamingResponse:
-        """Stream tokens as SSE via DirectStreamer."""
-        response_parser = build_response_parser(processor, model, inputs["input_ids"], tools=tools)
-        queue, streamer = gen_manager.generate_streaming(
-            model,
-            processor,
-            inputs,
-            gen_config,
-            request_id=request_id,
-            response_parser=response_parser,
-        )
+        """Stream tokens as SSE, decoded by a `Detokenizer`."""
+        processor, model_id = engine.processor, engine.model_id
+        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"])
+        queue, streamer = engine.generate_streaming(inputs, gen_config, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
@@ -285,18 +222,13 @@ class ChatCompletionHandler(BaseHandler):
     async def _non_streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
         gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
-        tools=None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
-        content, input_len, generated_ids = await gen_manager.generate_non_streaming(
-            model, processor, inputs, gen_config, request_id=request_id
-        )
+        processor, model_id = engine.processor, engine.model_id
+        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
 
         hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
         completion_tokens = len(generated_ids)
@@ -307,7 +239,7 @@ class ChatCompletionHandler(BaseHandler):
         )
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content, tools=tools
+            processor, engine.model_config, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
         )
         tool_calls = None
         if parsed_tool_calls:

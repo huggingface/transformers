@@ -30,14 +30,13 @@ if is_serve_available():
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .utils import BaseHandler, GenerateManager
+from .utils import BaseHandler, Modality
 
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
-    from transformers.pipelines import DecisionPipeline
+    from transformers import PreTrainedModel, PreTrainedTokenizerFast
 
-    from .model_manager import ModelManager
+    from .model_manager import EngineClient, ModelManager
     from .utils import GenerationState
 
 
@@ -129,17 +128,15 @@ class SystemOneHandler(BaseHandler):
             `JSONResponse`: `model`, `answers` keyed by question name, and `usage`.
         """
         request = self._validate_request(body)
-        model_id, model, processor = self._resolve_model(body)
-        logger.warning(f"[Request received] Model: {model_id}, questions: {len(request.questions)}")
+        engine = self._get_engine(body)
 
-        gen_manager: GenerateManager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
-        pipe = self._pipeline(model_id, model, processor)
-        try:
-            answers, input_tokens = await gen_manager.async_submit(
-                self._answer, pipe, request.model_dump(include={"state", "questions", "assets"})
-            )
-        except ValueError as error:  # e.g. labels that aren't single tokens, or images for a text model
-            raise HTTPException(status_code=400, detail=str(error)) from error
+        logger.warning(f"[Request received] Model: {engine.model_id}, questions: {len(request.questions)}")
+
+        inputs, questions, labels, input_tokens = self._prepare_inputs(engine, request)
+        temperatures = [self.decision_config.temperature.get(question.type, 1.0) for question in questions]
+        probabilities = await engine.submit(self._compute_probabilities, dict(inputs), labels, temperatures)
+        answers = build_answers(questions, probabilities)
+
         return JSONResponse(
             {
                 "model": body["model"],
@@ -147,3 +144,109 @@ class SystemOneHandler(BaseHandler):
                 "usage": {"input_tokens": input_tokens, "output_tokens": 0},
             }
         )
+
+    def get_processor_inputs_from_request(
+        self, request: SystemOneRequest, modality: Modality
+    ) -> tuple[list[list[dict]], list[Question]]:
+        """Build one processor-compatible conversation per question and retain its answer metadata."""
+        if request.images and modality not in (Modality.VLM, Modality.MULTIMODAL):
+            raise HTTPException(status_code=400, detail="The selected model does not support image input.")
+        questions = []
+        processor_inputs = []
+        for name, request_question in request.questions.items():
+            question = parse_question(name, request_question, self.decision_config.labels.get(request_question.type))
+            questions.append(question)
+            text = render_decision_prompt(request.state, question)
+            if modality == Modality.LLM:
+                content = text
+            else:
+                content = [{"type": "image", "url": image} for image in request.images]
+                content.append({"type": "text", "text": text})
+            processor_inputs.append([{"role": "user", "content": content}])
+        return processor_inputs, questions
+
+    def _prepare_inputs(
+        self, engine: "EngineClient", request: TransformersSystemOneRequestParams
+    ) -> tuple[dict, list[Question], list[list[int]], int]:
+        """Apply the model's chat template and batch text and images for one forward pass."""
+        processor, modality = engine.processor, engine.modality
+        tokenizer = getattr(processor, "tokenizer", processor)
+        processor_inputs, questions = self.get_processor_inputs_from_request(request, modality)
+
+        chat_template_kwargs = {
+            **self.chat_template_kwargs,
+            **request.chat_template_kwargs,
+            "enable_thinking": False,
+        }
+        prompts = []
+        for messages, question in zip(processor_inputs, questions):
+            if self.decision_config.chat_template is not None:
+                chat_template_kwargs.update(
+                    chat_template=self.decision_config.chat_template,
+                    state=request.state,
+                    question=question,
+                    images=request.images,
+                )
+            prompt = processor.apply_chat_template(
+                messages, add_generation_prompt=True, tokenize=False, **chat_template_kwargs
+            )
+            prompts.append(prompt)
+
+        processor_kwargs = {"images": [request.images for _ in questions]} if request.images else {}
+        inputs = processor(
+            text=prompts,
+            padding=True,
+            padding_side="left",
+            return_tensors="pt",
+            add_special_tokens=False,
+            **processor_kwargs,
+        )
+        if modality == Modality.LLM:
+            inputs["position_ids"] = (inputs["attention_mask"].cumsum(-1) - 1).clamp(min=0)
+
+        labels = [self._tokenize_labels(tokenizer, question) for question in questions]
+        input_tokens = int(inputs["attention_mask"].sum().item())
+        return inputs, questions, labels, input_tokens
+
+    @staticmethod
+    def _compute_probabilities(
+        model: "PreTrainedModel", inputs: dict, labels: list[list[int]], temperatures: list[float] | None = None
+    ) -> list[list[float]]:
+        """Run the model and normalize each question's logits over its allowed answer tokens."""
+        import torch
+
+        inputs = {
+            name: value.to(model.device) if isinstance(value, torch.Tensor) else value
+            for name, value in inputs.items()
+        }
+        with torch.inference_mode():
+            logits = model(**inputs, use_cache=False, logits_to_keep=1).logits[:, -1]
+        probabilities = []
+        for i, (question_logits, label_ids) in enumerate(zip(logits, labels)):
+            answer_logits = question_logits[label_ids].float()
+            if temperatures is not None:
+                answer_logits = answer_logits / temperatures[i]
+            answer_probabilities = answer_logits.softmax(dim=-1)
+            probabilities.append(answer_probabilities.tolist())
+        return probabilities
+
+    @staticmethod
+    def _tokenize_labels(tokenizer: "PreTrainedTokenizerFast", question: Question) -> list[int]:
+        """Tokenize each label independently and require distinct single-token answers."""
+        label_tokens = [tokenizer(label, add_special_tokens=False)["input_ids"] for label in question.labels]
+        if any(len(ids) != 1 for ids in label_tokens):
+            raise HTTPException(
+                status_code=400,
+                detail=f"The labels of question {question.name!r} are not single tokens for this model.",
+            )
+        label_ids = [ids[0] for ids in label_tokens]
+        if tokenizer.unk_token_id in label_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The labels of question {question.name!r} contain an unknown token for this model.",
+            )
+        if len(set(label_ids)) != len(label_ids):
+            raise HTTPException(
+                status_code=400, detail=f"Two labels of question {question.name!r} share a token for this model."
+            )
+        return label_ids
