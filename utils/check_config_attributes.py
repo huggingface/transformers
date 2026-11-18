@@ -220,6 +220,27 @@ SPECIAL_CASES_TO_ALLOW = {
     "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "DeepseekV41TextConfig": [
+        # The first six are inherited from `DeepseekV4Config`, and are unused for the same reasons as there
+        "attention_bias",
+        "n_shared_experts",
+        "norm_topk_prob",
+        "num_key_value_heads",
+        "router_aux_loss_coef",
+        "router_jitter_noise",
+        # The checkpoint's config lists the layers that run an indexer, but the model reads the
+        # `attention_layer_types` that we derive from it
+        "index_source_layer_ids",
+        # The DSpark draft layers are in the checkpoint, but they are not instantiated yet
+        "num_nextn_predict_layers",
+        "dspark_block_size",
+        "dspark_markov_rank",
+        "dspark_n_routed_experts",
+        "dspark_num_experts_per_tok",
+        "dspark_target_layer_ids",
+    ],
+    # The checkpoint's vision config carries the preprocessing parameters too
+    "DeepseekV41VisionConfig": ["max_image_tokens", "max_wh_ratio", "min_pixels"],
     "DeepseekV4Config": [
         # All BC / config-compat surface that the modeling code never reads but
         # checkpoints in the wild expose (so we keep accepting them in `__init__`):

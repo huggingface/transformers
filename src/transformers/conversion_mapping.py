@@ -793,6 +793,78 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "deepseek_v41": [
+            # The checkpoint is flat, and we nest it under the composite model. The names inside the language model
+            # and the vision tower are handled by their own mappings below, which only see their own keys.
+            WeightRenaming(
+                source_patterns=r"^embed\.weight", target_patterns="model.language_model.embed_tokens.weight"
+            ),
+            WeightRenaming(source_patterns=r"^norm\.weight", target_patterns="model.language_model.norm.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"^layers\.", target_patterns="model.language_model.layers."),
+            WeightRenaming(source_patterns=r"^vision\.blocks\.", target_patterns="model.vision_tower.layers."),
+            WeightRenaming(
+                source_patterns=r"^vision\.patch_embed\.proj\.", target_patterns="model.vision_tower.patch_embed."
+            ),
+            WeightRenaming(source_patterns=r"^vision\.norm\.", target_patterns="model.vision_tower.norm."),
+            WeightRenaming(source_patterns=r"^aligner\.w1\.", target_patterns="model.multi_modal_projector.linear_1."),
+            WeightRenaming(source_patterns=r"^aligner\.w2\.", target_patterns="model.multi_modal_projector.linear_2."),
+            WeightRenaming(source_patterns=r"^image_start", target_patterns="model.image_start"),
+            WeightRenaming(source_patterns=r"^image_end", target_patterns="model.image_end"),
+            WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
+        ],
+        "deepseek_v41_vision": [
+            WeightRenaming(source_patterns=r"\.attn\.wqkv\.", target_patterns=r".self_attn.qkv_proj."),
+            WeightRenaming(source_patterns=r"\.attn\.wo\.", target_patterns=r".self_attn.o_proj."),
+            WeightRenaming(source_patterns=r"\.mlp\.w1\.", target_patterns=r".mlp.gate_up_proj."),
+            WeightRenaming(source_patterns=r"\.mlp\.w2\.", target_patterns=r".mlp.down_proj."),
+            WeightRenaming(source_patterns=r"\.norm1\.", target_patterns=r".layer_norm1."),
+            WeightRenaming(source_patterns=r"\.norm2\.", target_patterns=r".layer_norm2."),
+        ],
+        "deepseek_v41_text": [
+            # General mid-key renames acting on several keys
+            WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
+            WeightRenaming(source_patterns=r"\.ffn\.", target_patterns=r".mlp."),
+            # Leaf patterns
+            WeightRenaming(source_patterns=r"\.attn_norm\.", target_patterns=r".input_layernorm."),
+            WeightRenaming(source_patterns=r"\.ffn_norm\.", target_patterns=r".post_attention_layernorm."),
+            WeightRenaming(source_patterns=r"\.hc_attn_fn", target_patterns=r".attn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_attn_base", target_patterns=r".attn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_attn_scale", target_patterns=r".attn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_fn", target_patterns=r".ffn_hc.fn"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_base", target_patterns=r".ffn_hc.base"),
+            WeightRenaming(source_patterns=r"\.hc_ffn_scale", target_patterns=r".ffn_hc.scale"),
+            WeightRenaming(source_patterns=r"\.attn_sink", target_patterns=r".sinks"),
+            WeightRenaming(source_patterns=r"\.compressor\.norm\.", target_patterns=r".compressor.kv_norm."),
+            WeightRenaming(source_patterns=r"\.indexer\.wq_b\.", target_patterns=r".indexer.q_b_proj."),
+            WeightRenaming(source_patterns=r"\.indexer\.wk\.", target_patterns=r".indexer.k_proj."),
+            WeightRenaming(source_patterns=r"\.wq_a\.", target_patterns=r".q_a_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.wq_b\.", target_patterns=r".self_attn.q_b_proj."),
+            WeightRenaming(source_patterns=r"\.wkv\.", target_patterns=r".kv_proj."),
+            WeightRenaming(source_patterns=r"\.wgate\.", target_patterns=r".gate_proj."),
+            WeightRenaming(source_patterns=r"\.wo_a\.", target_patterns=r".o_a_proj."),
+            WeightRenaming(source_patterns=r"\.wo_b\.", target_patterns=r".o_b_proj."),
+            WeightRenaming(source_patterns=r"\.q_norm\.", target_patterns=r".q_a_norm."),
+            # The routing bias of the image tokens goes first, as the pattern for the text one is a prefix of it
+            WeightRenaming(source_patterns=r"\.gate\.bias_vl", target_patterns=r".gate.e_score_correction_bias_vl"),
+            WeightRenaming(source_patterns=r"\.gate\.bias", target_patterns=r".gate.e_score_correction_bias"),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w1\.", target_patterns=r".shared_experts.gate_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w2\.", target_patterns=r".shared_experts.down_proj."),
+            WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r".shared_experts.up_proj."),
+            WeightConverter(
+                source_patterns=[
+                    r"\.experts.*.w1.weight",
+                    r"\.experts.*.w3.weight",
+                ],
+                target_patterns=r"\.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.experts.*.w2.weight",
+                target_patterns=r"\.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "glm5_next": [
             WeightRenaming(
                 source_patterns=r"self_attn\.f_a_proj\.",
