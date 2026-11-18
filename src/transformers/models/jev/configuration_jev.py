@@ -107,6 +107,8 @@ class JevConfig(PreTrainedConfig):
         `offsets[question.type]` on, in order.
     softcap (`float`, *optional*):
         Soft cap of the scores, `softcap * tanh(scores / softcap)`, like the logits of a language model head.
+    rps_weight (`float`, *optional*, defaults to 0.5):
+        Weight of the ordinal ranked probability score for `score` questions, added to the KL loss.
     text_config (`dict` or `PreTrainedConfig`, *optional*):
         Config of the model the head reads, the `config.json` of its repo.
 
@@ -124,6 +126,7 @@ class JevConfig(PreTrainedConfig):
     num_verbalizers: int = 24
     offsets: dict[str, int] | None = None
     softcap: float | None = None
+    rps_weight: float = 0.5
     text_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 

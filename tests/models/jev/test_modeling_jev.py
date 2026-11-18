@@ -21,7 +21,7 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import save_file
 
 from transformers import AutoProcessor, is_torch_available, pipeline
-from transformers.decision import DecisionConfig
+from transformers.decision import DecisionConfig, Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, render
@@ -31,6 +31,89 @@ if is_torch_available():
     import torch
 
     from transformers import JevForDecision
+    from transformers.loss.loss_jev import JevForDecisionLoss
+
+
+@require_torch
+class JevLossTest(unittest.TestCase):
+    def setUp(self):
+        self.logits = torch.tensor(
+            [1.0, 0.1, -0.2, -1.0, 0.5, 1.2, -0.4, 0.3, 0.8, 0.4, -0.5, 0.6, 0.9], requires_grad=True
+        )
+        self.num_options = torch.tensor([1, 2, 6, 4])
+        self.is_score = torch.tensor([True, False, True, False])
+        self.labels = torch.tensor([0, 1, 3, 2])
+        self.soft_labels = torch.tensor([1.0, 0.2, 0.8, 0.05, 0.1, 0.2, 0.3, 0.25, 0.1, 0.0, 0.2, 0.0, 0.8])
+        self.weights = torch.tensor([0.5, 0.25, 2.0, 0.5])
+
+    def test_model_card_loss_and_gradients(self):
+        # Independent float64 categorical KL and ordinal RPS reference, including ragged and singleton questions.
+        sizes = self.num_options.tolist()
+        ignored = self.labels.clone()
+        ignored[-1] = -100
+        for labels in (self.labels, self.soft_labels, ignored, torch.full_like(self.labels, -100)):
+            soft_labels = labels.is_floating_point()
+            for weights in (None, self.weights):
+                for rps_weight in (0.0, 0.5):
+                    with self.subTest(labels=labels.tolist(), weighted=weights is not None, rps_weight=rps_weight):
+                        reference_logits = self.logits.detach().double().requires_grad_()
+                        targets = labels.split(sizes) if soft_labels else labels
+                        terms = []
+                        for index, (scores, target) in enumerate(zip(reference_logits.split(sizes), targets)):
+                            if not soft_labels:
+                                if target == -100:
+                                    continue
+                                target = torch.nn.functional.one_hot(target, scores.numel())
+                            teacher = torch.distributions.Categorical(probs=target.double())
+                            student = torch.distributions.Categorical(logits=scores)
+                            term = torch.distributions.kl_divergence(teacher, student)
+                            if self.is_score[index] and scores.numel() > 1:
+                                difference = student.probs.cumsum(0)[:-1] - teacher.probs.cumsum(0)[:-1]
+                                term = term + rps_weight * difference.square().mean()
+                            terms.append(term if weights is None else term * weights[index])
+                        expected = torch.stack(terms).mean() if terms else reference_logits.sum() * 0
+                        actual = JevForDecisionLoss(
+                            self.logits,
+                            labels,
+                            self.num_options,
+                            self.is_score,
+                            rps_weight=rps_weight,
+                            loss_weights=weights,
+                        )
+                        torch.testing.assert_close(actual.double(), expected)
+                        actual_gradient = torch.autograd.grad(actual, self.logits)[0]
+                        expected_gradient = torch.autograd.grad(expected, reference_logits)[0]
+                        torch.testing.assert_close(actual_gradient.double(), expected_gradient)
+
+    def test_accumulated_loss(self):
+        loss = JevForDecisionLoss(
+            self.logits, self.soft_labels, self.num_options, self.is_score, loss_weights=self.weights
+        )
+        expected_gradient = torch.autograd.grad(loss, self.logits)[0]
+        start = 0
+        for index, count in enumerate(self.num_options.tolist()):
+            end = start + count
+            JevForDecisionLoss(
+                self.logits[start:end],
+                self.soft_labels[start:end],
+                self.num_options[index : index + 1],
+                self.is_score[index : index + 1],
+                loss_weights=self.weights[index : index + 1],
+                num_items_in_batch=4,
+            ).backward()
+            start = end
+        torch.testing.assert_close(self.logits.grad, expected_gradient)
+
+    def test_confident_prediction_gradients(self):
+        # Standard fp32 log_softmax rounds the winning loss and gradient to zero at this margin.
+        logits = torch.tensor([9.0, -9.0, -9.0], requires_grad=True)
+        loss = JevForDecisionLoss(logits, torch.tensor([0]), torch.tensor([3]), torch.tensor([False]))
+        mass = 2 * torch.exp(torch.tensor(-18.0, dtype=torch.float64))
+        non_target_gradient = mass / (1 + mass) / 2
+        expected_gradient = torch.stack([-2 * non_target_gradient, non_target_gradient, non_target_gradient])
+        loss.backward()
+        torch.testing.assert_close(loss.double(), torch.log1p(mass), rtol=1e-6, atol=0)
+        torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
 
 
 @require_torch
@@ -38,6 +121,32 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevForDecision,) if is_torch_available() else ()
     decision_repo = "hf-internal-testing/decision-gev"
     tiny_sizes = {"hidden_size": 16}
+
+    def test_loss_backward(self):
+        inputs = {
+            "input_ids": torch.arange(12)[None],
+            "marks": torch.tensor([[4, 8, 12]]),
+            "num_options": torch.tensor([[2, 6, 4]]),
+            "question_type_ids": torch.tensor(
+                [[Question.questions_types.index(kind) for kind in ("noul", "score", "choice")]]
+            ),
+            "labels": torch.tensor([[1, 3, 2]]),
+        }
+        for dtype in (torch.float32, torch.bfloat16):
+            with self.subTest(dtype=dtype):
+                model = JevForDecision(self.config).to(dtype).eval()
+                output = model(**inputs)
+                self.assertEqual(output.loss.dtype, torch.float32)
+                output.loss.backward()
+                self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
+                self.assertGreater(model.proj.weight.grad.abs().sum(), 0)
+                self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum(), 0)
+                active = torch.zeros(self.config.num_verbalizers, dtype=torch.bool)
+                for kind, count in zip(("noul", "score", "choice"), inputs["num_options"][0]):
+                    start = self.config.offsets[kind]
+                    active[start : start + count] = True
+                inactive_gradients = model.proj.weight.grad[~active]
+                torch.testing.assert_close(inactive_gradients, torch.zeros_like(inactive_gradients))
 
     @require_vision
     def test_chat_template_reproduces_the_model_code(self):
