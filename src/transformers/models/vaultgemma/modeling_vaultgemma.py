@@ -340,7 +340,6 @@ class VaultGemmaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VaultGemmaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = False  # sdpa does not support softcapping
     _supports_flex_attn = True
