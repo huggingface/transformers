@@ -59,15 +59,15 @@ logger = logging.get_logger(__name__)
 
 
 class ZambaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+    def __init__(self, hidden_size, eps=1e-6):
         """
-        ZambaRMSNorm is equivalent to T5LayerNorm
+        ZambaRMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -75,7 +75,7 @@ class ZambaRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -98,7 +98,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -282,22 +282,7 @@ def causal_conv1d_forward(
     return hidden_states
 
 
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
-
-
-@use_kernel_func_from_hub_with_fallback(
-    "selective_state_update",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
     hidden_states: torch.Tensor,
@@ -343,10 +328,7 @@ def mamba_selective_state_update(
     return out.to(input_dtype)
 
 
-@use_kernel_func_from_hub_with_fallback(
-    "selective_scan_fn",
-    "mamba_ssm",
-)
+@use_kernel_func_from_hub_with_fallback("selective_scan_fn", "mamba_ssm")
 def mamba_selective_scan(
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
@@ -452,6 +434,18 @@ def mamba_selective_scan(
         return scan_output, ssm_state
 
     return scan_output
+
+
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
 
 
 @use_kernelized_func(

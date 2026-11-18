@@ -70,15 +70,15 @@ class Zamba2RMSNormGated(torch.nn.Module):
 
 
 class Zamba2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+    def __init__(self, hidden_size, eps=1e-6):
         """
-        Zamba2RMSNorm is equivalent to T5LayerNorm
+        Zamba2RMSNorm is equivalent to T5LayerNorm and LlamaRMSNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -86,7 +86,7 @@ class Zamba2RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        return f"{self.weight.shape[0]}, eps={self.variance_epsilon}"
 
 
 class Zamba2RotaryEmbedding(nn.Module):
@@ -155,7 +155,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
@@ -490,7 +490,7 @@ def segment_sum(input_tensor):
 
 
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
-def ssd_selective_state_update(
+def mamba2_selective_state_update(
     state: torch.Tensor,
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
@@ -552,7 +552,7 @@ def ssd_selective_state_update(
 
 
 @use_kernel_func_from_hub_with_fallback("mamba_chunk_scan_combined", "mamba_ssm")
-def ssd_chunk_scan(
+def mamba2_chunk_scan(
     hidden_states: torch.Tensor,
     dt: torch.Tensor,
     A: torch.Tensor,
@@ -659,8 +659,8 @@ def ssd_chunk_scan(
     return output
 
 
-@use_kernel_forward_from_hub("ssd_forward")
-def ssd_forward(
+@use_kernel_forward_from_hub("mamba2_scan_forward")
+def mamba2_scan_forward(
     module: nn.Module,
     hidden_states: torch.Tensor,
     B: torch.Tensor,
@@ -709,13 +709,13 @@ def ssd_forward(
         C = C.view(batch_size, module.n_groups, module.ssm_state_size)
         D = module.D[:, None].expand(-1, module.head_dim)
         dt_bias = module.dt_bias[:, None].expand(-1, module.head_dim)
-        scan_output = ssd_selective_state_update(
+        scan_output = mamba2_selective_state_update(
             recurrent_state, hidden_states, dt, A, B, C, D, z=None, dt_bias=dt_bias, dt_softplus=True, **kwargs
         )
         return scan_output.view(batch_size, 1, -1)
 
     output_final_state = cache is not None
-    scan_result = ssd_chunk_scan(
+    scan_result = mamba2_chunk_scan(
         hidden_states.view(batch_size, seq_len, module.num_heads, module.head_dim),
         dt,
         A,
@@ -770,9 +770,9 @@ def mamba2_split_conv1d_scan_combined(
         causal_conv1d_fn,
         causal_conv1d_update,
         mamba2_split_conv1d_scan_combined,
-        ssd_forward,
-        ssd_selective_state_update,
-        ssd_chunk_scan,
+        mamba2_scan_forward,
+        mamba2_selective_state_update,
+        mamba2_chunk_scan,
     ]
 )
 class Zamba2MambaMixer(nn.Module):
@@ -921,7 +921,7 @@ class Zamba2MambaMixer(nn.Module):
             dim=-1,
         )
 
-        scan_output = ssd_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
 
         scan_output = self.norm(scan_output, gate)
 

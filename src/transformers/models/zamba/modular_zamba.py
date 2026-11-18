@@ -22,7 +22,6 @@ import math
 from collections.abc import Callable
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -30,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_func_from_hub_with_fallback, use_kernelized_func
+from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -40,15 +39,16 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import (
-    is_mambapy_available,
-    is_torch_greater_or_equal,
-    is_torchdynamo_compiling,
-    is_torchdynamo_exporting,
-)
 from ...utils.output_capturing import capture_outputs
-from ..llama.modeling_llama import repeat_kv
-from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
+from ..llama.modeling_llama import eager_attention_forward
+from ..mamba.modeling_mamba import (
+    MambaRMSNorm,
+    causal_conv1d_fn,
+    causal_conv1d_forward,
+    causal_conv1d_update,
+    mamba_selective_scan,
+    mamba_selective_state_update,
+)
 from ..mistral.modeling_mistral import MistralMLP
 from .configuration_zamba import ZambaConfig
 
@@ -56,49 +56,8 @@ from .configuration_zamba import ZambaConfig
 logger = logging.get_logger(__name__)
 
 
-class ZambaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        ZambaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
+class ZambaRMSNorm(MambaRMSNorm):
+    pass
 
 
 class ZambaAttention(nn.Module):
@@ -182,166 +141,6 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
     return hidden_states
-
-
-@use_kernel_func_from_hub_with_fallback(
-    "selective_state_update",
-    "mamba_ssm",
-)
-def mamba_selective_state_update(
-    state: torch.Tensor,
-    hidden_states: torch.Tensor,
-    dt: torch.Tensor,
-    A: torch.Tensor,
-    B: torch.Tensor,
-    C: torch.Tensor,
-    D: torch.Tensor | None = None,
-    dt_bias: torch.Tensor | None = None,
-    dt_softplus: bool = False,
-    z: torch.Tensor | None = None,
-    **kwargs,
-):
-    input_dtype = hidden_states.dtype
-
-    if dt_bias is not None:
-        dt = dt + dt_bias.to(dt.dtype)
-    if dt_softplus:
-        dt = F.softplus(dt)
-
-    # Discretize A
-    dA = torch.exp(dt.float()[..., None] * A.float()).to(device=state.device)
-
-    # Discretize B
-    dB = dt.float()[..., None] * B.float()[:, None, :]
-    # Discretize x into dB
-    dBx = dB * hidden_states.float()[..., None]
-
-    # State calculation
-    ssm_state = state.float() * dA + dBx
-    state.copy_(ssm_state.to(state.dtype))
-
-    # Subsequent output
-    out = torch.matmul(ssm_state.to(C.dtype), C.unsqueeze(-1)).squeeze(-1)
-
-    # D skip connection
-    if D is not None:
-        out = out + hidden_states * D
-
-    if z is not None:
-        out = out * F.silu(z)
-
-    return out.to(input_dtype)
-
-
-@use_kernel_func_from_hub_with_fallback(
-    "selective_scan_fn",
-    "mamba_ssm",
-)
-def mamba_selective_scan(
-    hidden_states: torch.Tensor,
-    dt: torch.Tensor,
-    A: torch.Tensor,
-    B: torch.Tensor,
-    C: torch.Tensor,
-    D: torch.Tensor | None = None,
-    z: torch.Tensor | None = None,
-    delta_bias: torch.Tensor | None = None,
-    delta_softplus: bool = False,
-    return_last_state: bool = False,
-    use_mambapy: bool = False,
-    use_associative_scan: bool = False,
-    **kwargs,
-):
-    # Torch only alternatives to the recurrent path
-    if is_torch_greater_or_equal("2.9.0"):
-        from torch._higher_order_ops.associative_scan import associative_scan
-    else:
-        associative_scan = None
-
-    if is_mambapy_available():
-        from mambapy.pscan import pscan
-    else:
-        pscan = None
-
-    batch_size, intermediate_size, seq_len = hidden_states.shape
-    input_dtype = hidden_states.dtype
-
-    if delta_bias is not None:
-        dt = dt + delta_bias.to(dt.dtype)[..., None]
-    if delta_softplus:
-        dt = F.softplus(dt)
-
-    # We need to transpose on the basis of the original kernel layout
-    B = B.transpose(1, 2)
-    C = C.transpose(1, 2)
-
-    # Discretize A and B for the entire sequence
-    discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None])
-    discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
-    deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
-
-    if use_mambapy and pscan is not None:
-        all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
-
-        scan_output = (all_states @ C.unsqueeze(-1)).squeeze(3).transpose(1, 2)
-        ssm_state = all_states[:, -1]
-
-    elif (
-        use_associative_scan
-        and associative_scan is not None
-        # There is no onnx translation for this op so we rely on the normal sequential path then
-        and (is_torchdynamo_compiling() and not is_torchdynamo_exporting())
-    ):
-
-        def combine_fn(left, right):
-            a_left, b_left = left
-            a_right, b_right = right
-            return a_left * a_right, a_right * b_left + b_right
-
-        combine_mode = "pointwise" if discrete_A.device.type in ("cuda", "xpu") else "generic"
-        _, all_states = associative_scan(
-            combine_fn,
-            (discrete_A, deltaB_u),
-            dim=2,
-            combine_mode=combine_mode,
-        )
-
-        scan_output = torch.matmul(all_states.transpose(1, 2).to(input_dtype), C.unsqueeze(-1))
-        scan_output = scan_output.squeeze(-1).transpose(1, 2)
-        ssm_state = all_states[:, :, -1]
-
-    # Recurrent iteration
-    else:
-        # "Initial hidden state" is not supported by the kernel path, so use
-        # the same zero initialization as the kernel
-        ssm_state = torch.zeros(
-            batch_size,
-            intermediate_size,
-            A.shape[-1],
-            dtype=input_dtype,
-            device=hidden_states.device,
-        )
-
-        scan_outputs = []
-        for index in range(seq_len):
-            # State calculation
-            ssm_state = discrete_A[:, :, index] * ssm_state + deltaB_u[:, :, index]
-
-            # Subsequent output
-            scan_output = torch.matmul(ssm_state.to(input_dtype), C[:, index, :].unsqueeze(-1))
-            scan_outputs.append(scan_output[:, :, 0])
-        scan_output = torch.stack(scan_outputs, dim=-1)
-
-    if D is not None:
-        scan_output = scan_output + hidden_states * D[None, :, None]
-
-    if z is not None:
-        scan_output = scan_output * F.silu(z)
-
-    if return_last_state:
-        return scan_output, ssm_state
-
-    return scan_output
 
 
 @use_kernelized_func(
