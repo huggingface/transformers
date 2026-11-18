@@ -755,6 +755,7 @@ class FalconModel(FalconPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache=cache,
+            position_ids=position_ids,
             # Always materialize the mask so alibi can be added onto it below.
             allow_is_causal_skip=False,
         )
