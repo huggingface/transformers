@@ -33,9 +33,10 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -824,10 +825,10 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        image_features = self.get_input_embeddings()(torch.cat(image_tokens))
+        split_sizes = torch.tensor([len(tokens) for tokens in image_tokens], device=image_features.device)
         return Apertus1p5VisionTokenizerModelOutput(
-            image_tokens=image_tokens,
-            pooler_output=self.get_input_embeddings()(torch.cat(image_tokens)),
-            split_sizes=torch.tensor([len(tokens) for tokens in image_tokens], device=image_tokens[0].device),
+            image_tokens=image_tokens, pooler_output=image_features, split_sizes=split_sizes
         )
 
     def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> list[torch.LongTensor]:
@@ -921,6 +922,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -957,8 +959,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
         image_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_features, torch.Tensor):
-                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
         audio_features = None
         if input_values is not None:
