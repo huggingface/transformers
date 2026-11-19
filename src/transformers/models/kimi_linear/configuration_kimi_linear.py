@@ -42,6 +42,7 @@ class KimiLinearConfig(PreTrainedConfig):
     """
 
     model_type = "kimi_linear"
+    # Attention stays replicated: `layers.*.self_attn` is latent attention on some layers and delta attention on others
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",

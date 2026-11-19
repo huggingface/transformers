@@ -127,6 +127,17 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
 class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Kimi_K25VisionText2TextModelTester
 
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # The key is valid but not always used based on the flag
+        if config.text_config.q_lora_rank is not None:
+            config.text_config.base_model_tp_plan.pop("layers.*.self_attn.q_proj")
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.text_config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
+
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
