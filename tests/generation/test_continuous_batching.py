@@ -2629,7 +2629,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         # Logit rows of the requests (1024 by default) when the model slices hidden states before the LM head: their
         # peak is the cast to fp32 (logits in both dtypes) for plain argmax, else the fp32 copies the sampler holds
         if logits_to_keep:
-            num_fp32_copies = 1 + (do_sample or logprobs) + do_sample
+            num_fp32_copies = 3 if do_sample else 2 if logprobs else 1
             if num_fp32_copies == 1:
                 fixed.append(torch.empty((1024, vocab_size), dtype=dtype, device=device))
             for _ in range(num_fp32_copies):

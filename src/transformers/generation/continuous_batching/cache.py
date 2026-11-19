@@ -648,7 +648,7 @@ class PagedAttentionMemoryHandler:
             # Per logit row, the peak is either the cast to fp32 (the logits are live in both dtypes) or the fp32 copies
             # the sampler holds at once: the logits, their softmax when sampling or returning logprobs, and the noise
             # torch.multinomial draws when sampling
-            num_fp32_copies = 1 + (self.do_sample or self.cb_config.return_logprobs) + self.do_sample
+            num_fp32_copies = 3 if self.do_sample else 2 if self.cb_config.return_logprobs else 1
             overhead += max_logit_rows * self.config.vocab_size * max(a + f, num_fp32_copies * f)
         return overhead
 
