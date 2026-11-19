@@ -421,10 +421,10 @@ class Inkling2SlidingAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.k_sconv = Inkling2ShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
-        )
+        ).to(dtype=torch.float32)
         self.v_sconv = Inkling2ShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-        )
+        ).to(dtype=torch.float32)
         self.rel_logits_proj = Inkling2RelativeLogits(config.d_rel, self.rel_extent)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
@@ -701,7 +701,7 @@ class Inkling2TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # routing runs in fp32, as in the original
@@ -732,9 +732,8 @@ class Inkling2SparseMoeBlock(nn.Module):
 class Inkling2BlockAttentionResidual(nn.Module):
     def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
-        self.query = nn.Parameter(
-            torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
-        )
+        shape = (config.hidden_size,) if num_queries == 1 else (num_queries, config.hidden_size)
+        self.query = nn.Parameter(torch.zeros(*shape, dtype=torch.float32))
         self.norm = Inkling2UnweightedRMSNorm()
 
     def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -764,10 +763,10 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -821,10 +820,10 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

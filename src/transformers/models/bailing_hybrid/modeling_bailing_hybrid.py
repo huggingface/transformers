@@ -430,8 +430,8 @@ class BailingHybridForgetGate(nn.Module):
         self.qkv_dim = self.head_dim * self.num_heads
         self.safe_gate = config.kda_safe_gate
         self.lower_bound = config.kda_lower_bound
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -696,6 +696,7 @@ class BailingHybridDeltaAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
+            dtype=torch.float32,
         )
         self.forget_gate = BailingHybridForgetGate(config)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
@@ -796,7 +797,7 @@ class BailingHybridTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)

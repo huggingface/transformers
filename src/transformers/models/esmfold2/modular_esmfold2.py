@@ -1311,7 +1311,7 @@ class EsmFold2ConfidenceHead(nn.Module):
                 config.confidence_head.min_dist,
                 config.confidence_head.max_dist,
                 config.confidence_head.distogram_bins - 1,
-                dtype=torch.float32
+                dtype=torch.float32,
             )
         )
         self.dist_bin_pairwise_embed = nn.Embedding(config.confidence_head.distogram_bins, config.pairwise_hidden_size)

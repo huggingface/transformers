@@ -254,11 +254,10 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    def __init__(self, config: VoxtralEncoderConfig):
+    def __init__(self, config: VoxtralConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
         self.max_source_positions = config.max_source_positions
@@ -266,8 +265,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
 
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
-
-        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
+        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim, dtype=torch.float32)
         self.embed_positions.requires_grad_(False)
 
         self.layers = nn.ModuleList([VoxtralEncoderLayer(config) for _ in range(config.encoder_layers)])

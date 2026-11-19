@@ -398,8 +398,8 @@ class DeepseekV4HCACompressor(nn.Module):
         self.head_dim = config.head_dim
         self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.head_dim, dtype=torch.float32))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -510,8 +510,8 @@ class DeepseekV4Indexer(nn.Module):
         self.index_topk = config.index_topk
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim, dtype=torch.float32))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.scorer = DeepseekV4IndexerScorer(config)
@@ -626,8 +626,8 @@ class DeepseekV4CSACompressor(nn.Module):
         self.head_dim = config.head_dim
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim, dtype=torch.float32))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.indexer = DeepseekV4Indexer(config)
 
@@ -794,16 +794,16 @@ class DeepseekV4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
 
         self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
-        self.q_a_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
+        self.q_a_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.q_b_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.o_a_proj = DeepseekV4GroupedLinear(
             self.num_heads * self.head_dim // config.o_groups, config.o_groups * config.o_lora_rank, config.o_groups
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(self.num_heads))
+        self.sinks = nn.Parameter(torch.empty(self.num_heads, torch.float32))
         self.compressor = (
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )
@@ -1083,7 +1083,7 @@ class DeepseekV4TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -1165,10 +1165,12 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.self_attn = DeepseekV4Attention(config, layer_idx)
         self.mlp = DeepseekV4SparseMoeBlock(config, layer_idx)
-        self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = DeepseekV4HyperConnection(config)
-        self.ffn_hc = DeepseekV4HyperConnection(config)
+        self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
+        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(
+            dtype=torch.float32
+        )
+        self.attn_hc = DeepseekV4HyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = DeepseekV4HyperConnection(config).to(dtype=torch.float32)
 
     def forward(
         self,
@@ -1313,10 +1315,10 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
         self.layers = nn.ModuleList(
             [DeepseekV4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.gradient_checkpointing = False
-        self.hc_head = DeepseekV4HyperHead(config)
+        self.hc_head = DeepseekV4HyperHead(config).to(dtype=torch.float32)
 
         # Initialize weights and apply final processing
         self.post_init()

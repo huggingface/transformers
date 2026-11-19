@@ -298,7 +298,7 @@ class PocketTTSTimestepEmbedding(nn.Module):
 
     def __init__(self, config: PocketTTSFlowHeadConfig):
         super().__init__()
-        self.freqs = nn.Buffer(self.compute_default_freqs(config))
+        self.freqs = nn.Buffer(self.compute_default_freqs(config, dtype=torch.float32))
         self.fc1 = nn.Linear(config.frequency_embedding_size, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.hidden_size)
         self.act_fn = ACT2FN[config.hidden_act]
@@ -683,8 +683,8 @@ class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGener
         self.model = PocketTTSModel(config)
         self.flow_head = PocketTTSFlowHead(config.flow_head_config)
         self.eos_head = nn.Linear(config.hidden_size, 1)
-        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
-        self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
+        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim, dtype=torch.float32))
+        self.latent_std = nn.Buffer(torch.ones(config.latent_dim, dtype=torch.float32))
 
         # training only, ~0.003% of the model weights: ok to always carry
         self.loss_weighting = PocketTTSFlowLossWeighting(config.flow_head_config)

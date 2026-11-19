@@ -1056,7 +1056,9 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = DeepseekV4Attention(config, layer_idx)
         self.mlp = DeepseekV4SparseMoeBlock(config, layer_idx)
         self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
-        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
+        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(
+            dtype=torch.float32
+        )
         self.attn_hc = DeepseekV4HyperConnection(config).to(dtype=torch.float32)
         self.ffn_hc = DeepseekV4HyperConnection(config).to(dtype=torch.float32)
 

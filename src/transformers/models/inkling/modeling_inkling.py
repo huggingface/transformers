@@ -212,7 +212,7 @@ class InklingAttention(nn.Module):
         ).to(dtype=torch.float32)
         self.v_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-        )
+        ).to(dtype=torch.float32)
         self.q_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rel_logits_proj = InklingRelativeLogits(config.d_rel, self.rel_extent)
@@ -354,8 +354,8 @@ class InklingTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        self.global_scale = nn.Parameter(torch.ones(1))
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -565,10 +565,10 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx]
         self.attn_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.mlp_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

@@ -536,7 +536,9 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     def __init__(self, config: HYV4VLConfig):
         super().__init__(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
     def forward(
         self,

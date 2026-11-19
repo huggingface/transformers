@@ -195,7 +195,7 @@ class OpenAIPrivacyFilterAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sliding_window = config.sliding_window + 1  # Account for FA symmetry using -1
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

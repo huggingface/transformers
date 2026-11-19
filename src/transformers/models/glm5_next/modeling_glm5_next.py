@@ -153,7 +153,7 @@ class Glm5NextTextTopkRouter(nn.Module):
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -275,13 +275,10 @@ class Glm5NextTextHyperConnection(nn.Module):
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
         self.input_norm = Glm5NextTextUnweightedRMSNorm(eps=config.rms_norm_eps)
-        # The mHC projects the N inputs streams into 3 weights: pre (size: N), post (size: N) and comb (size: N*N)
-        # Hence the output size of the projection is 2 * N + N * N = (2 + N) * N.
         concatenated_weights_size = (2 + self.hc_mult) * self.hc_mult
         self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
-        # The mHC produces 3 outputs, each with their own scale parameter (the "pre", "post" and "comb" weights)
-        self.scale = nn.Parameter(torch.empty(3))
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(3, dtype=torch.float32))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -346,8 +343,8 @@ class Glm5NextTextForgetGate(nn.Module):
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
         self.safe_gate_lower_bound = config.linear_lower_bound
 
@@ -649,7 +646,7 @@ class Glm5NextTextLinearAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
-            dtype=torch.flot32,
+            dtype=torch.float32,
         )
 
         self.forget_gate = Glm5NextTextForgetGate(config)

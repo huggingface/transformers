@@ -188,7 +188,7 @@ class MuseSparkTopkRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
 
@@ -458,8 +458,8 @@ class MuseSparkTextDecoderLayer(GradientCheckpointingLayer):
         )
         self.pre_feedforward_layernorm = MuseSparkTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = MuseSparkTextInputScaledRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.post_attention_residual_gate = MuseSparkResidualGate(config)
-        self.post_feedforward_residual_gate = MuseSparkResidualGate(config)
+        self.post_attention_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
+        self.post_feedforward_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

@@ -261,7 +261,7 @@ class FlintAttention(nn.Module):
         self.q_norm = FlintRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = FlintRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

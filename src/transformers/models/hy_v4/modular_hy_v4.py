@@ -386,7 +386,9 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
         self.hc_post_magnitude = config.hc_magnitude
         self.scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
-        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32))
+        self.fn = nn.Parameter(
+            torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32)
+        )
         self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -417,7 +419,7 @@ class HYV4HyperHead(DeepseekV4HyperHead):
         self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size, dtype=torch.float32))
         self.hc_base = nn.Parameter(torch.empty(self.hc_mult, dtype=torch.float32))
         self.hc_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
         device_type = x.device.type
