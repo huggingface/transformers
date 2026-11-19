@@ -103,6 +103,36 @@ class MaskGenerationPipelineTests(unittest.TestCase):
                 self.assertTrue(batches[-1]["is_last"])
                 self.assertFalse(any(b["is_last"] for b in batches[:-1]))
 
+    def test_downscaled_crop_points(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = Image.new("RGB", (64, 48), "white")
+        for factor in (1, 2):
+            reference = None
+            for points_per_batch in (None, 5, 16):
+                with self.subTest(factor=factor, points_per_batch=points_per_batch):
+                    kwargs = {
+                        "crops_n_layers": 1,
+                        "points_per_crop": 4,
+                        "crop_n_points_downscale_factor": factor,
+                        "points_per_batch": points_per_batch,
+                    }
+                    batches = list(mask_generator.preprocess(image, **kwargs))
+                    self.assertEqual(
+                        sum(batch["input_points"].shape[1] for batch in batches), 80 if factor == 1 else 32
+                    )
+                    self.assertTrue(all((batch["input_labels"] == 1).all() for batch in batches))
+                    self.assertTrue(batches[-1]["is_last"])
+                    self.assertFalse(any(batch["is_last"] for batch in batches[:-1]))
+                    output = mask_generator(image, **kwargs, pred_iou_thresh=0, stability_score_thresh=0)
+                    self.assertTrue(output["masks"])
+                    self.assertTrue(all(mask.shape == (48, 64) for mask in output["masks"]))
+                    if reference is None:
+                        reference = output
+                    else:
+                        np.testing.assert_allclose(output["scores"], reference["scores"], atol=1e-6)
+                        np.testing.assert_array_equal(output["masks"], reference["masks"])
+
     def test_crops_n_layers(self):
         mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
         mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
