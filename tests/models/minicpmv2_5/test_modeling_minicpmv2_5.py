@@ -34,28 +34,28 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
     config_class = MiniCPMV2_5Config
     conditional_generation_class = MiniCPMV2_5ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("image_token_id", 100)
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 8)  # each test image is one 4x4-patch slice
-        kwargs.setdefault("query_num", 4)  # ... which the resampler turns into 4 tokens
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 128)  # the resampler uses 128-dim heads
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("vision_intermediate_size", 37)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_token_id": 100,
+        "image_size": 32,
+        "patch_size": 8,  # each test image is one 4x4-patch slice
+        "query_num": 4,  # ... which the resampler turns into 4 tokens
+        "num_image_tokens": 4,
+        "vocab_size": 256,
+        "hidden_size": 128,  # the resampler uses 128-dim heads
+        "intermediate_size": 37,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "vision_intermediate_size": 37,
+    }
 
     def create_pixel_values(self, batch_size: int | None = None):
         # One slice per image, as a single row of 4 x 4 = 16 patches: (num_slices, channels, patch_size, 16 * patch_size)
