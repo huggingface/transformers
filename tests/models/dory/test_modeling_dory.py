@@ -33,9 +33,8 @@ class DoryModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DoryModel
 
-    def __init__(self, parent, **kwargs):
-        # One loop keeps the common tests' one-cache-slot-per-layer assumption; loops are tested below
-        super().__init__(parent, n_input_layers=1, n_output_layers=0, n_recurrent_loops=1, **kwargs)
+    # One loop keeps the common tests' one-cache-slot-per-layer assumption; loops are tested below
+    small_config_overrides = {"n_input_layers": 1, "n_output_layers": 0, "n_recurrent_loops": 1}
 
 
 @require_torch
