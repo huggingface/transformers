@@ -171,7 +171,7 @@ def sonicmoe_experts_forward(
     if self.has_post_expert_norm:
         raise ValueError("The `sonicmoe` experts implementation does not support experts with a post-expert norm.")
     limit = getattr(self, "limit", None)
-    if limit is not None and math.isfinite(limit):
+    if limit is not None and math.isfinite(limit) and (limit > 0 or not getattr(self, "limit_after_act", False)):
         raise ValueError("The `sonicmoe` experts implementation does not support expert clipping.")
 
     device = hidden_states.device

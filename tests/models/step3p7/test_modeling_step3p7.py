@@ -37,6 +37,7 @@ if is_torch_available():
     import torch
 
     from transformers import Step3p7ForConditionalGeneration, Step3p7Model
+    from transformers.models.step3p7.modeling_step3p7 import Step3p7SparseMoeBlock
 
 
 _REAL_CHECKPOINT = "stepfun-ai/Step-3.7-Flash"
@@ -94,6 +95,19 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
     # Vision encoder outputs hidden_size*4 channels after the stride-2 conv downsampler,
     # so last_hidden_state.shape[-1] != vision_config.hidden_size
     skip_test_image_features_output_shape = True
+
+    def test_zero_and_none_disable_expert_clipping(self):
+        config = self.model_tester.get_config().get_text_config()
+        config._experts_implementation = "eager"
+        config.swiglu_limits = [0, None]
+        config.swiglu_limits_shared = [None, 0]
+        zero = Step3p7SparseMoeBlock(config, 0).to(torch_device)
+        missing = Step3p7SparseMoeBlock(config, 1).to(torch_device)
+        for parameter in zero.parameters():
+            torch.nn.init.normal_(parameter, std=0.1)
+        missing.load_state_dict(zero.state_dict())
+        inputs = torch.randn(2, 3, config.hidden_size, device=torch_device)
+        torch.testing.assert_close(zero(inputs), missing(inputs), rtol=0, atol=0)
 
     # Training tests: only Step3p7ForConditionalGeneration has a loss head.
     # Step3p7Model is a backbone (returns BaseModelOutputWithPast, no .loss).

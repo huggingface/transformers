@@ -97,9 +97,9 @@ class Step3p7TextConfig(PreTrainedConfig):
         Scaling factor applied to the MoE block's routed-expert output (`routed_scaling_factor` in
         `Step3p7SparseMoeBlock`).
     swiglu_limits (`list[float | None]`, *optional*):
-        Per-layer gate/up clamping bound; `None` means no clamping.
+        Per-layer gate/up clamping bound; zero or `None` disables clamping.
     swiglu_limits_shared (`list[float | int | None]`, *optional*):
-        Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
+        Per-layer gate/up clamping bound for the always-active shared expert; zero or `None` disables clamping.
     mtp_layer_types (`list[str]`, *optional*):
         Per-MTP-layer attention type; split off `layer_types`'s legacy trailing pad instead of being
         discarded, so `Step3p7Config.get_mtp_config()` can build the MTP layers for `generate(use_mtp=True)`.

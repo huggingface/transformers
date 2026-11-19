@@ -306,11 +306,12 @@ class SonicMoeForwardTest(unittest.TestCase):
             self._run(experts)
 
     def test_forward_rejects_expert_clipping(self):
-        for limit in (None, float("inf"), 1.5):
-            with self.subTest(limit=limit):
+        for limit, after_act in ((None, False), (float("inf"), False), (0, True), (0, False), (1.5, True)):
+            with self.subTest(limit=limit, after_act=after_act):
                 experts = make_experts()
                 experts.limit = limit
-                if limit == 1.5:
+                experts.limit_after_act = after_act
+                if limit == 1.5 or (limit == 0 and not after_act):
                     with mock.patch.object(sm, "load_sonicmoe_kernel") as load_kernel:
                         with self.assertRaisesRegex(ValueError, "does not support expert clipping"):
                             sonicmoe_experts_forward(experts, None, None, None)

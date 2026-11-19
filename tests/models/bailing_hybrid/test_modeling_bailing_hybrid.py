@@ -149,7 +149,7 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         config.shared_experts_swiglu_limits = [1.5, 0]
         config = BailingHybridConfig.from_dict(config.to_dict())
         model = BailingHybridForCausalLM(config)
-        for layer, expert_limit, shared_limit in zip(model.model.layers, [float("inf"), 2.5], [1.5, float("inf")]):
+        for layer, expert_limit, shared_limit in zip(model.model.layers, [0, 2.5], [1.5, 0]):
             self.assertEqual(layer.mlp.experts.limit, expert_limit)
             self.assertEqual(layer.mlp.shared_experts.limit, shared_limit)
 
@@ -226,7 +226,10 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                     nn.init.normal_(parameter, std=0.2)
                 candidate.load_state_dict(reference.state_dict())
                 args = (inputs, indices, weights) if new_class is BailingHybridExperts else (inputs,)
-                torch.testing.assert_close(candidate(*args), reference(*args), rtol=0, atol=0)
+                for limit in (0, None, float("inf")):
+                    with self.subTest(limit=limit):
+                        candidate.limit = limit
+                        torch.testing.assert_close(candidate(*args), reference(*args), rtol=0, atol=0)
 
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""

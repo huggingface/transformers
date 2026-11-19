@@ -155,9 +155,9 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         Scaling factor applied to the MoE block's routed-expert output (`routed_scaling_factor` in
         `Step3p7SparseMoeBlock`).
     swiglu_limits (`list[float | None]`, *optional*):
-        Per-layer gate/up clamping bound; `None` means no clamping.
+        Per-layer gate/up clamping bound; zero or `None` disables clamping.
     swiglu_limits_shared (`list[float | int | None]`, *optional*):
-        Per-layer gate/up clamping bound for the always-active shared expert; `None` means no clamping.
+        Per-layer gate/up clamping bound for the always-active shared expert; zero or `None` disables clamping.
     mtp_layer_types (`list[str]`, *optional*):
         Per-MTP-layer attention type; split off `layer_types`'s legacy trailing pad instead of being
         discarded, so `Step3p7Config.get_mtp_config()` can build the MTP layers for `generate(use_mtp=True)`.
@@ -828,28 +828,33 @@ class Step3p7MLP(DeepseekV4MLP):
         super().__init__(config)
         self.intermediate_size = config.share_expert_dim if is_shared_expert else config.intermediate_size
         # CODEPATH: stepfun-ai/Step-3.7-Flash clamps layers 43-44 (bound 16) via `swiglu_limits_shared`;
-        # a `0.0` entry or no list at all means "no clamp", hence the `or float("inf")`.
-        self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
+        # a `0.0` entry or no list at all means "no clamp".
+        self.limit = config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0
 
     def forward(self, x):
-        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(self.gate_proj(x))
+        up = self.up_proj(x)
+        if self.limit is not None and self.limit > 0:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
         return self.down_proj(gate * up)
 
 
 @no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
-    def __init__(self, config, swiglu_limit=None):
+    def __init__(self, config, swiglu_limit=0):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size
-        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        self.limit = swiglu_limit
         # Declare the clipping order for replacement expert implementations.
         self.limit_after_act = True
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = self.act_fn(gate).clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(gate)
+        if self.limit is not None and self.limit > 0:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
         return gate * up
 
 
@@ -862,7 +867,7 @@ class Step3p7SparseMoeBlock(MiniMaxM3VLSparseMoeBlock):
         nn.Module.__init__(self)
         # CODEPATH: stepfun-ai/Step-3.7-Flash clamps the routed experts on layers 43-44 (bound 7) via
         # `swiglu_limits`; a `0.0` entry or no list at all means "no clamp".
-        swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
+        swiglu_limit = config.swiglu_limits[layer_idx] if config.swiglu_limits else 0
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
         self.shared_experts = Step3p7MLP(config, layer_idx, is_shared_expert=True)

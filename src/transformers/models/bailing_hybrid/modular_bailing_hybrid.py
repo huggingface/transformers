@@ -228,11 +228,14 @@ class BailingHybridExperts(Step3p7Experts):
 class BailingHybridMLP(DeepseekV3MLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config, intermediate_size)
-        self.limit = float("inf")
+        self.limit = 0
 
     def forward(self, x):
-        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(self.gate_proj(x))
+        up = self.up_proj(x)
+        if self.limit is not None and self.limit > 0:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
         return self.down_proj(gate * up)
 
 
@@ -422,17 +425,20 @@ class BailingHybridTopkRouter(DeepseekV3TopkRouter):
 
 
 class BailingHybridMoE(DeepseekV3MoE):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config)
+        self.experts.limit = config.experts_swiglu_limits[layer_idx]
+        self.shared_experts.limit = config.shared_experts_swiglu_limits[layer_idx]
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            expert_limit = config.experts_swiglu_limits[layer_idx]
-            shared_limit = config.shared_experts_swiglu_limits[layer_idx]
-            self.mlp.experts.limit = expert_limit if expert_limit > 0 else float("inf")
-            self.mlp.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
+        self.mlp = (
+            BailingHybridMoE(config, layer_idx)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else BailingHybridMLP(config)
+        )
 
 
 @auto_docstring
