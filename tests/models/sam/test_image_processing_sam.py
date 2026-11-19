@@ -44,6 +44,29 @@ class SamImageProcessingTester(ImageProcessingTester):
 class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = SamImageProcessingTester
 
+    def test_downscaled_crop_points(self):
+        from transformers import Sam2ImageProcessor, Sam3ImageProcessor
+
+        image = torch.randint(256, (3, 100, 200), dtype=torch.uint8)
+        classes = list(self.image_processing_classes.values()) + [Sam2ImageProcessor, Sam3ImageProcessor]
+        for image_processing_class in classes:
+            processor = image_processing_class()
+            for factor in (1, 2):
+                with self.subTest(processor=image_processing_class.__name__, factor=factor):
+                    _, points, crops, labels = processor.generate_crop_boxes(
+                        image, 1024, crop_n_layers=2, points_per_crop=8, crop_n_points_downscale_factor=factor
+                    )
+                    self.assertEqual(tuple(points.shape), (1, 64, 21, 2))
+                    self.assertEqual(labels.dtype, torch.int64)
+                    for crop_idx, crop in enumerate(crops):
+                        layer = 0 if crop_idx == 0 else (1 if crop_idx < 5 else 2)
+                        side = 8 // factor**layer
+                        count = side**2
+                        self.assertTrue((labels[0, :count, crop_idx] == 1).all())
+                        self.assertTrue((labels[0, count:, crop_idx] == -10).all())
+                        _, reference, _, _ = processor.generate_crop_boxes(crop, 1024, points_per_crop=side)
+                        torch.testing.assert_close(points[0, :count, crop_idx], reference[0, :, 0])
+
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processor
