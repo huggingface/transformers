@@ -1332,6 +1332,8 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             reshaped_embeds.append(embed.contiguous())
 
         vision_outputs.pooler_output = reshaped_embeds
+        # Per-image feature maps for the image tokenizer, not the flat rows `split_sizes` counts
+        vision_outputs.split_sizes = None
 
         return vision_outputs
 
