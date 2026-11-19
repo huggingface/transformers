@@ -61,96 +61,59 @@ class BltModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BltModel
 
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        seq_length=7,
-        is_training=True,
-    ):
-        super().__init__(parent)
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.batch_size = 3
-
+    small_config_overrides = {
+        "ignore_index": -100,
+        "seq_length": 7,
+        "is_training": True,
+        "batch_size": 3,
+        # Derived from the shared hidden_size=32 / num_attention_heads=2, before the overrides below.
+        "head_dim": 16,
         # Common parameters for all configs
-        self.hidden_size = 16
-        self.num_hidden_layers = 1
-        self.num_attention_heads = 2
-        self.num_key_value_heads = 2
-        self.intermediate_size = 32
-        self.hidden_act = "silu"
-        self.max_position_embeddings = 32
-        self.vocab_size = 32
-        self.rope_theta = 500000.0
-        self.rope_parameters = {"rope_type": "default"}
-        self.rms_norm_eps = 1e-5
-        self.dropout = 0.0
-        self.encoder_hash_byte_group_size = [2, 3]
-        self.encoder_hash_byte_group_vocab = 64
-        self.encoder_hash_byte_group_nb_functions = 1
+        "hidden_size": 16,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 32,
+        "vocab_size": 32,
+        "rope_theta": 500000.0,
+        "rope_parameters": {"rope_type": "default"},
+        "rms_norm_eps": 1e-5,
+        "dropout": 0.0,
+        "encoder_hash_byte_group_size": [2, 3],
+        "encoder_hash_byte_group_vocab": 64,
+        "encoder_hash_byte_group_nb_functions": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Common parameters for all configs
-        self.patcher_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
+        common = {
+            "num_hidden_layers": values["num_hidden_layers"],
+            "num_attention_heads": values["num_attention_heads"],
+            "num_key_value_heads": values["num_key_value_heads"],
+            "intermediate_size": values["intermediate_size"],
+            "max_position_embeddings": values["max_position_embeddings"],
+            "rope_theta": values["rope_theta"],
+            "rope_parameters": values["rope_parameters"],
+            "hidden_act": values["hidden_act"],
+            "rms_norm_eps": values["rms_norm_eps"],
+            "dropout": values["dropout"],
         }
-
-        self.encoder_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
+        values["patcher_config"] = {"hidden_size": values["hidden_size"], **common}
+        values["encoder_config"] = {"hidden_size": values["hidden_size"], **common}
+        values["decoder_config"] = {
+            "vocab_size": values["vocab_size"],
+            "hidden_size": values["hidden_size"],
+            # Must match global transformer output size
+            "hidden_size_global": values["hidden_size"] * 2,
+            **common,
         }
-
-        self.decoder_config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "hidden_size_global": self.hidden_size * 2,  # Must match global transformer output size
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
-        }
-
-        self.global_config = {
-            "hidden_size": self.hidden_size * 2,  # Double the hidden size for global transformer
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
-        }
-
-        self.num_hidden_layers = self.encoder_config["num_hidden_layers"]
+        # Double the hidden size for global transformer
+        values["global_config"] = {"hidden_size": values["hidden_size"] * 2, **common}
+        return values
 
     def get_config(self):
         config = BltConfig(
