@@ -44,6 +44,10 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
     # The nGPT normalized updates start small (`ngpt_alpha_init`), so overfitting takes a few more steps
     training_overfit_steps = 400
 
+    @unittest.skip("New model: `cache` only, no `past_key_values` BC")
+    def test_bc_cache_name_forward(self):
+        pass
+
     def test_reverse_loading_mapping(self):
         # Checkpoints are saved with the `backbone.` prefix, which only exists on the head model
         super().test_reverse_loading_mapping(skip_base_model=True)
@@ -60,7 +64,7 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = model(input_ids[:, :4], use_cache=True)
             logits = [outputs.logits]
             for position in range(4, input_ids.shape[1]):
-                outputs = model(input_ids[:, position : position + 1], past_key_values=outputs.past_key_values)
+                outputs = model(input_ids[:, position : position + 1], cache=outputs.cache)
                 logits.append(outputs.logits)
         torch.testing.assert_close(torch.cat(logits, dim=1), full_logits, rtol=1e-4, atol=1e-4)
 
@@ -90,7 +94,7 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
             ("last_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"]),
         ]:
             config.recurrent_kv_cache_mode = mode
-            cache = DoryModel(config).eval()(input_ids, use_cache=True).past_key_values
+            cache = DoryModel(config).eval()(input_ids, use_cache=True).cache
             self.assertEqual([type(layer).__name__ for layer in cache.layers], expected)
             self.assertTrue(all(layer.get_seq_length() == 3 for layer in cache.layers))
 

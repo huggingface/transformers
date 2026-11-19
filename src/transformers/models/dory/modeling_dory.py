@@ -36,7 +36,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_dory import DoryConfig
@@ -230,7 +229,6 @@ class DoryAttention(nn.Module):
         self.sqk_scale = self.head_dim**0.5 / config.initializer_range
         self.s_gate_scale = config.hidden_size**0.25 / config.initializer_range
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -334,7 +332,6 @@ class DoryDecoderLayer(GradientCheckpointingLayer):
         self.lambda_2 = nn.Parameter(torch.full((config.hidden_size,), config.initializer_range))
         self.lambda_scale = config.ngpt_alpha_init / config.initializer_range
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -434,7 +431,6 @@ class DoryModel(DoryPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -552,7 +548,6 @@ class DoryForCausalLM(DoryPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -26,9 +26,8 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
@@ -80,6 +79,7 @@ class DoryAttention(AfmoeAttention):
         self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_local_attention else None
 
+    @no_inherit_decorator
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -172,6 +172,7 @@ class DoryDecoderLayer(Gemma2DecoderLayer):
         self.lambda_2 = nn.Parameter(torch.full((config.hidden_size,), config.initializer_range))
         self.lambda_scale = config.ngpt_alpha_init / config.initializer_range
 
+    @no_inherit_decorator
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -243,7 +244,6 @@ class DoryModel(LlamaModel):
         self.rotary_emb = DoryRotaryEmbedding(config)
         self.norm = DoryL2Norm()
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -349,6 +349,11 @@ class DoryForCausalLM(LlamaForCausalLM):
     def __init__(self, config: DoryConfig):
         super().__init__(config)
         self.lm_head = DoryLMHead(config)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(self, **super_kwargs):
+        return super().forward(**super_kwargs)
 
 
 __all__ = ["DoryPreTrainedModel", "DoryModel", "DoryForCausalLM"]

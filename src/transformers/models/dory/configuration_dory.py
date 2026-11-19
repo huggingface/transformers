@@ -50,7 +50,7 @@ class DoryConfig(PreTrainedConfig):
 
     model_type = "dory"
     base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 131072
     hidden_size: int = 2560
