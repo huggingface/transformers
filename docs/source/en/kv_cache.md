@@ -75,7 +75,7 @@ As for [`DynamicCache`], note that for models using sliding window attention (Mi
 
 You can enable [`StaticCache`] by configuring `cache_implementation="static"` in [`~GenerationMixin.generate`]. This will also turn on automatic `compilation` of the decoding stage for greedy, sample and [assisted](./assisted_decoding) decoding strategies.
 
-For assisted decoding, the rejected drafts are rolled back in place, which only works as long as no state was evicted. A sliding window layer is therefore only usable while the window is wide enough to hold the whole generation; otherwise `generate` raises rather than silently reading evicted states.
+For assisted decoding, the support of static caches is limited to only a few classes of layer types, because the rejected draft tokens must be rolled back in place, which only works as long as no state was evicted from the cache. For example, a sliding window layer is only usable while the number of processed tokens is smaller than the window, otherwise older tokens start to get evicted from the cache, and since its size must be static, we cannot momentarily keep the additional states in memory the same way we do for a [`DynamicCache`] with a sliding window layer.
 
 ```py
 import torch
