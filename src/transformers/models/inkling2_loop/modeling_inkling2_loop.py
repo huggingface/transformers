@@ -861,8 +861,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(GradientCheckpointingLayer):
         """
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if self.attention_input is not None:
-            hidden_states = self.attention_input(block_states, hidden_states)[0]
+        hidden_states = self.attention_input(block_states, hidden_states)[0]
 
         if messages is None:
             query_hidden_states = key_hidden_states = value_hidden_states = self.input_layernorm(hidden_states)
@@ -1012,12 +1011,7 @@ class Inkling2LoopFullLoopDecoderLayer(GradientCheckpointingLayer):
         """
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if self.attention_input is None:
-            query_hidden_states = key_hidden_states = value_hidden_states = hidden_states
-        else:
-            query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(
-                block_states, hidden_states
-            )
+        query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(block_states, hidden_states)
 
         if messages is not None:
             query_message, key_message, value_message, mlp_message = messages.unbind(-2)

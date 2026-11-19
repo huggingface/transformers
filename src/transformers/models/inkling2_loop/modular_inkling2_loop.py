@@ -121,6 +121,8 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
     def validate_architecture(self):
         if self.loop_num_passes < 1:
             raise ValueError(f"`loop_num_passes` ({self.loop_num_passes}) must be at least 1.")
+        if self.loop_layer_index_start <= 0:
+            raise ValueError(f"`loop_layer_index_start` ({self.loop_layer_index_start}) must be greater than 0.")
         if self.loop_layer_index_start % self.n_layers_per_attn_res_block != 0:
             raise ValueError(
                 f"`loop_layer_index_start` ({self.loop_layer_index_start}) must be a multiple of "
@@ -260,8 +262,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
         """
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if self.attention_input is not None:
-            hidden_states = self.attention_input(block_states, hidden_states)[0]
+        hidden_states = self.attention_input(block_states, hidden_states)[0]
 
         if messages is None:
             query_hidden_states = key_hidden_states = value_hidden_states = self.input_layernorm(hidden_states)
@@ -335,12 +336,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
         """
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if self.attention_input is None:
-            query_hidden_states = key_hidden_states = value_hidden_states = hidden_states
-        else:
-            query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(
-                block_states, hidden_states
-            )
+        query_hidden_states, key_hidden_states, value_hidden_states = self.attention_input(block_states, hidden_states)
 
         if messages is not None:
             query_message, key_message, value_message, mlp_message = messages.unbind(-2)
