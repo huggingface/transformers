@@ -58,7 +58,6 @@ RUN pip install git+https://github.com/facebookresearch/detectron2.git --no-buil
 RUN pip install "triton>=3.5.0"
 
 ENV LD_PRELOAD=${LD_PRELOAD}:/opt/venv/lib/libiomp5.so:/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4
-ENV KMP_AFFINITY=granularity=fine,compact,1,0
 
 RUN touch /entrypoint.sh
 RUN chmod +x /entrypoint.sh
