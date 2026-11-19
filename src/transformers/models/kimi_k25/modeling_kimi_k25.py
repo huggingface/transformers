@@ -522,6 +522,9 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         pooled_states = hidden_states.new_zeros(
             num_merged_tokens * kernel_size, hidden_states.shape[-1], dtype=torch.float32
         )
+        # `grid_thw` follows the caller's device, which differs from the encoder's when it is sharded
+        destination_index = destination_index.to(hidden_states.device)
+        frame_weight = frame_weight.to(hidden_states.device)
         pooled_states.index_add_(0, destination_index, hidden_states.float() * frame_weight[:, None])
         return pooled_states.view(num_merged_tokens, kernel_size, -1).to(hidden_states.dtype)
 
