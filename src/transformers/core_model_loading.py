@@ -1507,6 +1507,23 @@ def apply_converters(source_key: str, weight_converters: list[WeightConverter]) 
     return renamed_key, source_pattern
 
 
+def converter_for(by_pattern: dict[str, list[WeightConverter]], source_pattern: str, key: str) -> WeightConverter:
+    """The converter whose `source_pattern` matched `key`: several scoped ones may share a pattern (e.g. `q_proj` in
+    a vision and a text attention), the one whose scope holds `key` is it"""
+    candidates = by_pattern[source_pattern]
+    if len(candidates) == 1:
+        return candidates[0]
+    return next((c for c in candidates if c._scoped_match(key) is not None), candidates[-1])
+
+
+def converters_by_pattern(converters: list[WeightConverter]) -> dict[str, list[WeightConverter]]:
+    by_pattern = defaultdict(list)
+    for converter in converters:
+        for pattern in converter.source_patterns:
+            by_pattern[pattern].append(converter)
+    return by_pattern
+
+
 def rename_source_key(
     source_key: str,
     weight_renamings: list[WeightRenaming],
@@ -1726,8 +1743,7 @@ def convert_and_load_state_dict_in_model(
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-
+    by_pattern = converters_by_pattern(converters)
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming and weight conversion patterns.
@@ -1752,7 +1768,8 @@ def convert_and_load_state_dict_in_model(
             empty_param = meta_model_state_dict.get(renamed_key)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[source_pattern])
+                matched = converter_for(by_pattern, source_pattern, apply_renamings(key, renamings))
+                new_converter = deepcopy(matched)
             # Otherwise, only potential renaming
             else:
                 new_converter = WeightRenaming(original_key, renamed_key)
@@ -1810,7 +1827,7 @@ def convert_and_load_state_dict_in_model(
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
-            mapping = pattern_to_converter[source_pattern]
+            mapping = converter_for(by_pattern, source_pattern, apply_renamings(key, renamings))
             for k in mapping.target_patterns:
                 _add_unmatched_checkpoint_key(
                     renamed_key.replace(mapping.target_patterns[0], k),
@@ -1903,8 +1920,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
     renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-
+    by_pattern = converters_by_pattern(converters)
     conversion_mapping: dict[str, WeightTransform] = {}
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
@@ -1914,7 +1930,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # `self.source/target_patterns` (for one-to-many and one-to-one, the final name would be enough to infer it technically)
         renamed_key, source_pattern = apply_converters(original_key, converters)
         if source_pattern is not None:
-            new_converter = deepcopy(pattern_to_converter[source_pattern])
+            new_converter = deepcopy(converter_for(by_pattern, source_pattern, original_key))
             # each target key gets its own converter instance
             mapping = conversion_mapping.setdefault(renamed_key, new_converter)
         # If not matching a Converter, we can directly apply the renamings to the key
