@@ -721,7 +721,6 @@ class GroupViTPreTrainedModel(PreTrainedModel):
         "attentions": GroupViTAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
 

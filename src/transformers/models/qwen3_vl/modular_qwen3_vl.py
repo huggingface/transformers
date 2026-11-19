@@ -142,6 +142,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_text"
     base_config_key = "text_config"
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     default_theta = 500000.0
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
@@ -193,7 +194,6 @@ class Qwen3VLConfig(PreTrainedConfig):
         "vision_config": Qwen3VLVisionConfig,
         "text_config": Qwen3VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

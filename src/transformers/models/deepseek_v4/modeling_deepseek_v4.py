@@ -138,7 +138,6 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
         # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
@@ -1204,7 +1203,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV4DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     # V4 ships eager-only. The non-eager backends are off for the following reasons:
     #
     #   * FlashAttention 2 / 3 cap the head dim at 256; V4's `head_dim=512`
@@ -1270,7 +1268,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     # a missing-method `AttributeError`.
     _is_stateful = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range

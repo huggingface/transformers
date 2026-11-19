@@ -764,13 +764,11 @@ class ClvpPreTrainedModel(PreTrainedModel):
     config: ClvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "hidden_states": [ClvpEncoderLayer, ClvpDecoderLayer],
         "attentions": ClvpSelfAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)

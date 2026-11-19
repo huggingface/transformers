@@ -56,7 +56,6 @@ class ZambaConfig(PreTrainedConfig):
     """
 
     model_type = "zamba"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"layer_types": "layers_block_type", "head_dim": "attention_head_dim"}
 
     vocab_size: int = 32000

@@ -442,7 +442,6 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -764,9 +763,10 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
             hw_grid = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
 
+        # fp32 like `inv_freq`: the global layers scale the positions by a fraction bf16 can't represent
         hpos_ids, wpos_ids = torch.meshgrid(
-            torch.arange(hw_grid[0]),
-            torch.arange(hw_grid[1]),
+            torch.arange(hw_grid[0], dtype=torch.float),
+            torch.arange(hw_grid[1], dtype=torch.float),
             indexing="ij",
         )
         position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)

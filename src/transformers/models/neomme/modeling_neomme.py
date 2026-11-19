@@ -140,7 +140,6 @@ class NeoMMERotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(
         self, x: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
@@ -422,7 +421,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["NeoMMEEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -443,7 +441,6 @@ class NeoMMEPreTrainedModel(PreTrainedModel):
         backbone = getattr(self, self.base_model_prefix, self)
         backbone.embed_tokens.word_embeddings = value
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         # `apply` visits children before parents, so the NeoMME-specific parent initialization below runs last.
         super()._init_weights(module)

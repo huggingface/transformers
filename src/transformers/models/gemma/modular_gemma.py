@@ -65,7 +65,6 @@ class GemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -169,7 +168,6 @@ class GemmaAttention(LlamaAttention):
 
 
 class GemmaPreTrainedModel(LlamaPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
