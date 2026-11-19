@@ -31,10 +31,12 @@ def JevaForDecisionLoss(
     candidates = labels[:, 1:].to(device=logits.device, dtype=torch.float32)
     log_probabilities = logits.float().masked_fill(~option_mask, 0.0)
     losses = -(candidates * log_probabilities).sum(-1)
+
     if allow_null is not None:
         coverage = candidates.sum(-1)
         coverage_logits = coverage_logits.float()
         coverage_loss = coverage * F.softplus(-coverage_logits) + (1 - coverage) * F.softplus(coverage_logits)
         losses = losses + coverage_loss * allow_null.to(logits.device)
+
     normalizer = len(losses) if num_items_in_batch is None else num_items_in_batch
     return losses.sum() / normalizer

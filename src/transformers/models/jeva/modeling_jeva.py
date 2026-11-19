@@ -211,7 +211,7 @@ JEVA_TEMPLATE = r"""
     """
 )
 class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
-    # Soft labels count options, so Trainer must not infer a decision count from their shape.
+    # Trainer averages microbatch losses. Its automatic item count would count options for soft labels.
     accepts_loss_kwargs = False
 
     def __init__(self, config: JevaConfig, model: PreTrainedModel | None = None):

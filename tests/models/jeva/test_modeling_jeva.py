@@ -74,21 +74,27 @@ class JevaLossTest(unittest.TestCase):
                         torch.testing.assert_close(actual_gradient.double(), expected_gradient)
 
     def test_accumulated_loss(self):
-        allow_null = torch.tensor([True, False])
-        loss = JevaForDecisionLoss(
-            _log_softmax(self.scores), self.labels, self.coverage, self.option_mask, allow_null=allow_null
-        )
+        rows = torch.tensor([0, 1, 0])
+        scores, labels = self.scores[rows], self.labels[rows]
+        coverage, option_mask = self.coverage[rows], self.option_mask[rows]
+        allow_null = torch.tensor([True, False, True])
+        loss = JevaForDecisionLoss(_log_softmax(scores), labels, coverage, option_mask, allow_null=allow_null)
         expected = torch.autograd.grad(loss, (self.scores, self.coverage))
-        for index in range(2):
-            row = slice(index, index + 1)
-            JevaForDecisionLoss(
-                _log_softmax(self.scores[row]),
-                self.labels[row],
-                self.coverage[row],
-                self.option_mask[row],
-                allow_null=allow_null[row],
-                num_items_in_batch=2,
-            ).backward()
+
+        accumulated_loss = 0.0
+        for batch in (rows[:1], rows[1:]):
+            microbatch_loss = JevaForDecisionLoss(
+                _log_softmax(self.scores[batch]),
+                self.labels[batch],
+                self.coverage[batch],
+                self.option_mask[batch],
+                allow_null=batch == 0,
+                num_items_in_batch=len(rows),
+            )
+            microbatch_loss.backward()
+            accumulated_loss += microbatch_loss.detach()
+
+        torch.testing.assert_close(accumulated_loss, loss)
         for actual, reference in zip((self.scores.grad, self.coverage.grad), expected):
             torch.testing.assert_close(actual, reference)
 
@@ -152,6 +158,7 @@ class JevaForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 output = model(**self.inputs)
                 self.assertEqual(output.loss.dtype, torch.float32)
                 output.loss.backward()
+
                 self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
                 self.assertGreater(model.core.tau_cov.raw.grad.abs().sum(), 0)
                 self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum(), 0)

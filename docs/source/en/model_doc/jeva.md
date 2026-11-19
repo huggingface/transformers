@@ -38,15 +38,30 @@ tokenizer = AutoTokenizer.from_pretrained(repo)
 
 ## Training
 
-Pass right-padded state inputs and flattened option inputs to `JevaForDecision`. Soft `labels` have shape
-`(batch_size, max_num_options + 1)`: null probability first, then option probabilities, with zero on padding.
-The loss follows the [official implementation](https://github.com/LiQiiiii/Jeva/blob/e2104e0720100f979f2cdd456a1cbbee96da0abd/src/jeva/finetune.py#L218-L231):
-candidate cross-entropy plus binary coverage loss when `allow_null=True`. It returns standard `loss` and `logits`
-for `Trainer` and TRL. Pass `num_items_in_batch` to normalize by decisions across accumulation steps.
+Jeva combines candidate cross-entropy with binary coverage loss for nullable decisions, following the
+[official implementation](https://github.com/LiQiiiii/Jeva/blob/e2104e0720100f979f2cdd456a1cbbee96da0abd/src/jeva/finetune.py#L218-L231).
+With the model and tokenizer above, give the first option 80% target probability and null 20%.
 
-Training updates the encoder and decision head by default. MoE router auxiliary losses are not added automatically.
+```python
+import torch
 
-`outputs.logits` contains conditional candidate log probabilities and `outputs.coverage_logits` contains coverage logits. For a nullable choice, candidate probabilities are `sigmoid(coverage_logits) * exp(logits)` and null probability is `sigmoid(-coverage_logits)`. For a closed choice, use `exp(logits)` directly.
+model.train()
+state = tokenizer(["My card was charged twice."], return_tensors="pt")
+options = tokenizer(["Refund", "Delivery"], padding=True, return_tensors="pt")
+output = model(
+    **state,
+    option_input_ids=options.input_ids,
+    option_attention_mask=options.attention_mask,
+    num_options=torch.tensor([2]),
+    labels=torch.tensor([[0.2, 0.8, 0.0]]),
+    allow_null=torch.tensor([True]),
+)
+output.loss.backward()
+```
+
+Use right padding and put null probability first in `labels`. Training updates the encoder and head by default.
+For exact weighting across uneven microbatches in a custom loop, pass the total decision count as
+`num_items_in_batch`. The standard `Trainer` averages the microbatch losses.
 
 After training, save and reload with `save_pretrained` and `AutoModelForDecision.from_pretrained`. The [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) accepts the shared `state` / `questions` schema. A choice with `allow_null=True` also returns `null_probability` and can return `choice=None`. Score questions can supply numeric `values` for their rubric levels.
 
