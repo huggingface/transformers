@@ -4090,7 +4090,7 @@ class GenerationMixin(ContinuousMixin):
 
             # Some layers (e.g. linear attention, which cannot roll back a recurrent state), only know whether they can `crop` after they
             # have been properly initialized, so check it only now after prefill and before first `crop`
-            if is_first_iteration and not cache.is_croppable:
+            if is_first_iteration and not outputs.cache.is_croppable:
                 raise ValueError(
                     "Assisted decoding requires a cache that can be cropped to restore the states after draft verification"
                 )
