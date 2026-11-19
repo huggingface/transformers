@@ -489,6 +489,20 @@ class PipelinePadTest(unittest.TestCase):
         )
 
     @require_torch
+    def test_pipeline_padding_empty_sequence(self):
+        import torch
+
+        for dim in (2, 3):
+            shape = (1, 0) if dim == 2 else (1, 0, 2)
+            nonempty = torch.arange(4).reshape(1, 4) if dim == 2 else torch.arange(8).reshape(1, 4, 2)
+            items = [{"input_ids": torch.empty(shape, dtype=torch.long)}, {"input_ids": nonempty}]
+            for padding_side in ("left", "right"):
+                with self.subTest(dim=dim, padding_side=padding_side):
+                    actual = _pad(items, "input_ids", 10, padding_side)
+                    self.assertTrue(torch.equal(actual[0], torch.full_like(nonempty[0], 10)))
+                    self.assertTrue(torch.equal(actual[1], nonempty[0]))
+
+    @require_torch
     def test_pipeline_image_padding(self):
         import torch
 
