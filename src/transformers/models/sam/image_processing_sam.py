@@ -584,10 +584,12 @@ def _generate_crop_boxes(
     )
     crop_boxes = torch.tensor(crop_boxes)
     crop_boxes = crop_boxes.float()
-    points_per_crop = torch.stack(point_grid_per_crop)
-    points_per_crop = points_per_crop.unsqueeze(0).permute(0, 2, 1, 3)
-
-    input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.int64)
+    max_points = max(points.shape[0] for points in point_grid_per_crop)
+    points_per_crop = point_grid_per_crop[0].new_zeros((1, max_points, len(point_grid_per_crop), 2))
+    input_labels = torch.full((1, max_points, len(point_grid_per_crop)), -10, dtype=torch.int64)
+    for crop_idx, points in enumerate(point_grid_per_crop):
+        points_per_crop[0, : len(points), crop_idx] = points
+        input_labels[0, : len(points), crop_idx] = 1
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
