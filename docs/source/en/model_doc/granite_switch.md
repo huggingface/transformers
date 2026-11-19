@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-16.*
+*This model was contributed to Hugging Face Transformers on 2026-11-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -26,9 +26,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-GraniteSwitch is a [GraniteMoeHybrid](./granitemoehybrid) model with several LoRA adapters built into one
-checkpoint. Control tokens in the prompt select the adapter for each token, so one request, or each turn of a
-conversation, can use a different adapter without loading weights or running a second model.
+GraniteSwitch is a dense, attention-only Granite model with several LoRA adapters built into one checkpoint.
+Control tokens in the prompt select the adapter for each token, so one request, or each turn of a conversation, can
+use a different adapter without loading weights or running a second model.
 
 Checkpoints are available under the [IBM Granite](https://huggingface.co/ibm-granite) organization, for example
 [ibm-granite/granite-switch-4.1-3b-preview](https://huggingface.co/ibm-granite/granite-switch-4.1-3b-preview).
@@ -37,14 +37,10 @@ They are built with the [granite-switch](https://github.com/generative-computing
 **Routing.** Every adapter has a control token, and the most recent control token decides the adapter for the
 tokens after it. Two small attention heads, built from the config with no trained weights, compute this index from
 `input_ids`. Each control token is then replaced with a substitute id before the embedding lookup, so the decoder
-never sees it. A checkpoint can also include a token that switches back to the base model.
+never sees it.
 
 **Shadow Residual.** With `dual_stream=True`, each layer runs a frozen base stream and an adapter stream that share
 all weights, connected by a low-rank `cross_stream` projection that is zero at initialization.
-
-**Probes.** An adapter slot marked `"probe"` in `adapter_kinds` holds a linear classifier on a hidden state instead
-of a LoRA adapter. When a request ends with a probe's control token, the next generated token is the probe's label,
-chosen from `probe_label_token_ids`.
 
 ## Usage
 
@@ -79,7 +75,6 @@ print(tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_t
 - Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 - With `inputs_embeds`, pass the token ids as `switch_input_ids` to keep routing. Without them every token uses the
   base model.
-- A probe's control token must be the last non-padding token of its sequence.
 - With adapters, `num_hidden_layers` in `config.json` includes two layer slots used by the router (42 for a 40-layer
   model). They are removed on load and added back on save.
 - `torch.compile` with `fullgraph=True` is not supported.

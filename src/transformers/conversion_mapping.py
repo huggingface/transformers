@@ -106,7 +106,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "granite_speech_plus": "granite_speech",
     "granitemoeshared": "granitemoe",
     "granitemoehybrid": "granitemoe",
-    "granite_switch": "granitemoe",
     "gemma3n_text": "qwen3_5_text",
     "glm5_next_text": "glm5_next",
     "qwen3_5_moe_text": "qwen3_5_text",

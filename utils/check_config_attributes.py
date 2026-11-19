@@ -258,6 +258,9 @@ SPECIAL_CASES_TO_ALLOW = {
         # maximum, which it reads as `max_lora_rank`.
         "adapter_names",
         "adapter_ranks",
+        # The dense MLP's width default: the inherited MLP reads `shared_intermediate_size`, which
+        # `__post_init__` fills from it when unset.
+        "intermediate_size",
     ],
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.

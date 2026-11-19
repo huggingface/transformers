@@ -49,10 +49,10 @@ class GraniteSwitchConfig(PreTrainedConfig):
         Layer type of each decoder layer, all `"full_attention"` by default. With adapters, the value in
         `config.json` starts with one entry per switch slot, like `num_hidden_layers`.
     num_adapters (`int`, *optional*, defaults to 0):
-        Number of adapter slots. Each slot holds a LoRA adapter or a probe head. Adapter index 0 is the base model.
+        Number of embedded LoRA adapters. Adapter index 0 is the base model.
     adapter_token_ids (`list[int]`, *optional*):
-        Control token of each slot: `adapter_token_ids[i]` selects adapter `i + 1`. May carry one extra
-        leading token that switches back to the base model. Required when `num_adapters > 0`.
+        Control token of each adapter: `adapter_token_ids[i]` selects adapter `i + 1`. Required when
+        `num_adapters > 0`.
     adapter_substitute_token_ids (`list[int]`, *optional*):
         Token ids that replace the control tokens before the embedding lookup. Same length as
         `adapter_token_ids`.
@@ -64,14 +64,7 @@ class GraniteSwitchConfig(PreTrainedConfig):
         LoRA rank of each adapter. The maximum must equal `max_lora_rank`.
     lora_target_modules (`list[str]`, *optional*):
         Projections that carry LoRA weights, from `qkv_proj`, `o_proj`, `shared_input_linear` and
-        `shared_output_linear`. Defaults to every one the architecture has.
-    adapter_kinds (`list[str]`, *optional*):
-        What each slot holds, `"lora"` (the default) or `"probe"`.
-    probe_label_token_ids (`list[list[int] | None]`, *optional*):
-        Token ids of each probe's labels, in the order of the head's outputs, and `None` for LoRA slots.
-        Required when any slot is a probe.
-    probe_read_layers (`list[int | None]`, *optional*):
-        Zero-based decoder layer each probe reads. `None` reads the final normalized hidden state.
+        `shared_output_linear`. Defaults to all four.
     control_token_gain (`float`, *optional*, defaults to 15.0):
         Attention gain that separates control tokens from ordinary tokens in the switch heads.
     ms_code_m (`int`, *optional*, defaults to 6):
@@ -88,7 +81,7 @@ class GraniteSwitchConfig(PreTrainedConfig):
     cross_stream_rank (`int`, *optional*):
         Rank of the per-layer `cross_stream` projection. Required when `dual_stream=True`.
     shared_intermediate_size (`int`, *optional*):
-        Width of the shared MLP. Defaults to `intermediate_size`, or 0 (no shared MLP) when the model has experts.
+        Width of the dense MLP. Defaults to `intermediate_size`.
     position_embedding_type (`str`, *optional*, defaults to `"rope"`):
         Positional embedding type, `None` or `"rope"`.
 
@@ -109,16 +102,10 @@ class GraniteSwitchConfig(PreTrainedConfig):
 
     model_type = "granite_switch"
     keys_to_ignore_at_inference = ["cache"]
-    base_model_tp_plan = {
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
-    }
-    base_model_ep_plan = {
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
-        "layers.*.block_sparse_moe.experts": "ep_dispatch_experts",
-    }
+
+    # The parent's plans shard its expert bank, which this model does not have.
+    base_model_tp_plan = None
+    base_model_ep_plan = None
 
     vocab_size: int = 32000
     hidden_size: int = 4096
@@ -142,15 +129,9 @@ class GraniteSwitchConfig(PreTrainedConfig):
     logits_scaling: int | float | None = 1.0
     residual_multiplier: int | float | None = 1.0
     attention_multiplier: int | float | None = 1.0
-    # Granite 4 dense is the default configuration.
-    num_local_experts: int | None = 0
-    num_experts_per_tok: int | None = 2
-    output_router_logits: bool | None = False
-    router_aux_loss_coef: float | None = 0.001
 
-    # The parent's fixed 1024 default is the wrong width for a dense base and cannot express the
-    # "no shared MLP" sentinel (0) that a pure sparse-MoE base needs, so an unset value is resolved
-    # in `__post_init__` instead. An explicit value, including 0, is honored.
+    # The parent's fixed 1024 default is the wrong width for a dense base, so an unset value is
+    # resolved to `intermediate_size` in `__post_init__` instead.
     shared_intermediate_size: int | None = None
     position_embedding_type: str | None = "rope"
     layer_types: list[str] | None = None
@@ -162,10 +143,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
     max_lora_rank: int = 8
     adapter_ranks: list[int] | None = None
     lora_target_modules: list[str] | None = None
-
-    adapter_kinds: list[str] | None = None
-    probe_label_token_ids: list[list[int] | None] | None = None
-    probe_read_layers: list[int | None] | None = None
 
     control_token_gain: float = 15.0
 
@@ -209,23 +186,15 @@ class GraniteSwitchConfig(PreTrainedConfig):
             self.layer_types = [ATTENTION_LAYER_TYPE] * self.num_hidden_layers
 
         if self.shared_intermediate_size is None:
-            self.shared_intermediate_size = 0 if self.num_local_experts > 0 else self.intermediate_size
+            self.shared_intermediate_size = self.intermediate_size
 
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
 
         if self.lora_target_modules is None:
-            lora_target_modules = []
-            if self.num_adapters > 0:
-                # The switch model is attention-only, so every layer has the attention groups.
-                lora_target_modules += ["qkv_proj", "o_proj"]
-                # The MLP groups exist only where a shared MLP does to hold them.
-                if self.shared_intermediate_size > 0:
-                    lora_target_modules += ["shared_input_linear", "shared_output_linear"]
-            self.lora_target_modules = lora_target_modules
-
-        if self.adapter_kinds is None:
-            self.adapter_kinds = ["lora"] * self.num_adapters
+            self.lora_target_modules = (
+                ["qkv_proj", "o_proj", "shared_input_linear", "shared_output_linear"] if self.num_adapters > 0 else []
+            )
 
         # The hybrid parent's `__post_init__` resolves mamba geometry from fields this config
         # retires, so skip it and delegate straight to the base implementation.
@@ -239,19 +208,15 @@ class GraniteSwitchConfig(PreTrainedConfig):
         if self.num_adapters == 0:
             return
 
-        # MultiSwitch accepts `num_adapters` control tokens, or `num_adapters + 1` with a leading
-        # base-reset token that writes adapter 0 and so enables return-to-base mid-request.
-        allowed_lengths = (self.num_adapters, self.num_adapters + 1)
-
         if self.adapter_token_ids is None:
             raise ValueError(
                 "adapter_token_ids is required when num_adapters > 0: every adapter needs a control token "
                 "for the switch to route on."
             )
-        if len(self.adapter_token_ids) not in allowed_lengths:
+        if len(self.adapter_token_ids) != self.num_adapters:
             raise ValueError(
-                f"adapter_token_ids length ({len(self.adapter_token_ids)}) must be one of {allowed_lengths} "
-                f"(num_adapters={self.num_adapters})."
+                f"adapter_token_ids length ({len(self.adapter_token_ids)}) must equal num_adapters "
+                f"({self.num_adapters})."
             )
         if len(set(self.adapter_token_ids)) != len(self.adapter_token_ids):
             raise ValueError(f"adapter_token_ids must be unique; got {self.adapter_token_ids}")
@@ -330,57 +295,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
             output["num_hidden_layers"] = self.num_hidden_layers + SWITCH_LAYER_SLOTS
             output["layer_types"] = [ATTENTION_LAYER_TYPE] * SWITCH_LAYER_SLOTS + output["layer_types"]
         return output
-
-    def validate_probes(self):
-        """Part of `@strict`-powered validation. Checks the probe slots are fully described."""
-        if len(self.adapter_kinds) != self.num_adapters:
-            raise ValueError(
-                f"adapter_kinds length ({len(self.adapter_kinds)}) must equal num_adapters ({self.num_adapters})."
-            )
-        invalid_kinds = [kind for kind in self.adapter_kinds if kind not in ("lora", "probe")]
-        if invalid_kinds:
-            raise ValueError(f"adapter_kinds values must be 'lora' or 'probe'; got invalid entries {invalid_kinds}")
-
-        if self.probe_label_token_ids is None:
-            if "probe" in self.adapter_kinds:
-                raise ValueError(
-                    "adapter_kinds declares a probe slot but probe_label_token_ids is unset. A probe reports "
-                    "its verdict as a label word, so the token id of every label is required."
-                )
-        else:
-            if len(self.probe_label_token_ids) != self.num_adapters:
-                raise ValueError(
-                    f"probe_label_token_ids length ({len(self.probe_label_token_ids)}) must equal num_adapters "
-                    f"({self.num_adapters}); it is indexed by adapter slot, with None on the LoRA slots."
-                )
-            for slot, (kind, label_ids) in enumerate(zip(self.adapter_kinds, self.probe_label_token_ids)):
-                if kind == "probe":
-                    if not label_ids:
-                        raise ValueError(f"probe slot {slot} must declare its label token ids; got {label_ids!r}.")
-                    if any(token_id < 0 for token_id in label_ids):
-                        raise ValueError(
-                            f"probe_label_token_ids[{slot}] must all be >= 0 (real token ids); got {label_ids}"
-                        )
-                elif label_ids:
-                    raise ValueError(f"LoRA slot {slot} must have no label token ids; got {label_ids!r}.")
-
-        if self.probe_read_layers is not None:
-            if len(self.probe_read_layers) != self.num_adapters:
-                raise ValueError(
-                    f"probe_read_layers length ({len(self.probe_read_layers)}) must equal num_adapters "
-                    f"({self.num_adapters})."
-                )
-            for slot, (kind, layer) in enumerate(zip(self.adapter_kinds, self.probe_read_layers)):
-                if layer is None:
-                    continue
-                if kind != "probe":
-                    raise ValueError(f"LoRA slot {slot} must have no read layer; got {layer!r}.")
-                # `bool` is an `int` subclass, and `True` is not a layer.
-                if isinstance(layer, bool) or not 0 <= layer < self.num_hidden_layers:
-                    raise ValueError(
-                        f"probe_read_layers[{slot}] = {layer!r} must be an int in 0..{self.num_hidden_layers - 1}; "
-                        "leave it None to read the final normalized hidden state."
-                    )
 
     def validate_shadow_residual(self):
         """Part of `@strict`-powered validation. Checks the Shadow Residual fields agree."""
