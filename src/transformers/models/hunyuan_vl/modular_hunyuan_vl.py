@@ -31,8 +31,9 @@ from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -1287,8 +1288,6 @@ class HunYuanVLModel(Qwen2VLModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_embeds, torch.Tensor):
-                image_embeds = torch.cat(image_embeds, dim=0)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,

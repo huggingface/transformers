@@ -47,6 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
+from ..modeling_multimodal_utils import MultimodalMixin
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
@@ -1025,17 +1026,14 @@ class GenerationMixin(ContinuousMixin):
         self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any]
     ) -> torch.Tensor:
         """Prepares image/video hidden states if model support this modality"""
-        from ..modeling_utils import MultimodalMixin
-
         model_kwargs.setdefault("mm_encoder_outputs", {})
         keys_to_pop = set()
         for modality in ["image", "video"]:
-            encoder_fn = getattr(self.base_model, f"get_{modality}_features", None)
             # Features that are the mixin's split of the flat embeddings: encode flat, expansion splits if it repeats
-            if getattr(type(self.base_model), f"get_{modality}_features", None) is getattr(
+            is_flat = getattr(type(self.base_model), f"get_{modality}_features", None) is getattr(
                 MultimodalMixin, f"get_{modality}_features"
-            ):
-                encoder_fn = getattr(self.base_model, f"get_{modality}_embeddings")
+            )
+            encoder_fn = getattr(self.base_model, f"get_{modality}_{'embeddings' if is_flat else 'features'}", None)
             if modality in self.input_modalities and encoder_fn is not None:
                 encoder_kwargs = {
                     key: model_kwargs[key]
@@ -1205,8 +1203,6 @@ class GenerationMixin(ContinuousMixin):
 
         # IMPORTANT - expand before input ids because the helper counts placeholders within encoded text!
         if (mm_encoder_output := model_kwargs.get("mm_encoder_outputs")) is not None:
-            from ..modeling_utils import MultimodalMixin
-
             # Flat outputs from `get_*_embeddings` are repeated per item, so split them first
             for modality, outputs in mm_encoder_output.items():
                 if getattr(outputs, "split_sizes", None) is not None and not isinstance(

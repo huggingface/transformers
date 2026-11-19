@@ -40,8 +40,9 @@ from ...masking_utils import (
     create_sliding_window_causal_mask,
     or_masks,
 )
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
-from ...modeling_utils import MultimodalMixin, slice_logits_to_keep
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
@@ -1254,8 +1255,6 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_features, torch.Tensor):
-                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)

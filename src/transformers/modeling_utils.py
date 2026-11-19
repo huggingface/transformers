@@ -106,7 +106,6 @@ from .utils import (
     KernelConfig,
     PushToHubMixin,
     cached_file,
-    can_return_tuple,
     check_torch_load_is_safe,
     copy_func,
     get_current_accelerator,
@@ -955,45 +954,6 @@ class ModuleUtilsMixin:
                     total_params += param.numel()
 
         return total_params
-
-
-class MultimodalMixin:
-    """
-    `get_image_features` and `get_video_features` from a model's flat `get_image_embeddings` and `get_video_embeddings`,
-    split per image or video by the `split_sizes` they return. A model with a head reaches its base model's.
-    """
-
-    model: "MultimodalMixin"
-    base_model: "MultimodalMixin"
-
-    def get_image_embeddings(self, *args, **kwargs):
-        return self.model.get_image_embeddings(*args, **kwargs)
-
-    def get_video_embeddings(self, *args, **kwargs):
-        return self.model.get_video_embeddings(*args, **kwargs)
-
-    @staticmethod
-    def split_modality_outputs(outputs):
-        """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
-        split_sizes = outputs.split_sizes.tolist()
-        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
-        if getattr(outputs, "deepstack_features", None) is not None:
-            outputs.deepstack_features = [
-                torch.split(features, split_sizes) for features in outputs.deepstack_features
-            ]
-        return outputs
-
-    @can_return_tuple
-    def get_image_features(self, *args, **kwargs):
-        """Each image's features, from `get_image_embeddings`."""
-        outputs = self.get_image_embeddings(*args, return_dict=True, **kwargs)
-        return getattr(self.base_model, "split_modality_outputs", self.split_modality_outputs)(outputs)
-
-    @can_return_tuple
-    def get_video_features(self, *args, **kwargs):
-        """Each video's features, from `get_video_embeddings`."""
-        outputs = self.get_video_embeddings(*args, return_dict=True, **kwargs)
-        return getattr(self.base_model, "split_modality_outputs", self.split_modality_outputs)(outputs)
 
 
 class EmbeddingAccessMixin:

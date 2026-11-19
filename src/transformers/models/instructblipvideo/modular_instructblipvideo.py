@@ -32,6 +32,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
@@ -335,6 +336,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -427,8 +429,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 **kwargs,
             )
         language_model_inputs = mm_encoder_outputs["video"].pooler_output
-        if not isinstance(language_model_inputs, torch.Tensor):
-            language_model_inputs = torch.cat(language_model_inputs, dim=0)
         qformer_outputs = mm_encoder_outputs["video"].qformer_outputs
         vision_outputs = mm_encoder_outputs["video"].vision_outputs
 

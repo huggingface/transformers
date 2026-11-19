@@ -31,9 +31,10 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_int
 from ...utils.deprecation import deprecate_kwarg
@@ -1138,8 +1139,6 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel, MultimodalMixin):
                 )
             image_outputs = mm_encoder_outputs["image"]
             image_hidden_states = image_outputs.pooler_output
-            if not isinstance(image_hidden_states, torch.Tensor):
-                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
             router_logits = image_outputs.router_logits
             deepstack_visual_embeds = image_outputs.deepstack_features
