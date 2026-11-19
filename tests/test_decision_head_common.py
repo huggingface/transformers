@@ -20,7 +20,7 @@ from types import SimpleNamespace
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.testing_utils import torch_device
+from transformers.pipelines.decision import DecisionPipeline
 
 
 if is_torch_available():
@@ -115,9 +115,16 @@ def check_decision(
 ):
     """The answers to the request of `decision_test.json` (probabilities in order, or `noul`) match `expected`."""
     test = json.loads(Path(hf_hub_download(decision_repo, "decision_test.json")).read_bytes())
-    # By default the original checkpoint, which the decision files are converted from
+    # By default the original checkpoint, which the decision files are converted from. The deciders are 27B checkpoints,
+    # so `device_map="auto"` offloads the layers that don't fit on the runner. `pipeline_class` keeps our pipeline for
+    # repos that declare their own remote `decision` pipeline.
     decide = pipeline(
-        "decision", model=model or test["model"], decision_config=decision_repo, device=torch_device, **pipeline_kwargs
+        "decision",
+        model=model or test["model"],
+        decision_config=decision_repo,
+        device_map="auto",
+        pipeline_class=DecisionPipeline,
+        **pipeline_kwargs,
     )
     answers = decide(test["request"])
     for name, value in expected.items():
