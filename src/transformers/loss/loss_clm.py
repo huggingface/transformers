@@ -22,6 +22,11 @@ def _log_softmax(logits: torch.Tensor) -> torch.Tensor:
     return shifted - torch.log1p(others)
 
 
+def _contrastive_cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    log_probabilities = _log_softmax(logits).masked_fill(targets == 0, 0.0)
+    return -(targets * log_probabilities).sum(-1).mean()
+
+
 def ClmForDecisionLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
@@ -36,19 +41,21 @@ def ClmForDecisionLoss(
     logits = logits.float()
     labels = labels.to(logits.device)
     targets = F.one_hot(labels.long(), logits.shape[-1]).float() if labels.ndim == 1 else labels.float()
+
     if group_ids is not None:
         group_ids = group_ids.to(logits.device)
         same_group = group_ids[:, None] == group_ids[None, :]
         same_group.fill_diagonal_(False)
         logits = logits.masked_fill(same_group, -torch.inf)
-    state_log_probabilities = _log_softmax(logits).masked_fill(targets == 0, 0.0)
-    state_loss = -(targets * state_log_probabilities).sum(-1).mean()
+
+    state_loss = _contrastive_cross_entropy(logits, targets)
+
     reverse_targets = targets.T
     positive_candidates = reverse_targets.sum(-1) > 0
     reverse_targets = reverse_targets[positive_candidates]
     reverse_targets = reverse_targets / reverse_targets.sum(-1, keepdim=True)
-    action_log_probabilities = _log_softmax(logits.T[positive_candidates]).masked_fill(reverse_targets == 0, 0.0)
-    action_loss = -(reverse_targets * action_log_probabilities).sum(-1).mean()
+    action_loss = _contrastive_cross_entropy(logits.T[positive_candidates], reverse_targets)
+
     loss = (state_loss + action_loss) / 2
     if num_items_in_batch is not None:
         loss = loss * logits.shape[0] / num_items_in_batch

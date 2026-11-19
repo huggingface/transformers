@@ -28,13 +28,29 @@ otherwise its key is used. Candidates do not see the current state or other cand
 
 ## Training
 
-For training, `labels` supplies matching candidate indices or target distributions over the in-batch candidate pool.
-The model returns a standard output with `loss` and `logits`. The loss averages forward and reverse InfoNCE; reverse
-supervision includes only candidates with positive target mass. Paired examples may supply `group_ids` to exclude
-off-diagonal examples from the same group as false negatives, during contrastive training.
-The contrastive pool is local to each batch; gradient accumulation does not create a larger pool.
-For the released heads' training setup, freeze `model.base_model` before constructing the Trainer.
-MoE router auxiliary losses are not added automatically.
+CLM uses bidirectional InfoNCE over the candidates in each forward pass. After converting the checkpoint below,
+pack each state followed by its matching candidate and mark the end of each segment.
+
+```python
+import torch
+from transformers import AutoModelForDecision, AutoTokenizer
+
+model = AutoModelForDecision.from_pretrained("clm-8b")
+tokenizer = AutoTokenizer.from_pretrained("clm-8b")
+segments = tokenizer(["I was charged twice.", "Billing", "Where is my parcel?", "Delivery"]).input_ids
+model.train()
+output = model(
+    input_ids=torch.tensor([[token for segment in segments for token in segment]]),
+    marks=torch.tensor([[len(segment) for segment in segments]]).cumsum(dim=-1),
+    num_options=torch.tensor([[1, 1]]),
+    labels=torch.tensor([0, 1]),
+)
+output.loss.backward()
+```
+
+Use `group_ids` in paired batches to exclude same-group false negatives. Each microbatch has its own contrastive pool.
+Gradient accumulation averages losses across those pools. To train only the projection heads and scale, freeze
+`model.base_model` before training.
 
 ## Convert a checkpoint
 

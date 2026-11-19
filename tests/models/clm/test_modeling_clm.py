@@ -69,6 +69,36 @@ class ClmLossTest(unittest.TestCase):
                     torch.autograd.grad(actual, logits)[0].double(), torch.autograd.grad(expected, reference_logits)[0]
                 )
 
+    def test_accumulation_weights_each_local_candidate_pool(self):
+        logits = torch.tensor(
+            [
+                [1.0, 0.1, 0.2, 0.3, 0.4],
+                [0.3, 1.1, 0.2, 0.4, 0.1],
+                [0.2, 0.3, 0.5, 0.2, 0.1],
+                [0.2, 0.4, 0.3, 0.7, 0.2],
+                [0.1, 0.3, 0.4, 0.1, 0.5],
+            ],
+            requires_grad=True,
+        )
+        reference = logits.detach().clone().requires_grad_()
+
+        def symmetric_ce(scores, labels):
+            return (F.cross_entropy(scores, labels) + F.cross_entropy(scores.T, labels)) / 2
+
+        expected = (
+            2 * symmetric_ce(reference[:2, :2], torch.arange(2)) + 3 * symmetric_ce(reference[2:, 2:], torch.arange(3))
+        ) / 5
+
+        accumulated_loss = 0.0
+        for batch in (slice(None, 2), slice(2, None)):
+            scores = logits[batch, batch]
+            loss = ClmForDecisionLoss(scores, torch.arange(scores.shape[0]), num_items_in_batch=5)
+            loss.backward()
+            accumulated_loss += loss.detach()
+
+        torch.testing.assert_close(accumulated_loss, expected)
+        torch.testing.assert_close(logits.grad, torch.autograd.grad(expected, reference)[0])
+
     def test_confident_prediction_gradients(self):
         logits = torch.tensor([[9.0, -9.0], [-9.0, 9.0]], requires_grad=True)
         loss = ClmForDecisionLoss(logits, torch.arange(2))
@@ -144,6 +174,7 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 output = model(**self.inputs, labels=torch.arange(3))
                 self.assertEqual(output.loss.dtype, torch.float32)
                 output.loss.backward()
+
                 self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
                 self.assertGreater(model.action_head.output_projection.weight.grad.abs().sum(), 0)
                 self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum(), 0)

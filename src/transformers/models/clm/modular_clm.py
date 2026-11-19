@@ -169,7 +169,7 @@ class ClmPreTrainedModel(PreTrainedModel):
     """
 )
 class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
-    # In-batch soft targets count candidates, so Trainer must not infer a question count from their shape.
+    # Trainer averages microbatch losses. Its automatic item count would count soft target entries.
     accepts_loss_kwargs = False
 
     def __init__(self, config: ClmConfig, model: PreTrainedModel | None = None):
@@ -254,7 +254,9 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
     ) -> list[torch.Tensor]:
         """Score each question's candidates with the same decision API as the other decision heads."""
         decision_config = decision_config or self.decision_config
-        inputs = {"input_ids": input_ids, **kwargs, "return_dict": True}
+        # Override any caller preference because we read `.logits` below.
+        kwargs["return_dict"] = True
+        inputs = {"input_ids": input_ids, **kwargs}
         num_options = torch.tensor([[len(question.options) for question in decision_questions]], device=self.device)
         question_types = [Question.questions_types.index(question.type) for question in decision_questions]
         output = self(
