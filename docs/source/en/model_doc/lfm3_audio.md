@@ -40,7 +40,7 @@ decoder, alongside text. Speech frames are turned into audio by the [Liquid code
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
 
@@ -69,7 +69,7 @@ print(transcription)
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
 
@@ -99,7 +99,7 @@ The answer interleaves text and speech; the text is the transcript of the speech
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
 
@@ -136,7 +136,7 @@ model may still switch to speech; to forbid it, pass
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
 
@@ -181,7 +181,7 @@ import itertools
 from transformers import AutoModelForMultimodalLM, AutoProcessor, TextStreamer
 from transformers.audio_utils import load_audio
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id, revision=revision)
 
@@ -232,7 +232,7 @@ processor returns the text targets as `labels` and the speech frames as `audio_l
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
 model.train()
@@ -274,7 +274,7 @@ print(f"text {outputs.text_loss.item():.3f}, speech {outputs.audio_loss.item():.
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model_id, revision = "LiquidAI/LFM3-Audio-2B", "refs/pr/26"
 
 # full model: speech encoder, LM and depth decoder
 model = AutoModelForMultimodalLM.from_pretrained(

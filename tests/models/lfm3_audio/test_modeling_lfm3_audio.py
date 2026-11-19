@@ -444,8 +444,8 @@ class Lfm3AudioIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """
 
     # every generation ends before `max_new_tokens`, except row 2 of `test_asr_batch`
-    checkpoint = "eustlb/LFM3-Audio-2B"
-    revision = "refs/pr/1"
+    checkpoint = "LiquidAI/LFM3-Audio-2B"
+    revision = "refs/pr/26"
     samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
 
     @classmethod

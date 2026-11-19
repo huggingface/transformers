@@ -46,8 +46,8 @@ if is_soundfile_available():
 class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm3AudioProcessor
     # tokenizer and chat template of the checkpoint (`from_pretrained(model_id)` would load its codec too)
-    checkpoint_name = "eustlb/LFM3-Audio-2B"
-    revision = "refs/pr/1"
+    checkpoint_name = "LiquidAI/LFM3-Audio-2B"
+    revision = "refs/pr/26"
 
     @classmethod
     def _setup_tokenizer(cls):

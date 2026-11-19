@@ -36,7 +36,7 @@ from ..lfm3.modeling_lfm3 import Lfm3Model, Lfm3PreTrainedModel, Lfm3RotaryEmbed
 from ..xcodec2.modeling_xcodec2 import Xcodec2FiniteScalarQuantization, Xcodec2ISTFTHead
 
 
-@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@auto_docstring(checkpoint="LiquidAI/Liquid-Codec")
 @strict
 class LiquidCodecEncoderConfig(Lfm3Config):
     r"""
@@ -95,7 +95,7 @@ class LiquidCodecEncoderConfig(Lfm3Config):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@auto_docstring(checkpoint="LiquidAI/Liquid-Codec")
 @strict
 class LiquidCodecDecoderConfig(Lfm3Config):
     r"""
@@ -153,7 +153,7 @@ class LiquidCodecDecoderConfig(Lfm3Config):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@auto_docstring(checkpoint="LiquidAI/Liquid-Codec")
 @strict
 class LiquidCodecConfig(PreTrainedConfig):
     r"""

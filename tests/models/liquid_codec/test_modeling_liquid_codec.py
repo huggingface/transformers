@@ -389,7 +389,7 @@ class LiquidCodecIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     RTOL = 0
     ATOL = 1e-5
 
-    checkpoint = "eustlb/Liquid-Codec"
+    checkpoint = "LiquidAI/Liquid-Codec"
     revision = "refs/pr/1"
     samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
     clips = ["librispeech_mr_quilter.wav", "dude_where_is_my_car.wav"]
