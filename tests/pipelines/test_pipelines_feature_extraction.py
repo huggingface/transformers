@@ -20,6 +20,7 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
+    AutoTokenizer,
     FeatureExtractionPipeline,
     LxmertConfig,
     is_torch_available,
@@ -35,6 +36,21 @@ if is_torch_available():
 @is_pipeline_test
 class FeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
+
+    @require_torch
+    def test_left_padding_empty_input(self):
+        model_id = "optimum-internal-testing/tiny-random-qwen3"
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        feature_extractor = pipeline("feature-extraction", model=model_id, tokenizer=tokenizer)
+        texts = ["", "Hello world"]
+        self.assertEqual(tokenizer(texts[0])["input_ids"], [])
+        actual = feature_extractor(texts, batch_size=2, return_tensors=True)
+        model_inputs = tokenizer(texts, padding=True, return_tensors="pt")
+        with torch.no_grad():
+            expected = feature_extractor.model(**model_inputs).last_hidden_state
+        self.assertEqual(len(actual), 2)
+        for index, output in enumerate(actual):
+            torch.testing.assert_close(output, expected[index : index + 1])
 
     @require_torch
     def test_small_model_pt(self):
