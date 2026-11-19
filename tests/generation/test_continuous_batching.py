@@ -39,7 +39,6 @@ from transformers import (
     ContinuousBatchingConfig,
     GenerationConfig,
     GenerationMixin,
-    LlamaConfig,
     StaticCache,
 )
 from transformers.generation.continuous_batching.cache import (
