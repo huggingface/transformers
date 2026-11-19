@@ -20,6 +20,14 @@ Fine-tuning continues training a large pretrained model on a smaller dataset spe
 
 The tutorial below walks through fine-tuning a large language model with [`Trainer`].
 
+> [!AgentPrompt]
+> Help the user plan a fine-tuning run for their task. Before proposing a configuration, identify the task, pretrained model and revision, dataset fields, evaluation data, Transformers version, hardware, and available memory. Use this tutorial to check the data preparation, model loading, and `Trainer` setup that apply to their case. Do not assume the example dataset or model fits a different task.
+>
+> 1. Ask for missing details that could change the model, preprocessing, or training setup. State any assumptions.
+> 2. Keep evaluation examples separate from training data. Select a model and tokenizer for the task, prepare the model's expected inputs and labels, and choose a data collator that matches those inputs.
+> 3. Set `TrainingArguments` to fit the user's hardware and goals. Configure evaluation and checkpoint saving when the user needs them. Run a small test before a full training job, and check that the model receives the expected inputs, the loss is finite, and evaluation completes.
+> 4. Do not start a full training run or upload artifacts unless the user asks. Report the proposed configuration, evidence from any test, expected resource tradeoffs, and anything you could not verify.
+
 Log in to your Hugging Face account with your user token to push your fine-tuned model to the Hub.
 
 ```py

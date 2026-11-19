@@ -110,7 +110,7 @@ audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "latents.wav")
 ```
 
-**3. Cached context**: the voice prompt's KV cache, passed as `past_key_values`. The shipped voices (`voices/`) use this form.
+**3. Cached context**: the voice prompt's KV cache, passed as `cache`. The shipped voices (`voices/`) use this form.
 
 ```python
 from huggingface_hub import hf_hub_download
@@ -141,7 +141,7 @@ inputs = processor.apply_chat_template(
     conversation, tokenize=True, return_dict=True, add_generation_prompt=True
 ).to(model.device)
 
-outputs = model.generate(**inputs, past_key_values=voice_cache)
+outputs = model.generate(**inputs, cache=voice_cache)
 audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "cached.wav")
 ```
@@ -208,7 +208,7 @@ voice_cache, voice_mask = load_voices(["alba"] * len(chunks) + ["jean"])
 inputs["attention_mask"] = torch.cat(
     [voice_mask.to(inputs["attention_mask"]), inputs["attention_mask"]], dim=-1
 )
-outputs = model.generate(**inputs, past_key_values=voice_cache)
+outputs = model.generate(**inputs, cache=voice_cache)
 audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(
     [torch.cat(audio[: len(chunks)]), audio[-1]], ["long.wav", "hello.wav"]
@@ -247,7 +247,7 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 
 outputs = model.generate(
-    **inputs, past_key_values=DynamicCache(layers, config=model.config)
+    **inputs, cache=DynamicCache(layers, config=model.config)
 )
 audio = processor.decode(outputs.audio_latents, outputs.audio_latents_mask)
 processor.save_audio(audio, "drifting.wav")

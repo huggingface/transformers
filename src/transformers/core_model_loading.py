@@ -81,6 +81,10 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    # Set True on an op that maps several sources to several targets (e.g. Ernie VL experts).
+    # Ops outside core can opt in without core importing them.
+    supports_many_to_many = False
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -320,8 +324,8 @@ class SplitModulelist(ConversionOps):
             sizes = tensor.size(self.dim)
             targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
-            # We squeeze each chunk here as well to make sure to give them their original shape
-            all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
+            # Squeeze only the split dim, so a tensor keeps its own size-1 dims
+            all_tensors.update({target: chunk.squeeze(self.dim) for target, chunk in zip(targets, chunks)})
         return all_tensors
 
     def get_target_patterns(
@@ -658,6 +662,8 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
+    supports_many_to_many = True
+
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -719,6 +725,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
+
+    supports_many_to_many = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -1142,6 +1150,37 @@ class GroupWeightRename(WeightRenaming):
         return result
 
 
+class Inkling2IndexOffsetWeightRename(WeightRenaming):
+    """
+    Special case of WeightRenaming that also shifts the captured index by `offset`. Use this when a checkpoint stores
+    per-layer weights in a list that does not start at layer 0, e.g. `attn_queries.{i}` belonging to `layers.{i + 1}`.
+    """
+
+    __slots__ = ("offset",)
+
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str], offset: int):
+        self.offset = offset
+        super().__init__(source_patterns=source_patterns, target_patterns=target_patterns)
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        matched = self._scoped_match(source_key)
+        if matched is None:
+            return source_key, None
+
+        prefix_dot, key_to_match, match_object = matched
+        self._was_used = True
+        matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
+        index = int(match_object.group(self.compiled_sources.groupindex[matching_group_name] + 1))
+        replacement = self.target_patterns[0].replace(r"\1", str(index + self.offset))
+        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+        if prefix_dot is not None:
+            renamed_key = prefix_dot + renamed_key
+        return renamed_key, self.source_patterns[int(matching_group_name[1:])]
+
+    def reverse_transform(self) -> Inkling2IndexOffsetWeightRename:
+        return self.copy(self._original_target_patterns, self._original_source_patterns, offset=-self.offset)
+
+
 class PrefixChange(WeightRenaming):
     """
     Special case of WeightRenaming, used to simplify adding/removing full parts of a weight name. The regexes
@@ -1189,13 +1228,6 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-# List of classes that are known to be able to use m:n
-_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ErnieFuseAndSplitTextVisionExperts,
-    ErnieSplitAndDecoupleTextVisionExperts,
-)
-
-
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 
@@ -1211,13 +1243,17 @@ class WeightConverter(WeightTransform):
         self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
+
+    def copy(self, source_patterns, target_patterns, **kwargs) -> WeightConverter:
+        # a quantizer copies a converter for its scales, which must convert on cpu too
+        kwargs.setdefault("force_cpu", self.force_cpu)
+        return super().copy(source_patterns, target_patterns, **kwargs)
 
     def convert(
         self,
@@ -1416,7 +1452,12 @@ def set_param_for_module(
         # For DTensor parameters, compare against the local shard loaded on this rank.
         expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
 
-        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+        # Shape errors result in mismatched key, except for quantized params
+        if (
+            ref is not None
+            and param_value.shape != expected_shape
+            and (hf_quantizer is None or not hf_quantizer.param_needs_quantization(model, target_name))
+        ):
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             if is_dtensor(ref):
@@ -1737,8 +1778,9 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # Skip params quantized on load. Casting them first would zero int8 storage or round fp8 twice.
+                _dtype = empty_param.dtype
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 

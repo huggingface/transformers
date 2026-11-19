@@ -27,8 +27,6 @@ import pytest
 from transformers import (
     AutoProcessor,
     Cosmos3OmniConfig,
-    Qwen3VLTextConfig,
-    Qwen3VLVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -58,8 +56,7 @@ if is_torch_available():
 class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
     base_model_class = Cosmos3OmniModel
     config_class = Cosmos3OmniConfig
-    text_config_class = Qwen3VLTextConfig
-    vision_config_class = Qwen3VLVisionConfig
+
     conditional_generation_class = Cosmos3OmniForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -112,11 +109,6 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
     def place_image_tokens(self, input_ids, config):
         # Place image tokens with vision_start_token_id prefix
         input_ids = input_ids.clone()
-        # Clear any accidental special tokens first
-        input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.video_token_id] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         # Place image tokens with vision_start_token_id prefix
         input_ids[:, 1] = self.image_token_id
         input_ids[:, 0] = self.vision_start_token_id
@@ -130,19 +122,6 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_config(self):
-        # Cosmos3OmniConfig expects text_config and vision_config as dicts, not config objects
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
 
 
 @require_torch
@@ -254,6 +233,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 (None, None): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom", 'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'],
+                ("cuda", (8, 6)): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a large, light brown dog with a black collar, sitting on the beach next to a person. Labrador Retrievers are known for", "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each"],
             }
         )  # fmt: skip
 

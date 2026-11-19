@@ -121,7 +121,7 @@ class Sam3VideoInferenceSession:
     Manages video inference session parameters, state and cache.
 
     Args:
-        video (`torch.FloatTensor`, *optional*):
+        video (`torch.Tensor`, *optional*):
             The video to process. No need to provide when streaming.
         video_height (`int`, *optional*):
             The height of the video.
@@ -141,7 +141,7 @@ class Sam3VideoInferenceSession:
 
     def __init__(
         self,
-        video: torch.FloatTensor | None = None,
+        video: torch.Tensor | None = None,
         video_height: int | None = None,
         video_width: int | None = None,
         inference_device: torch.device | str = "cpu",
@@ -463,7 +463,7 @@ class Sam3VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
         List of object IDs being tracked in the current frame.
-    obj_id_to_mask (`dict[int, torch.FloatTensor]`, *optional*):
+    obj_id_to_mask (`dict[int, torch.Tensor]`, *optional*):
         Dictionary mapping object IDs to their predicted low-resolution masks.
         Each mask has shape `(1, H_low, W_low)`.
     obj_id_to_score (`dict[int, float]`, *optional*):
@@ -479,7 +479,7 @@ class Sam3VideoSegmentationOutput(ModelOutput):
     """
 
     object_ids: list[int] | None = None
-    obj_id_to_mask: dict[int, torch.FloatTensor] | None = None
+    obj_id_to_mask: dict[int, torch.Tensor] | None = None
     obj_id_to_score: dict[int, float] | None = None
     obj_id_to_tracker_score: dict[int, float] | None = None
     removed_obj_ids: set[int] | None = None

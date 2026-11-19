@@ -50,7 +50,6 @@ class Cosmos3OmniConfig(PreTrainedConfig):
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_vl_vision"),
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_vl_text"),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

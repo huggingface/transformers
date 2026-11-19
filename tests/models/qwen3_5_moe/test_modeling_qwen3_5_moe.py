@@ -45,7 +45,6 @@ if is_torch_available():
         Qwen3_5MoeModel,
         Qwen3_5MoeTextConfig,
         Qwen3_5MoeTextModel,
-        Qwen3_5MoeVisionConfig,
     )
 
 
@@ -195,8 +194,7 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
 class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3_5MoeModel
     config_class = Qwen3_5MoeConfig
-    text_config_class = Qwen3_5MoeTextConfig
-    vision_config_class = Qwen3_5MoeVisionConfig
+
     conditional_generation_class = Qwen3_5MoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -274,23 +272,6 @@ class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_vision_config(self):
-        vision_config = super().get_vision_config()
-        vision_config.hidden_act = self.vision_hidden_act
-        vision_config.intermediate_size = self.vision_intermediate_size
-        return vision_config
-
-    def get_config(self):
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-        )
 
 
 @require_torch

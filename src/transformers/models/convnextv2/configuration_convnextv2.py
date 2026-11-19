@@ -42,6 +42,7 @@ class ConvNextV2Config(BackboneConfigMixin, PreTrainedConfig):
     ```"""
 
     model_type = "convnextv2"
+    attribute_map = {"num_hidden_layers": "num_stages"}
 
     num_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 4

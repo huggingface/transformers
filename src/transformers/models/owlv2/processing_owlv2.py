@@ -28,16 +28,21 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ImageGuidedObjectDetectionOutput, Owlv2ObjectDetectionOutput
 
 
-class Owlv2ImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedOwlv2ImagesKwargs(ImagesKwargs, total=False):
     """
     query_images (`ImageInput`, *optional*):
+        Deprecated, pass directly as `query_images` to [`Owlv2Processor.__call__`] instead.
         Query images to use for image-guided object detection. When provided, these images serve as visual queries
         to find similar objects in the main `images`. The query images override any text prompts, and the model
         performs image-to-image matching instead of text-to-image matching.
@@ -46,34 +51,37 @@ class Owlv2ImagesKwargs(ImagesKwargs, total=False):
     query_images: ImageInput | None
 
 
-class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Owlv2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-        },
-        "common_kwargs": {
-            "return_tensors": "np",
-        },
-    }
+class DeprecatedOwlv2ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeprecatedOwlv2ImagesKwargs
 
 
 @auto_docstring
 class Owlv2Processor(ProcessorMixin):
-    valid_processor_kwargs = Owlv2ProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "return_tensors": "np",
+    }
+    images_kwargs = {
+        "return_tensors": "np",
+    }
 
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 
     @auto_docstring
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.__call__ with OwlViT->Owlv2
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[Owlv2ProcessorKwargs],
+        query_images: ImageInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
+        query_images (`ImageInput`, *optional*):
+            Query images to use for image-guided object detection. When provided, these images serve as visual queries
+            to find similar objects in the main `images`. The query images override any text prompts, and the model
+            performs image-to-image matching instead of text-to-image matching.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
@@ -83,12 +91,20 @@ class Owlv2Processor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
+        images_kwargs = kwargs.get("images_kwargs", {}).copy()
+        if "query_images" in images_kwargs:
+            logger.warning_once(
+                "Passing `query_images` in `images_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+            # "images_kwargs" has priority for backwards compatibility
+            query_images = images_kwargs.pop("query_images")
+            kwargs["images_kwargs"] = images_kwargs
+
         output_kwargs = self._merge_kwargs(
-            Owlv2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        query_images = output_kwargs["images_kwargs"].pop("query_images", None)
         return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
@@ -226,4 +242,11 @@ class Owlv2Processor(ProcessorMixin):
         )
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "Owlv2ImagesKwargs": (DeprecatedOwlv2ImagesKwargs, "5.29.0"),
+        "Owlv2ProcessorKwargs": (DeprecatedOwlv2ProcessorKwargs, "5.29.0"),
+    },
+)
 __all__ = ["Owlv2Processor"]

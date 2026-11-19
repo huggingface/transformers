@@ -89,7 +89,7 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "trl-internal-testing/tiny-DbrxForCausalLM"
+        model_name = "hf-internal-testing/tiny-DbrxForCausalLM"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -97,6 +97,10 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     # The issue is that the offloaded weights of the mlp layer are still on meta device (w1_chunked, v1_chunked, w2_chunked)
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="DbrxConfig rejects `tie_word_embeddings=True`, so the head is never tied")
+    def test_tied_weights_are_sharded_together(self):
         pass
 
     @unittest.skip(reason="Dbrx models do not work with offload")
