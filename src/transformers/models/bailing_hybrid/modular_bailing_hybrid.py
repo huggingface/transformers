@@ -410,6 +410,7 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = None
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",

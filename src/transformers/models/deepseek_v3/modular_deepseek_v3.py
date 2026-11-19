@@ -219,7 +219,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
         "attentions": DeepseekV3Attention,
         "router_logits": OutputRecorder(DeepseekV3TopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     def _init_weights(self, module):

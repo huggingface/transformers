@@ -1170,7 +1170,7 @@ class DeepseekOcr2TextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
@@ -1303,6 +1303,7 @@ class DeepseekOcr2TextPreTrainedModel(PreTrainedModel):
         "attentions": DeepseekOcr2TextAttention,
         "router_logits": OutputRecorder(DeepseekOcr2TextTopkRouter, index=0),
     }
+    _keep_in_fp32_modules_strict = ["gate.weight"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
