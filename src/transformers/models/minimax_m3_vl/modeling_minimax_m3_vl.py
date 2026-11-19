@@ -132,6 +132,14 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
             self.idx_keys.zero_()
         self.idx_cumulative_length.zero_()
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Roll the write offset of both the main and the indexer buffers back, see `StaticLayer.crop`.
+        """
+        super().crop(tokens_to_remove)
+        if self.idx_keys is not None:
+            self.idx_cumulative_length.sub_(abs(tokens_to_remove))
+
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.idx_keys is not None:
@@ -303,7 +311,6 @@ class MiniMaxM3VLRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -675,7 +682,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiniMaxM3VLDecoderLayer", "MiniMaxM3VLVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -690,7 +696,6 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)
@@ -1021,7 +1026,6 @@ class MiniMaxM3VLVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (3, N) - with direct THW order
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

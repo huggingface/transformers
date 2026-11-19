@@ -309,6 +309,14 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
             self.idx_keys.zero_()
         self.idx_cumulative_length.zero_()
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Roll the write offset of both the main and the indexer buffers back, see `StaticLayer.crop`.
+        """
+        super().crop(tokens_to_remove)
+        if self.idx_keys is not None:
+            self.idx_cumulative_length.sub_(abs(tokens_to_remove))
+
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.idx_keys is not None:
@@ -632,7 +640,6 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     _supports_attention_backend = True
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)

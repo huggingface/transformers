@@ -807,7 +807,6 @@ class DabDetrPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         xavier_std = self.config.init_xavier_std

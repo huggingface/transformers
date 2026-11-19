@@ -42,16 +42,16 @@ class OlmoHybridModelTester(CausalLMModelTester):
         base_model_class = OlmoHybridModel
         causal_lm_class = OlmoHybridForCausalLM
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 4
-        self.linear_key_head_dim = 8
-        self.linear_value_head_dim = 8
-        self.linear_conv_kernel_dim = 4
-        self.linear_allow_neg_eigval = False
-        self.hidden_act = "silu"
+    small_config_overrides = {
+        "layer_types": ["linear_attention", "full_attention"],
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 4,
+        "linear_key_head_dim": 8,
+        "linear_value_head_dim": 8,
+        "linear_conv_kernel_dim": 4,
+        "linear_allow_neg_eigval": False,
+        "hidden_act": "silu",
+    }
 
 
 @require_torch
