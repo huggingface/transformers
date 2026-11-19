@@ -155,6 +155,7 @@ if TYPE_CHECKING:
     from .esmfold2 import *
     from .eurobert import *
     from .evolla import *
+    from .exaone import *
     from .exaone4 import *
     from .exaone4_5 import *
     from .exaone_moe import *

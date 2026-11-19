@@ -1280,6 +1280,18 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Concatenate(dim=0)],
             ),
         ],
+        "exaone": [
+            WeightRenaming(r"^transformer\.wte\.", "model.embed_tokens."),
+            WeightRenaming(r"^transformer\.h\.", "model.layers."),
+            WeightRenaming(r"^transformer\.ln_f\.", "model.norm."),
+            WeightRenaming(r"\.attn\.attention\.", ".self_attn."),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.ln_1\.", ".input_layernorm."),
+            WeightRenaming(r"\.ln_2\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.mlp\.c_fc_0\.", ".mlp.gate_proj."),
+            WeightRenaming(r"\.mlp\.c_fc_1\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.down_proj."),
+        ],
         "lara_mini": [
             WeightRenaming(source_patterns=r"linear_attn\.out_norm\.", target_patterns="linear_attn.norm."),
             # The checkpoints fuse the gated delta net input projections into one `in_proj`, rows `[q|k|v|z|b|a]`
