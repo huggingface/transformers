@@ -137,6 +137,36 @@ class TQAPipelineTests(unittest.TestCase):
             )
 
     @require_torch
+    def test_streaming_inputs(self):
+        import pandas as pd
+        from torch.utils.data import Dataset, Subset
+
+        table_querier = pipeline("table-question-answering", model="lysandre/tiny-tapas-random-wtq")
+        table = pd.DataFrame({"actors": ["Brad Pitt", "George Clooney"], "age": ["56", "59"]})
+        rows = [
+            {"table": table, "query": "How old is Brad Pitt?"},
+            {"table": table, "query": "How old is George Clooney?"},
+        ]
+        expected = table_querier(rows)
+
+        class TableDataset(Dataset):
+            def __len__(self):
+                return len(rows)
+
+            def __getitem__(self, index):
+                return rows[index]
+
+        for inputs in ((row for row in rows), TableDataset()):
+            with self.subTest(input_type=type(inputs).__name__):
+                outputs = table_querier(inputs, num_workers=0)
+                self.assertIs(iter(outputs), outputs)
+                self.assertEqual(list(outputs), expected)
+        single_outputs = table_querier(Subset(TableDataset(), [0]), num_workers=0)
+        self.assertEqual(list(single_outputs), expected[:1])
+        self.assertEqual(list(table_querier((row for row in []), num_workers=0)), [])
+        self.assertEqual(table_querier(rows[:1]), expected[0])
+
+    @require_torch
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(dtype="float16")
 
