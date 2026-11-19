@@ -61,13 +61,16 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
         Softcap applied to the output logits.
     scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
         Activation turning the router logits into expert scores.
-    loop_config (`dict`, *optional*):
-        The looped core of the decoder, with keys `core_start`, `core_end`, `num_passes` and `gate_rank`. Layers
-        `core_start` to `core_end - 1` run `num_passes` times with the same weights. Each pass after the first
-        starts again from the output of the layers before the core and reads the residual blocks of the previous
-        pass through message gates of rank `gate_rank`. The core boundaries must be multiples of
-        `n_layers_per_attn_res_block`. Defaults to `{"core_start": 6, "core_end": 18, "num_passes": 3,
-        "gate_rank": 64}`.
+    loop_layer_index_start (`int`, *optional*, defaults to 6):
+        Index of the first looped decoder layer. Must be a multiple of `n_layers_per_attn_res_block`.
+    loop_layer_index_end (`int`, *optional*, defaults to 18):
+        Index after the last looped decoder layer. Layers `loop_layer_index_start` to
+        `loop_layer_index_end - 1` are looped. Must be a multiple of `n_layers_per_attn_res_block`.
+    loop_num_passes (`int`, *optional*, defaults to 3):
+        Number of loops.
+    loop_gate_rank (`int`, *optional*, defaults to 64):
+        Rank of the message gate projections that mix the residual blocks of the previous pass into the current
+        one.
     """
 
     model_type = "inkling2_loop_text"
@@ -132,24 +135,40 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
     scoring_func: str = "sigmoid"
     use_cache: bool = True
     number_of_conv_states = 4
-    # TODO: should prob make those flat attributes instead of dict
-    loop_config: dict | None = None
+    loop_layer_index_start: int = 6
+    loop_layer_index_end: int = 18
+    loop_num_passes: int = 3
+    loop_gate_rank: int = 64
 
     def __post_init__(self, **kwargs):
-        if self.loop_config is None:
-            # TODO: Better naming: layer_index_start, layer_index_end, num_passes, gate_rank
-            self.loop_config = {"core_start": 6, "core_end": 18, "num_passes": 3, "gate_rank": 64}
+        if (loop_config := kwargs.get("loop_config")) is not None:
+            self.loop_layer_index_start = loop_config.get("core_start", self.loop_layer_index_start)
+            self.loop_layer_index_end = loop_config.get("core_end", self.loop_layer_index_end)
+            self.loop_num_passes = loop_config.get("num_passes", self.loop_num_passes)
+            self.loop_gate_rank = loop_config.get("gate_rank", self.loop_gate_rank)
         if self.layer_types is None:
             self.layer_types = [
                 "hybrid" if (i + 1) % 6 == 0 else "hybrid_sliding" for i in range(self.num_hidden_layers)
             ]
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        if self.loop_layer_index_start % self.n_layers_per_attn_res_block != 0:
+            raise ValueError(
+                f"`loop_layer_index_start` ({self.loop_layer_index_start}) must be a multiple of "
+                f"`n_layers_per_attn_res_block` ({self.n_layers_per_attn_res_block})."
+            )
+        if self.loop_layer_index_end % self.n_layers_per_attn_res_block != 0:
+            raise ValueError(
+                f"`loop_layer_index_end` ({self.loop_layer_index_end}) must be a multiple of "
+                f"`n_layers_per_attn_res_block` ({self.n_layers_per_attn_res_block})."
+            )
+
     @property
     def cache_layer_indices(self) -> list[int]:
         """Returns decoder layer index for each cache layer."""
-        looped_layer_indices = range(self.loop_config["core_start"], self.loop_config["core_end"])
-        return list(range(self.num_hidden_layers)) + (self.loop_config["num_passes"] - 1) * list(looped_layer_indices)
+        looped_layer_indices = range(self.loop_layer_index_start, self.loop_layer_index_end)
+        return list(range(self.num_hidden_layers)) + (self.loop_num_passes - 1) * list(looped_layer_indices)
 
     @property
     def total_num_hidden_layers(self) -> int:

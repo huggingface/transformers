@@ -65,9 +65,9 @@ class Inkling2LoopMessageGate(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
         self.norm = Inkling2LoopUnweightedRMSNorm()
-        self.down_proj = nn.Linear(2 * config.hidden_size, config.loop_config["gate_rank"], bias=False)
-        self.forget_gate_proj = nn.Linear(config.loop_config["gate_rank"], config.hidden_size, bias=False)
-        self.message_gate_proj = nn.Linear(config.loop_config["gate_rank"], config.hidden_size, bias=False)
+        self.down_proj = nn.Linear(2 * config.hidden_size, config.loop_gate_rank, bias=False)
+        self.forget_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False)
+        self.message_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
         hidden_states, message = hidden_states.float(), message.float()
@@ -86,9 +86,7 @@ class Inkling2LoopMessageAttentionResidual(nn.Module):
         super().__init__()
         # 4 * num_loop_layers queries, shape is (2 * num_loop_layers, 2 * hidden_dim) because of original checkpoint shapes.
         self.query = nn.Parameter(
-            torch.zeros(
-                2 * (config.loop_config["core_end"] - config.loop_config["core_start"]), 2 * config.hidden_size
-            )
+            torch.zeros(2 * (config.loop_layer_index_end - config.loop_layer_index_start), 2 * config.hidden_size)
         )
         self.norm = Inkling2LoopUnweightedRMSNorm()
 
@@ -1180,10 +1178,9 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
         self.norm = Inkling2LoopRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         self.final_input = Inkling2LoopBlockAttentionResidual(config)
-        loop_config = config.loop_config
         for layer_idx in range(config.num_hidden_layers):
             is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
-            is_loop_layer = loop_config["core_start"] <= layer_idx < loop_config["core_end"]
+            is_loop_layer = config.loop_layer_index_start <= layer_idx < config.loop_layer_index_end
             if is_loop_layer:
                 layer_class = Inkling2LoopSlidingLoopDecoderLayer if is_sliding else Inkling2LoopFullLoopDecoderLayer
             else:
@@ -1236,13 +1233,15 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
-        loop_config = self.config.loop_config
-        loop_layer_index_start, loop_layer_index_end = loop_config["core_start"], loop_config["core_end"]
+        loop_layer_index_start, loop_layer_index_end = (
+            self.config.loop_layer_index_start,
+            self.config.loop_layer_index_end,
+        )
         # pre loop layers, then `num_passes` times the loop layers, then post loop layers
         layer_and_loop_indices = [(layer_idx, 0) for layer_idx in range(loop_layer_index_start)]
         layer_and_loop_indices += [
             (layer_idx, loop_idx)
-            for loop_idx in range(loop_config["num_passes"])
+            for loop_idx in range(self.config.loop_num_passes)
             for layer_idx in range(loop_layer_index_start, loop_layer_index_end)
         ]
         layer_and_loop_indices += [
