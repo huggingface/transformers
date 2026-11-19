@@ -4832,7 +4832,7 @@ class PreTrainedModel(
             or getattr(self, "_last_compile_config", default_config) != compile_config
         ):
             self._last_compile_config = compile_config
-            self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
+            self._compiled_call = torch.compile(self.__call__, **compile_config.to_compile_kwargs())
         return self._compiled_call
 
     @classmethod
