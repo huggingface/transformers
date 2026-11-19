@@ -118,16 +118,12 @@ RUN python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHAUDIO_IND
 RUN printf 'torch==%s\ntorchvision==%s\n' "${TORCH_VERSION}" "${TORCHVISION_VERSION}" > /opt/rocm-constraints.txt
 ENV PIP_CONSTRAINT=/opt/rocm-constraints.txt
 
-# Every other Python package, pinned per GPU arch (the device wheels differ). Unpinned,
-# two builds of the same commit diverged: on 2026-10-24 a rebuild pulled
-# huggingface_hub 2.3.0 where the published image had 1.33.0, plus fastapi, openai,
-# pandas and 40 more, so a "same image plus one change" was not. The files are a pip
-# freeze of a reviewed build; regenerate them with constraints-update.sh and review
-# the diff before an image is pushed. A missing file for an arch fails the build.
-# With REF=main, a main that raises a dependency floor fails the build here
-# rather than drifting: regenerate the file then.
-COPY constraints-${GPU_ARCH}.txt /opt/hf-constraints.txt
-ENV PIP_CONSTRAINT="/opt/rocm-constraints.txt /opt/hf-constraints.txt"
+# Everything except the torch stack resolves freely, like the MI300 image
+# (docker/transformers-pytorch-amd-gpu). A frozen pin file broke this build
+# whenever main raised a floor (kernels, hf-doc-builder, transformers-mlinter),
+# and dropping it changed no test outcome on gfx1151. The few pins that matter
+# are their own steps below. Each build's freeze is kept at /opt/pip-freeze.txt
+# so two images can still be compared.
 
 # torchvision image codecs. PyTorch's rocm7.14 channel ships them; AMD's ROCm
 # 10.x torchvision (a TheRock build) is built without libPNG, so decode_png
@@ -216,9 +212,8 @@ RUN python3 -m pip uninstall -y py3nvml pynvml nvidia-ml-py apex || true
 # dies -- an OOM kill loading a big checkpoint -- the controller's StatusDB
 # thread spins on recv() of the dead worker's socket and nothing is scheduled
 # again: the job idles, GPU at ~1%, until its timeout. That looked like a KFD
-# wedge; it is not. 16.7 raises on EOF (pytest-rerunfailures#358). Not in the
-# constraints files, and --no-deps, for the reason urllib3 has its own step
-# below: a constraint would make the [testing] install unresolvable.
+# wedge; it is not. 16.7 raises on EOF (pytest-rerunfailures#358). Its own
+# step, with --no-deps, because [testing]'s <16.0 would otherwise win.
 RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 
 # `kernels` is pinned in below, not uninstalled; see the note there.
@@ -253,14 +248,12 @@ RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 # granitemoe_swa pass, and ministral3's fp8 slow tests now load
 # finegrained-fp8's torch-rocm build and run. Compiled kernels still fail to
 # load on ROCm 10.1; see "Hub kernels" at the end of this file.
-# urllib3 is pinned here, not globally, because two requirements conflict:
-# transformers[testing] (its "quality" deps) wants urllib3<2.0.0, while kernels
-# -> sigstore -> tuf wants urllib3~=2.0. Unpinned, the transformers
-# install takes 1.26.x and this step upgrades it. A global constraint would
-# apply to the transformers step too and make it unresolvable.
+# No urllib3 pin any more: in kernels 0.18.3 sigstore (which wanted
+# urllib3 2.x against [testing]'s <2) is optional, and urllib3 resolves to 2.x
+# through requests and blobfile anyway.
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm \
       scipy librosa soundfile pycocotools peft bitsandbytes matplotlib \
-      "kernels==0.18.1" "urllib3==2.8.0"
+      "kernels==0.18.3"
 
 # Media decoders needed by audio/video model tests:
 #  - PyAV (`av`): torchvision video ops
@@ -383,9 +376,10 @@ print('megablocks v1', v[:7])" \
     && python3 -c "import json; a=json.load(open('/opt/hub-kernels/megablocks/build/torch214-rocm714-x86_64-linux/metadata.json'))['backend']['archs']; assert '${GPU_ARCH}' in a, a"
 ENV LOCAL_KERNELS=Atlas-Inference/gdn=/opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux:kernels-community/megablocks=/opt/hub-kernels/megablocks/build/torch214-rocm714-x86_64-linux
 
-# Last: urllib3 must still be 2.x (pinned on the kernels step above, against
-# transformers[testing]'s <2) and kernels must still import. A later step that
-# resolved deps would silently move urllib3 back to 1.26 and break kernels' tuf.
-# The same resolve would take pytest-rerunfailures back below 16.7.
-RUN python3 -c "import urllib3, kernels; assert urllib3.__version__.startswith('2.'), urllib3.__version__; \
+# Last: kernels must still import, and a later step that resolved deps must not
+# have taken pytest-rerunfailures back below 16.7.
+RUN python3 -c "import kernels; \
 from importlib.metadata import version as v; assert v('pytest-rerunfailures') == '16.7', v('pytest-rerunfailures')"
+
+# Record what this build resolved, for comparing two images.
+RUN python3 -m pip freeze --all > /opt/pip-freeze.txt
