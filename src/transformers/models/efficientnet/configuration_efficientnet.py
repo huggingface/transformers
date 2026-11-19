@@ -13,6 +13,8 @@
 # limitations under the License.
 """EfficientNet model configuration"""
 
+import math
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -89,7 +91,7 @@ class EfficientNetConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
-        self.num_hidden_layers = sum(self.num_block_repeats) * 4
+        self.num_hidden_layers = sum(math.ceil(self.depth_coefficient * repeats) for repeats in self.num_block_repeats)
 
 
 __all__ = ["EfficientNetConfig"]

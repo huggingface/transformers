@@ -232,7 +232,6 @@ class RegNetPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["RegNetYLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
@@ -329,7 +328,7 @@ class RegNetForImageClassification(RegNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:

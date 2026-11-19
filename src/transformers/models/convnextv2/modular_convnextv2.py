@@ -82,7 +82,7 @@ class ConvNextV2GRN(nn.Module):
         self.weight = nn.Parameter(torch.zeros(1, 1, 1, dim))
         self.bias = nn.Parameter(torch.zeros(1, 1, 1, dim))
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Compute and normalize global spatial feature maps
         global_features = torch.linalg.vector_norm(hidden_states, ord=2, dim=(1, 2), keepdim=True)
         norm_features = global_features / (global_features.mean(dim=-1, keepdim=True) + 1e-6)
@@ -158,7 +158,6 @@ class ConvNextV2PreTrainedModel(ConvNextPreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["ConvNextV2Layer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # Skip ConvNextPreTrainedModel layer-scale branch (IJEPA-style)
         PreTrainedModel._init_weights(self, module)
@@ -197,7 +196,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel, ConvNextForIma
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
+        self, pixel_values: torch.Tensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.convnextv2(pixel_values, **kwargs)
         pooled_output = outputs.pooler_output

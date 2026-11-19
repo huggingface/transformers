@@ -20,10 +20,9 @@
 import re
 from typing import Any
 
-from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -32,20 +31,11 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class Florence2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
-
-
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
-    valid_processor_kwargs = Florence2ProcessorKwargs
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
 
     def __init__(
         self,
@@ -150,20 +140,6 @@ class Florence2Processor(ProcessorMixin):
             text = [self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token for sample in text]
 
         return images, text, None, None
-
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text)
-
-        if not isinstance(text, list) or not all(isinstance(token, str) for token in text):
-            raise ValueError("`text` must be a string or list of strings.")
-
-        if isinstance(images, list) and len(images) != len(text):
-            raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
@@ -703,5 +679,7 @@ class Florence2PostProcessor:
 
         return parsed_dict
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Florence2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Florence2Processor"]

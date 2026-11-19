@@ -226,7 +226,6 @@ class ResNetPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
@@ -330,7 +329,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:

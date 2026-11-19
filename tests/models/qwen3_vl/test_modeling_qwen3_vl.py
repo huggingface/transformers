@@ -27,7 +27,7 @@ from transformers import (
     is_torch_available,
     set_seed,
 )
-from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig, Qwen3VLVisionConfig
+from transformers.models.qwen3_vl.configuration_qwen3_vl import Qwen3VLTextConfig
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -52,44 +52,43 @@ if is_torch_available():
 class Qwen3VLVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3VLModel
     config_class = Qwen3VLConfig
-    text_config_class = Qwen3VLTextConfig
-    vision_config_class = Qwen3VLVisionConfig
+
     conditional_generation_class = Qwen3VLForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("num_heads", 2)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("num_position_embeddings", 16)
-        kwargs.setdefault("deepstack_visual_indexes", [0, 1])
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "rope_type": "default",
-                "mrope_section": [2, 3, 3],
-                "mrope_interleaved": True,
-                "rope_theta": 10000,
-            },
-        )
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 16,
+        "patch_size": 16,
+        "num_image_tokens": 32,
+        "hidden_act": "silu",
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 16,
+        "depth": 2,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "num_heads": 2,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "num_position_embeddings": 16,
+        "deepstack_visual_indexes": [0, 1],
+        "rope_parameters": {
+            "rope_type": "default",
+            "mrope_section": [2, 3, 3],
+            "mrope_interleaved": True,
+            "rope_theta": 10000,
+        },
+    }
 
-        # These can be inferred from existing properties and don't get separate kwargs
-        self.out_hidden_size = self.hidden_size
-        self.vision_hidden_size = self.hidden_size
-        self.vision_intermediate_size = self.hidden_size
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["out_hidden_size"] = values["hidden_size"]
+        values["vision_hidden_size"] = values["hidden_size"]
+        values["vision_intermediate_size"] = values["hidden_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -123,19 +122,6 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_config(self):
-        # Qwen3VLConfig expects text_config and vision_config as dicts, not config objects
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
 
 
 @require_torch
@@ -630,6 +616,7 @@ class Qwen3VLIntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 (None, None): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: Golden-yellow coat, which is the classic color for a Yellow Labrador.\n- **Build**: Stocky, muscular, and friendly-looking — typical of the breed',
+                ("cuda", (8, 6)): "user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: Golden-yellow coat, typical of the yellow variety of Labrador Retrievers.\n- **Build**: Stocky, muscular, and friendly-looking — classic Labrador physique.\n",
                 ("rocm", (9, 4)): 'user\nWhat kind of dog is this?\nassistant\nThis is a **Yellow Labrador Retriever**.\n\nKey identifying features:\n- **Color**: The dog has a classic golden-yellow coat, which is the most common color for the breed.\n- **Build**: It has a sturdy, athletic build with',
             }
         )  # fmt: skip

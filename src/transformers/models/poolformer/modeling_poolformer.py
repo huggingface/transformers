@@ -191,7 +191,6 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["PoolFormerStage"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, PoolFormerLayer):
@@ -225,7 +224,7 @@ class PoolFormerEncoder(PoolFormerPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithNoAttention:
         hidden_states = pixel_values
         for stage in self.stages:
@@ -253,7 +252,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithNoAttention:
         if pixel_values is None:
@@ -306,7 +305,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutputWithNoAttention:

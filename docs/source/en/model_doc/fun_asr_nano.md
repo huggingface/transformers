@@ -103,39 +103,47 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 ### Training
 
 ```python
+from datasets import Audio, load_dataset
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
-processor = AutoProcessor.from_pretrained(model_id)
+NUM_SAMPLES = 2
+
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/5")
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 model.train()
 
-audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "audio", "path": audio_url},
-        ],
-    },
-    {
-        "role": "assistant",
-        "content": [
-            {
-                "type": "text",
-                "text": "The tribal chieftain called for the boy, and presented him with fifty pieces of gold.",
-            }
-        ],
-    },
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "audio", "audio": sample["audio"]["array"]},
+                # the checkpoint's name for English
+                {"type": "language", "language": "英文"},
+            ],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": sample["text"]}]},
+    ]
+    for sample in ds.select(range(NUM_SAMPLES))
 ]
+
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
     processor_kwargs={"output_labels": True},
-).to(model.device)
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
+print("Loss:", loss.item())
 loss.backward()
 ```
 

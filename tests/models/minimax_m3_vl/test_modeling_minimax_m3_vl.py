@@ -24,7 +24,6 @@ from transformers import (
     MiniMaxM3VLImageProcessorFast,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
-    MiniMaxM3VLTextConfig,
     MiniMaxM3VLVideoProcessor,
     MiniMaxM3VLVisionConfig,
     is_torch_available,
@@ -64,48 +63,45 @@ if is_vision_available():
 class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniMaxM3VLModel
     config_class = MiniMaxM3VLConfig
-    text_config_class = MiniMaxM3VLTextConfig
-    vision_config_class = MiniMaxM3VLVisionConfig
+
     conditional_generation_class = MiniMaxM3SparseForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("video_token_id", 5)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("image_size", 14)
-        kwargs.setdefault("patch_size", 14)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "video_token_id": 5,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "image_size": 28,
+        "patch_size": 14,
         # One patch per image (grid [1, 1, 1]) so that the generation common tests, which crop
         # all inputs along the batch dim, keep ``pixel_values`` and ``image_grid_thw`` consistent.
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("projector_hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("dense_intermediate_size", 128)
-        kwargs.setdefault("shared_intermediate_size", 32)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("rotary_dim", 16)
-        kwargs.setdefault("rms_norm_eps", 1e-6)
-        kwargs.setdefault("num_experts", 4)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("layer_types", ["full_attention", "minimax_m3_sparse"])
-        kwargs.setdefault("routed_scaling_factor", 2.0)
-        kwargs.setdefault("swiglu_alpha", 1.702)
-        kwargs.setdefault("swiglu_limit", 7.0)
-        kwargs.setdefault(
-            "rope_parameters", {"rope_type": "default", "rope_theta": 5000000.0, "partial_rotary_factor": 0.5}
-        )
-        kwargs.setdefault("index_n_heads", 2)
-        kwargs.setdefault("index_head_dim", 16)
-        kwargs.setdefault("index_block_size", 8)
-        kwargs.setdefault("index_topk_blocks", 4)
-        kwargs.setdefault("index_local_blocks", 1)
-        super().__init__(parent, **kwargs)
+        "num_image_tokens": 4,
+        "temporal_patch_size": 2,
+        "spatial_merge_size": 1,
+        "projector_hidden_size": 32,
+        "intermediate_size": 64,
+        "dense_intermediate_size": 128,
+        "shared_intermediate_size": 32,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "rotary_dim": 16,
+        "rms_norm_eps": 1e-6,
+        "num_experts": 4,
+        "num_experts_per_tok": 2,
+        "mlp_layer_types": ["dense", "sparse"],
+        "layer_types": ["full_attention", "minimax_m3_sparse"],
+        "routed_scaling_factor": 2.0,
+        "swiglu_alpha": 1.702,
+        "swiglu_limit": 7.0,
+        "rope_parameters": {"rope_type": "default", "rope_theta": 5000000.0, "partial_rotary_factor": 0.5},
+        "index_n_heads": 2,
+        "index_head_dim": 16,
+        "index_block_size": 8,
+        "index_topk_blocks": 4,
+        "index_local_blocks": 1,
+    }
 
     @property
     def _special_token_ids(self):
@@ -122,7 +118,7 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
 
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
 
 @require_torch

@@ -221,7 +221,7 @@ class Swinv2Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -399,7 +399,6 @@ class Swinv2PreTrainedModel(SwinPreTrainedModel):
         "attentions": OutputRecorder(Swinv2Stage, index=2, capture_initial_hidden_state=False),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

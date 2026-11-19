@@ -2129,16 +2129,16 @@ class ModelUtilsTest(TestCasePlus):
 
         # If we set `use_cache=True` while training, then a cache is returned
         model_outputs = model(**model_inputs, use_cache=True)
-        self.assertIsInstance(model_outputs.past_key_values, DynamicCache)
+        self.assertIsInstance(model_outputs.cache, DynamicCache)
         self.assertTrue(model.training)
 
         # simulate injecting virtual tokens like in prefix tuning
         num_virtual_tokens = 3
-        past_key_values = [
+        cache = [
             (torch.randn(1, 2, num_virtual_tokens, 8), torch.randn(1, 2, num_virtual_tokens, 8)),
             (torch.randn(1, 2, num_virtual_tokens, 8), torch.randn(1, 2, num_virtual_tokens, 8)),
         ]
-        past_key_values = DynamicCache(past_key_values)
+        cache = DynamicCache(cache)
         model_inputs["attention_mask"] = torch.cat(
             (
                 model_inputs["attention_mask"],
@@ -2146,14 +2146,14 @@ class ModelUtilsTest(TestCasePlus):
             ),
             dim=1,
         )
-        model_outputs = model(**model_inputs, past_key_values=past_key_values, use_cache=True)
+        model_outputs = model(**model_inputs, cache=cache, use_cache=True)
         self.assertTrue(model.training)
 
         # We can also disable the cache to skip a few operations, if the training loop doesn't need cache
         # NOTE: after #41900, we need to pass the correct attention mask size
         model_inputs["attention_mask"] = model_inputs["attention_mask"][:, :-num_virtual_tokens]
         model_outputs = model(**model_inputs, use_cache=False)
-        self.assertIsNone(model_outputs.past_key_values)
+        self.assertIsNone(model_outputs.cache)
         self.assertTrue(model.training)
 
     def test_restore_default_dtype_from_pretrained(self):
@@ -2713,7 +2713,7 @@ class ModelUtilsTest(TestCasePlus):
 
         # Stands in for a hub kernel layer: same forward signature as the class it would replace
         class KernelGatedDeltaNet(torch.nn.Module):
-            def forward(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+            def forward(self, hidden_states, cache=None, attention_mask=None, **kwargs):
                 return hidden_states
 
         # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
@@ -2740,6 +2740,30 @@ class ModelUtilsTest(TestCasePlus):
                 caching_allocator_warmup(model, expanded_device_map, None)
 
         self.assertIn("Skipping caching allocator warmup", cl.out)
+
+    def test_mismatched_keys_with_quantizer(self):
+        from transformers import FineGrainedFP8Config
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaForCausalLM(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = model.state_dict()
+            # Overwrite with mismatched shape
+            state_dict["model.layers.0.self_attn.q_proj.weight"] = torch.rand(2, 2)
+            model.save_pretrained(tmpdirname, state_dict=state_dict)
+
+            quant_config = FineGrainedFP8Config(modules_to_not_convert=["self_attn.q_proj"])
+            # Skip the GPU check, we won't run any forward anyway
+            with patch(
+                "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+                lambda *arg, **kwargs: None,
+            ):
+                # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
+                with self.assertRaisesRegex(
+                    RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
+                ):
+                    _ = LlamaForCausalLM.from_pretrained(tmpdirname, quantization_config=quant_config)
 
 
 @slow
@@ -3195,6 +3219,14 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
 
+    def test_error_flash_kernel_without_flash_support(self):
+        # A Flash Attention kernel from the Hub must not bypass the model's `_supports_flash_attn`
+        model = BaseModel(PreTrainedConfig())
+        with self.assertRaises(ValueError) as cm:
+            model._check_and_adjust_attn_implementation("kernels-community/flash-attn3")
+
+        self.assertIn("BaseModel does not support Flash Attention yet", str(cm.exception))
+
     def test_registered_experts_implementation_is_valid(self):
         from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS
 
@@ -3259,6 +3291,36 @@ class TestAttentionImplementation(unittest.TestCase):
         with sdpa_kernel([backends[expected_backend]]):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    @parameterized.expand([(False,), (True,)])
+    def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(2, 8, 1, 64, device=torch_device)
+        key = torch.randn(2, 2, 16, 64, device=torch_device)
+        value = torch.randn(2, 2, 16, 64, device=torch_device)
+        attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
+        attention_mask[1, ..., :5] = False  # left padding
+        # makes the mask per-head
+        position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if use_position_bias else None
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(),
+            query,
+            repeat_kv(key, 4),
+            repeat_kv(value, 4),
+            attention_mask,
+            position_bias=position_bias,
+        )
+        with patch(
+            "transformers.integrations.sdpa_attention.repeat_kv", side_effect=AssertionError("K/V were repeated")
+        ):
+            attn_output, _ = sdpa_attention_forward(
+                module, query, key, value, attention_mask, position_bias=position_bias
+            )
+        torch.testing.assert_close(attn_output, expected)
 
     @parameterized.expand(
         [

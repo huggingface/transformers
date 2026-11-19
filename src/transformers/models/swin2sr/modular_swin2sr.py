@@ -49,9 +49,9 @@ logger = logging.get_logger(__name__)
 )
 @dataclass
 class Swin2SREncoderOutput(ModelOutput):
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class Swin2SRDropPath(Swinv2DropPath):
@@ -93,7 +93,7 @@ class Swin2SREmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.window_size = config.window_size
 
-    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor]:
+    def forward(self, pixel_values: torch.Tensor | None) -> tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
 
         if self.position_embeddings is not None:
@@ -119,7 +119,7 @@ class Swin2SRPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
         self.layernorm = nn.LayerNorm(config.embed_dim) if normalize_patches else None
 
-    def forward(self, embeddings: torch.FloatTensor | None) -> tuple[torch.Tensor, tuple[int]]:
+    def forward(self, embeddings: torch.Tensor | None) -> tuple[torch.Tensor, tuple[int]]:
         embeddings = self.projection(embeddings)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
@@ -215,7 +215,6 @@ class Swin2SRPreTrainedModel(Swinv2PreTrainedModel):
         "attentions": OutputRecorder(Swin2SRStage, index=1, capture_initial_hidden_state=False),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
@@ -320,7 +319,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         _, _, height, width = pixel_values.shape
@@ -519,7 +518,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageSuperResolutionOutput:

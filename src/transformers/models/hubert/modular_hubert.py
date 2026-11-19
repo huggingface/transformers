@@ -138,7 +138,6 @@ class HubertPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(HubertAttention, index=1, layer_name="encoder"),  # noqa: F821
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -219,7 +218,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,

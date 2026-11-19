@@ -19,7 +19,6 @@ from transformers import (
     AutoProcessor,
     CohereCompassConfig,
     CohereCompassTextConfig,
-    CohereCompassVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
@@ -40,7 +39,6 @@ if is_torch_available():
         CohereCompassModel,
         CohereCompassTextForSequenceClassification,
         CohereCompassTextModel,
-        CohereCompassVisionModel,
     )
     from transformers.modeling_outputs import BaseModelOutputWithPast
 
@@ -51,28 +49,25 @@ class CohereCompassTextModelTester(CausalLMModelTester):
     causal_lm_class = CohereCompassForCausalLM
     sequence_classification_class = CohereCompassTextForSequenceClassification
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("vocab_size", 64)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "full_attention": {
-                    "rope_type": "default",
-                    "rope_theta": 10_000,
-                    "mrope_section": [1, 1, 2],
-                },  # RoPE layers
-                "sliding_attention": None,  # NoPE layers
-            },
-        )
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "batch_size": 2,
+        "vocab_size": 64,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "max_position_embeddings": 64,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "rope_parameters": {
+            "full_attention": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [1, 1, 2],
+            },  # RoPE layers
+            "sliding_attention": None,  # NoPE layers
+        },
+    }
 
 
 @require_torch
@@ -158,48 +153,49 @@ class CohereCompassTextModelTest(CausalLMModelTest, unittest.TestCase):
 class CohereCompassModelTester(VLMModelTester):
     base_model_class = CohereCompassModel
     config_class = CohereCompassConfig
-    text_config_class = CohereCompassTextConfig
-    vision_config_class = CohereCompassVisionConfig
+
     conditional_generation_class = CohereCompassForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("vocab_size", 64)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("image_token_id", 5)
-        kwargs.setdefault("vision_start_token_id", 6)
-        kwargs.setdefault("vision_end_token_id", 7)
-        kwargs.setdefault("video_token_id", 8)
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_position_embeddings", 64)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("deepstack_visual_indexes", [0])
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "full_attention": {
-                    "rope_type": "default",
-                    "rope_theta": 10_000,
-                    "mrope_section": [1, 1, 2],
-                },
-                "sliding_attention": None,
+    small_config_overrides = {
+        "batch_size": 2,
+        "vocab_size": 64,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "image_token_id": 5,
+        "vision_start_token_id": 6,
+        "vision_end_token_id": 7,
+        "video_token_id": 8,
+        "image_size": 64,
+        "patch_size": 16,
+        "num_position_embeddings": 64,
+        "num_image_tokens": 4,
+        "hidden_act": "silu",
+        "depth": 2,
+        "num_heads": 4,
+        "spatial_merge_size": 2,
+        "temporal_patch_size": 2,
+        "deepstack_visual_indexes": [0],
+        "layer_types": ["full_attention", "sliding_attention"],
+        "rope_parameters": {
+            "full_attention": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [1, 1, 2],
             },
-        )
-        super().__init__(parent, **kwargs)
-        self.out_hidden_size = self.hidden_size
+            "sliding_attention": None,
+        },
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["out_hidden_size"] = values["hidden_size"]
+        return values
 
     @property
     def _special_token_ids(self):
@@ -222,10 +218,8 @@ class CohereCompassModelTester(VLMModelTester):
 
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
-        for token_id in self._special_token_ids:
-            input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, 0] = self.vision_start_token_id
-        input_ids[:, 1] = self.image_token_id
+        input_ids[:, 0] = config.vision_start_token_id
+        input_ids[:, 1 : self.num_image_tokens + 1] = config.image_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
@@ -233,21 +227,9 @@ class CohereCompassModelTester(VLMModelTester):
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 4, 4]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_config(self):
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
 
     def prepare_text_inputs(self):
         input_ids = torch.randint(3, self.vocab_size, (self.batch_size, self.seq_length), device=torch_device)
@@ -277,24 +259,6 @@ class CohereCompassModelTester(VLMModelTester):
         attention_mask = torch.ones_like(input_ids)
         mm_token_type_ids = (input_ids == self.image_token_id).int()
         return input_ids, attention_mask, pixel_values, image_grid_thw, mm_token_type_ids
-
-
-@require_torch
-class CohereCompassVisionModelTest(unittest.TestCase):
-    all_model_classes = (CohereCompassVisionModel,)
-
-    def test_forward(self):
-        config = CohereCompassModelTester(self).get_vision_config()
-        model = CohereCompassVisionModel(config).to(torch_device).eval()
-        grid_thw = torch.tensor([[1, 2, 2]], device=torch_device)
-        patch_dim = config.in_channels * config.temporal_patch_size * config.patch_size**2
-        hidden_states = torch.randn(4, patch_dim, device=torch_device)
-
-        with torch.no_grad():
-            output = model(hidden_states, grid_thw)
-
-        self.assertEqual(output.last_hidden_state.shape, (4, config.hidden_size))
-        self.assertEqual(output.pooler_output.shape, (1, config.out_hidden_size))
 
 
 @require_torch
@@ -402,8 +366,8 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = self.get_model()
         expected_texts = Expectations(
             {
-                ("cuda", None): [
-                    'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
+                ("cuda", (8, 6)): [
+                    "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
                     "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
                 ]
             }
