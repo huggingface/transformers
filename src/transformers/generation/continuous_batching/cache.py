@@ -148,7 +148,7 @@ class PagedAttentionCache:
         if distributed_helper.tp_size > 1 and distributed_helper.are_kv_heads_tp_ed():
             if num_key_value_heads % distributed_helper.tp_size != 0:
                 raise ValueError(
-                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size"
+                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size "
                     f"{distributed_helper.tp_size}."
                 )
             kv_tp_size = distributed_helper.tp_size
@@ -572,7 +572,6 @@ class PagedAttentionMemoryHandler:
         self.trash_bytes = 2 * bytes_per_sector  # the two trash sectors at the start of the cache tensor
         self.num_groups = len(attn_types)
 
-        # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
         # Under tensor parallelism each rank holds 1 / tp_size of the heads, in the cache and in the activations.
         # TODO: add a separate q_tp_size for finer granularity. For rn because if KV heads are TP'ed, so are Q heads.
         self.num_attention_heads = self.config.num_attention_heads // kv_tp_size
@@ -582,6 +581,7 @@ class PagedAttentionMemoryHandler:
             self.num_attention_masks = 0
             self.kv_heads_at_peak = 2 * self.num_key_value_heads
         else:
+            # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
             self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
             self.kv_heads_at_peak = 2 * self.num_attention_heads + self.num_key_value_heads  # repeated KV + V
 
