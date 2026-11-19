@@ -36,21 +36,13 @@ class DeepseekV2ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV2Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+    }
 
 
 @require_torch
