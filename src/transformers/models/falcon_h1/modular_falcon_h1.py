@@ -272,13 +272,23 @@ class FalconH1Mixer(BambaMixer):
 
         # Recurrent form
         if recurrent_state is not None and seq_len == 1:
+            dt_bias = self.dt_bias
+            dt_softplus = True
+            if self.time_step_limit is not None and (
+                self.time_step_limit[0] > 0.0 or self.time_step_limit[1] < float("inf")
+            ):
+                # selective_state_update has no dt_limit argument.
+                dt = F.softplus(dt.float() + dt_bias.float()).clamp(*self.time_step_limit)
+                dt_bias = torch.zeros_like(dt_bias)  # Some kernel versions require a bias tensor.
+                dt_softplus = False
+
             hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
             B = B.view(batch_size, self.n_groups, B.shape[2] // self.n_groups)
             C = C.view(batch_size, self.n_groups, C.shape[2] // self.n_groups)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
-            dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
+            dt_bias = dt_bias[:, None, ...].expand(-1, self.head_dim)
 
             scan_output = mamba2_selective_state_update(
                 recurrent_state,
@@ -291,7 +301,7 @@ class FalconH1Mixer(BambaMixer):
                 # Key difference 2: Potential z gate into kernel
                 z=gate.view(batch_size, self.num_heads, self.head_dim) if not self.mamba_rms_norm else None,
                 dt_bias=dt_bias,
-                dt_softplus=True,
+                dt_softplus=dt_softplus,
             )
             scan_output = scan_output.view(batch_size, 1, self.num_heads * self.head_dim)
 

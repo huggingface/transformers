@@ -320,6 +320,31 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
 
+    def test_mamba2_caching_with_time_step_limit(self):
+        config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
+        config.num_hidden_layers = 1
+        input_ids = input_ids[:2].to(torch_device)
+        for limit in ((0.5, float("inf")), (0.0, 1.0), (0.0, float("inf"))):
+            with self.subTest(time_step_limit=limit), torch.no_grad():
+                config.time_step_limit = limit
+                model = Mamba2Model(config).to(torch_device).eval()
+                mixer = model.layers[0].mixer
+                # Alternate small and large time steps so each bound affects only half the heads.
+                mixer.in_proj.weight[-config.num_heads :].zero_()
+                mixer.dt_bias[::2].fill_(-2.0)
+                mixer.dt_bias[1::2].fill_(2.0)
+
+                full = model(input_ids, use_cache=True)
+                prefix = model(input_ids[:, :-1], use_cache=True)
+                decoded = model(input_ids[:, -1:], cache=prefix.cache, use_cache=True)
+
+                torch.testing.assert_close(
+                    decoded.last_hidden_state, full.last_hidden_state[:, -1:], atol=1e-3, rtol=1e-3
+                )
+                torch.testing.assert_close(
+                    decoded.cache.get_recurrent_state(0), full.cache.get_recurrent_state(0), atol=1e-3, rtol=1e-3
+                )
+
     def test_mamba2_grouped_rmsnorm(self):
         config = self.model_tester.get_config()
         for n_groups in (1, 2, 8):
