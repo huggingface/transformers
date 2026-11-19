@@ -14,19 +14,14 @@
 # limitations under the License.
 """LG AI Research EXAONE Lab"""
 
-import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
@@ -171,32 +166,6 @@ class ExaoneMoeConfig(Exaone4Config):
         super().__post_init__(**kwargs)
 
 
-def get_mask_keys(config: ExaoneMoeConfig) -> list[str]:
-    """Key of each layer's mask. Sliding layers get one key per window size when the window varies across layers."""
-    per_layer_windows = "sliding_window" in (config.per_layer_attributes or ())
-    return [
-        f"sliding_attention_{layer_config.sliding_window}"
-        if per_layer_windows and layer_type == "sliding_attention"
-        else layer_type
-        for layer_type, layer_config in zip(config.layer_types, config.per_layer_config)
-    ]
-
-
-def create_masks(config: ExaoneMoeConfig, **mask_kwargs) -> dict:
-    """Creates one mask per key of `get_mask_keys`, using each layer's own `sliding_window`."""
-    causal_mask_mapping = {}
-    for layer_idx, mask_key in enumerate(get_mask_keys(config)):
-        if mask_key in causal_mask_mapping:
-            continue
-        if mask_key == "full_attention":
-            causal_mask_mapping[mask_key] = create_causal_mask(config=config, **mask_kwargs)
-        else:
-            causal_mask_mapping[mask_key] = create_sliding_window_causal_mask(
-                config=config.per_layer_config[layer_idx], layer_idx=layer_idx, **mask_kwargs
-            )
-    return causal_mask_mapping
-
-
 class ExaoneMoeAttention(Exaone4Attention):
     pass
 
@@ -262,89 +231,10 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
 
 
 class ExaoneMoeModel(Dots1Model):
-    def __init__(self, config: ExaoneMoeConfig):
-        super().__init__(config)
-        self.mask_keys = get_mask_keys(config)
-
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        cache: Cache | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if use_cache and cache is None:
-            cache = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = create_masks(
-                self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-                position_ids=position_ids,
-            )
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.mask_keys[i]],
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                cache=cache,
-                use_cache=use_cache,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-        return MoeModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            cache=cache,
-        )
+    pass
 
 
 class ExaoneMoeForCausalLM(DeepseekV3ForCausalLM):
-    @staticmethod
-    def create_masks_for_generate(
-        config: ExaoneMoeConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        cache: Cache | None,
-        position_ids: torch.Tensor | None = None,
-        block_sequence_ids: torch.Tensor | None = None,
-        **kwargs,
-    ) -> dict:
-        # Used by `generate` with compilable caches: the generic version assumes a single `sliding_window`
-        return create_masks(
-            config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache=cache,
-            position_ids=position_ids,
-            block_sequence_ids=block_sequence_ids,
-        )
-
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],

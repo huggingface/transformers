@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate, get_layer_mask_keys
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -457,32 +457,6 @@ class ExaoneMoeRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def get_mask_keys(config: ExaoneMoeConfig) -> list[str]:
-    """Key of each layer's mask. Sliding layers get one key per window size when the window varies across layers."""
-    per_layer_windows = "sliding_window" in (config.per_layer_attributes or ())
-    return [
-        f"sliding_attention_{layer_config.sliding_window}"
-        if per_layer_windows and layer_type == "sliding_attention"
-        else layer_type
-        for layer_type, layer_config in zip(config.layer_types, config.per_layer_config)
-    ]
-
-
-def create_masks(config: ExaoneMoeConfig, **mask_kwargs) -> dict:
-    """Creates one mask per key of `get_mask_keys`, using each layer's own `sliding_window`."""
-    causal_mask_mapping = {}
-    for layer_idx, mask_key in enumerate(get_mask_keys(config)):
-        if mask_key in causal_mask_mapping:
-            continue
-        if mask_key == "full_attention":
-            causal_mask_mapping[mask_key] = create_causal_mask(config=config, **mask_kwargs)
-        else:
-            causal_mask_mapping[mask_key] = create_sliding_window_causal_mask(
-                config=config.per_layer_config[layer_idx], layer_idx=layer_idx, **mask_kwargs
-            )
-    return causal_mask_mapping
-
-
 @auto_docstring
 class ExaoneMoeModel(ExaoneMoePreTrainedModel):
     def __init__(self, config: ExaoneMoeConfig):
@@ -498,7 +472,7 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
         self.rotary_emb = ExaoneMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
-        self.mask_keys = get_mask_keys(config)
+        self.mask_keys = get_layer_mask_keys(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -532,8 +506,8 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = create_masks(
-                self.config,
+            causal_mask_mapping = create_masks_for_generate(
+                config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 cache=cache,
@@ -644,26 +618,6 @@ class ExaoneMoeForCausalLM(ExaoneMoePreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-        )
-
-    @staticmethod
-    def create_masks_for_generate(
-        config: ExaoneMoeConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        cache: Cache | None,
-        position_ids: torch.Tensor | None = None,
-        block_sequence_ids: torch.Tensor | None = None,
-        **kwargs,
-    ) -> dict:
-        # Used by `generate` with compilable caches: the generic version assumes a single `sliding_window`
-        return create_masks(
-            config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache=cache,
-            position_ids=position_ids,
-            block_sequence_ids=block_sequence_ids,
         )
 
 

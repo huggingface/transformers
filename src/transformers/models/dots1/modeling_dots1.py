@@ -28,7 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate, get_layer_mask_keys
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -467,6 +467,7 @@ class Dots1Model(Dots1PreTrainedModel):
         self.rotary_emb = Dots1RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
+        self.mask_keys = get_layer_mask_keys(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -500,20 +501,13 @@ class Dots1Model(Dots1PreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": position_ids,
-            }
-            mask_creation_functions = {
-                "full_attention": lambda: create_causal_mask(**mask_kwargs),
-                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-            }
-            causal_mask_mapping = {}
-            for layer_type in set(self.config.layer_types):
-                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+            causal_mask_mapping = create_masks_for_generate(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+                position_ids=position_ids,
+            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -521,7 +515,7 @@ class Dots1Model(Dots1PreTrainedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=causal_mask_mapping[self.mask_keys[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 cache=cache,
