@@ -310,15 +310,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, SentencePieceExtractor
 
         converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
-        has_converter = (converter_class is not None and hasattr(converter_class, "convert_from_spm")) or hasattr(
-            cls, "convert_from_spm_model"
-        )
-        # Non-model specific tokenizers rebuild merges from the piece scores in step 3, so skip them in step 1
-        builds_from_proto = (cls is TokenizersBackend or "__init__" not in cls.__dict__) and not has_converter
 
         # 1. Extract vocab, merges, and spm_precompiled from the .model proto
         extractor = SentencePieceExtractor(vocab_file)
-        local_kwargs = extractor.extract(cls.model, generate_merges=not builds_from_proto, **local_kwargs)
+        local_kwargs = extractor.extract(cls.model, **local_kwargs)
 
         # 2. If a model-specific converter exists, use it.
         try:
@@ -342,22 +337,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # Replace placeholder tokens as specified in added_tokens_decoder
             added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
             if isinstance(vocab, dict) and added_tokens_decoder:
-                id_to_token = {token_id: token for token, token_id in vocab.items()}
-                renames = {
-                    int(token_id): str(new_token)
-                    for token_id, new_token in added_tokens_decoder.items()
-                    if id_to_token.get(int(token_id)) not in (None, str(new_token))
-                }
-                # A new token may already be in the vocab only if its id is renamed too (e.g. two pieces swapped)
-                renames = {
-                    token_id: new_token
-                    for token_id, new_token in renames.items()
-                    if new_token not in vocab or vocab[new_token] in renames
-                }
-                for token_id in renames:
-                    del vocab[id_to_token[token_id]]
-                for token_id, new_token in renames.items():
-                    vocab[new_token] = token_id
+                names = {int(token_id): str(token) for token_id, token in added_tokens_decoder.items()}
+                # Skip a rename onto a piece that keeps its own id (two pieces may swap names)
+                kept = {token for token, token_id in vocab.items() if token_id not in names}
+                vocab = {(names[i] if i in names and names[i] not in kept else token): i for token, i in vocab.items()}
 
             # User-defined pieces are handled by the backend tokenizer, not as special tokens
             user_defined = {piece.piece for piece in extractor.proto.pieces if piece.type == 4}

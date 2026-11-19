@@ -161,11 +161,10 @@ class SentencePieceExtractor:
             m.ParseFromString(f.read())
         self.proto = m
 
-    def extract(self, model_type, generate_merges=True, **kwargs) -> tuple[dict[str, int], list[tuple]]:
+    def extract(self, model_type, **kwargs) -> tuple[dict[str, int], list[tuple]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
-        order the merges with respect to the piece scores instead. With `generate_merges=False`, BPE merges are left
-        for the caller to build.
+        order the merges with respect to the piece scores instead.
         """
         self.proto.trainer_spec.unk_id
         if model_type is None:
@@ -178,12 +177,12 @@ class SentencePieceExtractor:
             kwargs["unk_id"] = self.proto.trainer_spec.unk_id
             kwargs["vocab"] = vocab
         else:
-            from .tokenization_utils_base import generate_merges as generate_merges_from_vocab
+            from .tokenization_utils_base import generate_merges
 
             vocab = {word: i for i, (word, score) in enumerate(vocab)}
             kwargs["vocab"] = vocab
-            if generate_merges:
-                kwargs["merges"] = generate_merges_from_vocab(vocab)
+            merges = generate_merges(vocab)
+            kwargs["merges"] = merges
 
         # control tokens are special
         # user defined symbols are not
@@ -720,14 +719,13 @@ class SpmConverter(Converter):
             tokenizer.pre_tokenizer = pre_tokenizers.Sequence(_pre_tokenizers)
 
         # decoder
-        _decoders = [decoders.Replace("▁", " ")]
+        _decoders = [
+            decoders.Metaspace(
+                replacement="▁", prepend_scheme="first" if normalizer_spec.add_dummy_prefix else "never", split=False
+            )
+        ]
         if byte_fallback:
-            _decoders.append(decoders.ByteFallback())
-        if normalizer_spec.add_dummy_prefix:
-            # `Strip` applies to each token, so fuse them first to strip only the start of the text
-            _decoders += [decoders.Fuse(), decoders.Strip(content=" ", left=1)]
-        elif byte_fallback:
-            _decoders.append(decoders.Fuse())
+            _decoders += [decoders.ByteFallback(), decoders.Fuse()]
         tokenizer.decoder = decoders.Sequence(_decoders)
 
         return tokenizer
