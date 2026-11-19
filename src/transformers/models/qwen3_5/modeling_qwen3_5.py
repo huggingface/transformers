@@ -29,8 +29,10 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.continuous_batching import PagedAttentionCache
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.linear_attention_packed import packed_causal_conv1d_update
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -305,6 +307,12 @@ def causal_conv1d_forward(
     seq_len = hidden_states.shape[-1]
     conv_state = cache.get_conv_state(layer_idx, state_idx=state_idx) if cache is not None else None
     weight = conv1d.weight.squeeze(1)
+
+    # When using a paged cache we use a custom implementation that handles packed sequences and updates in place
+    if isinstance(cache, PagedAttentionCache):
+        return packed_causal_conv1d_update(
+            hidden_states, conv_state, weight, conv1d.bias, activation=activation, **kwargs
+        )
 
     # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
     if conv_state is not None and seq_len == 1 and not cache.is_recording_past(layer_idx):

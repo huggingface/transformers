@@ -399,8 +399,9 @@ class ContinuousBatchingIOs:
             # Accumulate the key sequence lengths for the current request
             for layer_type, cache_allocator in self.cache.cache_allocators.items():
                 seqlen_k = cache_allocator.get_seqlen_k(past_length, query_length)
-                cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + seqlen_k)
-                self.max_length_k[layer_type] = max(self.max_length_k[layer_type], seqlen_k)
+                if seqlen_k >= 0:  # some attention types, like linear attention, don't have a key cache
+                    cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + seqlen_k)
+                    self.max_length_k[layer_type] = max(self.max_length_k[layer_type], seqlen_k)
 
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself

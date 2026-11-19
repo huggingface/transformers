@@ -23,10 +23,12 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
+    LINEAR_ATTENTION,
     SLIDING_ATTENTION,
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    LinearAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from .distributed import DistributedHelper
@@ -38,6 +40,7 @@ from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memor
 ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
     SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+    LINEAR_ATTENTION: LinearAttentionCacheAllocator,
 }
 
 
@@ -114,6 +117,8 @@ class PagedAttentionCache:
     (https://github.com/vllm-project/vllm/issues/11382) and the Jenga paper (https://arxiv.org/html/2503.18292v1#S5),
     so we would like to thank the vLLM team and the Jenga authors for their work.
     """
+
+    # ________________________________________________ INITIALIZATION ________________________________________________ #
 
     def __init__(
         self,
@@ -245,6 +250,8 @@ class PagedAttentionCache:
             acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
         return int(acc)
 
+    # __________________________________________________ SCHEDULING __________________________________________________ #
+
     def can_store_request_tokens(self, state: RequestState, request_len: int, dry_run: bool = False) -> bool:
         """Checks if the new tokens for a request can be stored in the cache. If they can, actual cache allocation is
         performed. Otherwise, this has no side effects. If the dry_run flag is set, the cache allocation is not
@@ -292,6 +299,50 @@ class PagedAttentionCache:
                 free_blocks[name] -= blocks_needed[name]
         return len(list_blocks_needed)
 
+    def compute_free_capacity(self, relative: bool = True) -> int | float:
+        """Returns the free capacity of the cache in bytes or as a percentage of the total capacity."""
+        free_bytes = len(self.pool.free_sectors) * self.bytes_per_sector
+        for allocator in self.cache_allocators.values():
+            free_bytes += allocator.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
+        return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
+
+    # ______________________________________________ INPUT PREPARATION _______________________________________________ #
+
+    def extend_read_and_write_indices(
+        self,
+        request_id: str,
+        past_length: int,
+        query_length: int,
+        read_index: list[list[int]] | None,
+        write_index: list[list[int]],
+    ) -> None:
+        """Retrieve physical cache indices for reading KV states in the cache across all allocators. This method
+        coordinates with all cache allocators to build the complete set of read indices needed for attention computation.
+        When read_index is None, the batch has no cache reads and we only compute the write indices.
+        The i-th list of each accumulator corresponds to the i-th allocator, in the order of the cache_allocators dict.
+        """
+        # Write indices are always computed
+        for allocator, write_indices in zip(self.cache_allocators.values(), write_index):
+            write_indices.extend(allocator.get_write_indices(request_id, past_length, query_length))
+        # Read indices are only computed if there are cache indices
+        if read_index is not None:
+            for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
+                read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
+
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        """Fills each allocator's row of the kernel block table for the given request."""
+        for allocator in self.cache_allocators.values():
+            allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
+
+    # _______________________________________________ BLOCK MANAGEMENT _______________________________________________ #
+
+    def reset(self) -> None:
+        """Frees the cache of all requests and returns all sectors to the global pool."""
+        self.free_all_requests(clear_ledgers=True)
+        self.pool.reset()
+
     def free_blocks(self, request_id: str, no_cache: bool = False) -> None:
         """Signals all cache allocators that a request's cache can be freed. If the `no_cache` flag is passed, the freed
         blocks go straight to the free pool, and cannot be reused later."""
@@ -304,6 +355,8 @@ class PagedAttentionCache:
             allocator.free_all_requests()
             if clear_ledgers:
                 allocator.ledger.reset()
+
+    # ________________________________________________ BLOCK SHARING _________________________________________________ #
 
     def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
         """Searches the prompt for a prefix whose blocks are already in the cache. Matched blocks are shared with the
@@ -368,70 +421,6 @@ class PagedAttentionCache:
                 evicted_any = True
         return evicted_any
 
-    def extend_read_and_write_indices(
-        self,
-        request_id: str,
-        past_length: int,
-        query_length: int,
-        read_index: list[list[int]] | None,
-        write_index: list[list[int]],
-    ) -> None:
-        """Retrieve physical cache indices for reading KV states in the cache across all allocators. This method
-        coordinates with all cache allocators to build the complete set of read indices needed for attention computation.
-        When read_index is None, the batch has no cache reads and we only compute the write indices.
-        The i-th list of each accumulator corresponds to the i-th allocator, in the order of the cache_allocators dict.
-        """
-        # Write indices are always computed
-        for allocator, write_indices in zip(self.cache_allocators.values(), write_index):
-            write_indices.extend(allocator.get_write_indices(request_id, past_length, query_length))
-        # Read indices are only computed if there are cache indices
-        if read_index is not None:
-            for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
-                read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
-
-    @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def update(
-        self,
-        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
-        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
-        layer_idx: int,
-        kwargs: dict[str, Any],  # updated in place
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, num_kv_heads, seqlen_q + past_length, head_dim]
-        """Updates the cache or the kwargs before entering the flash attention wrapper. The kwargs are updated in place.
-        For an index-based update, the keys and values are actually updated to seqlen "seqlen_q + past_length". For a
-        block table update, the KV states are untouched but the kwargs are filled with what is needed to call flash.
-        """
-        allocator = self.layer_to_allocator[layer_idx]
-
-        # Select the right keywords arguments for this layer. These are always needed.
-        kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
-        kwargs["max_length_k"] = kwargs["max_length_k"][allocator.layer_type]
-
-        # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
-        block_table = kwargs.get("block_table")
-        if block_table is not None:
-            k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
-            kwargs["block_table"] = block_table[allocator.index]
-            kwargs["k_cache"] = k_cache
-            kwargs["v_cache"] = v_cache
-
-        # Index-based update: actually update the cache and return full KV
-        else:
-            read_index = kwargs["read_index"][allocator.index]
-            write_index = kwargs["write_index"][allocator.index]
-            # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
-            # KV states in the same shape they were passed. It will help when we unify with regular Cache.
-            key_states, value_states = (x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
-            key_states, value_states = allocator.update(key_states, value_states, layer_idx, read_index, write_index)
-            key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
-
-        return key_states, value_states
-
-    def reset(self) -> None:
-        """Frees the cache of all requests and returns all sectors to the global pool."""
-        self.free_all_requests(clear_ledgers=True)
-        self.pool.reset()
-
     def prepare_fork_request(
         self, src_state: RequestState, dst_req_ids: list[str], copy_src_and_dst: dict[str, tuple[list[int], list[int]]]
     ) -> list[str]:
@@ -478,21 +467,55 @@ class PagedAttentionCache:
             if src_blocks:
                 self.cache_allocators[name].copy_blocks(src_blocks, dst_blocks)
 
-    def compute_free_capacity(self, relative: bool = True) -> int | float:
-        """Returns the free capacity of the cache in bytes or as a percentage of the total capacity."""
-        free_bytes = len(self.pool.free_sectors) * self.bytes_per_sector
-        for allocator in self.cache_allocators.values():
-            free_bytes += allocator.pool.count_free_blocks(allocator.index) * allocator.bytes_per_block
-        return free_bytes / (self.num_sectors * self.bytes_per_sector if relative else 1)
+    # _____________________________________________ MODELING ENTRYPOINTS _____________________________________________ #
 
-    def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
-    ) -> None:
-        """Fills each allocator's row of the kernel block table for the given request."""
-        for allocator in self.cache_allocators.values():
-            allocator.fill_block_table(request_id, past_length, query_length, block_table[allocator.index])
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
+    def update(
+        self,
+        key_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        value_states: torch.Tensor,  # shape [1, num_kv_heads, seqlen_q, head_dim]
+        layer_idx: int,
+        kwargs: dict[str, Any],  # updated in place
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [1, num_kv_heads, seqlen_q + past_length, head_dim]
+        """Updates the cache or the kwargs before entering the flash attention wrapper. The kwargs are updated in place.
+        For an index-based update, the keys and values are actually updated to seqlen "seqlen_q + past_length". For a
+        block table update, the KV states are untouched but the kwargs are filled with what is needed to call flash.
+        """
+        allocator = self.layer_to_allocator[layer_idx]
 
-    # DEPRECATED METHODS
+        # Select the right keywords arguments for this layer. These are always needed.
+        kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
+        kwargs["max_length_k"] = kwargs["max_length_k"][allocator.layer_type]
+
+        # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
+        block_table = kwargs.get("block_table")
+        if block_table is not None:
+            k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+            kwargs["block_table"] = block_table[allocator.index]
+            kwargs["k_cache"] = k_cache
+            kwargs["v_cache"] = v_cache
+
+        # Index-based update: actually update the cache and return full KV
+        else:
+            read_index = kwargs["read_index"][allocator.index]
+            write_index = kwargs["write_index"][allocator.index]
+            # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
+            # KV states in the same shape they were passed. It will help when we unify with regular Cache.
+            key_states, value_states = (x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
+            key_states, value_states = allocator.update(key_states, value_states, layer_idx, read_index, write_index)
+            key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
+
+        return key_states, value_states
+
+    def get_conv_state(self, layer_idx: int, state_idx: int, kwargs: dict[str, Any]) -> torch.Tensor:
+        """Returns the conv state for the given layer and state index."""
+        allocator = self.layer_to_allocator[layer_idx]
+        if not isinstance(allocator, LinearAttentionCacheAllocator):
+            raise ValueError(f"The allocator for {layer_idx = } is of type {type(allocator).__name__}.")
+        return allocator.get_conv_state(layer_idx, state_idx, kwargs)
+
+    # ______________________________________________ DEPRECATED METHODS ______________________________________________ #
+
     def get_cache_for_block_table(self, layer_idx: int) -> tuple[int, torch.Tensor, torch.Tensor]:
         """Deprecated method to get the K and V cache views for a block table update. Now baked in "update"."""
         warnings.warn(
