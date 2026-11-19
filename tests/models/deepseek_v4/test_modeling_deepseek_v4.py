@@ -22,6 +22,7 @@ from transformers.testing_utils import (
     require_cuda_capability_at_least,
     require_torch,
     require_torch_accelerator,
+    require_torch_accelerator_memory,
     require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_n_accelerators,
@@ -228,6 +229,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 @require_torch_accelerator
+@require_torch_accelerator_memory(memory=600)  # ~582 GiB of bf16 weights after FP8 dequant, plus activations
 @slow
 class DeepseekV4IntegrationTest(unittest.TestCase):
     """End-to-end check on the published DeepSeek-V4-Flash checkpoint.
