@@ -24,6 +24,7 @@ import multiprocessing
 import os
 import queue
 import threading
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -35,6 +36,11 @@ from tqdm import tqdm
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.chat_template_utils import _REASONING_FIELDS
+from transformers.utils.import_utils import is_serve_available
+
+
+if is_serve_available():
+    from starlette.datastructures import Headers, MutableHeaders
 
 
 if TYPE_CHECKING:
@@ -193,6 +199,29 @@ def freeze_garbage_collector() -> None:
     initialized (model loaded, server built), to reduce the collector's overhead from static objects while serving."""
     gc.collect()
     gc.freeze()
+
+
+class RequestIdMiddleware:
+    """
+    Gets or sets the request ID in the header. A plain ASGI middleware: `@app.middleware("http")` would pass every
+    chunk of a streamed response through an extra task.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        request_id = Headers(scope=scope).get(X_REQUEST_ID) or str(uuid.uuid4())
+        scope.setdefault("state", {})["request_id"] = request_id
+
+        async def send_with_request_id(message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)[X_REQUEST_ID] = request_id
+            await send(message)
+
+        await self.app(scope, receive, send_with_request_id)
 
 
 # Errors

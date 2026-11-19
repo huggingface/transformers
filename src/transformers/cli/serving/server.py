@@ -15,7 +15,6 @@
 FastAPI app factory.
 """
 
-import uuid
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
     from .transcription import TranscriptionHandler
 
 from .model_manager import ModelManager
-from .utils import X_REQUEST_ID, EngineDeadError, ModelNotServedError
+from .utils import EngineDeadError, ModelNotServedError, RequestIdMiddleware
 
 
 logger = logging.get_logger(__name__)
@@ -91,14 +90,7 @@ def build_server(
 
     # ---- Middleware ----
 
-    @app.middleware("http")
-    async def request_id_middleware(request: Request, call_next):
-        """Get or set the request ID in the header."""
-        request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
-        request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers[X_REQUEST_ID] = request_id
-        return response
+    app.add_middleware(RequestIdMiddleware)
 
     # ---- Routes ----
 
