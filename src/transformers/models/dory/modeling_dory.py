@@ -26,7 +26,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -485,20 +485,14 @@ class DoryModel(DoryPreTrainedModel):
 
         shared_kv_states = None
         if past_key_values is not None and last_loop_only:
-            # Only the last loop writes: earlier loops read this snapshot of the past, see `DoryAttention`
-            recurrent_cache = past_key_values.layers[recurrent_start:recurrent_end]
-            if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer) for layer in recurrent_cache):
-                raise ValueError("`recurrent_kv_cache_mode='last_loop'` needs a dynamic cache")
+            # Only the last loop writes, the earlier ones read the past
             shared_kv_states = {
-                recurrent_start + i: (layer.keys, layer.values)
-                for i, layer in enumerate(recurrent_cache)
-                if layer.is_initialized
+                i: (c.keys, c.values) for i, c in enumerate(past_key_values.layers) if c.is_initialized
             }
         elif past_key_values is not None and len(past_key_values.layers) == self.config.num_hidden_layers:
-            # `per_loop`: loops 1, 2, ... get their own copies of the recurrent cache layers, appended at the end
-            # ponytail: copied at the first forward, a cache filled with another loop count is not resized
-            recurrent_cache = past_key_values.layers[recurrent_start:recurrent_end]
-            past_key_values.layers += [copy.deepcopy(layer) for _ in range(n_loops - 1) for layer in recurrent_cache]
+            # Loops 1, 2, ... write to copies of the recurrent cache layers, appended at the end
+            recurrent_cache = past_key_values.layers[recurrent_start:recurrent_end] * (n_loops - 1)
+            past_key_values.layers += [copy.deepcopy(layer) for layer in recurrent_cache]
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
