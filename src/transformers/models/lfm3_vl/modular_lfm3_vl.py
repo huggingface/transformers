@@ -454,8 +454,6 @@ class Lfm3VlModel(Qwen2VLModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_features, torch.Tensor):
-                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -464,8 +462,6 @@ class Lfm3VlModel(Qwen2VLModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output
-            if not isinstance(video_features, torch.Tensor):
-                video_features = torch.cat(video_features, dim=0)
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features

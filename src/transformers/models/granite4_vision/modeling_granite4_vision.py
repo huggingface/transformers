@@ -37,9 +37,10 @@ from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
@@ -939,6 +940,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -986,8 +988,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
         if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
             for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
-                if not isinstance(packed_features, torch.Tensor):
-                    packed_features = torch.cat(packed_features, dim=0)
                 packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     vision_mask = self.get_placeholder_mask(
@@ -1027,6 +1027,14 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
             (layer, torch.split(features, split_sizes)) for layer, features in outputs.deepstack_features
         ]
         return outputs
+
+    @staticmethod
+    def merge_modality_outputs(outputs):
+        """Concatenates each `(layer, features)` deepstack pair back into one tensor."""
+        if isinstance(outputs.deepstack_features[0][1], torch.Tensor):
+            return outputs
+        deepstack_features = [(layer, torch.cat(features)) for layer, features in outputs.deepstack_features]
+        return type(outputs)(**{**outputs, "deepstack_features": deepstack_features})
 
 
 @auto_docstring(

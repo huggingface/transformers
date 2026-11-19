@@ -720,9 +720,6 @@ class Qwen3VLModel(Qwen2VLModel):
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
             deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
-            if not isinstance(image_embeds, torch.Tensor):
-                image_embeds = torch.cat(image_embeds, dim=0)
-                deepstack_image_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -732,9 +729,6 @@ class Qwen3VLModel(Qwen2VLModel):
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
             deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
-            if not isinstance(video_embeds, torch.Tensor):
-                video_embeds = torch.cat(video_embeds, dim=0)
-                deepstack_video_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
