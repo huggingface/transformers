@@ -592,7 +592,6 @@ class WavLMPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(WavLMAttention, index=1, layer_name="encoder"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

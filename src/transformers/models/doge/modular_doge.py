@@ -80,7 +80,6 @@ class DogeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "doge"
-    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `DogeModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -443,7 +442,6 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
         "attentions": DogeAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

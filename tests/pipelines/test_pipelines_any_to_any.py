@@ -57,6 +57,42 @@ if is_torch_available():
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
 
+    def test_media_only_blip_image_text_output(self):
+        import torch
+        from PIL import Image
+
+        from transformers import AutoModelForMultimodalLM
+
+        model_id = "hf-internal-testing/tiny-random-BlipForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.float32).eval()
+        pipe = AnyToAnyPipeline(model=model, processor=processor, task="any-to-any", device=-1)
+        image = Image.new("RGB", (64, 64), "white")
+
+        for return_full_text in (False, True):
+            with self.subTest(return_full_text=return_full_text):
+                result = pipe(
+                    images=image,
+                    max_new_tokens=1,
+                    return_full_text=return_full_text,
+                )
+                self.assertEqual(len(result), 1)
+                self.assertIsNone(result[0]["input_text"])
+                self.assertIsInstance(result[0]["generated_text"], str)
+
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 2}
+
+        outputs = pipe(text=messages, return_tensors=True, generate_kwargs=kwargs)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
     def test_string_assistant_prefill_full_text(self):
         import copy
 

@@ -45,7 +45,7 @@ class DiffLlamaConfig(PreTrainedConfig):
     """
 
     model_type = "diffllama"
-    keys_to_ignore_at_inference = ["cache"]
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
 
     vocab_size: int = 32000
     hidden_size: int = 2048

@@ -16,7 +16,8 @@ import os
 import time
 import types
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from copy import deepcopy
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -45,8 +46,9 @@ def _fmt(val: Any, spec: str = "", missing: str = "X") -> str:
 
 def _config_summary(cfg: Any) -> dict[str, Any]:
     """Extract a JSON-friendly summary of a dataclass/config object."""
-    raw = cfg.to_dict() if hasattr(cfg, "to_dict") else cfg.__dict__
-    return {k: v for k, v in raw.items() if isinstance(v, (int, float, str, bool, type(None)))}
+    if hasattr(cfg, "to_json_string"):
+        return json.loads(cfg.to_json_string(use_diff=False))
+    return asdict(cfg) if is_dataclass(cfg) else dict(cfg.__dict__)
 
 
 # Data-related functions
@@ -220,9 +222,6 @@ class BenchmarkResults:
     ) -> None:
         """Run one CB benchmark and record its timings, tokens, peak memory and optional accuracy."""
 
-        gen_config = GenerationConfig() if gen_config is None else gen_config
-        gen_config.max_new_tokens = max_new_tokens
-
         avg_input = sum(len(x) for x in data) / max(len(data), 1)
         entry = BenchmarkEntry(
             label=label or f"bench_{len(self.entries)}",
@@ -230,7 +229,7 @@ class BenchmarkResults:
             avg_input_tokens=avg_input,
             max_new_tokens=max_new_tokens,
             cb_config=_config_summary(cb_config),
-            gen_config=_config_summary(gen_config),
+            gen_config=_config_summary(gen_config) if gen_config is not None else {},
         )
         # In DP, entries are sharded round-robin across ranks: entry i runs on rank i % dp_size.
         if self.dp_size > 1 and len(self.entries) % self.dp_size != self.global_rank:
@@ -247,6 +246,10 @@ class BenchmarkResults:
         self.cleanup()
 
         try:
+            # No override means natural generation, including the model's EOS token(s).
+            gen_config = deepcopy(model.generation_config if gen_config is None else gen_config)
+            gen_config.max_new_tokens = max_new_tokens
+            entry.gen_config = _config_summary(gen_config)
             e2e_start = time.perf_counter()
             outputs = model.generate_batch(
                 inputs=data,
