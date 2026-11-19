@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from dataclasses import dataclass
 from fractions import Fraction
-from itertools import accumulate
 
 import numpy as np
 import torch
@@ -644,8 +644,9 @@ class Granite4VisionModel(LlavaNextModel):
         """Concatenates each `(layer, features)` deepstack pair back into one tensor."""
         if isinstance(outputs.deepstack_features[0][1], torch.Tensor):
             return outputs
-        deepstack_features = [(layer, torch.cat(features)) for layer, features in outputs.deepstack_features]
-        return type(outputs)(**{**outputs, "deepstack_features": deepstack_features})
+        merged = copy.copy(outputs)
+        merged.deepstack_features = [(layer, torch.cat(features)) for layer, features in outputs.deepstack_features]
+        return merged
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -778,59 +779,6 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             attentions=outputs.attentions,
             deepstack_features=outputs.deepstack_features,
         )
-
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.LongTensor | None = None,
-    ) -> dict[str, dict]:
-        # override -> model has only deepstack features with no pooler output
-
-        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
-            else:
-                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
-                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
-
-        image_outputs = mm_encoder_output.get("image")
-        if image_outputs is None or getattr(image_outputs, "deepstack_features", None) is None:
-            return mm_encoder_output
-
-        # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
-        if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
-        else:
-            num_image_tokens_in_text = (input_ids == self.config.image_token_id).sum(-1)
-        num_image_tokens_in_vision = [len(out) for out in image_outputs.deepstack_features[0][1]]
-        num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
-        num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
-
-        # 2. Find offsets to split encoder output into separate groups per text. In a single batch
-        # we might get a text with single image and another with two images, so the most reliable
-        # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
-        offsets = [0] + [i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text]
-
-        # 3. GraniteVision has each deepstack feature as a `tuple(layer_idx, list[torch.Tensor])`
-        # Each deepstack feat is `(total_image_len, dim)` tensor
-        image_outputs.deepstack_features = [
-            (
-                tuple_item[0],
-                [
-                    expanded_feats
-                    for start, end in zip(offsets[:-1], offsets[1:])
-                    for expanded_feats in repeat_tensor_or_list(tuple_item[1][start:end], expand_size)
-                ],
-            )
-            for tuple_item in image_outputs.deepstack_features
-        ]
-
-        return mm_encoder_output
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Granite4VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
