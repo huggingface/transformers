@@ -462,24 +462,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                 },
                 "rocm": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/liger-kernels",
                         layer_name="LigerRMSNorm",
-                        version=3,
+                        version=4,
                     ),
                 },
                 "xpu": {
