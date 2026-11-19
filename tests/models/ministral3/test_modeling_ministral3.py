@@ -112,7 +112,8 @@ class Ministral3IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", None): "My favourite condiment is 100% pure olive oil. It is a versatile, healthy, and delicious ingredient that can",
+                ("cuda", None): "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
+                ("cuda", (8, 6)): "My favourite condiment is 100% pure olive oil. It is a versatile, healthy, and delicious ingredient that can",
                 ("xpu", None): "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",
             }
         )
