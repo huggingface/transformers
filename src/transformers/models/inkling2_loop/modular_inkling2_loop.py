@@ -27,7 +27,7 @@ from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
@@ -720,21 +720,8 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
     }
 
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        std = self.config.get_text_config().initializer_range
-        if isinstance(module, Inkling2LoopRelativeLogits):
-            init.normal_(module.proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2LoopExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2LoopTopKRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
-            init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Inkling2LoopScaledL2Clip):
-            init.ones_(module.scale)
-        elif isinstance(module, Inkling2LoopDynamicShortConvolution):
-            init.zeros_(module.static_weight)
-        elif isinstance(module, (Inkling2LoopBlockAttentionResidual, Inkling2LoopMessageAttentionResidual)):
+        super()._init_weights(module)
+        if isinstance(module, Inkling2LoopMessageAttentionResidual):
             init.zeros_(module.query)
 
 

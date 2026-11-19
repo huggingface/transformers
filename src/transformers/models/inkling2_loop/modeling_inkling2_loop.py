@@ -1148,7 +1148,9 @@ class Inkling2LoopPreTrainedModel(PreTrainedModel):
             init.ones_(module.scale)
         elif isinstance(module, Inkling2LoopDynamicShortConvolution):
             init.zeros_(module.static_weight)
-        elif isinstance(module, (Inkling2LoopBlockAttentionResidual, Inkling2LoopMessageAttentionResidual)):
+        elif isinstance(module, Inkling2LoopBlockAttentionResidual):
+            init.zeros_(module.query)
+        if isinstance(module, Inkling2LoopMessageAttentionResidual):
             init.zeros_(module.query)
 
 

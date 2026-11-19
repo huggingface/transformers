@@ -1202,12 +1202,6 @@ class Inkling2PreTrainedModel(PreTrainedModel):
             init.zeros_(module.static_weight)
         elif isinstance(module, Inkling2BlockAttentionResidual):
             init.zeros_(module.query)
-        elif isinstance(module, Inkling2VisionEmbeddings):
-            init.normal_(module.class_embedding, mean=0.0, std=std)
-            init.normal_(module.cls_position_embedding, mean=0.0, std=std)
-        elif isinstance(module, Inkling2VisionEncoderLayer):
-            init.constant_(module.lambda_1, module.config.layer_scale_init_value)
-            init.constant_(module.lambda_2, module.config.layer_scale_init_value)
 
 
 class Inkling2NormedEmbedding(nn.Embedding):
@@ -1420,6 +1414,16 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
         self.layers = nn.ModuleList([Inkling2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.merger = Inkling2VisionMerger(config)
         self.post_init()
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Inkling2VisionEmbeddings):
+            init.normal_(module.class_embedding, mean=0.0, std=std)
+            init.normal_(module.cls_position_embedding, mean=0.0, std=std)
+        elif isinstance(module, Inkling2VisionEncoderLayer):
+            init.constant_(module.lambda_1, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, module.config.layer_scale_init_value)
 
     @capture_outputs
     @auto_docstring
