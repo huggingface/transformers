@@ -202,8 +202,23 @@ WORKDIR /
 # and the scheduled builder has no persistent layer cache to invalidate anyway.)
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-# Install transformers (editable) + test deps.
-RUN python3 -m pip install --no-cache-dir -e ./transformers[testing]
+# Install transformers (editable) + test deps, and `kernels` through
+# transformers' own [kernels] extra: pip takes the newest kernels in the range
+# REF declares (setup.py; kernels>=0.18.2,<0.19 on 2026-11-19) and follows it
+# when main moves the range. A kernels outside that range would install
+# cleanly, but is_kernels_available() is then False and hub_kernels defines no
+# mapping, so every Hub-kernel test would stop testing anything.
+# kernels used to be uninstalled here, as in the MI300 image: adding it took
+# gpt_oss from 5 failures to 25, all resolving the CUDA-only
+# kernels-community/vllm-flash-attn3. Retested on ROCm 10.1 with kernels 0.17.2:
+# the kernel tests in ministral3, granite_swa and granitemoe_swa pass, and
+# ministral3's fp8 slow tests load finegrained-fp8's torch-rocm build and run.
+# On torch 2.15 + ROCm 10.2, megablocks, activation and aiter-flash-attn load
+# from the Hub as they are; see "Hub kernels" at the end of this file.
+# No urllib3 pin: since kernels 0.18.3 sigstore (which wanted urllib3 2.x
+# against [testing]'s <2) is optional, and urllib3 resolves to 2.x through
+# requests and blobfile anyway.
+RUN python3 -m pip install --no-cache-dir -e "./transformers[testing,kernels]"
 
 # When installing in editable mode, `transformers` is not always recognized as
 # a package; this line makes python aware of it (same as the MI300 image).
@@ -221,8 +236,6 @@ RUN python3 -m pip uninstall -y py3nvml pynvml nvidia-ml-py apex || true
 # wedge; it is not. 16.7 raises on EOF (pytest-rerunfailures#358). Installed
 # after [testing], which picks <16.0, and with --no-deps so nothing else moves.
 RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
-
-# `kernels` is pinned in below, not uninstalled; see the note there.
 
 # Common extra deps used across the test suite. scipy, librosa and soundfile
 # are easy to miss: transformers' lazy imports turn their absence into errors
@@ -244,23 +257,8 @@ RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 # matplotlib: auto's test_custom_tokenizer_init loads a remote-code tokenizer
 # that imports it, so without it that slow test fails with an ImportError naming
 # matplotlib, on every GPU.
-#
-# kernels, pinned to transformers' range (setup.py: kernels>=0.18.0,<0.19 since
-# transformers#50307). Outside it, is_kernels_available() is False and
-# hub_kernels defines no mapping at all.
-# It used to be uninstalled: adding it took gpt_oss from 5 failures to 25, all
-# resolving the CUDA-only kernels-community/vllm-flash-attn3. Retested on ROCm
-# 10.1 with kernels 0.17.2: the kernel tests in ministral3, granite_swa and
-# granitemoe_swa pass, and ministral3's fp8 slow tests now load
-# finegrained-fp8's torch-rocm build and run. On torch 2.15 + ROCm 10.2,
-# megablocks, activation and aiter-flash-attn load from the Hub as they are;
-# see "Hub kernels" at the end of this file.
-# No urllib3 pin any more: in kernels 0.18.3 sigstore (which wanted
-# urllib3 2.x against [testing]'s <2) is optional, and urllib3 resolves to 2.x
-# through requests and blobfile anyway.
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm \
-      scipy librosa soundfile pycocotools peft bitsandbytes matplotlib \
-      "kernels==0.18.3"
+      scipy librosa soundfile pycocotools peft bitsandbytes matplotlib
 
 # Media decoders needed by audio/video model tests:
 #  - PyAV (`av`): torchvision video ops
@@ -343,9 +341,10 @@ ENV FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE
 # Atlas-Inference/gdn has no torch 2.15 build yet, so qwen3_5's gated-delta-net
 # runs transformers' PyTorch path until it gets one.
 
-# Last: kernels must still import, and a later step that resolved deps must not
-# have taken pytest-rerunfailures back below 16.7.
-RUN python3 -c "import kernels; \
+# Last: kernels must still import and be in the range transformers accepts, and
+# a later step that resolved deps must not have taken pytest-rerunfailures back
+# below 16.7.
+RUN python3 -c "from transformers.utils import is_kernels_available; assert is_kernels_available(), 'kernels missing or outside transformers range'; \
 from importlib.metadata import version as v; assert v('pytest-rerunfailures') == '16.7', v('pytest-rerunfailures')"
 
 # Record what this build resolved, for comparing two images.
