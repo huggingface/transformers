@@ -41,6 +41,36 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
             str(w[0].message),
         )
 
+    def test_spm_converter_bpe_model(self):
+        # Regression test: converting a BPE-trained SentencePiece model through
+        # `SpmConverter.tokenizer` used to crash with
+        # `AttributeError: 'list' object has no attribute '__name__'` because the
+        # BPE branch called `SentencePieceExtractor.extract` with a stale signature.
+        import sentencepiece as spm
+
+        spm_model_file = get_tests_dir("fixtures/test_sentencepiece_bpe.model")
+
+        original_tokenizer = FakeOriginalTokenizer(vocab_file=spm_model_file)
+        tokenizer = SpmConverter(original_tokenizer).converted()
+
+        # The converted vocab must carry every piece from the SentencePiece model
+        # at its exact id, and merges must be generated from the piece scores.
+        extractor = SentencePieceExtractor(spm_model_file)
+        for piece_id, piece in enumerate(extractor.proto.pieces):
+            self.assertEqual(tokenizer.id_to_token(piece_id), piece.piece)
+        merges = json.loads(tokenizer.to_str())["model"]["merges"]
+        self.assertGreater(len(merges), 0)
+
+        # The converted tokenizer must encode exactly like SentencePiece itself.
+        sp = spm.SentencePieceProcessor(model_file=spm_model_file)
+        for text in [
+            "the quick brown fox jumps over the lazy dog",
+            "sentence piece bpe conversion test",
+            "hello world this is a longer representative input for tokenization",
+            "tokenization",
+        ]:
+            self.assertEqual(tokenizer.encode(text, add_special_tokens=False).ids, sp.encode(text))
+
     def test_spm_precompiled_charsmap_empty_is_none(self):
         # If the `precompiled_charsmap` is empty (`b""`), it should be converted to `None` and complete conversion successfully.
         spm_model_file = get_tests_dir("fixtures/test_sentencepiece.model")
