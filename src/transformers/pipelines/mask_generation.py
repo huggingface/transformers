@@ -235,11 +235,17 @@ class MaskGenerationPipeline(ChunkPipeline):
                     # TODO: Identifying the model by the type of its returned embeddings is brittle.
                     #       Consider using a more robust method for distinguishing model types here.
 
-            for i in range(0, n_points, points_per_batch):
-                batched_points = grid_points[:, i : i + points_per_batch, c : c + 1, :]
-                labels = input_labels[:, i : i + points_per_batch, c : c + 1]
+            crop_points = grid_points[:, :, c : c + 1, :]
+            crop_labels = input_labels[:, :, c : c + 1]
+            valid_points = crop_labels[0, :, 0] != -10
+            crop_points = crop_points[:, valid_points]
+            crop_labels = crop_labels[:, valid_points]
+            crop_n_points = crop_points.shape[1]
+            for i in range(0, crop_n_points, points_per_batch):
+                batched_points = crop_points[:, i : i + points_per_batch]
+                labels = crop_labels[:, i : i + points_per_batch]
                 input_boxes = crop_boxes[c : c + 1]
-                is_last = (c == len(pixel_values) - 1) and (i + points_per_batch >= n_points)
+                is_last = (c == len(pixel_values) - 1) and (i + points_per_batch >= crop_n_points)
 
                 yield {
                     "input_points": batched_points,
