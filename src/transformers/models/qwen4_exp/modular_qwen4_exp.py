@@ -854,7 +854,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     # during forward. Note that if it fits on accelerator (e.g. huge B200 gpus), then it will not be skipped, and will be put on device
     _no_placement_params = ["ple.ple_embedding.ngram_embedding.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Qwen4ExpTextGatedDeltaNet):

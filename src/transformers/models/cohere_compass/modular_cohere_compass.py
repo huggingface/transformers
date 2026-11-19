@@ -82,7 +82,6 @@ class CohereCompassTextConfig(Cohere2Config):
 
     model_type = "cohere_compass_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
     rope_parameters: dict[str, RopeParameters | dict | float | str | int | None] | None = None
@@ -316,7 +315,6 @@ class CohereCompassPreTrainedModel(Qwen3VLPreTrainedModel):
         "attentions": CohereCompassAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, CohereCompassRotaryEmbedding):

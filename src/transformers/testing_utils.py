@@ -242,35 +242,6 @@ _VLM_COMMON_MODEL_NAMES_MAP = {
     "conditional_generation_class": "ForConditionalGeneration",
 }
 
-# Shared text-model defaults for CausalLMModelTester and MultiModalModelTester.
-_TEXT_MODEL_TESTER_DEFAULTS = {
-    "batch_size": 13,
-    "seq_length": 7,
-    "is_training": True,
-    "use_input_mask": True,
-    "use_labels": True,
-    "vocab_size": 99,
-    "hidden_size": 32,
-    "num_hidden_layers": 2,
-    "num_attention_heads": 2,
-    "num_key_value_heads": 2,
-    "intermediate_size": 32,
-    "hidden_act": "gelu",
-    "max_position_embeddings": 512,
-    "pad_token_id": 0,
-    "bos_token_id": 1,
-    "eos_token_id": 2,
-    "expert_interval": 1,
-    "moe_layer_start_index": 0,
-    "moe_intermediate_size": 16,
-    "shared_expert_intermediate_size": 36,
-    "shared_expert_gate": True,
-    "moe_num_shared_experts": 2,
-    "num_experts_per_tok": 2,
-    "num_experts": 8,
-}
-
-
 if is_torch_available():
     import torch
     from safetensors.torch import load_file
@@ -2855,23 +2826,24 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
     return _RunOutput(await p.wait(), out, err)
 
 
-def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
+def execute_subprocess_async(
+    cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True, allow_empty_output=False
+) -> _RunOutput:
+    """Run a subprocess, requiring output unless `allow_empty_output=True`."""
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
     )
 
     cmd_str = " ".join(cmd)
-    if result.returncode > 0:
+    if result.returncode != 0:
         stderr = "\n".join(result.stderr)
         raise RuntimeError(
             f"'{cmd_str}' failed with returncode {result.returncode}\n\n"
             f"The combined stderr from workers follows:\n{stderr}"
         )
 
-    # check that the subprocess actually did run and produced some output, should the test rely on
-    # the remote side to do the testing
-    if not result.stdout and not result.stderr:
+    if not allow_empty_output and not result.stdout and not result.stderr:
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result

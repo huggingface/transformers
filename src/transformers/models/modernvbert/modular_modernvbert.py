@@ -163,7 +163,6 @@ class ModernVBertPreTrainedModel(SmolVLMPreTrainedModel):
     config: ModernVBertConfig
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
 

@@ -108,7 +108,6 @@ class T5GemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5gemma"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "encoder": T5GemmaModuleConfig,
         "decoder": T5GemmaModuleConfig,
@@ -402,7 +401,6 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
     # Recording is declared on T5GemmaEncoder/T5GemmaDecoder; None avoids inheriting the gemma2 dict
     _can_record_outputs = None
 
-    @torch.no_grad()
     def _init_weights(self, module):
         # TODO: support initialization for encoders and decoders separately(?)
         PreTrainedModel._init_weights(self, module)

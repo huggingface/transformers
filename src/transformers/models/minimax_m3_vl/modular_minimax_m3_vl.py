@@ -628,7 +628,6 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     _supports_attention_backend = True
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)

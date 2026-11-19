@@ -88,7 +88,6 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
 
     model_type = "glm4v_moe_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -232,7 +231,6 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Glm4vMoeTextDecoderLayer", "Glm4vMoeVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {}
 
 

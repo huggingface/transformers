@@ -14,56 +14,52 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Optimum Quanto
+# Quanto
 
-[Quanto](https://github.com/huggingface/optimum-quanto) is a PyTorch quantization backend for [Optimum](https://huggingface.co/docs/optimum/index). It features linear quantization for weights (float8, int8, int4, int2) with accuracy very similar to full-precision models. Quanto is compatible with any model modality and device, making it simple to use regardless of hardware.
+[Quanto](https://github.com/huggingface/optimum-quanto) is a PyTorch quantization library from [Optimum](https://huggingface.co/docs/optimum/index). It replaces linear layers with quantized versions built on PyTorch, so it works on any device PyTorch supports and with any model that has `torch.nn.Linear` layers, including speech and vision models. Use it to quantize weights to 2, 4, or 8 bits on hardware other methods don't support, like MPS or CPU.
 
-Quanto is also compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for faster generation.
+The table below summarizes what Quanto supports in Transformers.
 
-Install Quanto with the following command.
+| | |
+|---|---|
+| Config | [`QuantoConfig`] |
+| `quant_method` | `quanto` |
+| Workflow | Quantize while loading |
+| Bits | 2, 4, 8 |
+| Hardware | CUDA, MPS, XPU, CPU |
+| Save | ❌ |
+| Fine-tune | ✅ |
+| Auto-compile | ❌ |
+
+## Install Quanto
+
+Install optimum-quanto and [Accelerate](https://huggingface.co/docs/accelerate/index).
 
 ```bash
-pip install optimum-quanto accelerate transformers
+pip install -U optimum-quanto accelerate
 ```
 
-Quantize a model by creating a [`QuantoConfig`] and specifying the `weights` parameter to quantize to. This works for any model in any modality as long as it contains [torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) layers.
+## Quantize a model with Quanto
 
-> [!TIP]
-> The Transformers integration only supports weight quantization. Use the Quanto library directly if you need activation quantization, calibration, or QAT.
+Create a [`QuantoConfig`] and pass it to [`~PreTrainedModel.from_pretrained`]. `weights` sets the weight dtype and accepts `"int8"` (the default), `"float8"`, `"int4"`, or `"int2"`.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer, QuantoConfig
+from transformers import AutoModelForCausalLM, QuantoConfig
 
-quant_config = QuantoConfig(weights="int8")
-model = transformers.AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.1-8B", 
-    dtype="auto", 
-    device_map="auto", 
-    quantization_config=quant_config
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B",
+    quantization_config=QuantoConfig(weights="int4"),
+    device_map="auto",
 )
 ```
 
-## torch.compile
+## Limitations
 
-Wrap a Quanto model with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for faster generation.
-
-```py
-import torch
-from transformers import AutoModelForSpeechSeq2Seq, QuantoConfig
-
-quant_config = QuantoConfig(weights="int8")
-model = AutoModelForSpeechSeq2Seq.from_pretrained(
-  "openai/whisper-large-v2",
-  dtype="auto",
-  device_map="auto",
-  quantization_config=quant_config
-)
-
-model = torch.compile(model)
-```
+- Transformers quantizes only the weights. Setting `activations` in [`QuantoConfig`] raises a `ValueError`. Use the [Quanto](https://github.com/huggingface/optimum-quanto) library directly for activation quantization, calibration, or quantization-aware training.
+- Transformers can't save Quanto models. The [Quanto](https://github.com/huggingface/optimum-quanto) library has its own way to save and reload quantized models.
+- Quantizing while loading can't offload to the CPU or disk. A `device_map` that places part of the model on `"cpu"` or `"disk"` raises a `ValueError`.
 
 ## Resources
 
-Read the [Quanto: a PyTorch quantization backend for Optimum](https://huggingface.co/blog/quanto-introduction) blog post to learn more about the library design and benchmarks.
-
-For more hands-on examples, take a look at the Quanto [notebook](https://colab.research.google.com/drive/16CXfVmtdQvciSh9BopZUDYcmXCDpvgrT?usp=sharing).
+- [Quanto: a PyTorch quantization backend for Optimum](https://huggingface.co/blog/quanto-introduction) blog post
+- [optimum-quanto](https://github.com/huggingface/optimum-quanto) repository

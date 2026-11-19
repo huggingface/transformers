@@ -166,7 +166,6 @@ class HunYuanVLTextConfig(HunYuanDenseV1Config):
 
     model_type = "hunyuan_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     ignore_keys_at_rope_validation = {
         "alpha",
         "beta_fast",
@@ -878,7 +877,6 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
         "attentions": HunYuanVLDenseV1Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
 
@@ -890,6 +888,7 @@ class HunYuanVLPreTrainedModel(HunYuanDenseV1PreTrainedModel):
             init.normal_(module.image_sep, mean=0.0, std=embed_std)
 
 
+@auto_docstring
 class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
     """
     HunYuanVL vision tower: patch embedding -> transformer blocks -> per-image patch merger.

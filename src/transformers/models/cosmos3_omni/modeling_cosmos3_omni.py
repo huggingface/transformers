@@ -72,7 +72,6 @@ class Cosmos3OmniPreTrainedModel(PreTrainedModel):
 
     # So that modular doesn't drag unnecessary deps
     _no_split_modules = None
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

@@ -718,7 +718,6 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -729,7 +728,6 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaExperts):
@@ -747,7 +745,6 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):

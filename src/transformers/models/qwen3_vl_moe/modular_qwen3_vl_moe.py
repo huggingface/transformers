@@ -85,7 +85,6 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
 
     model_type = "qwen3_vl_moe_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 500000.0
     # Default tensor parallel plan for base model `Qwen3VLMoe`
     base_model_tp_plan = {
@@ -217,7 +216,6 @@ class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         PreTrainedModel._init_weights(self, module)

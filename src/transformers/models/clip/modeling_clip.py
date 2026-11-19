@@ -406,7 +406,6 @@ class CLIPPreTrainedModel(PreTrainedModel):
         "attentions": CLIPAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
