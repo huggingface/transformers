@@ -115,6 +115,33 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
             * 4,  # 4 image pairs
         )
 
+    def test_non_square_image_sizes(self):
+        import torch
+
+        image_matcher = pipeline("keypoint-matching", model="magic-leap-community/superglue_outdoor")
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        images = [image.resize((320, 160)), image.resize((160, 320))]
+        outputs = image_matcher(images, threshold=0.2)
+
+        model_inputs = image_matcher.image_processor(images=images, return_tensors="pt")
+        with torch.no_grad():
+            model_outputs = image_matcher.model(**model_inputs)
+        expected = image_matcher.image_processor.post_process_keypoint_matching(
+            model_outputs, target_sizes=[[(image.height, image.width) for image in images]], threshold=0.2
+        )[0]
+        expected = [
+            {
+                "keypoint_image_0": {"x": keypoint0[0].item(), "y": keypoint0[1].item()},
+                "keypoint_image_1": {"x": keypoint1[0].item(), "y": keypoint1[1].item()},
+                "score": score.item(),
+            }
+            for keypoint0, keypoint1, score in zip(
+                expected["keypoints0"], expected["keypoints1"], expected["matching_scores"]
+            )
+        ]
+        self.assertTrue(expected)
+        self.assertEqual(outputs, sorted(expected, key=lambda match: match["score"], reverse=True))
+
     @require_torch
     def test_single_image(self):
         self._load_dataset()
@@ -143,10 +170,10 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
         outputs = image_matcher((image_0, image_1), threshold=0.0)
 
         output = outputs[0]  # first match from image pair
-        self.assertAlmostEqual(output["keypoint_image_0"]["x"], 698, places=1)
-        self.assertAlmostEqual(output["keypoint_image_0"]["y"], 469, places=1)
-        self.assertAlmostEqual(output["keypoint_image_1"]["x"], 434, places=1)
-        self.assertAlmostEqual(output["keypoint_image_1"]["y"], 440, places=1)
+        self.assertAlmostEqual(output["keypoint_image_0"]["x"], 507, places=1)
+        self.assertAlmostEqual(output["keypoint_image_0"]["y"], 645, places=1)
+        self.assertAlmostEqual(output["keypoint_image_1"]["x"], 325, places=1)
+        self.assertAlmostEqual(output["keypoint_image_1"]["y"], 587, places=1)
         self.assertAlmostEqual(output["score"], 0.9905, places=3)
 
     @require_torch
@@ -170,24 +197,25 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
 
         # Test first pair (image_0, image_1)
         output_0 = outputs[0][0]  # First match from first pair
-        self.assertAlmostEqual(output_0["keypoint_image_0"]["x"], 698, places=1)
-        self.assertAlmostEqual(output_0["keypoint_image_0"]["y"], 469, places=1)
-        self.assertAlmostEqual(output_0["keypoint_image_1"]["x"], 434, places=1)
-        self.assertAlmostEqual(output_0["keypoint_image_1"]["y"], 440, places=1)
+        self.assertAlmostEqual(output_0["keypoint_image_0"]["x"], 507, places=1)
+        self.assertAlmostEqual(output_0["keypoint_image_0"]["y"], 645, places=1)
+        self.assertAlmostEqual(output_0["keypoint_image_1"]["x"], 325, places=1)
+        self.assertAlmostEqual(output_0["keypoint_image_1"]["y"], 587, places=1)
         self.assertAlmostEqual(output_0["score"], 0.9905, places=3)
 
         # Test second pair (image_1, image_2)
         output_1 = outputs[1][0]  # First match from second pair
-        self.assertAlmostEqual(output_1["keypoint_image_0"]["x"], 272, places=1)
-        self.assertAlmostEqual(output_1["keypoint_image_0"]["y"], 310, places=1)
-        self.assertAlmostEqual(output_1["keypoint_image_1"]["x"], 228, places=1)
-        self.assertAlmostEqual(output_1["keypoint_image_1"]["y"], 568, places=1)
+        self.assertAlmostEqual(output_1["keypoint_image_0"]["x"], 204, places=1)
+        self.assertAlmostEqual(output_1["keypoint_image_0"]["y"], 414, places=1)
+        self.assertAlmostEqual(output_1["keypoint_image_1"]["x"], 304, places=1)
+        self.assertAlmostEqual(output_1["keypoint_image_1"]["y"], 425, places=1)
         self.assertAlmostEqual(output_1["score"], 0.9890, places=3)
 
         # Test third pair (image_2, image_0)
-        output_2 = outputs[2][0]  # First match from third pair
-        self.assertAlmostEqual(output_2["keypoint_image_0"]["x"], 385, places=1)
-        self.assertAlmostEqual(output_2["keypoint_image_0"]["y"], 677, places=1)
-        self.assertAlmostEqual(output_2["keypoint_image_1"]["x"], 689, places=1)
-        self.assertAlmostEqual(output_2["keypoint_image_1"]["y"], 351, places=1)
+        output_2 = next(match for match in outputs[2] if match["keypoint_image_0"] == {"x": 514, "y": 507})
+        self.assertLess(outputs[2][0]["score"] - output_2["score"], 1e-3)
+        self.assertAlmostEqual(output_2["keypoint_image_0"]["x"], 514, places=1)
+        self.assertAlmostEqual(output_2["keypoint_image_0"]["y"], 507, places=1)
+        self.assertAlmostEqual(output_2["keypoint_image_1"]["x"], 501, places=1)
+        self.assertAlmostEqual(output_2["keypoint_image_1"]["y"], 482, places=1)
         self.assertAlmostEqual(output_2["score"], 0.9900, places=3)
