@@ -91,6 +91,8 @@ class JambaConfigTester(ConfigTester):
 
 
 class JambaModelTester:
+    causal_lm_class = JambaForCausalLM
+
     def __init__(
         self,
         parent,

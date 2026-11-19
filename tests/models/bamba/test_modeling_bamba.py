@@ -44,6 +44,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -54,9 +55,8 @@ if is_torch_available():
 
 class BambaModelTester:
     config_class = BambaConfig
-    if is_torch_available():
-        model_class = BambaModel
-        for_causal_lm_class = BambaForCausalLM
+    model_class = BambaModel
+    causal_lm_class = BambaForCausalLM
 
     def __init__(
         self,
@@ -103,7 +103,6 @@ class BambaModelTester:
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
-        self.attn_layer_indices = attn_layer_indices
         self.attn_rotary_emb = attn_rotary_emb
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
@@ -117,6 +116,7 @@ class BambaModelTester:
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
         self.mamba_chunk_size = mamba_chunk_size
+        self.attn_layer_indices = [0]
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -203,7 +203,7 @@ class BambaModelTester:
         input_mask,
         token_labels,
     ):
-        model = self.for_causal_lm_class(config=config)
+        model = self.causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -221,7 +221,7 @@ class BambaModelTester:
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
-        model = self.for_causal_lm_class(config=config)
+        model = self.causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -300,7 +300,9 @@ class BambaModelTester:
 
 
 @require_torch
-class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BambaModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     model_tester_class = BambaModelTester
     all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (

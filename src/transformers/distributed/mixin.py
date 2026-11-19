@@ -265,13 +265,11 @@ class DistributedMixin:
 
         if "ep_router" in ep_plan.values() or "moe_tp_experts" in ep_plan.values():
             raise ValueError(
-                "The `ep_router` style was removed, and `moe_tp_experts` is a tensor-parallel style that belongs in "
-                "`tp_plan`. Drop the router rule and shard the experts by expert with `ep_dispatch_experts` and "
-                "`grouped_gemm`, e.g. `ep_plan={'layers.*.mlp.experts': 'ep_dispatch_experts', "
-                "'layers.*.mlp.experts.gate_up_proj': 'grouped_gemm', 'layers.*.mlp.experts.down_proj': "
-                "'grouped_gemm'}` (most MoE models default to this plan, so `ep_plan` can usually be left out). "
-                '`DistributedConfig(ep_implementation="all_reduce")` gives the masking and all-reduce of the old '
-                "`ep_router` + `moe_tp_experts` plan."
+                "The `ep_router` and `moe_tp_experts` parallel styles have been deprecated (removal in v5.28.0). "
+                "Use expert parallelism with `ep_dispatch_experts` and `grouped_gemm` instead. "
+                "Most MoE models already define this as their default `ep_plan`, so an explicit "
+                "plan is usually unnecessary. To preserve the previous masking and all-reduce behavior, use "
+                '`DistributedConfig(ep_implementation="all_reduce")`.'
             )
 
         # EP rules take precedence: drop TP rules on EP modules and their children.
