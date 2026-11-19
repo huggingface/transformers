@@ -611,6 +611,14 @@ else:
             "altclip.processing_altclip": {
                 "AltCLIPProcessor",
             },
+            "apertus1p5.configuration_apertus1p5": {
+                "Apertus1p5Config",
+                "Apertus1p5TextConfig",
+                "Apertus1p5VisionTokenizerConfig",
+            },
+            "apertus1p5.processing_apertus1p5": {
+                "Apertus1p5Processor",
+            },
             "apertus.configuration_apertus": {
                 "ApertusConfig",
             },
@@ -1602,6 +1610,14 @@ else:
             "hy_v4.configuration_hy_v4": {
                 "HYV4Config",
             },
+            "hy_v4_vl.configuration_hy_v4_vl": {
+                "HYV4VLConfig",
+                "HYV4VLTextConfig",
+                "HYV4VLVisionConfig",
+            },
+            "hy_v4_vl.processing_hy_v4_vl": {
+                "HYV4VLProcessor",
+            },
             "hyperclovax.configuration_hyperclovax": {
                 "HyperCLOVAXConfig",
             },
@@ -1752,6 +1768,9 @@ else:
             },
             "laguna.configuration_laguna": {
                 "LagunaConfig",
+            },
+            "lara_mini.configuration_lara_mini": {
+                "LaraMiniConfig",
             },
             "lasr.configuration_lasr": {
                 "LasrCTCConfig",
@@ -2758,6 +2777,9 @@ else:
                 "Sapiens2Config",
                 "Sapiens2HeadConfig",
             },
+            "sarvam_mla.configuration_sarvam_mla": {
+                "SarvamMLAConfig",
+            },
             "seamless_m4t.configuration_seamless_m4t": {
                 "SeamlessM4TConfig",
             },
@@ -3163,6 +3185,13 @@ else:
             "wavlm.configuration_wavlm": {
                 "WavLMConfig",
             },
+            "wavtokenizer.configuration_wavtokenizer": {
+                "WavTokenizerConfig",
+                "WavTokenizerEncoderConfig",
+            },
+            "wavtokenizer.feature_extraction_wavtokenizer": {
+                "WavTokenizerFeatureExtractor",
+            },
             "whisper.configuration_whisper": {
                 "WhisperConfig",
             },
@@ -3348,6 +3377,16 @@ else:
                 "AltCLIPPreTrainedModel",
                 "AltCLIPTextModel",
                 "AltCLIPVisionModel",
+            },
+            "apertus1p5.modeling_apertus1p5": {
+                "Apertus1p5ForConditionalGeneration",
+                "Apertus1p5Model",
+                "Apertus1p5PreTrainedModel",
+                "Apertus1p5TextForCausalLM",
+                "Apertus1p5TextModel",
+                "Apertus1p5TextPreTrainedModel",
+                "Apertus1p5VisionTokenizerModel",
+                "Apertus1p5VisionTokenizerPreTrainedModel",
             },
             "apertus.modeling_apertus": {
                 "ApertusForCausalLM",
@@ -4761,6 +4800,13 @@ else:
                 "HYV4Model",
                 "HYV4PreTrainedModel",
             },
+            "hy_v4_vl.modeling_hy_v4_vl": {
+                "HYV4VLForConditionalGeneration",
+                "HYV4VLModel",
+                "HYV4VLPreTrainedModel",
+                "HYV4VLTextModel",
+                "HYV4VLVisionModel",
+            },
             "hyperclovax.modeling_hyperclovax": {
                 "HyperCLOVAXForCausalLM",
                 "HyperCLOVAXModel",
@@ -4928,6 +4974,11 @@ else:
                 "LagunaForCausalLM",
                 "LagunaModel",
                 "LagunaPreTrainedModel",
+            },
+            "lara_mini.modeling_lara_mini": {
+                "LaraMiniForCausalLM",
+                "LaraMiniModel",
+                "LaraMiniPreTrainedModel",
             },
             "lasr.feature_extraction_lasr": {
                 "LasrFeatureExtractor",
@@ -6811,6 +6862,11 @@ else:
                 "WavLMModel",
                 "WavLMPreTrainedModel",
             },
+            "wavtokenizer.modeling_wavtokenizer": {
+                "WavTokenizerEncoderModel",
+                "WavTokenizerModel",
+                "WavTokenizerPreTrainedModel",
+            },
             "whisper.modeling_whisper": {
                 "WhisperForAudioClassification",
                 "WhisperForCausalLM",
@@ -6958,6 +7014,9 @@ else:
             },
         },
         frozenset({"torch", "torchvision", "vision"}): {
+            "apertus1p5.image_processing_apertus1p5": {
+                "Apertus1p5ImageProcessor",
+            },
             "aria.image_processing_aria": {
                 "AriaImageProcessor",
             },
@@ -7121,6 +7180,12 @@ else:
             },
             "hunyuan_vl.image_processing_hunyuan_vl": {
                 "HunYuanVLImageProcessor",
+            },
+            "hy_v4_vl.image_processing_hy_v4_vl": {
+                "HYV4VLImageProcessor",
+            },
+            "hy_v4_vl.video_processing_hy_v4_vl": {
+                "HYV4VLVideoProcessor",
             },
             "idefics2.image_processing_idefics2": {
                 "Idefics2ImageProcessor",
@@ -7626,6 +7691,9 @@ else:
             },
             "hunyuan_vl.image_processing_pil_hunyuan_vl": {
                 "HunYuanVLImageProcessorPil",
+            },
+            "hy_v4_vl.image_processing_pil_hy_v4_vl": {
+                "HYV4VLImageProcessorPil",
             },
             "idefics2.image_processing_pil_idefics2": {
                 "Idefics2ImageProcessorPil",

@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -31,5 +30,35 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_apertus1p5": {
+                "Apertus1p5Config",
+                "Apertus1p5TextConfig",
+                "Apertus1p5VisionTokenizerConfig",
+            },
+            "processing_apertus1p5": {
+                "Apertus1p5Processor",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_apertus1p5": {
+                "Apertus1p5ForConditionalGeneration",
+                "Apertus1p5Model",
+                "Apertus1p5PreTrainedModel",
+                "Apertus1p5TextForCausalLM",
+                "Apertus1p5TextModel",
+                "Apertus1p5TextPreTrainedModel",
+                "Apertus1p5VisionTokenizerModel",
+                "Apertus1p5VisionTokenizerPreTrainedModel",
+            },
+        },
+        frozenset({"torch", "torchvision", "vision"}): {
+            "image_processing_apertus1p5": {
+                "Apertus1p5ImageProcessor",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
