@@ -16,8 +16,8 @@ Converts an original GR00T N1.7 checkpoint (e.g. `nvidia/GR00T-N1.7-3B`) to the 
 `Gr00tProcessor` (with the tokenizer and chat template of the Cosmos-Reason2 backbone and the per-embodiment statistics)
 and the weights.
 
-The weights of the original checkpoints also load directly with `Gr00tForConditionalGeneration.from_pretrained`; this
-script is needed for the config and the processor, whose original files use the Isaac-GR00T format.
+The original weights are renamed on load by the `gr00t` entry of `conversion_mapping.py`, given the converted config;
+the original config and processor files use the Isaac-GR00T format and are converted here.
 
 Usage:
 
@@ -169,12 +169,6 @@ def validate_original_config(original: dict) -> None:
             problems.append("vl_self_attention_cfg.positional_embeddings: the VL refiner has no positional embeddings")
         if not refiner.get("final_dropout", True):
             problems.append("vl_self_attention_cfg.final_dropout=False: the port requires True")
-        refiner_dropout = refiner.get("dropout", 0.1)
-        if refiner_dropout != diffusion.get("dropout"):
-            problems.append(
-                f"VL refiner dropout {refiner_dropout} differs from the DiT dropout {diffusion.get('dropout')}: "
-                "the port uses a single `dropout` for both"
-            )
         refiner_width = refiner.get("num_attention_heads", 0) * refiner.get("attention_head_dim", 0)
         if refiner_width != original.get("backbone_embedding_dim", 2048):
             problems.append(f"the VL refiner width {refiner_width} must equal backbone_embedding_dim")
@@ -254,8 +248,21 @@ def convert_config(original: dict) -> Gr00tConfig:
         )
     # The checkpoint only stores the decoder layers the action head reads from
     vlm_config.text_config.num_hidden_layers = original["select_layer"]
+    # The action head reads the last decoder layer before the final norm
+    vlm_config.text_config.tie_last_hidden_states = False
     diffusion = original["diffusion_model_cfg"]
     refiner = original["vl_self_attention_cfg"]
+    dit_hidden_size = diffusion["num_attention_heads"] * diffusion["attention_head_dim"]
+    refiner_hidden_size = refiner["num_attention_heads"] * refiner["attention_head_dim"]
+    # Even blocks cross-attend, to the text tokens every `attend_text_every_n_blocks`-th time and to the image tokens
+    # otherwise, odd blocks self-attend
+    attend_text_every_n_blocks = original.get("attend_text_every_n_blocks", 2)
+    layer_types = [
+        "full_attention"
+        if layer_idx % 2
+        else ("text_cross_attention" if layer_idx % (2 * attend_text_every_n_blocks) == 0 else "image_cross_attention")
+        for layer_idx in range(diffusion["num_layers"])
+    ]
     return Gr00tConfig(
         vlm_config=vlm_config.to_dict(),
         action_horizon=original["action_horizon"],
@@ -263,14 +270,21 @@ def convert_config(original: dict) -> Gr00tConfig:
         max_action_dim=original["max_action_dim"],
         max_num_embodiments=original["max_num_embodiments"],
         projector_hidden_size=original["hidden_size"],
+        refiner_config={
+            "hidden_size": refiner_hidden_size,
+            "intermediate_size": refiner.get("ff_inner_dim") or 4 * refiner_hidden_size,
+            "num_hidden_layers": refiner["num_layers"],
+            "num_attention_heads": refiner["num_attention_heads"],
+            "dropout": refiner.get("dropout", 0.1),
+        },
         action_head_config={
-            "hidden_size": diffusion["num_attention_heads"] * diffusion["attention_head_dim"],
+            "hidden_size": dit_hidden_size,
+            "intermediate_size": diffusion.get("ff_inner_dim") or 4 * dit_hidden_size,
             "num_hidden_layers": diffusion["num_layers"],
             "num_attention_heads": diffusion["num_attention_heads"],
-            "attend_text_every_n_blocks": original.get("attend_text_every_n_blocks", 2),
-            "refiner_num_hidden_layers": refiner["num_layers"],
-            "refiner_num_attention_heads": refiner["num_attention_heads"],
-            # Checked to be the same for the DiT and the refiner
+            "layer_types": layer_types,
+            "backbone_hidden_size": vlm_config.text_config.hidden_size,
+            "output_size": original["hidden_size"],
             "dropout": diffusion["dropout"],
         },
         num_timestep_buckets=original["num_timestep_buckets"],

@@ -112,6 +112,10 @@ The image processor pads non-square camera images to a square before resizing, a
 
 [[autodoc]] Gr00tConfig
 
+## Gr00tVLRefinerConfig
+
+[[autodoc]] Gr00tVLRefinerConfig
+
 ## Gr00tActionHeadConfig
 
 [[autodoc]] Gr00tActionHeadConfig
@@ -129,6 +133,11 @@ The image processor pads non-square camera images to a square before resizing, a
     - normalize_state
     - normalize_actions
     - post_process_actions
+
+## Gr00tVLRefiner
+
+[[autodoc]] Gr00tVLRefiner
+    - forward
 
 ## Gr00tDiT
 

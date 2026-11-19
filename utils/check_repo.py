@@ -256,6 +256,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
     + [
         # models to ignore for model xxx mapping
         "Aimv2TextModel",
+        "Gr00tVLRefiner",  # building block of Gr00tModel
         "Gr00tDiT",  # building block of Gr00tModel
         "AlignTextModel",
         "AlignVisionModel",

@@ -102,6 +102,7 @@ class Gr00tModelTester:
                         "mrope_section": [2, 1, 1],
                         "mrope_interleaved": True,
                     },
+                    "tie_last_hidden_states": False,
                 },
                 "vision_config": {
                     "depth": 2,
@@ -121,12 +122,19 @@ class Gr00tModelTester:
             max_action_dim=self.max_action_dim,
             max_num_embodiments=self.max_num_embodiments,
             projector_hidden_size=16,
+            refiner_config={
+                "hidden_size": 32,
+                "intermediate_size": 128,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+            },
             action_head_config={
                 "hidden_size": self.hidden_size,
+                "intermediate_size": 4 * self.hidden_size,
                 "num_hidden_layers": self.num_hidden_layers,
                 "num_attention_heads": self.num_attention_heads,
-                "refiner_num_hidden_layers": 2,
-                "refiner_num_attention_heads": 4,
+                "backbone_hidden_size": 32,
+                "output_size": 16,
                 "timestep_embedding_dim": 8,
             },
             max_position_embeddings=8,
@@ -224,21 +232,20 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
             features = model.model.get_vlm_features(**vlm_inputs)
         hook.remove()
         with torch.no_grad():
-            expected = model.model.vl_refiner(model.model.vl_layer_norm(captured["features"]))
+            expected = model.model.vl_refiner(model.model.vl_layer_norm(captured["features"])).last_hidden_state
         torch.testing.assert_close(features, expected)
 
-    def test_precomputed_vlm_features_match(self):
+    def test_sample_actions_step_matches_forward(self):
+        # `sample_actions` runs the backbone once and reuses its features: one Euler step must match `forward` at t=0
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Gr00tForConditionalGeneration(config).eval().to(torch_device)
-        vlm_inputs = {
-            key: inputs_dict[key]
-            for key in ("input_ids", "attention_mask", "pixel_values", "image_grid_thw", "mm_token_type_ids")
-        }
+        inputs_dict.pop("actions")
+        noise = inputs_dict["noise"]
+        inputs_dict["timestep"] = torch.zeros_like(inputs_dict["timestep"])
         with torch.no_grad():
-            expected = model(**inputs_dict).logits
-            vlm_features = model.model.get_vlm_features(**vlm_inputs)
-            inputs_dict.pop("pixel_values")
-            actual = model(**inputs_dict, vlm_features=vlm_features).logits
+            expected = noise + model(**inputs_dict).logits
+            inputs_dict.pop("timestep")
+            actual = model.sample_actions(**inputs_dict, num_steps=1)
         torch.testing.assert_close(actual, expected)
 
     def test_embodiment_selects_projection_slot(self):
@@ -332,16 +339,26 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
             key: inputs_dict[key]
             for key in ("input_ids", "attention_mask", "pixel_values", "image_grid_thw", "mm_token_type_ids")
         }
+
+        def denoising_step(state, noise, timestep, embodiment_id, vlm_features, attention_mask, image_token_mask):
+            inputs_embeds, bucketed_timestep = model.embed_state_and_actions(state, noise, timestep, embodiment_id)
+            dit_outputs = model.model.dit(
+                inputs_embeds=inputs_embeds,
+                encoder_hidden_states=vlm_features,
+                timestep=bucketed_timestep,
+                encoder_attention_mask=attention_mask,
+                image_token_mask=image_token_mask,
+            )
+            return model.decode_velocity(dit_outputs.last_hidden_state, embodiment_id)
+
         with torch.no_grad():
-            step_inputs = {
-                key: value
-                for key, value in inputs_dict.items()
-                if key not in vlm_inputs or key in ("input_ids", "attention_mask")
-            }
+            step_inputs = {key: inputs_dict[key] for key in ("state", "noise", "timestep", "embodiment_id")}
             step_inputs["vlm_features"] = model.model.get_vlm_features(**vlm_inputs)
-            expected = model(**step_inputs).logits
+            step_inputs["attention_mask"] = inputs_dict["attention_mask"]
+            step_inputs["image_token_mask"] = inputs_dict["mm_token_type_ids"] == 1
+            expected = denoising_step(**step_inputs)
             # One denoising step from precomputed backbone features compiles without graph breaks
-            actual = torch.compile(lambda **kwargs: model(**kwargs).logits, fullgraph=True)(**step_inputs)
+            actual = torch.compile(denoising_step, fullgraph=True)(**step_inputs)
         torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
 
     def test_training_gradients_reach_used_parameters(self):

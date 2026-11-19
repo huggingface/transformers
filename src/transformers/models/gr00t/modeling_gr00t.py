@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
 
@@ -26,6 +25,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
@@ -34,7 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
-from .configuration_gr00t import Gr00tActionHeadConfig, Gr00tConfig
+from .configuration_gr00t import Gr00tActionHeadConfig, Gr00tConfig, Gr00tVLRefinerConfig
 
 
 class Gr00tCategorySpecificLinear(nn.Module):
@@ -62,27 +62,44 @@ class Gr00tCategorySpecificMLP(nn.Module):
         return self.fc2(hidden_states, embodiment_id)
 
 
+class Gr00tSinusoidalEmbedding(nn.Module):
+    """
+    Sinusoidal encoding of the discretized timestep. The action encoder and the DiT timestep embedding use two variants
+    of it, set by `downscale_freq_shift` and `flip_sin_to_cos`.
+    """
+
+    def __init__(self, embedding_dim: int, downscale_freq_shift: int = 0, flip_sin_to_cos: bool = False):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.downscale_freq_shift = downscale_freq_shift
+        self.flip_sin_to_cos = flip_sin_to_cos
+        self.freqs = nn.Buffer(self.compute_freqs(), persistent=False)
+
+    def compute_freqs(self) -> torch.Tensor:
+        half_dim = self.embedding_dim // 2
+        exponent = -math.log(10000.0) * torch.arange(half_dim, dtype=torch.float32)
+        return (exponent / (half_dim - self.downscale_freq_shift)).exp()
+
+    def forward(self, timestep: torch.Tensor) -> torch.Tensor:
+        freqs = timestep.float()[..., None] * self.freqs
+        sin, cos = freqs.sin(), freqs.cos()
+        return torch.cat([cos, sin] if self.flip_sin_to_cos else [sin, cos], dim=-1)
+
+
 class Gr00tActionEncoder(nn.Module):
     """Embeds noisy actions together with a sinusoidal encoding of the denoising timestep."""
 
     def __init__(self, config: Gr00tConfig):
         super().__init__()
-        self.embedding_dim = config.action_head_config.hidden_size
-        self.fc1 = Gr00tCategorySpecificLinear(config.max_num_embodiments, config.max_action_dim, self.embedding_dim)
-        self.fc2 = Gr00tCategorySpecificLinear(config.max_num_embodiments, 2 * self.embedding_dim, self.embedding_dim)
-        self.fc3 = Gr00tCategorySpecificLinear(config.max_num_embodiments, self.embedding_dim, self.embedding_dim)
-
-    def sinusoidal_encoding(self, timestep: torch.Tensor) -> torch.Tensor:
-        half_dim = self.embedding_dim // 2
-        exponent = -torch.arange(half_dim, dtype=torch.float32, device=timestep.device) * (
-            math.log(10000.0) / half_dim
-        )
-        freqs = timestep.float().unsqueeze(-1) * exponent.exp()
-        return torch.cat([torch.sin(freqs), torch.cos(freqs)], dim=-1)
+        embedding_dim = config.action_head_config.hidden_size
+        self.fc1 = Gr00tCategorySpecificLinear(config.max_num_embodiments, config.max_action_dim, embedding_dim)
+        self.fc2 = Gr00tCategorySpecificLinear(config.max_num_embodiments, 2 * embedding_dim, embedding_dim)
+        self.fc3 = Gr00tCategorySpecificLinear(config.max_num_embodiments, embedding_dim, embedding_dim)
+        self.time_embedding = Gr00tSinusoidalEmbedding(embedding_dim)
 
     def forward(self, actions: torch.Tensor, timestep: torch.Tensor, embodiment_id: torch.Tensor) -> torch.Tensor:
         action_embeds = self.fc1(actions, embodiment_id)
-        time_embeds = self.sinusoidal_encoding(timestep[:, None].expand(-1, actions.shape[1]))
+        time_embeds = self.time_embedding(timestep[:, None].expand(-1, actions.shape[1]))
         hidden_states = torch.cat([action_embeds, time_embeds.to(action_embeds.dtype)], dim=-1)
         hidden_states = F.silu(self.fc2(hidden_states, embodiment_id))
         return self.fc3(hidden_states, embodiment_id)
@@ -93,30 +110,33 @@ class Gr00tTimestepEmbedding(nn.Module):
 
     def __init__(self, config: Gr00tActionHeadConfig):
         super().__init__()
-        self.num_channels = config.timestep_embedding_dim
-        self.linear_1 = nn.Linear(self.num_channels, config.hidden_size)
+        self.sinusoids = Gr00tSinusoidalEmbedding(
+            config.timestep_embedding_dim, downscale_freq_shift=1, flip_sin_to_cos=True
+        )
+        self.linear_1 = nn.Linear(config.timestep_embedding_dim, config.hidden_size)
         self.linear_2 = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(self, timestep: torch.Tensor) -> torch.Tensor:
-        half_dim = self.num_channels // 2
-        exponent = -math.log(10000.0) * torch.arange(half_dim, dtype=torch.float32, device=timestep.device)
-        exponent = exponent / (half_dim - 1)
-        freqs = timestep[:, None].float() * exponent.exp()[None, :]
-        time_proj = torch.cat([torch.cos(freqs), torch.sin(freqs)], dim=-1).to(self.linear_1.weight.dtype)
+        time_proj = self.sinusoids(timestep).to(self.linear_1.weight.dtype)
         return self.linear_2(F.silu(self.linear_1(time_proj)))
 
 
+# AdaLayerNormZero for final layer
+# return only with modulated x for attn input, cuz no more mlp modulation
 class Gr00tAdaLayerNorm(nn.Module):
-    """LayerNorm whose scale and shift are predicted from the timestep embedding."""
-
-    def __init__(self, hidden_size: int, eps: float = 1e-5):
+    def __init__(self, dim: int):
         super().__init__()
-        self.linear = nn.Linear(hidden_size, 2 * hidden_size)
-        self.norm = nn.LayerNorm(hidden_size, eps=eps, elementwise_affine=False)
 
-    def forward(self, hidden_states: torch.Tensor, time_embeds: torch.Tensor) -> torch.Tensor:
-        scale, shift = self.linear(F.silu(time_embeds)).chunk(2, dim=1)
-        return self.norm(hidden_states) * (1 + scale[:, None]) + shift[:, None]
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(dim, dim * 2)
+        self.norm = nn.LayerNorm(dim, eps=1e-5, elementwise_affine=False)
+
+    def forward(self, hidden_states, emb):
+        emb = self.linear(self.silu(emb))
+        scale, shift = torch.chunk(emb, 2, dim=1)
+
+        hidden_states = self.norm(hidden_states) * (1 + scale)[:, None, :] + shift[:, None, :]
+        return hidden_states
 
 
 def eager_attention_forward(
@@ -143,39 +163,31 @@ def eager_attention_forward(
 
 
 class Gr00tAttention(nn.Module):
-    """
-    Multi-headed attention without positional encoding, used by the refiner (self-attention over the backbone
-    features) and the DiT (self-attention over the action tokens, or cross-attention to the backbone features).
-    """
+    """Multi-headed self-attention without positional encoding, used by the refiner and the DiT."""
 
-    def __init__(self, config: Gr00tActionHeadConfig, is_refiner: bool = False, is_cross_attention: bool = False):
+    def __init__(self, config: Gr00tActionHeadConfig | Gr00tVLRefinerConfig):
         super().__init__()
         self.config = config
-        hidden_size = config.backbone_hidden_size if is_refiner else config.hidden_size
-        num_heads = config.refiner_num_attention_heads if is_refiner else config.num_attention_heads
-        kv_input_size = config.backbone_hidden_size if is_cross_attention else hidden_size
-        self.head_dim = hidden_size // num_heads
+        self.head_dim = config.hidden_size // config.num_attention_heads
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.q_proj = nn.Linear(hidden_size, hidden_size)
-        self.k_proj = nn.Linear(kv_input_size, hidden_size)
-        self.v_proj = nn.Linear(kv_input_size, hidden_size)
-        self.o_proj = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(config.dropout)
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
-        kv_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        query_states = self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(kv_states).view(*kv_states.shape[:-1], -1, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(kv_states).view(*kv_states.shape[:-1], -1, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -192,38 +204,86 @@ class Gr00tAttention(nn.Module):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.dropout(self.o_proj(attn_output))
-        return attn_output, attn_weights
+        return self.o_proj(attn_output), attn_weights
+
+
+class Gr00tCrossAttention(nn.Module):
+    """Cross-attention from the state and action tokens of the DiT to the backbone features."""
+
+    def __init__(self, config: Gr00tActionHeadConfig):
+        super().__init__()
+        self.config = config
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.k_proj = nn.Linear(config.backbone_hidden_size, config.hidden_size)
+        self.v_proj = nn.Linear(config.backbone_hidden_size, config.hidden_size)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.head_dim)
+        query_states = self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim).transpose(1, 2)
+        key_states = self.k_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+        value_states = self.v_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
 
 
 class Gr00tMLP(nn.Module):
-    def __init__(self, config: Gr00tActionHeadConfig, is_refiner: bool = False):
+    def __init__(self, config: Gr00tActionHeadConfig | Gr00tVLRefinerConfig):
         super().__init__()
-        hidden_size = config.backbone_hidden_size if is_refiner else config.hidden_size
-        self.fc1 = nn.Linear(hidden_size, 4 * hidden_size)
-        self.fc2 = nn.Linear(4 * hidden_size, hidden_size)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dropout(F.gelu(self.fc1(hidden_states), approximate="tanh"))
+        hidden_states = self.dropout(self.activation_fn(self.fc1(hidden_states)))
         return self.dropout(self.fc2(hidden_states))
 
 
 class Gr00tVLRefinerLayer(GradientCheckpointingLayer):
     """Pre-norm self-attention block refining the backbone features."""
 
-    def __init__(self, config: Gr00tActionHeadConfig):
+    def __init__(self, config: Gr00tVLRefinerConfig):
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.backbone_hidden_size, eps=1e-5)
-        self.attention = Gr00tAttention(config, is_refiner=True)
-        self.norm3 = nn.LayerNorm(config.backbone_hidden_size, eps=1e-5)
-        self.mlp = Gr00tMLP(config, is_refiner=True)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.attention = Gr00tAttention(config)
+        self.norm3 = nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.mlp = Gr00tMLP(config)
+        # As in the original, the attention output goes through its own dropout, then the residual one
+        self.attention_dropout = nn.Dropout(config.dropout)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         # The refiner attends to every backbone token, padding included, as in the original implementation
         attn_output, _ = self.attention(self.norm1(hidden_states), **kwargs)
-        hidden_states = hidden_states + self.dropout(attn_output)
+        hidden_states = hidden_states + self.dropout(self.attention_dropout(attn_output))
         return hidden_states + self.mlp(self.norm3(hidden_states))
 
 
@@ -232,11 +292,15 @@ class Gr00tDiTLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: Gr00tActionHeadConfig, layer_idx: int):
         super().__init__()
-        self.is_cross_attention = layer_idx % 2 == 0
         self.norm1 = Gr00tAdaLayerNorm(config.hidden_size)
-        self.attention = Gr00tAttention(config, is_cross_attention=self.is_cross_attention)
+        if config.layer_types[layer_idx] == "full_attention":
+            self.attention = Gr00tAttention(config)
+        else:
+            self.attention = Gr00tCrossAttention(config)
         self.norm3 = nn.LayerNorm(config.hidden_size, eps=1e-5, elementwise_affine=False)
         self.mlp = Gr00tMLP(config)
+        # As in the original, the attention output goes through its own dropout, then the residual one
+        self.attention_dropout = nn.Dropout(config.dropout)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(
@@ -247,25 +311,15 @@ class Gr00tDiTLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        attn_output, _ = self.attention(
-            self.norm1(hidden_states, time_embeds),
-            encoder_hidden_states=encoder_hidden_states,
-            attention_mask=encoder_attention_mask,
-            **kwargs,
-        )
-        hidden_states = hidden_states + self.dropout(attn_output)
+        normed_hidden_states = self.norm1(hidden_states, time_embeds)
+        if encoder_hidden_states is None:
+            attn_output, _ = self.attention(normed_hidden_states, **kwargs)
+        else:
+            attn_output, _ = self.attention(
+                normed_hidden_states, encoder_hidden_states, attention_mask=encoder_attention_mask, **kwargs
+            )
+        hidden_states = hidden_states + self.dropout(self.attention_dropout(attn_output))
         return hidden_states + self.mlp(self.norm3(hidden_states))
-
-
-class Gr00tVLRefiner(nn.Module):
-    def __init__(self, config: Gr00tActionHeadConfig):
-        super().__init__()
-        self.layers = nn.ModuleList([Gr00tVLRefinerLayer(config) for _ in range(config.refiner_num_hidden_layers)])
-
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, **kwargs)
-        return hidden_states
 
 
 @auto_docstring
@@ -289,6 +343,32 @@ class Gr00tPreTrainedModel(PreTrainedModel):
         if isinstance(module, Gr00tCategorySpecificLinear):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.bias)
+        elif isinstance(module, Gr00tSinusoidalEmbedding):
+            init.copy_(module.freqs, module.compute_freqs())
+
+
+@auto_docstring(
+    custom_intro="""
+    Self-attention blocks refining the backbone features before the DiT cross-attends to them.
+    """
+)
+class Gr00tVLRefiner(Gr00tPreTrainedModel):
+    config: Gr00tVLRefinerConfig
+
+    def __init__(self, config: Gr00tVLRefinerConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([Gr00tVLRefinerLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @auto_docstring
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        r"""
+        hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            The normalized backbone features.
+        """
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, **kwargs)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring(
@@ -298,19 +378,11 @@ class Gr00tPreTrainedModel(PreTrainedModel):
 )
 class Gr00tDiT(Gr00tPreTrainedModel):
     config: Gr00tActionHeadConfig
-    _tp_plan = {
-        "layers.*.attention.q_proj": "colwise",
-        "layers.*.attention.k_proj": "colwise",
-        "layers.*.attention.v_proj": "colwise",
-        "layers.*.attention.o_proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
-        # Like PI0's `action_out_proj`, the output projection is sharded and its output gathered for the action decoder
-        "proj_out_2": "colwise_gather_output",
-    }
+    # Like PI0's `action_out_proj`, the output projection is sharded and its output gathered for the action decoder
+    _tp_plan = {"proj_out_2": "colwise_gather_output"}
     _can_record_outputs = {
         "hidden_states": OutputRecorder(Gr00tDiTLayer),
-        "attentions": OutputRecorder(Gr00tAttention, index=1),
+        "attentions": [OutputRecorder(Gr00tAttention, index=1), OutputRecorder(Gr00tCrossAttention, index=1)],
     }
 
     def __init__(self, config: Gr00tActionHeadConfig):
@@ -338,7 +410,7 @@ class Gr00tDiT(Gr00tPreTrainedModel):
         r"""
         inputs_embeds (`torch.Tensor` of shape `(batch_size, 1 + action_horizon, hidden_size)`):
             The embedded robot state followed by the embedded noisy action chunk.
-        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, backbone_hidden_size)`):
             The refined backbone features the cross-attention blocks attend to.
         timestep (`torch.LongTensor` of shape `(batch_size,)`):
             The discretized flow-matching timestep, in `[0, num_timestep_buckets)`.
@@ -348,31 +420,30 @@ class Gr00tDiT(Gr00tPreTrainedModel):
             Whether each backbone token is an image token.
         """
         padding_mask = encoder_attention_mask.bool()
-        text_attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=padding_mask & ~image_token_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        image_attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=padding_mask & image_token_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
+        attention_masks = {
+            "text_cross_attention": create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=padding_mask & ~image_token_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            ),
+            "image_cross_attention": create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=padding_mask & image_token_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            ),
+            "full_attention": None,
+        }
 
         time_embeds = self.time_embedding(timestep)
         hidden_states = inputs_embeds
-        for layer_idx, layer in enumerate(self.layers):
-            if not layer.is_cross_attention:
-                hidden_states = layer(hidden_states, time_embeds, **kwargs)
-                continue
-            attends_text = layer_idx % (2 * self.config.attend_text_every_n_blocks) == 0
+        for layer, layer_type in zip(self.layers, self.config.layer_types):
             hidden_states = layer(
                 hidden_states,
                 time_embeds,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=text_attention_mask if attends_text else image_attention_mask,
+                encoder_hidden_states=None if layer_type == "full_attention" else encoder_hidden_states,
+                encoder_attention_mask=attention_masks[layer_type],
                 **kwargs,
             )
 
@@ -384,21 +455,11 @@ class Gr00tDiT(Gr00tPreTrainedModel):
 
 @auto_docstring
 class Gr00tModel(Gr00tPreTrainedModel):
-    # The plans of the backbone and of the DiT are merged in from their own sub-models
-    _tp_plan = {
-        "vl_refiner.layers.*.attention.q_proj": "colwise",
-        "vl_refiner.layers.*.attention.k_proj": "colwise",
-        "vl_refiner.layers.*.attention.v_proj": "colwise",
-        "vl_refiner.layers.*.attention.o_proj": "rowwise",
-        "vl_refiner.layers.*.mlp.fc1": "colwise",
-        "vl_refiner.layers.*.mlp.fc2": "rowwise",
-    }
-
     def __init__(self, config: Gr00tConfig):
         super().__init__(config)
         self.vlm = AutoModel.from_config(config.vlm_config)
-        self.vl_layer_norm = nn.LayerNorm(config.action_head_config.backbone_hidden_size, eps=1e-5)
-        self.vl_refiner = Gr00tVLRefiner(config.action_head_config)
+        self.vl_layer_norm = nn.LayerNorm(config.refiner_config.hidden_size, eps=1e-5)
+        self.vl_refiner = Gr00tVLRefiner(config.refiner_config)
         self.dit = Gr00tDiT(config.action_head_config)
         self.post_init()
 
@@ -411,10 +472,10 @@ class Gr00tModel(Gr00tPreTrainedModel):
     def get_vlm_features(
         self,
         input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        mm_token_type_ids: torch.IntTensor,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -434,8 +495,7 @@ class Gr00tModel(Gr00tPreTrainedModel):
             output_hidden_states=-1,
             **kwargs,
         )
-        vlm_features = self.vl_layer_norm(vlm_outputs.hidden_states[-1])
-        return self.vl_refiner(vlm_features)
+        return self.vl_refiner(self.vl_layer_norm(vlm_outputs.hidden_states[-1])).last_hidden_state
 
     @can_return_tuple
     @auto_docstring
@@ -444,11 +504,10 @@ class Gr00tModel(Gr00tPreTrainedModel):
         action_embeds: torch.Tensor,
         timestep: torch.Tensor,
         input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        mm_token_type_ids: torch.IntTensor,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-        vlm_features: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -456,27 +515,21 @@ class Gr00tModel(Gr00tPreTrainedModel):
             The embedded robot state followed by the embedded noisy action chunk.
         timestep (`torch.LongTensor` of shape `(batch_size,)`):
             The discretized flow-matching timestep, in `[0, num_timestep_buckets)`.
-        vlm_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Precomputed output of [`~Gr00tModel.get_vlm_features`]. If not provided, it is computed from the inputs.
         """
-        if vlm_features is None:
-            vlm_features = self.get_vlm_features(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                attention_mask=attention_mask,
-                mm_token_type_ids=mm_token_type_ids,
-                **kwargs,
-            )
-
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
+        vlm_features = self.get_vlm_features(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            mm_token_type_ids=mm_token_type_ids,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
+            **kwargs,
+        )
         return self.dit(
             inputs_embeds=action_embeds,
             encoder_hidden_states=vlm_features,
             timestep=timestep,
             encoder_attention_mask=attention_mask,
-            image_token_mask=input_ids == self.config.vlm_config.image_token_id,
+            image_token_mask=mm_token_type_ids == 1,
             **kwargs,
         )
 
@@ -521,6 +574,25 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         sample = torch.distributions.Beta(alpha, beta).sample((batch_size,)).to(device)
         return (1 - sample) * self.config.time_sampling_scale
 
+    def embed_state_and_actions(
+        self, state: torch.Tensor, noisy_actions: torch.Tensor, timestep: torch.Tensor, embodiment_id: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Returns the DiT input embeddings of the state and the noisy actions, and the discretized timestep."""
+        state_embeds = self.state_encoder(state[:, None, :], embodiment_id)
+        if self.training and self.config.state_dropout_prob > 0:
+            keep_state = torch.rand(state.shape[0], device=state.device) >= self.config.state_dropout_prob
+            state_embeds = state_embeds * keep_state[:, None, None].to(state_embeds.dtype)
+
+        bucketed_timestep = (timestep * self.config.num_timestep_buckets).long()
+        action_embeds = self.action_encoder(noisy_actions, bucketed_timestep, embodiment_id)
+        position_ids = torch.arange(action_embeds.shape[1], device=state.device)
+        action_embeds = action_embeds + self.action_position_embeddings(position_ids)[None]
+        return torch.cat([state_embeds, action_embeds], dim=1), bucketed_timestep
+
+    def decode_velocity(self, dit_outputs: torch.Tensor, embodiment_id: torch.Tensor) -> torch.Tensor:
+        """Decodes the DiT outputs of the action tokens into the predicted velocity."""
+        return self.action_decoder(dit_outputs, embodiment_id)[:, -self.config.action_horizon :]
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -528,13 +600,12 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         state: torch.Tensor,
         embodiment_id: torch.LongTensor,
         input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        mm_token_type_ids: torch.IntTensor,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
         noise: torch.Tensor | None = None,
         timestep: torch.Tensor | None = None,
-        vlm_features: torch.Tensor | None = None,
         actions: torch.Tensor | None = None,
         action_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -550,8 +621,6 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         timestep (`torch.Tensor` of shape `(batch_size,)`, *optional*):
             Flow-matching time in `[0, 1]`, where `0` is pure noise and `1` the clean actions. Sampled from the
             training distribution if not provided.
-        vlm_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Precomputed output of [`~Gr00tModel.get_vlm_features`].
         actions (`torch.Tensor` of shape `(batch_size, action_horizon, max_action_dim)`, *optional*):
             Normalized ground-truth action chunk. When provided, the flow-matching loss is computed.
         action_mask (`torch.Tensor` of shape `(batch_size, action_horizon, max_action_dim)`, *optional*):
@@ -578,29 +647,18 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         else:
             noisy_actions = noise
 
-        state_embeds = self.state_encoder(state[:, None, :], embodiment_id)
-        if self.training and self.config.state_dropout_prob > 0:
-            keep_state = torch.rand(batch_size, device=device) >= self.config.state_dropout_prob
-            state_embeds = state_embeds * keep_state[:, None, None].to(state_embeds.dtype)
-
-        bucketed_timestep = (timestep * self.config.num_timestep_buckets).long()
-        action_embeds = self.action_encoder(noisy_actions, bucketed_timestep, embodiment_id)
-        position_ids = torch.arange(action_embeds.shape[1], device=device)
-        action_embeds = action_embeds + self.action_position_embeddings(position_ids)[None]
-
+        inputs_embeds, bucketed_timestep = self.embed_state_and_actions(state, noisy_actions, timestep, embodiment_id)
         outputs = self.model(
-            action_embeds=torch.cat([state_embeds, action_embeds], dim=1),
+            action_embeds=inputs_embeds,
             timestep=bucketed_timestep,
             input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             mm_token_type_ids=mm_token_type_ids,
-            vlm_features=vlm_features,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
             **kwargs,
         )
-        predicted_velocity = self.action_decoder(outputs.last_hidden_state, embodiment_id)
-        predicted_velocity = predicted_velocity[:, -self.config.action_horizon :]
+        predicted_velocity = self.decode_velocity(outputs.last_hidden_state, embodiment_id)
 
         loss = None
         if actions is not None:
@@ -623,10 +681,10 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
         state: torch.Tensor,
         embodiment_id: torch.LongTensor,
         input_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
+        mm_token_type_ids: torch.IntTensor,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
         noise: torch.Tensor | None = None,
         num_steps: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -648,30 +706,31 @@ class Gr00tForConditionalGeneration(Gr00tPreTrainedModel):
             )
         noise = noise.to(self.dtype)
 
+        # The backbone features don't depend on the noisy actions: run the backbone once, then only the action head
         vlm_features = self.model.get_vlm_features(
             input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             mm_token_type_ids=mm_token_type_ids,
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw,
             **kwargs,
         )
+        image_token_mask = mm_token_type_ids == 1
 
         actions = noise
         dt = 1.0 / num_steps
         for step in range(num_steps):
             timestep = torch.full((batch_size,), step * dt, dtype=torch.float32, device=state.device)
-            velocity = self(
-                state=state,
-                embodiment_id=embodiment_id,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                noise=actions,
-                timestep=timestep,
-                vlm_features=vlm_features,
-            ).logits
-            actions = actions + dt * velocity
+            inputs_embeds, bucketed_timestep = self.embed_state_and_actions(state, actions, timestep, embodiment_id)
+            dit_outputs = self.model.dit(
+                inputs_embeds=inputs_embeds,
+                encoder_hidden_states=vlm_features,
+                timestep=bucketed_timestep,
+                encoder_attention_mask=attention_mask,
+                image_token_mask=image_token_mask,
+            )
+            actions = actions + dt * self.decode_velocity(dit_outputs.last_hidden_state, embodiment_id)
         return actions
 
 
-__all__ = ["Gr00tPreTrainedModel", "Gr00tDiT", "Gr00tModel", "Gr00tForConditionalGeneration"]
+__all__ = ["Gr00tPreTrainedModel", "Gr00tVLRefiner", "Gr00tDiT", "Gr00tModel", "Gr00tForConditionalGeneration"]

@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import math
 import warnings
 from collections.abc import Iterable
@@ -92,6 +93,9 @@ def smart_resize(
     return h_bar, w_bar
 
 
+# Vendored from OpenCV (cv2.resize, INTER_AREA), Apache-2.0:
+# https://github.com/opencv/opencv/blob/4.x/modules/imgproc/src/resize.cpp
+@functools.lru_cache(maxsize=16)
 def _area_downscale_weights(in_size: int, out_size: int) -> torch.Tensor:
     """Weights, of shape `(out_size, in_size)`, of the fractional pixel areas averaged by `cv2.INTER_AREA`."""
     weights = torch.zeros(out_size, in_size, dtype=torch.float32)
@@ -109,6 +113,7 @@ def _area_downscale_weights(in_size: int, out_size: int) -> torch.Tensor:
     return weights
 
 
+@functools.lru_cache(maxsize=16)
 def _area_upscale_coefficients(in_size: int, out_size: int) -> tuple[torch.Tensor, ...]:
     """
     Source indices and fixed-point (11 bits) weights of the linear interpolation `cv2.INTER_AREA` uses to upscale.
@@ -146,8 +151,7 @@ def _area_resize(images: torch.Tensor, size: int) -> torch.Tensor:
         return ((summed + 2) // 4).to(torch.uint8)
     if in_size > size:
         weights = _area_downscale_weights(in_size, size).to(images.device)
-        resized = torch.einsum("bchw,ow->bcho", images.float(), weights)
-        resized = torch.einsum("bcho,ph->bcpo", resized, weights)
+        resized = weights @ (images.float() @ weights.T)
         return resized.round().clamp(0, 255).to(torch.uint8)
     first, second, first_weight, second_weight = (
         t.to(images.device) for t in _area_upscale_coefficients(in_size, size)
