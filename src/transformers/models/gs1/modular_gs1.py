@@ -5,6 +5,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import math
 from dataclasses import dataclass, field
@@ -16,13 +22,13 @@ from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.utils.checkpoint import checkpoint
 
-from transformers.decision import DecisionMixin
-from transformers.decision.configuration_utils import DecisionConfig
-
+from ... import decision
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
-from ..auto import AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5PreTrainedModel
+
 
 GS1_DEFAULTS = {
     "attnres": True,
@@ -79,8 +85,8 @@ class GS1Config(PreTrainedConfig):
 
     model_type = "gs1"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(model_type="qwen3_5_text"),
-        "vision_config": SubConfigSpec(model_type="qwen3_5_vision"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_vision"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -110,8 +116,11 @@ class GS1Config(PreTrainedConfig):
         self.text_config.use_cache = False
         self.text_config._attn_implementation = "sdpa"
         self.vision_config._attn_implementation = "sdpa"
+        self.text_config._attn_implementation = "sdpa"
+        self.vision_config._attn_implementation = "sdpa"
 
 
+@auto_docstring
 @dataclass
 class GS1DecisionOutput(ModelOutput):
     r"""Output of GS1 structured candidate scoring.
@@ -151,15 +160,19 @@ class GS1DecisionHead(nn.Module):
         self.routing_attention_norm = nn.ModuleList(
             nn.LayerNorm(hidden_size, eps=eps) for _ in range(decision["cross_attention_layers"])
         )
-        self.routing_ffn = nn.ModuleList(
-            nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.GELU(), nn.Linear(hidden_size, hidden_size))
-            for _ in range(decision["cross_attention_layers"])
+        self.routing_ffn_in = nn.ModuleList(
+            nn.Linear(hidden_size, hidden_size) for _ in range(decision["cross_attention_layers"])
+        )
+        self.routing_ffn_out = nn.ModuleList(
+            nn.Linear(hidden_size, hidden_size) for _ in range(decision["cross_attention_layers"])
         )
         self.routing_output_norm = nn.ModuleList(
             nn.LayerNorm(hidden_size, eps=eps) for _ in range(decision["cross_attention_layers"])
         )
-        self.query_mlp = nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.GELU(), nn.Linear(hidden_size, width))
-        self.key_mlp = nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.GELU(), nn.Linear(hidden_size, width))
+        self.query_mlp_in = nn.Linear(hidden_size, hidden_size)
+        self.query_mlp_out = nn.Linear(hidden_size, width)
+        self.key_mlp_in = nn.Linear(hidden_size, hidden_size)
+        self.key_mlp_out = nn.Linear(hidden_size, width)
         self.query_norm = nn.LayerNorm(width, eps=eps)
         self.key_norm = nn.LayerNorm(width, eps=eps)
         self.projection_size = width
@@ -179,19 +192,20 @@ class GS1DecisionHead(nn.Module):
                 + self.question_evidence_projection(evidence)
             )
             routed = self.option_norm(self.option_projection(options) + self.condition_projection(context))
-            for attention, attention_norm, ffn, output_norm in zip(
+            for attention, attention_norm, ffn_in, ffn_out, output_norm in zip(
                 self.routing_attention,
                 self.routing_attention_norm,
-                self.routing_ffn,
+                self.routing_ffn_in,
+                self.routing_ffn_out,
                 self.routing_output_norm,
                 strict=True,
             ):
                 with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
                     evidence = attention(routed[None], memory, memory, need_weights=False)[0][0]
                 updated = attention_norm(routed + evidence)
-                routed = output_norm(updated + ffn(updated))
-            query = self.query_norm(self.query_mlp(context))
-            keys = self.key_norm(self.key_mlp(routed))
+                routed = output_norm(updated + ffn_out(F.gelu(ffn_in(updated))))
+            query = self.query_norm(self.query_mlp_out(F.gelu(self.query_mlp_in(context))))
+            keys = self.key_norm(self.key_mlp_out(F.gelu(self.key_mlp_in(routed))))
         return (keys.float() @ query.float()) / math.sqrt(self.projection_size)
 
 
@@ -248,19 +262,13 @@ class GS1TextModel(nn.Module):
         )
 
     @staticmethod
-    def _run_layer(layer, carry, positional, mask, read, valid_lengths, cohorts):
+    def _run_layer(layer, carry, positional, mask, read, valid):
         if layer.block_type == "full_attention":
             mixed = layer.self_attn(layer.input_layernorm(read), position_embeddings=positional, attention_mask=mask)[
                 0
             ]
-        elif min(valid_lengths) != carry.shape[1]:
-            mixed = torch.zeros_like(carry)
-            for size, rows in cohorts:
-                value = carry.index_select(0, rows)[:, -size:]
-                value = layer.linear_attn(layer.input_layernorm(value))
-                mixed = mixed.index_copy(0, rows, F.pad(value, (0, 0, carry.shape[1] - size, 0)))
         else:
-            mixed = layer.linear_attn(layer.input_layernorm(carry))
+            mixed = layer.linear_attn(hidden_states=layer.input_layernorm(carry), attention_mask=valid)
         hidden = carry + mixed
         ffn = layer.mlp(layer.post_attention_layernorm(hidden))
         return hidden + ffn, mixed, ffn
@@ -271,7 +279,6 @@ class GS1TextModel(nn.Module):
         if not valid[:, -1].all() or (valid[:, :-1] & ~valid[:, 1:]).any():
             raise ValueError("GS1 requires left-padded nonempty sequences")
         keep = valid.unsqueeze(-1)
-        valid_lengths = tuple(valid.sum(-1).tolist())
         hidden = inputs_embeds * keep
         eye = torch.eye(length, dtype=torch.bool, device=hidden.device)[None]
         selected = self.config.decision["bidirectional_layers"] or self.full_layers
@@ -289,10 +296,6 @@ class GS1TextModel(nn.Module):
                 ~allowed[:, None], torch.finfo(hidden.dtype).min
             )
         positional = self.rotary_emb(hidden, position_ids)
-        cohorts = tuple(
-            (size, torch.tensor([i for i, value in enumerate(valid_lengths) if value == size], device=hidden.device))
-            for size in sorted(set(valid_lengths))
-        )
         bank, partial = (hidden,), None
         for index, layer in enumerate(self.layers):
             read = (
@@ -303,10 +306,10 @@ class GS1TextModel(nn.Module):
             mask = masks[bidirectional and index in selected]
             if self.training and self.gradient_checkpointing:
                 hidden, mixed, ffn = self._gradient_checkpointing_func(
-                    self._run_layer, layer, hidden, positional, mask, read, valid_lengths, cohorts
+                    self._run_layer, layer, hidden, positional, mask, read, valid
                 )
             else:
-                hidden, mixed, ffn = self._run_layer(layer, hidden, positional, mask, read, valid_lengths, cohorts)
+                hidden, mixed, ffn = self._run_layer(layer, hidden, positional, mask, read, valid)
             hidden, mixed, ffn = hidden * keep, mixed * keep, ffn * keep
             if self.attnres_routers:
                 partial = mixed + ffn if partial is None else partial + mixed + ffn
@@ -318,26 +321,25 @@ class GS1TextModel(nn.Module):
 @auto_docstring
 class GS1PreTrainedModel(Qwen3_5PreTrainedModel):
     config: GS1Config
-    config_class = GS1Config
-    base_model_prefix = ""
-    _no_split_modules = ["GS1DecoderLayer", "Qwen3_5VisionBlock"]
+    base_model_prefix = "language_model"
+    _no_split_modules = ["GS1DecoderLayer"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, nn.LayerNorm):
-            torch.nn.init.ones_(module.weight)
+            init.ones_(module.weight)
             if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
         elif isinstance(module, FADepthRouter):
-            torch.nn.init.zeros_(module.query)
+            init.zeros_(module.query)
 
 
 @auto_docstring(checkpoint="bigai/GS1-9B")
-class GS1ForDecision(DecisionMixin, GS1PreTrainedModel):
+class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
     supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: GS1Config):
         super().__init__(config)
         self._newline_token_ids = ()
         self.language_model = GS1TextModel(config)
@@ -490,7 +492,7 @@ class GS1ForDecision(DecisionMixin, GS1PreTrainedModel):
             position_ids = self._vision_positions(input_ids, mm_token_type_ids, image_grid_thw)
         hidden = self.language_model(hidden, position_ids, roles, attention_mask)
         logits = []
-        for row, (begin, q0, q1, decision, qspan, starts, ends, spans) in enumerate(metadata):
+        for row, (begin, q0, q1, decision_position, qspan, starts, ends, spans) in enumerate(metadata):
             question = torch.stack(
                 (
                     hidden[row, begin + q0],
@@ -511,7 +513,7 @@ class GS1ForDecision(DecisionMixin, GS1PreTrainedModel):
                 ]
             )
             state = hidden[row, begin : begin + q0]
-            logits.append(self.decision_head(state, question, hidden[row, begin + decision], options))
+            logits.append(self.decision_head(state, question, hidden[row, begin + decision_position], options))
         logits = torch.cat(logits)
         loss = None
         if labels is not None:
@@ -528,7 +530,7 @@ class GS1ForDecision(DecisionMixin, GS1PreTrainedModel):
 
     def post_init(self):
         super().post_init()
-        self.decision_config = DecisionConfig(
+        self.decision_config = decision.configuration_utils.DecisionConfig(
             chat_template=GS1_TEMPLATE, sanitize_control_tokens=True, noul_options=["false", "true"]
         )
 
@@ -543,4 +545,4 @@ class GS1ForDecision(DecisionMixin, GS1PreTrainedModel):
         return model
 
 
-__all__ = ["GS1Config", "GS1ForDecision"]
+__all__ = ["GS1Config", "GS1PreTrainedModel", "GS1ForDecision"]

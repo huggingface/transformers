@@ -16,6 +16,7 @@ limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was contributed to Hugging Face Transformers on 2026-11-19.*
 
 # GS1
 
@@ -35,3 +36,12 @@ the compiled request and returns one score per candidate.
 
 GS1 is developed by [BIGAI](https://gs1.mybigai.ac.cn). See the [open-source implementation](https://github.com/bigai-nlco/GS1)
 for the model and inference reference.
+
+## GS1Config
+
+[[autodoc]] GS1Config
+
+## GS1ForDecision
+
+[[autodoc]] GS1ForDecision
+    - forward

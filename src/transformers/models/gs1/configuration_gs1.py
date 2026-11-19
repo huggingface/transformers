@@ -11,6 +11,12 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import math
 from dataclasses import field
@@ -19,6 +25,8 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
+
 
 GS1_DEFAULTS = {
     "attnres": True,
@@ -50,8 +58,8 @@ class GS1Config(PreTrainedConfig):
 
     model_type = "gs1"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(model_type="qwen3_5_text"),
-        "vision_config": SubConfigSpec(model_type="qwen3_5_vision"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_vision"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -79,6 +87,10 @@ class GS1Config(PreTrainedConfig):
             raise ValueError("cross_attention_heads must divide the text hidden size")
         self.tie_word_embeddings = False
         self.text_config.use_cache = False
+        self.text_config._attn_implementation = "sdpa"
+        self.vision_config._attn_implementation = "sdpa"
+        self.text_config._attn_implementation = "sdpa"
+        self.vision_config._attn_implementation = "sdpa"
 
 
 __all__ = ["GS1Config"]
