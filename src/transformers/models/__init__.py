@@ -155,6 +155,7 @@ if TYPE_CHECKING:
     from .esmfold2 import *
     from .eurobert import *
     from .evolla import *
+    from .exaone import *
     from .exaone4 import *
     from .exaone4_5 import *
     from .exaone_moe import *
@@ -469,6 +470,7 @@ if TYPE_CHECKING:
     from .sam3_video import *
     from .sam_hq import *
     from .sapiens2 import *
+    from .sarvam_mla import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *

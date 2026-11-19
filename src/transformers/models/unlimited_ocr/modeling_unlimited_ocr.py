@@ -1627,6 +1627,20 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
 
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was.
+        """
+        # We don't know yet, so let's be extra careful
+        if self.prefill_length is None:
+            return False
+        return self.prefill_max_cache_len <= self.prefill_length
+
+    # We never want to set it, but this is needed as the parent tries it - so just do nothing
+    @is_croppable.setter
+    def is_croppable(self, x): ...
+
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):

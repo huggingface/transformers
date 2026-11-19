@@ -56,19 +56,19 @@ class Qwen3NextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3NextModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
-        self.hidden_act = "silu"
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
+        "attention_probs_dropout_prob": 0.0,
+        "hidden_act": "silu",
+        "layer_types": ["linear_attention", "full_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+    }
 
     def get_gated_delta_rule_inputs(
         self, batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=False

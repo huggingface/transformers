@@ -326,6 +326,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GlmgaConfig": ["vision_config"],
     # Use the Llama implementation, which the auto mappings point to
     "InternLM3Config": True,
+    "ExaoneConfig": True,
     "IQuestCoderConfig": True,
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
@@ -336,6 +337,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # Consumed by cache_utils to select indexed-attention cache layers.
     "HYV4VLTextConfig": ["layer_types"],
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
+    # Use the DeepseekV3 implementation, which the auto mappings point to
+    "SarvamMLAConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
