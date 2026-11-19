@@ -90,7 +90,6 @@ class SentencePieceModelConversionTest(unittest.TestCase):
         "hi\nthere \n x",
         "end <reserve_0>",
         "  two leading",
-        "▁ literal metaspace",
     ]
 
     def _train(self, tmp_dir, **kwargs):

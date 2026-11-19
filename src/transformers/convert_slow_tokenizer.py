@@ -722,13 +722,14 @@ class SpmConverter(Converter):
             tokenizer.pre_tokenizer = pre_tokenizers.Sequence(_pre_tokenizers)
 
         # decoder
-        _decoders = [
-            decoders.Metaspace(
-                replacement="▁", prepend_scheme="first" if normalizer_spec.add_dummy_prefix else "never", split=False
-            )
-        ]
+        _decoders = [decoders.Replace("▁", " ")]
         if byte_fallback:
-            _decoders += [decoders.ByteFallback(), decoders.Fuse()]
+            _decoders.append(decoders.ByteFallback())
+        if normalizer_spec.add_dummy_prefix:
+            # `Strip` applies to each token, so fuse them first to strip only the start of the text
+            _decoders += [decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+        elif byte_fallback:
+            _decoders.append(decoders.Fuse())
         tokenizer.decoder = decoders.Sequence(_decoders)
 
         return tokenizer
