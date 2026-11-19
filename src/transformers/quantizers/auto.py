@@ -538,8 +538,10 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
         operation = quantizer.get_load_operation()
         tensors = {tensor for names in quantizer.serialized_names.values() for tensor in names}
-        if operation is None or not isinstance(transform, WeightConverter) or name.rpartition(".")[2] not in tensors:
+        if operation is None or name.rpartition(".")[2] not in tensors:
             return transform  # e.g. a merged expert bias: not one of the format's tensors
+        if not isinstance(transform, WeightConverter):  # renamed only: a converter of its one key, for the op
+            transform = WeightConverter(transform._original_source_patterns, transform._original_target_patterns, [])
         # Dequantized, the scales fold into the weight before the model's ops
         load, ops = operation(quantizer), transform.operations
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
