@@ -448,7 +448,7 @@ class HYV4Attention(nn.Module):
             topk_indices = prev_topk_indices
 
         sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
+        if self.config._attn_implementation in ("eager", "paged|eager", "sdpa"):
             index_mask = (
                 topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
                 .scatter(-1, topk_indices.long(), False)

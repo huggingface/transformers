@@ -37,6 +37,7 @@ from transformers import (
     CompileConfig,
     ContinuousBatchingConfig,
     DeepseekV3ForCausalLM,
+    DeepseekV32ForCausalLM,
     GenerationConfig,
     GenerationMixin,
     StaticCache,
@@ -95,6 +96,7 @@ from transformers.utils.generic import is_flash_attention_requested
 
 from ..distributed_testing_utils import run_distributed
 from ..models.deepseek_v3.test_modeling_deepseek_v3 import DeepseekV3ModelTester
+from ..models.deepseek_v32.test_modeling_deepseek_v32 import DeepseekV32ModelTester
 
 
 # Constants for tests
@@ -911,14 +913,26 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             for check in cached_availability_checks:
                 check.cache_clear()
 
-    @parameterized.expand(["eager", "sdpa"])
-    def test_continuous_batching_mla(self, attn_implementation: str) -> None:
-        """Test continuous batching on a model with MLA layers: they cache two latents of different shapes rather than
-        keys and values of shape [num_key_value_heads, head_dim]."""
+    @parameterized.expand(
+        [
+            (f"{name}_{attn_implementation}", tester_class, tester_kwargs, model_class, attn_implementation)
+            for name, tester_class, tester_kwargs, model_class in [
+                # The default tester config has latents of the same shape, so we make them ragged like real checkpoints
+                ("mla", DeepseekV3ModelTester, {"qk_rope_head_dim": 8}, DeepseekV3ForCausalLM),
+                # MLA layers with a sparse attention indexer, which also cache the indexer keys
+                ("indexed_mla", DeepseekV32ModelTester, {}, DeepseekV32ForCausalLM),
+            ]
+            for attn_implementation in ("eager", "sdpa")
+        ]
+    )
+    def test_continuous_batching_mla(
+        self, _, tester_class, tester_kwargs: dict, model_class, attn_implementation: str
+    ) -> None:
+        """Test continuous batching on models with MLA layers: they cache two latents of different shapes rather than
+        keys and values of shape [num_key_value_heads, head_dim], plus the indexer keys for indexed layers."""
         torch.manual_seed(0)
-        # The default tester config has latents of the same shape, so we make them ragged like real checkpoints
-        config = DeepseekV3ModelTester(self, qk_rope_head_dim=8).get_config()
-        model = DeepseekV3ForCausalLM(config).to(torch_device).eval()
+        config = tester_class(self, **tester_kwargs).get_config()
+        model = model_class(config).to(torch_device).eval()
         model.set_attn_implementation(attn_implementation)
         generation_config = GenerationConfig(max_new_tokens=10, do_sample=False, pad_token_id=config.pad_token_id)
         # Prompts both shorter and longer than max_batch_tokens, so the prefill of the long one reads from the cache

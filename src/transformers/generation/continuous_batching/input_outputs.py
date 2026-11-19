@@ -22,7 +22,7 @@ from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
-from .cache_allocators import FULL_ATTENTION, SLIDING_ATTENTION
+from .cache_allocators import FULL_ATTENTION, INDEXED_ATTENTION, SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
@@ -172,6 +172,9 @@ class ContinuousBatchingIOs:
             self.cumulative_seqlens_k["full_attention"] = full_attention_cumulative_seqlens_k
         if SLIDING_ATTENTION in self.cache.cache_allocators:
             self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
+        # Indexed attention layers read their keys like full attention ones, the indexer only narrows the attention
+        if INDEXED_ATTENTION in self.cache.cache_allocators:
+            self.cumulative_seqlens_k["indexed_attention"] = full_attention_cumulative_seqlens_k
 
         # Output tensor and scalars
         num_output_rows = 2 if self.return_logprobs else 1
