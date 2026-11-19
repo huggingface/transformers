@@ -57,8 +57,6 @@ class AudioVisualFlamingoConfig(AudioFlamingo3Config):
         Base period of the time embedding of video tokens.
     audio_time_embedding_theta (`float`, *optional*, defaults to 10000.0):
         Base period of the time embedding of audio tokens.
-    audio_frame_step (`float`, *optional*, defaults to 0.01):
-        Duration in seconds of one input mel frame.
 
     Example:
 
@@ -103,7 +101,6 @@ class AudioVisualFlamingoConfig(AudioFlamingo3Config):
     time_embedding_dim: int = 128
     video_time_embedding_theta: float | int = 50000.0
     audio_time_embedding_theta: float | int = 10000.0
-    audio_frame_step: float = 0.01
     tie_word_embeddings: bool = False
 
 
@@ -177,18 +174,20 @@ class AudioVisualFlamingoImageProcessor(TorchvisionBackend):
         is_tiled = [num_images == 1 for num_images in batch_num_images for _ in range(num_images)]
         for image, tiled in zip(images, is_tiled):
             if not tiled:
+                # A single tile, at the last scale, whose features are used for every scale by the model
                 tiles.append(self.resize(image, size, resample))
-                grids.append((1, 1))
+                grids.append([(0, 0)] * (len(s2_scales) - 1) + [(1, 1)])
                 continue
             num_cols, num_rows = get_optimal_tiled_canvas(
                 image.shape[-2:], (size.height, size.width), (s2_scales[-1] // s2_scales[0]) ** 2, max_tiles
             )
-            for rows, cols in get_s2_tile_grids(s2_scales, num_rows, num_cols):
+            image_grids = get_s2_tile_grids(s2_scales, num_rows, num_cols)
+            for rows, cols in image_grids:
                 resized = self.resize(image, SizeDict(height=rows * size.height, width=cols * size.width), resample)
                 # (channels, rows * height, cols * width) -> (rows * cols, channels, height, width)
                 resized = resized.unflatten(-2, (rows, -1)).unflatten(-1, (cols, -1))
                 tiles.extend(resized.permute(1, 3, 0, 2, 4).flatten(0, 1))
-            grids.append((num_rows, num_cols))
+            grids.append(image_grids)
 
         pixel_values = self.rescale_and_normalize(
             torch.stack(tiles), do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -214,6 +213,7 @@ class AudioVisualFlamingoMultiModalProjector(InternVLMultiModalProjector):
 class AudioVisualFlamingoAudioProjector(AudioFlamingo3MultiModalProjector):
     """Projects the audio encoder features to the language model space."""
 
+    # Only sets the type of `config`, that the modular converter would otherwise name `AudioVisualFlamingoAudioConfig`
     def __init__(self, config: AudioVisualFlamingoConfig):
         super().__init__(config)
 
@@ -240,7 +240,7 @@ class AudioVisualFlamingoRotaryEmbedding(nn.Module):
     def forward(self, timestamps: torch.Tensor, num_frames: int, num_tokens: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
-            timestamps (`torch.Tensor`): Times in seconds, broadcastable to `(..., num_frames, num_tokens)`.
+            timestamps (`torch.Tensor`): Times in seconds, broadcastable with `(num_frames, num_tokens)`.
             num_frames (`int`): Number of frames, or frame groups.
             num_tokens (`int`): Number of tokens per frame.
         """
@@ -323,32 +323,33 @@ class AudioVisualFlamingoModel(LlavaModel):
         r"""
         pixel_values (`torch.FloatTensor` of shape `(num_tiles, num_channels, height, width)`):
             Image tiles of all S2 scales, as returned by [`AudioVisualFlamingoImageProcessor`].
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
-            Number of tile rows and columns of the last S2 scale of each image. A `(1, 1)` grid marks an image encoded
-            as a single tile, whose features are used for every scale.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, num_scales, 2)`):
+            Number of tile rows and columns of each S2 scale of each image. Images encoded as a single tile only have
+            a `(1, 1)` grid at the last scale, whose features are used for every scale.
         """
         vision_outputs, tiles = self._get_vision_feature_maps(pixel_values, **kwargs)
-        scales = self.config.s2_scales
-        # Tile grid of each scale. A `(1, 1)` image grid is a single tile, used for every scale.
-        image_grids = [
-            [(1, 1)] if rows * cols == 1 else get_s2_tile_grids(scales, rows, cols)
-            for rows, cols in image_grid_hw.tolist()
-        ]
-        tiles_per_image = tiles.split([sum(rows * cols for rows, cols in grids) for grids in image_grids])
+        num_tiles = image_grid_hw.prod(-1)
+        tiles_per_image = tiles.split(num_tiles.sum(-1).tolist())
 
         image_features = []
-        for image_tiles, grids in zip(tiles_per_image, image_grids):
-            tiles_per_scale = image_tiles.split([rows * cols for rows, cols in grids])
-            scale_maps = [merge_tiles(scale_tiles, *grid) for scale_tiles, grid in zip(tiles_per_scale, grids)]
-            if len(scale_maps) == 1:
-                scale_maps *= len(scales)
+        for image_tiles, grids, counts in zip(tiles_per_image, image_grid_hw.tolist(), num_tiles.tolist()):
+            tiles_per_scale = image_tiles.split(counts)
+            scale_maps = [
+                merge_tiles(scale_tiles, *grid)
+                for scale_tiles, grid in zip(tiles_per_scale, grids)
+                if len(scale_tiles)
+            ]
+            # Scales without tiles use the features of the last scale
+            scale_maps = scale_maps[-1:] * (len(grids) - len(scale_maps)) + scale_maps
             # The feature maps of all scales are resized to the size of the last one, and concatenated along channels
             size = scale_maps[-1].shape[-2:]
-            feature_maps = torch.cat(
-                [nn.functional.interpolate(x[None].float(), size=size, mode="area").to(x.dtype) for x in scale_maps],
-                dim=1,
-            )
-            image_features.append(self._project_feature_maps(feature_maps)[0])
+            scale_maps = [
+                x
+                if x.shape[-2:] == size
+                else nn.functional.interpolate(x[None].float(), size=size, mode="area")[0].to(x.dtype)
+                for x in scale_maps
+            ]
+            image_features.append(self._project_feature_maps(torch.cat(scale_maps)[None])[0])
 
         vision_outputs.pooler_output = image_features
         return vision_outputs
@@ -390,6 +391,7 @@ class AudioVisualFlamingoModel(LlavaModel):
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
+        audio_timestamps: list[list[float]] | torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -397,6 +399,9 @@ class AudioVisualFlamingoModel(LlavaModel):
             Log-mel features of each audio, padded to a multiple of the audio encoder window.
         input_features_mask (`torch.Tensor` of shape `(num_audios, num_frames)`):
             Mask of the mel frames whose embeddings are passed to the language model.
+        audio_timestamps (`list[list[float]]` or `torch.Tensor` of shape `(num_audios, num_audio_tokens)`):
+            Time in seconds of each audio token, with one token every 4 mel frames. The processor returns them as
+            Python floats, so that casting the inputs to a lower precision doesn't affect them.
         """
         # Mel frames of a 30 second window, downsampled by 2 by the audio encoder convolutions
         window_size = 2 * self.audio_tower.config.max_source_positions
@@ -409,17 +414,12 @@ class AudioVisualFlamingoModel(LlavaModel):
         audio_embeds = window_embeds.new_zeros(*window_mask.shape, *window_embeds.shape[1:])
         audio_embeds[window_mask.to(window_embeds.device)] = window_embeds
         audio_embeds = audio_embeds.flatten(1, 2)
-        frames_per_token = window_size // window_embeds.shape[1]
-        token_duration = self.config.audio_frame_step * frames_per_token
-        # Token times are computed in float64 and cast to float32, as in training
-        timestamps = torch.arange(
-            audio_embeds.shape[1], device=audio_embeds.device, dtype=get_time_dtype(audio_embeds.device)
-        )
-        timestamps = (timestamps * token_duration + token_duration / 2).float()
+        # Token times are rounded to float32, as in training
+        timestamps = torch.as_tensor(audio_timestamps, dtype=torch.float32, device=audio_embeds.device)
         cos, sin = self.audio_rotary_emb(timestamps, 1, audio_embeds.shape[1])
         audio_embeds = apply_rotary_time_emb(audio_embeds, cos, sin)
 
-        token_mask = input_features_mask[:, ::frames_per_token]
+        token_mask = input_features_mask[:, :: window_size // window_embeds.shape[1]]
         return BaseModelOutputWithPooling(
             **audio_outputs, pooler_output=[embeds[mask] for embeds, mask in zip(audio_embeds, token_mask)]
         )
@@ -455,6 +455,7 @@ class AudioVisualFlamingoModel(LlavaModel):
         video_timestamps: list[list[float]] | torch.Tensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
+        audio_timestamps: list[list[float]] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -463,12 +464,14 @@ class AudioVisualFlamingoModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            Number of tile rows and columns of the last S2 scale of each image.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, num_scales, 2)`, *optional*):
+            Number of tile rows and columns of each S2 scale of each image.
         video_timestamps (`list[list[float]]` or `torch.Tensor` of shape `(num_videos, num_frames)`, *optional*):
             Time in seconds of each video frame.
         input_features_mask (`torch.Tensor` of shape `(num_audios, num_frames)`, *optional*):
             Mask of the mel frames whose embeddings are passed to the language model.
+        audio_timestamps (`list[list[float]]` or `torch.Tensor` of shape `(num_audios, num_audio_tokens)`, *optional*):
+            Time in seconds of each audio token.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -490,7 +493,7 @@ class AudioVisualFlamingoModel(LlavaModel):
             )
         if mm_encoder_outputs.get("audio") is None and input_features is not None:
             mm_encoder_outputs["audio"] = self.get_audio_features(
-                input_features, input_features_mask, return_dict=True
+                input_features, input_features_mask, audio_timestamps, return_dict=True
             )
 
         for modality in ("image", "video", "audio"):
@@ -522,8 +525,8 @@ class AudioVisualFlamingoForConditionalGeneration(LlavaForConditionalGeneration)
         self, pixel_values: torch.FloatTensor, image_grid_hw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
-            Number of tile rows and columns of the last S2 scale of each image.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, num_scales, 2)`):
+            Number of tile rows and columns of each S2 scale of each image.
         """
         return self.model.get_image_features(pixel_values, image_grid_hw, **kwargs)
 
@@ -545,13 +548,16 @@ class AudioVisualFlamingoForConditionalGeneration(LlavaForConditionalGeneration)
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
+        audio_timestamps: list[list[float]] | torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_audios, num_frames)`):
             Mask of the mel frames whose embeddings are passed to the language model.
+        audio_timestamps (`list[list[float]]` or `torch.Tensor` of shape `(num_audios, num_audio_tokens)`):
+            Time in seconds of each audio token.
         """
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
+        return self.model.get_audio_features(input_features, input_features_mask, audio_timestamps, **kwargs)
 
     def _prepare_multimodal_encoder_kwargs_for_generation(self, model_kwargs):
         # Audio is also encoded before generation, so that its features are expanded per prompt (e.g. for beam
@@ -559,7 +565,10 @@ class AudioVisualFlamingoForConditionalGeneration(LlavaForConditionalGeneration)
         model_kwargs = super()._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
         if model_kwargs["mm_encoder_outputs"].get("audio") is None and model_kwargs.get("input_features") is not None:
             model_kwargs["mm_encoder_outputs"]["audio"] = self.get_audio_features(
-                model_kwargs.pop("input_features"), model_kwargs.pop("input_features_mask"), return_dict=True
+                model_kwargs.pop("input_features"),
+                model_kwargs.pop("input_features_mask"),
+                model_kwargs.pop("audio_timestamps"),
+                return_dict=True,
             )
         return model_kwargs
 
@@ -575,6 +584,7 @@ class AudioVisualFlamingoForConditionalGeneration(LlavaForConditionalGeneration)
         video_timestamps: list[list[float]] | torch.Tensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
+        audio_timestamps: list[list[float]] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -585,12 +595,14 @@ class AudioVisualFlamingoForConditionalGeneration(LlavaForConditionalGeneration)
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            Number of tile rows and columns of the last S2 scale of each image.
+        image_grid_hw (`torch.LongTensor` of shape `(num_images, num_scales, 2)`, *optional*):
+            Number of tile rows and columns of each S2 scale of each image.
         video_timestamps (`list[list[float]]` or `torch.Tensor` of shape `(num_videos, num_frames)`, *optional*):
             Time in seconds of each video frame.
         input_features_mask (`torch.Tensor` of shape `(num_audios, num_frames)`, *optional*):
             Mask of the mel frames whose embeddings are passed to the language model.
+        audio_timestamps (`list[list[float]]` or `torch.Tensor` of shape `(num_audios, num_audio_tokens)`, *optional*):
+            Time in seconds of each audio token.
 
         Example:
 
@@ -625,6 +637,7 @@ class AudioVisualFlamingoForConditionalGeneration(LlavaForConditionalGeneration)
             video_timestamps=video_timestamps,
             input_features=input_features,
             input_features_mask=input_features_mask,
+            audio_timestamps=audio_timestamps,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,

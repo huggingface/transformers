@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2026-07-17 and contributed to Hugging Face Transformers on 2026-11-14.*
+*This model was published in HF papers on 2026-07-17 and contributed to Hugging Face Transformers on 2026-11-19.*
 
 # Audio-Visual Flamingo
 
@@ -44,12 +44,11 @@ The original code can be found [here](https://github.com/NVIDIA/audio-flamingo).
 The audio track of a video is loaded and interleaved with its frames when `load_audio_from_video=True`.
 
 ```python
-import torch
 from transformers import AudioVisualFlamingoForConditionalGeneration, AutoProcessor
 
 model_id = "nvidia/nemotron-labs-audio-visual-flamingo-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AudioVisualFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.bfloat16)
+model = AudioVisualFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {

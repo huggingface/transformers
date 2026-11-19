@@ -50,6 +50,11 @@ TINY_CONFIG_KWARGS = {
 }
 
 
+def get_audio_timestamps(num_tokens):
+    """Times in seconds of the tokens of an audio, one every 4 mel frames of 10 ms."""
+    return torch.arange(num_tokens, dtype=torch.float64, device=torch_device) * 0.04 + 0.02
+
+
 class AudioVisualFlamingoVisionTextModelTester(VLMModelTester):
     base_model_class = AudioVisualFlamingoModel
     config_class = AudioVisualFlamingoConfig
@@ -72,8 +77,10 @@ class AudioVisualFlamingoVisionTextModelTester(VLMModelTester):
         batch_size = self.batch_size if batch_size is None else batch_size
         input_ids[:, self.num_image_tokens : 2 * self.num_image_tokens] = config.video_token_id
         pixel_values_videos = modality_inputs[:, None].repeat(1, self.num_frames, 1, 1, 1)
+        # Each image is a single tile, at the last S2 scale
+        image_grid_hw = torch.tensor([[0, 0], [0, 0], [1, 1]], device=torch_device).repeat(batch_size, 1, 1)
         return {
-            "image_grid_hw": torch.ones(batch_size, 2, dtype=torch.long, device=torch_device),
+            "image_grid_hw": image_grid_hw,
             "pixel_values_videos": pixel_values_videos,
             "video_timestamps": torch.arange(self.num_frames, dtype=torch.float64, device=torch_device).repeat(
                 batch_size, 1
@@ -97,6 +104,10 @@ class AudioVisualFlamingoAudioTextModelTester(ALMModelTester):
         # One audio token every 4 mel frames
         return audio_mask[:, ::4]
 
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size=None):
+        # A single row of token times, shared by all audio, so that tests changing the number of audio keep it valid
+        return {"audio_timestamps": get_audio_timestamps(self.feat_seq_length // 4)[None]}
+
 
 @require_torch
 class AudioVisualFlamingoVisionTextModelTest(VLMModelTest, unittest.TestCase):
@@ -113,12 +124,18 @@ class AudioVisualFlamingoVisionTextModelTest(VLMModelTest, unittest.TestCase):
         model = AudioVisualFlamingoModel(config).to(torch_device).eval()
         # A tiled 3x4 image (1 + 2x2 + 3x4 tiles) and a single-tile image
         pixel_values = torch.randn(1 + 4 + 12 + 1, 3, 8, 8, device=torch_device)
-        image_grid_hw = torch.tensor([[3, 4], [1, 1]], device=torch_device)
+        image_grid_hw = torch.tensor([[[1, 1], [2, 2], [3, 4]], [[0, 0], [0, 0], [1, 1]]], device=torch_device)
         with torch.no_grad():
             image_features = model.get_image_features(pixel_values, image_grid_hw).pooler_output
+            single_tile_features = model.get_image_features(pixel_values[-1:], image_grid_hw[1:]).pooler_output[0]
+            # Projected features of the single tile, concatenated for every scale
+            _, tile_map = model._get_vision_feature_maps(pixel_values[-1:], output_hidden_states=True)
+            expected = model._project_feature_maps(tile_map.repeat(1, 3, 1, 1))[0]
 
         # 4 tokens per tile of the last scale
         self.assertEqual([features.shape[0] for features in image_features], [48, 4])
+        torch.testing.assert_close(image_features[1], single_tile_features)
+        torch.testing.assert_close(single_tile_features, expected)
 
     def test_interleaved_video_and_audio(self):
         config = self.model_tester.get_config()
@@ -131,6 +148,7 @@ class AudioVisualFlamingoVisionTextModelTest(VLMModelTest, unittest.TestCase):
         audio = {
             "input_features": torch.randn(1, 8, 32, device=torch_device),
             "input_features_mask": torch.ones(1, 32, dtype=torch.bool, device=torch_device),
+            "audio_timestamps": get_audio_timestamps(8)[None],
         }
         # Each segment holds the tokens of a group of frames, followed by the tokens of its audio
         text, video_id, audio_id = self.model_tester._safe_token_id(), config.video_token_id, config.audio_token_id
@@ -146,12 +164,16 @@ class AudioVisualFlamingoVisionTextModelTest(VLMModelTest, unittest.TestCase):
             video_features = model.get_video_features(**video).pooler_output[0]
             shifted_video_features = model.get_video_features(video["pixel_values_videos"], [[10.0, 11.0, 12.0, 13.0]])
             audio_features = model.get_audio_features(**audio).pooler_output[0]
+            shifted_audio_features = model.get_audio_features(
+                audio["input_features"], audio["input_features_mask"], audio["audio_timestamps"] + 10
+            )
 
         embeds = inputs_embeds["inputs_embeds"][0]
         torch.testing.assert_close(embeds[input_ids[0] == video_id], video_features)
         torch.testing.assert_close(embeds[input_ids[0] == audio_id], audio_features)
-        # Video features depend on the frame times, through their time embedding
+        # Video and audio features depend on their times, through their time embedding
         self.assertFalse(torch.allclose(shifted_video_features.pooler_output[0], video_features))
+        self.assertFalse(torch.allclose(shifted_audio_features.pooler_output[0], audio_features))
 
         # Raw inputs and pre-computed features of the same modality can't be both passed
         with self.assertRaisesRegex(ValueError, "both the raw video inputs and their mm_encoder_outputs"):
@@ -203,6 +225,7 @@ class AudioVisualFlamingoAudioTextModelTest(ALMModelTest, unittest.TestCase):
             "input_ids": torch.tensor([[text] + [audio_id] * 4 + [text] + [audio_id] * 8], device=torch_device),
             "input_features": torch.randn(2, 8, 32, device=torch_device),
             "input_features_mask": input_features_mask,
+            "audio_timestamps": get_audio_timestamps(8).repeat(2, 1),
         }
 
         generation_kwargs = {"max_new_tokens": 3, "return_dict_in_generate": True, "output_logits": True}
@@ -216,11 +239,10 @@ class AudioVisualFlamingoAudioTextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_audio_features_return_tuple(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         model = AudioVisualFlamingoModel(config).to(torch_device).eval()
+        audio = (inputs["input_features"], inputs["input_features_mask"], inputs["audio_timestamps"])
         with torch.no_grad():
-            outputs = model.get_audio_features(inputs["input_features"], inputs["input_features_mask"])
-            outputs_tuple = model.get_audio_features(
-                inputs["input_features"], inputs["input_features_mask"], return_dict=False
-            )
+            outputs = model.get_audio_features(*audio)
+            outputs_tuple = model.get_audio_features(*audio, return_dict=False)
 
         torch.testing.assert_close(torch.cat(outputs_tuple[1]), torch.cat(outputs.pooler_output))
 

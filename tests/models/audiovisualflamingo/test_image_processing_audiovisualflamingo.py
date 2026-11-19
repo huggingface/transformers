@@ -48,9 +48,10 @@ class AudioVisualFlamingoImageProcessingTest(ImageProcessingTestMixin, unittest.
             # A single image is tiled at every scale: 1 + 4 tiles, then the 2x5 grid closest to its aspect ratio
             inputs = image_processor(image, return_tensors="pt")
             self.assertEqual(inputs.pixel_values.shape, (15, 3, 20, 20))
-            self.assertEqual(inputs.image_grid_hw.tolist(), [[2, 5]])
+            self.assertEqual(inputs.image_grid_hw.tolist(), [[[1, 1], [2, 2], [2, 5]]])
 
-            # Images of multi-image samples are resized to a single tile
+            # Images of multi-image samples are resized to a single tile, at the last scale
             inputs = image_processor([[image, image], [image]], return_tensors="pt")
             self.assertEqual(inputs.pixel_values.shape, (17, 3, 20, 20))
-            self.assertEqual(inputs.image_grid_hw.tolist(), [[1, 1], [1, 1], [2, 5]])
+            single_tile = [[0, 0], [0, 0], [1, 1]]
+            self.assertEqual(inputs.image_grid_hw.tolist(), [single_tile, single_tile, [[1, 1], [2, 2], [2, 5]]])

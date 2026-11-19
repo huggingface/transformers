@@ -35,9 +35,9 @@ logger = logging.get_logger(__name__)
 class AudioVisualFlamingoProcessor(OmniModalProcessorMixin):
     text_kwargs = {"padding": True, "padding_side": "left", "return_tensors": "pt"}
     videos_kwargs = {"return_metadata": True}
-    # Frame times are kept as Python floats, so that casting the inputs to a lower precision doesn't affect them: their
-    # time embedding needs float64 precision
-    skip_tensor_conversion = OmniModalProcessorMixin.skip_tensor_conversion + ["video_timestamps"]
+    # Frame and audio token times are kept as Python floats, so that casting the inputs to a lower precision doesn't
+    # affect them: their time embedding needs more precision
+    skip_tensor_conversion = OmniModalProcessorMixin.skip_tensor_conversion + ["video_timestamps", "audio_timestamps"]
     # The audio encoder outputs one token every 4 mel frames
     audio_frames_per_token = 4
 
@@ -124,7 +124,8 @@ class AudioVisualFlamingoProcessor(OmniModalProcessorMixin):
         return super().get_text_with_replacements(text, images_replacements, videos_replacements, audio_replacements)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        num_rows, num_cols = image_inputs["image_grid_hw"][image_idx].tolist()
+        # The image is encoded at the resolution of its last S2 scale
+        num_rows, num_cols = image_inputs["image_grid_hw"][image_idx, -1].tolist()
         # As in training, each image ends with a newline
         return self.image_token * (num_rows * num_cols * self.image_seq_length) + "\n"
 
@@ -146,10 +147,15 @@ class AudioVisualFlamingoProcessor(OmniModalProcessorMixin):
             input_features.append(features[0].T)
 
         num_frames = torch.tensor([len(features) for features in input_features])
+        # Each audio token is placed at the middle of its mel frames
+        token_duration = self.feature_extractor.hop_length / sampling_rate * self.audio_frames_per_token
+        num_tokens = int(num_frames.max()) // self.audio_frames_per_token
+        timestamps = [index * token_duration + token_duration / 2 for index in range(num_tokens)]
         audio_inputs = BatchFeature(
             {
                 "input_features": torch.nn.utils.rnn.pad_sequence(input_features, batch_first=True).transpose(1, 2),
                 "input_features_mask": torch.arange(num_frames.max()) < num_frames[:, None],
+                "audio_timestamps": [list(timestamps) for _ in input_features],
             }
         )
         num_audio_tokens = (num_frames // self.audio_frames_per_token).tolist()
@@ -238,7 +244,7 @@ class AudioVisualFlamingoProcessor(OmniModalProcessorMixin):
 
     @property
     def model_input_names(self) -> list[str]:
-        return super().model_input_names + ["video_timestamps", "input_features_mask"]
+        return super().model_input_names + ["video_timestamps", "input_features_mask", "audio_timestamps"]
 
 
 __all__ = ["AudioVisualFlamingoProcessor"]

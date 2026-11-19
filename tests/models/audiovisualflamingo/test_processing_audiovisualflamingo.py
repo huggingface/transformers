@@ -98,13 +98,13 @@ class AudioVisualFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tiling = {"s2_scales": [28, 56, 84], "max_tiles": 12}
         inputs = processor(text="<image>Describe.", images=image, **tiling)
         self.assertEqual(inputs["pixel_values"].shape, (15, 3, 28, 28))
-        self.assertEqual(inputs["image_grid_hw"].tolist(), [[2, 5]])
+        self.assertEqual(inputs["image_grid_hw"].tolist(), [[[1, 1], [2, 2], [2, 5]]])
         self.assertEqual(self.decode_layout(inputs["input_ids"][0]), "<|image_bos|><image>x40\n<|image_eos|>Describe.")
 
         # Images of multi-image prompts are single tiles, and the image span is wrapped once
         inputs = processor(text="<image>vs<image>", images=[image, image], **tiling)
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 28, 28))
-        self.assertEqual(inputs["image_grid_hw"].tolist(), [[1, 1], [1, 1]])
+        self.assertEqual(inputs["image_grid_hw"].tolist(), [[[0, 0], [0, 0], [1, 1]]] * 2)
         self.assertEqual(
             self.decode_layout(inputs["input_ids"][0]), "<|image_bos|><image>x4\nvs<image>x4\n<|image_eos|>"
         )
@@ -116,6 +116,19 @@ class AudioVisualFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_features"].shape, (1, 128, 6000))
         self.assertTrue(inputs["input_features_mask"].all())
         self.assertEqual(self.decode_layout(inputs["input_ids"][0]), "<|sound_bos|><sound>x1500<|sound_eos|>Describe.")
+        # Each token is placed at the middle of its 4 mel frames of 10 ms
+        self.assertEqual(len(inputs["audio_timestamps"][0]), 1500)
+        self.assertEqual(inputs["audio_timestamps"][0][:3], [0.02, 0.06, 0.1])
+
+    def test_audio_timestamps_of_a_batch(self):
+        processor = self.get_processor()
+        audio = [np.zeros(40 * 16000, dtype=np.float32), np.zeros(10 * 16000, dtype=np.float32)]
+        inputs = processor(text=["<sound>Describe.", "<sound>Describe."], audio=audio)
+
+        # The token times of every audio cover the padded audio, and are Python floats, which casting the inputs to a
+        # lower precision leaves untouched
+        expected = [index * 0.04 + 0.02 for index in range(1500)]
+        self.assertEqual(inputs.to(torch.bfloat16)["audio_timestamps"], [expected, expected])
 
     def test_video_with_audio_interleaving(self):
         processor = self.get_processor()

@@ -42,8 +42,6 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         Base period of the time embedding of video tokens.
     audio_time_embedding_theta (`float`, *optional*, defaults to 10000.0):
         Base period of the time embedding of audio tokens.
-    audio_frame_step (`float`, *optional*, defaults to 0.01):
-        Duration in seconds of one input mel frame.
 
     Example:
 
@@ -93,7 +91,6 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
     time_embedding_dim: int = 128
     video_time_embedding_theta: float | int = 50000.0
     audio_time_embedding_theta: float | int = 10000.0
-    audio_frame_step: float = 0.01
     tie_word_embeddings: bool = False
 
 

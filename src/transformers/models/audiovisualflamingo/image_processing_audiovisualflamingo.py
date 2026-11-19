@@ -169,18 +169,20 @@ class AudioVisualFlamingoImageProcessor(TorchvisionBackend):
         is_tiled = [num_images == 1 for num_images in batch_num_images for _ in range(num_images)]
         for image, tiled in zip(images, is_tiled):
             if not tiled:
+                # A single tile, at the last scale, whose features are used for every scale by the model
                 tiles.append(self.resize(image, size, resample))
-                grids.append((1, 1))
+                grids.append([(0, 0)] * (len(s2_scales) - 1) + [(1, 1)])
                 continue
             num_cols, num_rows = get_optimal_tiled_canvas(
                 image.shape[-2:], (size.height, size.width), (s2_scales[-1] // s2_scales[0]) ** 2, max_tiles
             )
-            for rows, cols in get_s2_tile_grids(s2_scales, num_rows, num_cols):
+            image_grids = get_s2_tile_grids(s2_scales, num_rows, num_cols)
+            for rows, cols in image_grids:
                 resized = self.resize(image, SizeDict(height=rows * size.height, width=cols * size.width), resample)
                 # (channels, rows * height, cols * width) -> (rows * cols, channels, height, width)
                 resized = resized.unflatten(-2, (rows, -1)).unflatten(-1, (cols, -1))
                 tiles.extend(resized.permute(1, 3, 0, 2, 4).flatten(0, 1))
-            grids.append((num_rows, num_cols))
+            grids.append(image_grids)
 
         pixel_values = self.rescale_and_normalize(
             torch.stack(tiles), do_rescale, rescale_factor, do_normalize, image_mean, image_std
