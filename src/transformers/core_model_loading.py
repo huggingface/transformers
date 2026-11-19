@@ -769,6 +769,57 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
+class Inkling2LoopDequantizeExperts(ConversionOps):
+    r"""
+    Temporary op that dequantizes the NVFP4 and MXFP8 expert weights of the original Inkling2Loop checkpoints to the
+    dtype of the model param, until these formats can be loaded quantized.
+
+    - NVFP4 (`amax` present): two E2M1 codes per byte (even element in the low nibble), one float8 scale per 16 values
+      and a per-expert factor `amax / outer_scale_denominator`.
+    - MXFP8: float8 values with one power-of-two scale `2 ** (scale - 127)` per 32 values.
+    """
+
+    E2M1_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
+    EXPERTS_PER_CHUNK = 8
+
+    @torch.no_grad()
+    def convert(self, input_dict, source_patterns, target_patterns, model=None, full_layer_name=None, **kwargs):
+        tensors = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        if len(tensors) == 1:
+            return {target_patterns[0]: next(iter(tensors.values()))}
+        weight, scale, amax, denominator = (tensors.get(pattern) for pattern in source_patterns)
+
+        # Without a quantizer, the loader casts all sources to the param dtype, but don't rely on it
+        try:
+            dtype = model.get_parameter(full_layer_name).dtype
+        except (AttributeError, TypeError):
+            dtype = torch.bfloat16
+        num_experts, rows = weight.shape[:2]
+        columns = weight.shape[2] * 2 if amax is not None else weight.shape[2]
+        output = torch.empty(num_experts, rows, columns, dtype=dtype, device=weight.device)
+        if amax is not None:
+            e2m1_values = torch.tensor(self.E2M1_VALUES, device=weight.device)
+            byte = torch.arange(256, device=weight.device)
+            byte_to_values = torch.stack((e2m1_values[byte & 0xF], e2m1_values[byte >> 4]), dim=-1)
+            expert_factor = amax.float() / denominator.float()
+        for start in range(0, num_experts, self.EXPERTS_PER_CHUNK):
+            experts = slice(start, start + self.EXPERTS_PER_CHUNK)
+            block_scale = scale[experts].float()
+            if amax is None:
+                values = weight[experts].float().view(*block_scale.shape, 32)
+                values = values * torch.exp2(block_scale - 127)[..., None]
+            else:
+                codes = weight[experts].to(torch.uint8).long()
+                values = byte_to_values[codes].view(*block_scale.shape, 16) * block_scale[..., None]
+                values = values * expert_factor[experts, None, None, None]
+            output[experts] = values.reshape(-1, rows, columns).to(dtype)
+        return {target_patterns[0]: output}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return self
+
+
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).

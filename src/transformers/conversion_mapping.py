@@ -24,6 +24,7 @@ from .core_model_loading import (
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
+    Inkling2LoopDequantizeExperts,
     Interleave,
     MergeModulelist,
     PermuteForRope,
@@ -2577,6 +2578,35 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     mapping["inkling2_loop"] = mapping["inkling2"].copy()
+    # Temporary: the original Inkling2Loop checkpoints store NVFP4 and MXFP8 experts. They are dequantized on load and
+    # replace the Inkling2 expert transforms, which keep MXFP8 experts quantized.
+    inkling2_loop_experts = [
+        WeightConverter(
+            source_patterns=[
+                r"mlp\.experts\.w13_weight",
+                r"mlp\.experts\.w13_weight_scale",
+                r"mlp\.experts\.w13_weight_amax",
+                r"mlp\.experts\.w13_weight_outer_scale_denominator",
+            ],
+            target_patterns=r"mlp.experts.gate_up_proj",
+            operations=[Inkling2LoopDequantizeExperts(), Interleave(dim=1)],
+        ),
+        WeightConverter(
+            source_patterns=[
+                r"mlp\.experts\.w2_weight",
+                r"mlp\.experts\.w2_weight_scale",
+                r"mlp\.experts\.w2_weight_amax",
+                r"mlp\.experts\.w2_weight_outer_scale_denominator",
+            ],
+            target_patterns=r"mlp.experts.down_proj",
+            operations=[Inkling2LoopDequantizeExperts()],
+        ),
+    ]
+    inkling2_text = [
+        transform
+        for transform in mapping["inkling2_text"]
+        if not transform._original_source_patterns[0].startswith(r"mlp\.experts\.w")
+    ]
     mapping["inkling2_loop_text"] = [
         WeightRenaming(source_patterns=r"controllers\.attn\.", target_patterns=r"q_message_gate."),
         WeightRenaming(source_patterns=r"controllers\.k\.", target_patterns=r"k_message_gate."),
@@ -2600,7 +2630,8 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=r"message_input.query",
             operations=[Concatenate(dim=1)],
         ),
-    ] + mapping["inkling2_text"].copy()
+        *inkling2_loop_experts,
+    ] + inkling2_text
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
