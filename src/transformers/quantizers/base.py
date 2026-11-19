@@ -399,6 +399,9 @@ class HfQuantizer(ABC):
     # expert, before the experts merge), as a dequantization does
     load_before_model_ops = False
 
+    # A requantization: the load op dequantizes before the model's ops, `get_quantize_ops` quantizes after them
+    requantize = False
+
     def get_load_operation(self):
         """The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"""
         if not self.pre_quantized or self.load_serialized:

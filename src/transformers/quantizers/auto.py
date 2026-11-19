@@ -547,6 +547,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
         before = dequantize or quantizer.load_before_model_ops
         transform.operations = [load, *ops] if before else [*ops, load]
+        if quantizer.requantize:
+            transform.quantization_operation = quantizer.get_quantize_ops()
         return transform
 
     def param_needs_quantization(self, model, param_name, **kwargs):
