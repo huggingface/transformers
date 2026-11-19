@@ -237,7 +237,7 @@ jobs:
 
           # The image has no flash_attn package: transformers serves
           # flash_attention_2 from the aiter-flash-attn hub kernel, which the
-          # image ships locally (LOCAL_KERNELS). Load it the way transformers does.
+          # loader fetches from the Hub. Load it the way transformers does.
           from kernels import get_kernel
           fa = get_kernel("kernels-community/aiter-flash-attn", version=2)
           q = torch.randn(1, 256, 8, 64, device="cuda", dtype=torch.float16)

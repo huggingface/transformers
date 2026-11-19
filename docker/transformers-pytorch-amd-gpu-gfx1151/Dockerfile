@@ -2,7 +2,7 @@
 # AI Pro R9700 (gfx1201); GPU_ARCH below picks the GPU.
 #
 # Base is plain Ubuntu 24.04 (system python 3.12, matching the cp312 wheels
-# below). No ROCm in the base: the torch wheels (AMD's ROCm 10.1 build by
+# below). No ROCm in the base: the torch wheels (AMD's ROCm 10.2 build by
 # default) pull their own ROCm userspace from pip (rocm-sdk-core /
 # rocm-sdk-libraries), so a ROCm base image would only add ~20 GB of unused
 # libraries. The host still supplies the amdgpu/KFD kernel driver; run with
@@ -50,17 +50,21 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Declared here because the torch stack below picks its device code from it.
 ARG GPU_ARCH=gfx1151
 
-# torch stack: AMD's ROCm 10.1 wheels (cp312, matching the base image's python
-# 3.12), the stack this file was validated on for gfx1151 and gfx1201 (full
-# fast and slow suites, 2026-10-26). AMD splits its index into product trees,
-# torch in one and rocm-sdk-* in another, so it needs an extra index, and its
-# torch pulls the GPU's device code through an extra such as [device-gfx1201]
-# rather than requiring rocm[device-all].
+# torch stack: AMD's ROCm 10.2 wheels with torch 2.15 (cp312, matching the base
+# image's python 3.12). PyTorch 2.15 is the version ROCm 10.2 validates, and the
+# Hub's torch215-rocm100 kernel builds load on it (kernels matches a ROCm build
+# of the same major and an equal or lower minor). Checked on gfx1151 against
+# torch 2.14 + ROCm 10.1 (36 folders, no new failures) and, for SDPA flash and
+# memory-efficient attention, on gfx1201 (2026-11-19). AMD splits its index
+# into product trees, torch in one and rocm-sdk-* in another, so it needs an
+# extra index, and its torch pulls the GPU's device code through an extra such
+# as [device-gfx1201] rather than requiring rocm[device-all].
 #
 # PyTorch's own ROCm 7.14 channel also works but was last validated before the
 # kernel and pin changes in this file: build it with
 #   --build-arg TORCH_INDEX=https://download.pytorch.org/whl/rocm7.14
 #   --build-arg TORCH_EXTRA_INDEX= --build-arg TORCH_DEVICE_EXTRA=
+#   --build-arg TRIM_OTHER_ARCHS=0
 #   --build-arg TORCH_VERSION=2.14.0+rocm7.14 --build-arg TORCHVISION_VERSION=0.29.0+rocm7.14
 #   --build-arg TORCHAUDIO_INDEX=https://repo.amd.com/rocm/whl-multi-arch/
 #   --build-arg TORCHAUDIO_VERSION=2.11.0+rocm7.14.1
@@ -69,16 +73,18 @@ ARG GPU_ARCH=gfx1151
 ARG TORCH_INDEX=https://stable.repo.amd.com/rocm/pytorch/whl-next/
 ARG TORCH_EXTRA_INDEX=https://stable.repo.amd.com/rocm/core/whl-next/
 ARG TORCH_DEVICE_EXTRA=[device-${GPU_ARCH}]
-ARG TORCH_VERSION=2.14.0+rocm10.1.0
-ARG TORCHVISION_VERSION=0.29.0a0+rocm10.1.0
+ARG TORCH_VERSION=2.15.0+rocm10.2.0
+ARG TORCHVISION_VERSION=0.29.2+rocm10.2.0
 
-# --- Keep only one GPU architecture (saves ~10 GB) ---------------------------
-# torch requires rocm[device-all], which installs ROCm libraries for all 25
-# supported architectures (torch itself has kernels for 13 of them). When
-# TRIM_OTHER_ARCHS=1, the install step below deletes the files of every
-# rocm-sdk-device-* package except GPU_ARCH. Their metadata is kept, so later
-# pip calls still see torch's requirements as met. This has to happen in the
-# same RUN as the install: deleting in a later RUN would not shrink the image.
+# --- Keep only one GPU architecture ------------------------------------------
+# With the [device-<arch>] extra, AMD's 10.2 torch installs only that GPU's
+# rocm-sdk-device package, so this finds nothing to remove. It stays for torch
+# builds that pull device code for every architecture (ROCm 10.1's required
+# rocm[device-all], ~10 GB for all 25). When TRIM_OTHER_ARCHS=1, the install
+# step below deletes the files of every rocm-sdk-device-* package except
+# GPU_ARCH. Their metadata is kept, so later pip calls still see torch's
+# requirements as met. This has to happen in the same RUN as the install:
+# deleting in a later RUN would not shrink the image.
 #   GPU_ARCH           (above) must match the GPU this image runs on.
 #   TRIM_OTHER_ARCHS   1 = keep only GPU_ARCH (default); 0 = keep all 25.
 #                      Any other value fails the build.
@@ -108,7 +114,7 @@ list(map(os.remove, paths))" ;; \
 # build, from the same tree as torch. --no-deps so it cannot pull a different
 # torch.
 ARG TORCHAUDIO_INDEX=https://stable.repo.amd.com/rocm/pytorch/whl-next/
-ARG TORCHAUDIO_VERSION=2.11.0+rocm10.1.0
+ARG TORCHAUDIO_VERSION=2.11.1+rocm10.2.0
 RUN python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHAUDIO_INDEX} \
       "torchaudio==${TORCHAUDIO_VERSION}"
 
@@ -212,8 +218,8 @@ RUN python3 -m pip uninstall -y py3nvml pynvml nvidia-ml-py apex || true
 # dies -- an OOM kill loading a big checkpoint -- the controller's StatusDB
 # thread spins on recv() of the dead worker's socket and nothing is scheduled
 # again: the job idles, GPU at ~1%, until its timeout. That looked like a KFD
-# wedge; it is not. 16.7 raises on EOF (pytest-rerunfailures#358). Its own
-# step, with --no-deps, because [testing]'s <16.0 would otherwise win.
+# wedge; it is not. 16.7 raises on EOF (pytest-rerunfailures#358). Installed
+# after [testing], which picks <16.0, and with --no-deps so nothing else moves.
 RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 
 # `kernels` is pinned in below, not uninstalled; see the note there.
@@ -241,13 +247,14 @@ RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 #
 # kernels, pinned to transformers' range (setup.py: kernels>=0.18.0,<0.19 since
 # transformers#50307). Outside it, is_kernels_available() is False and
-# hub_kernels defines no mapping at all, which the gdn step below trips on.
+# hub_kernels defines no mapping at all.
 # It used to be uninstalled: adding it took gpt_oss from 5 failures to 25, all
 # resolving the CUDA-only kernels-community/vllm-flash-attn3. Retested on ROCm
 # 10.1 with kernels 0.17.2: the kernel tests in ministral3, granite_swa and
 # granitemoe_swa pass, and ministral3's fp8 slow tests now load
-# finegrained-fp8's torch-rocm build and run. Compiled kernels still fail to
-# load on ROCm 10.1; see "Hub kernels" at the end of this file.
+# finegrained-fp8's torch-rocm build and run. On torch 2.15 + ROCm 10.2,
+# megablocks, activation and aiter-flash-attn load from the Hub as they are;
+# see "Hub kernels" at the end of this file.
 # No urllib3 pin any more: in kernels 0.18.3 sigstore (which wanted
 # urllib3 2.x against [testing]'s <2) is optional, and urllib3 resolves to 2.x
 # through requests and blobfile anyway.
@@ -328,53 +335,13 @@ ENV FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE
 # Container /tmp (overlay, disk-backed) is fine. If a dedicated cache is wanted
 # later, create it at runtime inside whatever is mounted.
 
-# --- Hub kernels the ROCm 10.1 loader rejects by tag ---------------------------
-# kernels 0.18.1 picks the backend tag from torch.version.rocm, so on ROCm 10.1
-# it wants a "rocm101" build (0.17.2 read torch.version.hip and wanted "rocm716"),
-# and no Hub kernel publishes one: every compiled kernel fails with "Cannot find
-# a build variant for this system", even where a rocm72 build exists and runs
-# correctly here. LOCAL_KERNELS points the loader at a variant directory and
-# skips that check (load.py at v0.18.1).
-# Measured on gfx1151 for Atlas-Inference/gdn: qwen3_5 and qwen3_5_moe's
-# kernel-load tests 0/4 -> 4/4, and the layer matches transformers' own forward
-# to <1% relative L2. This section goes away once kernels matches ROCm builds by
-# HIP major version (rocm72 and rocm101 are both HIP 7), or the Hub publishes
-# builds for ROCm 10.1 with these GPUs in them.
-#
-# Only builds with our code objects in them are pointed at: gdn on gfx1151
-# (transformers maps gdn to ROCm capability 115 at this revision, and its rocm72
-# build carries gfx1151 alone) and megablocks below. activation's ROCm builds
-# stop at gfx1101, so pointing the loader at them would only trade one error for
-# another; that needs a Hub build with the RDNA archs added, as megablocks got.
-# The revision is read from the transformers checked out at REF, because
-# LOCAL_KERNELS overrides by repo name and ignores the revision transformers
-# asks for: a revision written here goes stale silently when REF moves (it did,
-# dff7b2f -> 13462bf). It takes the entry covering gfx1151's capability (115),
-# so a later mapping for another ROCm GPU doesn't break this build. If
-# transformers stops mapping gdn for gfx1151, the build fails here rather than
-# shipping an override nothing uses.
-# The ENV is set on every arch: Dockerfiles cannot set one conditionally, and on
-# gfx1201 nothing asks for gdn, so the override is never consulted there.
-RUN if [ "${GPU_ARCH}" = "gfx1151" ]; then \
-      rev="$(python3 -c "import transformers.integrations.hub_kernels as h; \
-r=[x for d, x in h._build_kernel_mapping()['Qwen3_5GatedDeltaNet'].items() if getattr(d, 'type', d) == 'rocm' \
-   and getattr(getattr(d, 'properties', None), 'min_capability', 0) <= 115 <= getattr(getattr(d, 'properties', None), 'max_capability', 0)]; \
-assert len(r) == 1, r; print(r[0]._revision)")" \
-      && echo "gdn revision from transformers: ${rev}" \
-      && python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Atlas-Inference/gdn', repo_type='kernel', revision='${rev}', allow_patterns=['build/torch214-cxx11-rocm72-x86_64-linux/*'], local_dir='/opt/hub-kernels/gdn')" \
-      && test -f /opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux/metadata.json; \
-    fi
-
-# megablocks (gpt_oss): the Hub's ROCm builds carry gfx1151 and gfx1201 since
-# kernels-community#1293, but only as rocm714/rocm72 variants, so the same tag
-# check rejects them. This takes the torch214-rocm714 variant of the v1 branch
-# (transformers asks for version=1) and fails the build if it lacks GPU_ARCH.
-RUN python3 -c "from huggingface_hub import snapshot_download, HfApi; \
-snapshot_download('kernels-community/megablocks', repo_type='kernel', revision='v1', allow_patterns=['build/torch214-rocm714-x86_64-linux/*'], local_dir='/opt/hub-kernels/megablocks'); \
-v=[b.target_commit for b in HfApi().list_repo_refs('kernels-community/megablocks', repo_type='kernel').branches if b.name == 'v1'][0]; \
-print('megablocks v1', v[:7])" \
-    && python3 -c "import json; a=json.load(open('/opt/hub-kernels/megablocks/build/torch214-rocm714-x86_64-linux/metadata.json'))['backend']['archs']; assert '${GPU_ARCH}' in a, a"
-ENV LOCAL_KERNELS=Atlas-Inference/gdn=/opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux:kernels-community/megablocks=/opt/hub-kernels/megablocks/build/torch214-rocm714-x86_64-linux
+# --- Hub kernels ------------------------------------------------------------
+# None are baked in and no LOCAL_KERNELS override is set: the loader fetches
+# each kernel from the Hub at run time. On torch 2.15 + ROCm 10.2 it picks
+# megablocks' torch215-rocm100 build (which carries gfx1151 and gfx1201),
+# activation's torch-stable-abi210-rocm100 and aiter-flash-attn's torch-rocm.
+# Atlas-Inference/gdn has no torch 2.15 build yet, so qwen3_5's gated-delta-net
+# runs transformers' PyTorch path until it gets one.
 
 # Last: kernels must still import, and a later step that resolved deps must not
 # have taken pytest-rerunfailures back below 16.7.
