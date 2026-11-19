@@ -75,8 +75,8 @@ def _json(text: str, args: dict) -> Any:
         # The first alternative swallows whole quoted strings (escapes included) and puts them back untouched,
         # so that key-like text inside a string value is never rewritten. Only the second one is a bare key.
         working = re.sub(
-            r'"(?:\\.|[^"\\])*"|(?<=[{,])(\w+):',
-            lambda m: m.group(0) if m.group(1) is None else f'"{m.group(1)}":',
+            r'"(?:\\.|[^"\\])*"|(?<=[{,])(\s*)(\w+)(\s*):',
+            lambda m: m.group(0) if m.group(2) is None else f'{m.group(1)}"{m.group(2)}"{m.group(3)}:',
             working,
         )
 

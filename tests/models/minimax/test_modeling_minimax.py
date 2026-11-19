@@ -41,10 +41,10 @@ class MiniMaxModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MiniMaxModel
 
-    def __init__(self, parent, layer_types=None, block_size=3):
-        super().__init__(parent)
-        self.layer_types = layer_types
-        self.block_size = block_size
+    small_config_overrides = {
+        "layer_types": None,
+        "block_size": 3,
+    }
 
 
 @require_torch
