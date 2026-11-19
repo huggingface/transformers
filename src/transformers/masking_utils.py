@@ -205,23 +205,6 @@ def remap_positions_for_packed_sequence(mask_function: Callable, position_ids: t
     return inner_mask
 
 
-def packed_sequence_compatibility_function(
-    mask_function: Callable, position_ids: torch.Tensor, packed_sequence_mask: torch.Tensor
-) -> Callable:
-    """
-    This function ensures compatibility of the current `mask_function` with packed sequence format, by making sure each sequence
-    stays fully independent of all others, and the `q_idx` and `kv_idx` positions inside each sequence are correctly remapped to
-    their actual values.
-    Note that it is ensured that `position_ids.shape[1] == packed_sequence_mask.shape[1] == q_length == kv_length`, so we can never
-    have indexing problems here.
-    """
-    # For packed sequences, we need to make sure each sequence are independent, as well as remapping the indices
-    return and_masks(
-        packed_sequence_mask_function(packed_sequence_mask),
-        remap_positions_for_packed_sequence(mask_function, position_ids),
-    )
-
-
 def add_offsets_to_mask_function(mask_function: Callable, q_offset: int, kv_offset: int) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,

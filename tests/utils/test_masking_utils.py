@@ -408,12 +408,13 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         config.attention_chunk_size = 3
 
         position_ids = torch.tensor([[0, 1, 2, 0, 1, 2]])
-        block_ids = torch.tensor([[0, 0, -1, 0, 0, -1]])
+        # The two samples reuse block id 0 at different offsets: A = [txt, img, img], B = [img, img, txt]
+        block_ids = torch.tensor([[-1, 0, 0, 0, 0, -1]])
 
         # fmt: off
         EXPECTED = torch.tensor(
-             [[[[1, 1, 0, 0, 0, 0],
-                [1, 1, 0, 0, 0, 0],
+             [[[[1, 0, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0],
                 [1, 1, 1, 0, 0, 0],
                 [0, 0, 0, 1, 1, 0],
                 [0, 0, 0, 1, 1, 0],
