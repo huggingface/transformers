@@ -130,8 +130,11 @@ class Inkling2UnweightedRMSNorm(nn.Module):
         super().__init__()
         self.eps = eps
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
+        hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.eps)
+        return hidden_states.to(input_dtype)
 
 
 class Inkling2L2Clip(nn.Module):
@@ -164,31 +167,40 @@ class Inkling2ScaledL2Clip(nn.Module):
 
 
 class Inkling2RelativeLogits(nn.Module):
-    """hidden states conditioned relative position bias. `proj` is a trained bank of bias-vs-distance profiles; each token's
-    `relative_states` mixes them into one bias value per backward distance
-    (`sglang RelLogitsProj` + the FA4 `score_mod`, materialized densely). The bias is zero
-    outside `0 <= distance < rel_extent`; causality and padding stay in the attention mask.
+    """
+    Hidden-states conditioned relative position bias. `linear` and `norm` give each token per-head `relative_states`
+    that mix the trained bank of bias-vs-distance profiles in `proj` into one bias value per backward distance. The
+    bias is zero outside `0 <= distance < rel_extent`.
     """
 
-    def __init__(self, d_rel: int, rel_extent: int):
+    def __init__(self, config: Inkling2TextConfig, num_heads: int, rel_extent: int):
         super().__init__()
+        self.num_heads = num_heads
         self.rel_extent = rel_extent
-        self.proj = nn.Parameter(torch.empty(d_rel, rel_extent))
+        self.linear = nn.Linear(config.hidden_size, num_heads * config.d_rel, bias=False)
+        self.norm = Inkling2ScaledL2Clip(num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        self.proj = nn.Parameter(torch.empty(config.d_rel, rel_extent))
 
     def forward(
         self,
-        relative_states: torch.Tensor,
+        hidden_states: torch.Tensor,
         cache: Cache | None = None,
         layer_idx: int = 0,
+        scale: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        q_length = relative_states.shape[1]
+        relative_states = self.linear(hidden_states).view(*hidden_states.shape[:-1], self.num_heads, -1)
+        relative_states = self.norm(relative_states)
+        if scale is not None:
+            relative_states = (relative_states.float() * scale).to(relative_states.dtype)
+
+        q_length = hidden_states.shape[1]
         if cache is None:
             kv_length, kv_offset, q_offset = q_length, 0, 0
         else:
             kv_length, kv_offset = cache.get_mask_sizes(q_length, layer_idx)
             q_offset = cache.get_query_offset(layer_idx)
-        q_positions = torch.arange(q_length, device=relative_states.device) + q_offset
-        kv_positions = torch.arange(kv_length, device=relative_states.device) + kv_offset
+        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
+        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
 
         # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
         rel_logits = (relative_states @ self.proj).transpose(1, 2)
@@ -376,20 +388,13 @@ class Inkling2DynamicShortConvolution(nn.Module):
 
 
 class Inkling2SlidingKeyValueProjection(nn.Module):
-    """Key or value states of the sliding-attention layers: projection, short convolution and per-head norm."""
+    """Key or value states of the sliding-attention layers: projection followed by a short convolution."""
 
-    def __init__(self, config: Inkling2TextConfig, layer_idx: int, is_key: bool):
+    def __init__(self, config: Inkling2TextConfig, layer_idx: int, conv_idx: int):
         super().__init__()
-        self.head_dim = config.swa_head_dim
         hidden_size = config.swa_num_key_value_heads * config.swa_head_dim
         self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
-        self.sconv = Inkling2ShortConvolution(
-            hidden_size, config.sconv_kernel_size, layer_idx, conv_idx=0 if is_key else 1
-        )
-        if is_key:
-            self.norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
-        else:
-            self.norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
+        self.sconv = Inkling2ShortConvolution(hidden_size, config.sconv_kernel_size, layer_idx, conv_idx=conv_idx)
 
     def forward(
         self,
@@ -399,20 +404,17 @@ class Inkling2SlidingKeyValueProjection(nn.Module):
         cache_offset: int = 0,
     ) -> torch.Tensor:
         states = self.linear(hidden_states)
-        states = self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
-        states = states.view(*hidden_states.shape[:-1], -1, self.head_dim)
-        return self.norm(states.float()).to(states.dtype).transpose(1, 2)
+        return self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
 
 
 class Inkling2FullKeyValueProjection(nn.Module):
     """
-    Key or value states of the full-attention layers: projection, dynamic short convolution and per-head norm. The
+    Key or value states of the full-attention layers: projection followed by a dynamic short convolution. The
     convolution weights are computed from the same input as the projection.
     """
 
-    def __init__(self, config: Inkling2TextConfig, layer_idx: int, is_key: bool):
+    def __init__(self, config: Inkling2TextConfig, layer_idx: int, conv_idx: int):
         super().__init__()
-        self.head_dim = config.head_dim
         hidden_size = config.num_key_value_heads * config.head_dim
         self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
         self.sconv = Inkling2DynamicShortConvolution(
@@ -421,12 +423,8 @@ class Inkling2FullKeyValueProjection(nn.Module):
             config.num_key_value_heads,
             config.sconv_kernel_size,
             layer_idx,
-            conv_idx=0 if is_key else 1,
+            conv_idx=conv_idx,
         )
-        if is_key:
-            self.norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
-        else:
-            self.norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -436,9 +434,7 @@ class Inkling2FullKeyValueProjection(nn.Module):
         cache_offset: int = 0,
     ) -> torch.Tensor:
         states = self.linear(hidden_states)
-        states = self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
-        states = states.view(*hidden_states.shape[:-1], -1, self.head_dim)
-        return self.norm(states.float()).to(states.dtype).transpose(1, 2)
+        return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -504,15 +500,15 @@ class Inkling2SlidingAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, is_key=True)
-        self.v_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, is_key=False)
-        self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
+        self.k_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=0)
+        self.v_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=1)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.rel_logits_proj = Inkling2RelativeLogits(config.d_rel, self.rel_extent)
+        self.q_norm = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
+        self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.rel_logits_proj = Inkling2RelativeLogits(config, self.num_heads, self.rel_extent)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
-        self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -541,16 +537,19 @@ class Inkling2SlidingAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
-        value_states = self.v_proj(value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
-        relative_states = self.r_proj(hidden_states)
-        gate = self.gate_proj(hidden_states)
-        sinks = self.sink_proj(hidden_states)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset).view(
+            hidden_shape
+        )
+        value_states = self.v_proj(
+            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+        ).view(hidden_shape)
 
-        query_states = self.q_l2_clip(query_states.view(hidden_shape)).transpose(1, 2)
-        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
-        position_bias = self.rel_logits_proj(relative_states, cache=cache, layer_idx=cache_layer_idx)
+        query_states = self.q_norm(query_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
+        value_states = self.v_norm(value_states).transpose(1, 2)
+
+        position_bias = self.rel_logits_proj(hidden_states, cache=cache, layer_idx=cache_layer_idx)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
@@ -559,6 +558,7 @@ class Inkling2SlidingAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
+        sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -569,12 +569,13 @@ class Inkling2SlidingAttention(nn.Module):
             scaling=self.scaling,
             sliding_window=self.sliding_window,
             position_bias=position_bias,
-            sinks=sinks.transpose(1, 2).unsqueeze(-1),
+            sinks=sinks,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
+        gate = torch.sigmoid(self.gate_proj(hidden_states).float())
+        attn_output = (attn_output.float() * gate).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -596,15 +597,15 @@ class Inkling2FullAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = Inkling2FullKeyValueProjection(config, layer_idx, is_key=True)
-        self.v_proj = Inkling2FullKeyValueProjection(config, layer_idx, is_key=False)
-        self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
+        self.k_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=0)
+        self.v_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=1)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.rel_logits_proj = Inkling2RelativeLogits(config.d_rel, self.rel_extent)
+        self.q_norm = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
+        self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.rel_logits_proj = Inkling2RelativeLogits(config, self.num_heads, self.rel_extent)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
-        self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -631,24 +632,26 @@ class Inkling2FullAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
-        value_states = self.v_proj(value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
-        relative_states = self.r_proj(hidden_states)
-        gate = self.gate_proj(hidden_states)
-        sinks = self.sink_proj(hidden_states)
-
         # log scaling of the queries and relative states, in fp32 as in the original
         tau = 1.0 + self.config.log_scaling_alpha * torch.log(
             ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
         )
         tau = tau[..., None, None]
 
-        query_states = self.q_l2_clip(query_states.view(hidden_shape))
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset).view(
+            hidden_shape
+        )
+        value_states = self.v_proj(
+            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+        ).view(hidden_shape)
+
+        query_states = self.q_norm(query_states)
         query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
-        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
-        relative_states = (relative_states.float() * tau).to(relative_states.dtype)
-        position_bias = self.rel_logits_proj(relative_states, cache=cache, layer_idx=cache_layer_idx)
+        key_states = self.k_norm(key_states).transpose(1, 2)
+        value_states = self.v_norm(value_states).transpose(1, 2)
+
+        position_bias = self.rel_logits_proj(hidden_states, cache=cache, layer_idx=cache_layer_idx, scale=tau)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
@@ -657,6 +660,7 @@ class Inkling2FullAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
+        sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -667,12 +671,13 @@ class Inkling2FullAttention(nn.Module):
             scaling=self.scaling,
             sliding_window=self.sliding_window,
             position_bias=position_bias,
-            sinks=sinks.transpose(1, 2).unsqueeze(-1),
+            sinks=sinks,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
+        gate = torch.sigmoid(self.gate_proj(hidden_states).float())
+        attn_output = (attn_output.float() * gate).to(attn_output.dtype)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
