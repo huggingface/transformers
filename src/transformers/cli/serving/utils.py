@@ -28,7 +28,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 from huggingface_hub import scan_cache_dir
 from tqdm import tqdm
@@ -684,20 +684,25 @@ class Detokenizer:
 
 
 # In a model's process: running its requests
-class EngineResult(NamedTuple):
-    """What the engine sends back for a request: its next streamed token, or, once `finished`, what it returned (its
-    generated tokens, or what the function returned) or the error that failed it."""
+# More than the requests an API server ever sends: each has a range of ids of its own
+IDS_PER_API_SERVER = 1 << 40
 
-    request_id: str  # the number of the API server that sent it, then a random id
-    data: Any
-    finished: bool
+
+def make_request_id(api_server: int, request_number: int) -> int:
+    """The id of the `request_number`-th request of an API server: unique among all the API servers' requests."""
+    return api_server * IDS_PER_API_SERVER + request_number
+
+
+def api_server_of(request_id: int) -> int:
+    """The API server that sent a request, which its results go to."""
+    return request_id // IDS_PER_API_SERVER
 
 
 class _TokenStreamer:
     """The streamer of a request's `model.generate()`: sends each new token (not the prompt's), and stops the
     generation once the request is cancelled."""
 
-    def __init__(self, request_id: str, send_results: Callable, cancelled_request_ids: set):
+    def __init__(self, request_id: int, send_results: Callable, cancelled_request_ids: set):
         self.request_id = request_id
         self.send_results = send_results
         self.cancelled_request_ids = cancelled_request_ids
@@ -709,8 +714,8 @@ class _TokenStreamer:
         if self.prompt:
             self.prompt = False
             return
-        for token in value.tolist():
-            self.send_results([EngineResult(self.request_id, token, False)])
+        tokens = value.tolist()
+        self.send_results([self.request_id] * len(tokens), tokens, [])
 
     def end(self) -> None:
         pass
@@ -718,15 +723,19 @@ class _TokenStreamer:
 
 class GenerateRunner:
     """Runs one request at a time, on a thread of its own (``torch.compile``'s CUDA graphs keep their state per
-    thread): text generation with `model.generate()`, or a submitted function."""
+    thread): text generation with `model.generate()`, or a submitted function.
+
+    `send_results(ids, tokens, finished)` sends its results: streamed tokens as two lists, each token's request id
+    and the token, and the requests that ended, as ``(request id, result)`` pairs, the result being what the request
+    returned (its generated tokens, or what the function returned) or the error that failed it."""
 
     def __init__(self, model: "PreTrainedModel", processor: Any, send_results: Callable):
         self.model, self.processor, self.send_results = model, processor, send_results
         self.queue: queue.Queue = queue.Queue()
-        self.cancelled_request_ids: set[str] = set()
+        self.cancelled_request_ids: set[int] = set()
         threading.Thread(target=self._process_requests, name="generate", daemon=True).start()
 
-    def generate(self, request_id: str, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
+    def generate(self, request_id: int, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
         """Generates with the model's generation config and the request's `generation_kwargs` on top (see
         `BaseHandler._build_generation_kwargs`)."""
 
@@ -751,10 +760,10 @@ class GenerateRunner:
 
         self.queue.put((request_id, generate_tokens, (), stream))
 
-    def submit(self, request_id: str, function: Callable, args: tuple, stream: bool) -> None:
+    def submit(self, request_id: int, function: Callable, args: tuple, stream: bool) -> None:
         self.queue.put((request_id, function, args, stream))
 
-    def cancel(self, request_id: str) -> None:
+    def cancel(self, request_id: int) -> None:
         self.cancelled_request_ids.add(request_id)
 
     def _process_requests(self) -> None:
@@ -776,7 +785,7 @@ class GenerateRunner:
                 logger.exception("A request failed")
                 result = RuntimeError(f"{type(error).__name__}: {error}")  # as text: any error crosses to the server
             self.cancelled_request_ids.discard(request_id)
-            self.send_results([EngineResult(request_id, result, True)])
+            self.send_results([], [], [(request_id, result)])
 
 
 class CBGenerateRunner(GenerateRunner):
@@ -795,11 +804,11 @@ class CBGenerateRunner(GenerateRunner):
         cb_config: "ContinuousBatchingConfig | None",
     ):
         super().__init__(model, processor, send_results)
-        self.active_requests: dict[str, list] = {}
+        self.active_requests: dict[int, list] = {}
         self.lock = threading.Lock()
         self.manager = self._start_continuous_batching(model, cb_config)
 
-    def generate(self, request_id: str, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
+    def generate(self, request_id: int, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
         seed = generation_kwargs.pop("seed", None)  # the request's: continuous batching shares the random numbers
         if seed is not None:
             set_torch_seed(seed)
@@ -808,13 +817,14 @@ class CBGenerateRunner(GenerateRunner):
         with self.lock:
             self.active_requests[request_id] = [stream, 0]
         batching_kwargs = self._build_continuous_batching_kwargs(generation_kwargs)
-        self.manager.add_request(inputs["input_ids"], request_id=request_id, streaming=stream, **batching_kwargs)
+        # The batching manager's ids are strings
+        self.manager.add_request(inputs["input_ids"], request_id=str(request_id), streaming=stream, **batching_kwargs)
 
-    def cancel(self, request_id: str) -> None:
+    def cancel(self, request_id: int) -> None:
         with self.lock:
             batched = self.active_requests.pop(request_id, None) is not None
         if batched:
-            self.manager.cancel_request(request_id)
+            self.manager.cancel_request(str(request_id))
         else:
             super().cancel(request_id)
 
@@ -838,13 +848,13 @@ class CBGenerateRunner(GenerateRunner):
         logger.info(f"Continuous batching settings of the request: {batching_kwargs}, ignored: {ignored}")
         return batching_kwargs
 
-    def _fail_if_worker_died(self, request_id: str) -> bool:
+    def _fail_if_worker_died(self, request_id: int) -> bool:
         """Fails the request if the batching manager's worker died, as it can't take requests anymore."""
         fatal_error = self.manager.background_thread_status.fatal_error
         if fatal_error is None:
             return False
         error = EngineDeadError(f"The continuous batching worker is dead and can't take requests: {fatal_error}")
-        self.send_results([EngineResult(request_id, error, True)])
+        self.send_results([], [], [(request_id, error)])
         return True
 
     def _start_continuous_batching(
@@ -869,37 +879,41 @@ class CBGenerateRunner(GenerateRunner):
                             failed = list(self.active_requests)
                             self.active_requests.clear()
                         error = EngineDeadError(f"The continuous batching worker died: {fatal_error}")
-                        self.send_results([EngineResult(request_id, error, True) for request_id in failed])
+                        if failed:
+                            self.send_results([], [], [(request_id, error) for request_id in failed])
                     continue
                 # All the outputs that are ready go in one message: a message per token would cost much more
-                results = []
+                ids, tokens, finished = [], [], []
                 while output is not None:
-                    results.extend(self._convert_to_engine_results(output))
+                    self._collect_output(output, ids, tokens, finished)
                     output = manager.get_result(timeout=0)
-                self.send_results(results)
+                if ids or finished:
+                    self.send_results(ids, tokens, finished)
 
         threading.Thread(target=send_outputs_to_api_servers, name="continuous-batching-outputs", daemon=True).start()
         return manager
 
-    def _convert_to_engine_results(self, output) -> list[EngineResult]:
-        """What to send for an output of the manager: its request's new tokens if it streams, and its end."""
+    def _collect_output(self, output, ids: list[int], tokens: list[int], finished: list[tuple[int, Any]]) -> None:
+        """Collects what to send for an output of the manager: its request's new tokens if it streams, and its end."""
+        request_id = int(output.request_id)
         with self.lock:
-            request_id = output.request_id
             entry = self.active_requests.get(request_id)
             if entry is None:  # cancelled
-                return []
+                return
             stream, sent = entry
             if output.error is not None:
                 del self.active_requests[request_id]
                 error = RuntimeError(f"Continuous batching failed for the request: {output.error}")
-                return [EngineResult(request_id, error, True)]
+                finished.append((request_id, error))
+                return
             generated = output.generated_tokens
-            results = [EngineResult(request_id, token, False) for token in generated[sent:]] if stream else []
+            if stream:
+                ids.extend([request_id] * (len(generated) - sent))
+                tokens.extend(generated[sent:])
             entry[1] = len(generated)
             if output.is_finished():
                 del self.active_requests[request_id]
-                results.append(EngineResult(request_id, list(generated), True))
-            return results
+                finished.append((request_id, list(generated)))
 
 
 def transcribe(model: "PreTrainedModel", processor: Any, inputs: dict, streamer=None) -> list[int]:
@@ -1085,12 +1099,18 @@ class BaseHandler:
 
         Subclasses call ``super()._build_generation_kwargs(...)`` then add theirs (``max_tokens``, ``stop``, etc.).
         """
+        from fastapi import HTTPException
+
         required = ("max_new_tokens", "eos_token_id", "do_sample", "temperature", "top_k", "top_p")
         generation_kwargs = {name: getattr(default, name) for name in required}
         if default.max_new_tokens is None or default.max_new_tokens < 1024:
             generation_kwargs["max_new_tokens"] = 1024
         if body.get("generation_config") is not None:
-            generation_kwargs.update(json.loads(body["generation_config"]))
+            requested = json.loads(body["generation_config"])
+            # They become arguments of `generate`, which runs a repository's code with this one
+            if "trust_remote_code" in requested:
+                raise HTTPException(status_code=422, detail="`trust_remote_code` can't be set by a request.")
+            generation_kwargs.update(requested)
 
         if body.get("temperature") is not None:
             generation_kwargs["temperature"] = float(body["temperature"])

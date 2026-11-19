@@ -17,12 +17,12 @@ they load (`ModelLoader`).
 """
 
 import asyncio
+import itertools
 import json
 import multiprocessing
 import queue
 import threading
-import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from functools import cached_property, partial
 from typing import TYPE_CHECKING, Any
 
@@ -36,18 +36,19 @@ from .utils import (
     CBGenerateRunner,
     Detokenizer,
     EngineDeadError,
-    EngineResult,
     GenerateRunner,
     GenerationState,
     Modality,
     ModelNotServedError,
     _StreamError,
+    api_server_of,
     canonical_model_id,
     decision_model_class,
     exit_with_parent,
     freeze_garbage_collector,
     get_gen_models,
     make_progress_tqdm_class,
+    make_request_id,
     model_owner,
     parse_model_id,
     prompt_length,
@@ -99,7 +100,9 @@ class EngineClient:
         self.managed_process: multiprocessing.process.BaseProcess | None = None
         self.is_dead = False
         self.fatal_error: str | None = None
-        self.result_queues: dict[str, asyncio.Queue[EngineResult]] = {}
+        # The requests in progress, by id: the future of their result, and the streamer of those that stream
+        self.pending_requests: dict[int, tuple[asyncio.Future, Detokenizer | None]] = {}
+        self._request_counter = itertools.count()
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
@@ -132,11 +135,7 @@ class EngineClient:
 
     async def generate_non_streaming(self, inputs: dict, generation_kwargs: dict) -> tuple[str, int, list[int]]:
         """Generates for `inputs`. Returns the text, the prompt's length, and the generated tokens."""
-        results = [
-            result
-            async for result in self._send_request("generate", stream=False, args=(dict(inputs), generation_kwargs))
-        ]
-        generated_ids = results[-1].data
+        generated_ids = await self._send_request("generate", args=(dict(inputs), generation_kwargs))
         text = self.processor.decode(generated_ids, skip_special_tokens=True)
         return text, prompt_length(inputs), generated_ids
 
@@ -144,18 +143,15 @@ class EngineClient:
         self, inputs: dict, generation_kwargs: dict, response_parser: "ResponseParser | None" = None
     ) -> tuple[asyncio.Queue, Detokenizer]:
         """Generates for `inputs`, streaming the answer. Returns its output queue and its streamer."""
-        results = self._send_request("generate", stream=True, args=(dict(inputs), generation_kwargs))
-        return self._stream_results(results, response_parser)
+        return self._send_streaming_request("generate", (dict(inputs), generation_kwargs), response_parser)
 
     async def submit(self, function: Callable, *args) -> Any:
         """Runs `function(model, processor, *args)` in the model's process, and returns its result."""
-        results = [result async for result in self._send_request("submit", stream=False, args=(function, args))]
-        return results[-1].data
+        return await self._send_request("submit", args=(function, args))
 
     def submit_streaming(self, function: Callable, *args) -> tuple[asyncio.Queue, Detokenizer]:
         """Like `submit`, streaming the tokens `function` generates. Returns its output queue and its streamer."""
-        results = self._send_request("submit", stream=True, args=(function, args))
-        return self._stream_results(results)
+        return self._send_streaming_request("submit", (function, args))
 
     def shutdown(self, reason: str = "The model's process stopped.") -> None:
         """Stops the model's process, if this client manages it. Its requests in progress fail with `reason`."""
@@ -170,10 +166,11 @@ class EngineClient:
         error = EngineDeadError(reason) if self.is_dead else RuntimeError(reason)
 
         def fail_all_requests() -> None:
-            for request_id, result_queue in self.result_queues.items():
-                result_queue.put_nowait(EngineResult(request_id, error, True))
+            for future, _ in self.pending_requests.values():
+                if not future.done():
+                    future.set_result(error)
 
-        if self._loop is not None and not self._loop.is_closed():  # on the event loop, where their queues belong
+        if self._loop is not None and not self._loop.is_closed():  # on the event loop, where their futures belong
             self._loop.call_soon_threadsafe(fail_all_requests)
 
         # Shutdown the process
@@ -189,54 +186,58 @@ class EngineClient:
 
         threading.Thread(target=release_once_exited, daemon=True).start()
 
-    async def _send_request(self, method: str, stream: bool, args: tuple) -> AsyncIterator[EngineResult]:
-        """Sends a request to the engine, to call `method(*args)` on its runner, and yields its results. Raises the
-        error that failed it."""
+    async def _send_request(self, method: str, args: tuple, streamer: Detokenizer | None = None) -> Any:
+        """Sends a request to the engine, to call `method(*args)` on its runner, and returns its result. With a
+        `streamer`, the request streams: its tokens go to it as they come. Raises the error that failed it."""
         if not self.running:
             await asyncio.to_thread(self.start)
 
         self._loop = asyncio.get_running_loop()
-        request_id = f"{self.api_server}-{uuid.uuid4().hex}"
-        result_queue = asyncio.Queue()
-        self.result_queues[request_id] = result_queue
+        request_id = make_request_id(self.api_server, next(self._request_counter))
+        future = self._loop.create_future()
+        self.pending_requests[request_id] = (future, streamer)
         self._cancel_idle_shutdown()
-        self.requests.put((method, request_id, *args, stream))
-        finished = False
+        self.requests.put((method, request_id, *args, streamer is not None))
         try:
-            while not finished:
-                result = await result_queue.get()
-                finished = result.finished
-                if isinstance(result.data, Exception):
-                    raise result.data
-                yield result
+            # An error comes as a result too: set as the future's exception, it would be logged as never retrieved
+            # when the request is cancelled meanwhile
+            result = await future
         finally:
-            del self.result_queues[request_id]
-            if not finished:
+            self.pending_requests.pop(request_id, None)
+            if future.cancelled():
                 self.requests.put(("cancel", request_id))
-            if not self.result_queues:
+            if not self.pending_requests:
                 self._schedule_idle_shutdown()
+        if isinstance(result, Exception):
+            raise result
+        return result
 
-    def _stream_results(
-        self, results: AsyncIterator[EngineResult], response_parser: "ResponseParser | None" = None
+    def _send_streaming_request(
+        self, method: str, args: tuple, response_parser: "ResponseParser | None" = None
     ) -> tuple[asyncio.Queue, Detokenizer]:
-        """Starts the task that decodes a request's streamed tokens. Returns its output queue and its streamer."""
+        """Sends a request that streams: creates its streamer, which receives its tokens (see `_start_reading_results`),
+        and the task that waits for its end. Returns the streamer's output queue and the streamer."""
         output_queue = asyncio.Queue()
         tokenizer = getattr(self.processor, "tokenizer", self.processor)._tokenizer  # type: ignore[union-attr]
         streamer = Detokenizer(tokenizer, output_queue, response_parser=response_parser)
 
-        async def decode_tokens() -> None:
+        async def wait_for_the_end() -> None:
             try:
-                async for result in results:
-                    if not result.finished:
-                        streamer.put_token(result.data)
+                await self._send_request(method, args=args, streamer=streamer)
                 streamer.end()
             except asyncio.CancelledError:
                 pass
             except Exception as e:
                 output_queue.put_nowait(_StreamError(str(e)))
 
-        streamer.task = asyncio.create_task(decode_tokens())
+        streamer.task = asyncio.create_task(wait_for_the_end())
         return output_queue, streamer
+
+    def _mark_dead(self, reason: str) -> None:
+        """Records that the engine can't generate any more: the server reports it, and stops."""
+        self.is_dead = True
+        self.fatal_error = reason
+        logger.error(f"The engine of {self.model_id} died: {reason}")
 
     def _start_reading_results(self) -> None:
         """Starts the thread that reads the engine's results. It also notices if the model's process crashed."""
@@ -244,14 +245,25 @@ class EngineClient:
         self._shutdown_requested = shutdown_requested
 
         def read_results(results_queue) -> None:
-            def handle_results(results: list[EngineResult]) -> None:
-                for result in results:
-                    if isinstance(result.data, EngineDeadError) and not self.is_dead:
-                        self.is_dead = True
-                        self.fatal_error = str(result.data)
-                        logger.error(f"The engine of {self.model_id} died: {self.fatal_error}")
-                    if result.request_id in self.result_queues:  # else its request was cancelled
-                        self.result_queues[result.request_id].put_nowait(result)
+            def deliver_results(ids: list[int], tokens: list[int], finished: list[tuple[int, Any]]) -> None:
+                """Delivers a message of the engine to the requests waiting in `_send_request`: each streamed token
+                (`tokens`, with the id of its request in `ids`) to its request's streamer, and each result of
+                `finished` to its request's future, which ends the request."""
+                for request_id, token in zip(ids, tokens):
+                    if request_id not in self.pending_requests:  # cancelled
+                        continue
+                    future, streamer = self.pending_requests[request_id]
+                    try:
+                        streamer.put_token(token)
+                    except Exception as error:  # the request fails, not the others whose tokens came with its own
+                        del self.pending_requests[request_id]
+                        future.set_result(error)
+                        self.requests.put(("cancel", request_id))
+                for request_id, result in finished:
+                    if isinstance(result, EngineDeadError) and not self.is_dead:
+                        self._mark_dead(str(result))
+                    if request_id in self.pending_requests:  # else cancelled
+                        self.pending_requests[request_id][0].set_result(result)
 
             while True:
                 try:
@@ -260,14 +272,12 @@ class EngineClient:
                     if shutdown_requested.is_set():
                         return
                     if process is not None and not process.is_alive():
-                        self.is_dead = True
-                        self.fatal_error = f"The model's process crashed (exit code {process.exitcode})."
-                        logger.error(f"The engine of {self.model_id} died: {self.fatal_error}")
+                        self._mark_dead(f"The model's process crashed (exit code {process.exitcode}).")
                         self.shutdown(self.fatal_error)
                         return
                     continue
                 if self._loop is not None:
-                    self._loop.call_soon_threadsafe(handle_results, results)
+                    self._loop.call_soon_threadsafe(deliver_results, *results)
 
         threading.Thread(target=read_results, args=(self.results,), name="model-results", daemon=True).start()
 
@@ -277,7 +287,7 @@ class EngineClient:
             return
 
         def shutdown_if_idle() -> None:
-            if not self.result_queues and self.running:
+            if not self.pending_requests and self.running:
                 logger.info(f"Stopping a model's process after {self.timeout}s without requests")
                 self.shutdown()
 
@@ -357,11 +367,17 @@ class EngineClient:
         if generation_state.seed is not None:
             set_torch_seed(generation_state.seed)
 
-        def send_results(engine_results: list[EngineResult]) -> None:
+        def send_results(ids: list[int], tokens: list[int], finished: list[tuple[int, Any]]) -> None:
+            if len(results) == 1:  # one API server: it's all for it
+                results[0].put((ids, tokens, finished))
+                return
             for api_server, results_queue in enumerate(results):
-                to_send = [result for result in engine_results if result.request_id.startswith(f"{api_server}-")]
-                if to_send:
-                    results_queue.put(to_send)
+                streamed = [pair for pair in zip(ids, tokens) if api_server_of(pair[0]) == api_server]
+                ended = [pair for pair in finished if api_server_of(pair[0]) == api_server]
+                if streamed or ended:
+                    results_queue.put(
+                        ([request_id for request_id, _ in streamed], [token for _, token in streamed], ended)
+                    )
 
         try:
             model, processor = load(on_progress=writer.send if report_progress else None)
