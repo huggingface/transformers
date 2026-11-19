@@ -37,7 +37,9 @@ We used curriculum learning for pretraining, changing the data mix during traini
 More detailed information about DBRX Instruct and DBRX Base can be found in our [technical blog post](https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm).
 
 This model was contributed by [eitan-turok](https://huggingface.co/eitanturok) and [abhi-db](https://huggingface.co/abhi-db).
-Note: The original `databricks/dbrx-instruct` checkpoint was closed; [`transformers-community/dbrx-instruct`](https://huggingface.co/transformers-community/dbrx-instruct) is a re-upload for compatibility, and the snippets below use that re-upload.
+
+> [!CAUTION]
+> The original `databricks/dbrx-instruct` checkpoint was closed. [alpindale/dbrx-instruct](https://huggingface.co/alpindale/dbrx-instruct) is a re-upload for compatibility, and the snippets below use that re-upload.
 
 ## Usage Examples
 
@@ -48,9 +50,9 @@ The `generate()` method can be used to generate text using DBRX. You can generat
 from transformers import AutoTokenizer, DbrxForCausalLM
 
 
-tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained("alpindale/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
-    "transformers-community/dbrx-instruct",
+    "alpindale/dbrx-instruct",
     device_map="auto",
     token="YOUR_HF_TOKEN",
     )
@@ -70,9 +72,9 @@ If you have flash-attention installed (`pip install flash-attn`), it is possible
 from transformers import AutoTokenizer, DbrxForCausalLM
 
 
-tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained("alpindale/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
-    "transformers-community/dbrx-instruct",
+    "alpindale/dbrx-instruct",
     device_map="auto",
     token="YOUR_HF_TOKEN",
     attn_implementation="flash_attention_2",
@@ -93,9 +95,9 @@ You can also generate faster using the PyTorch scaled dot product attention. (Th
 from transformers import AutoTokenizer, DbrxForCausalLM
 
 
-tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct", token="YOUR_HF_TOKEN")
+tokenizer = AutoTokenizer.from_pretrained("alpindale/dbrx-instruct", token="YOUR_HF_TOKEN")
 model = DbrxForCausalLM.from_pretrained(
-    "transformers-community/dbrx-instruct",
+    "alpindale/dbrx-instruct",
     device_map="auto",
     token="YOUR_HF_TOKEN",
     attn_implementation="sdpa",

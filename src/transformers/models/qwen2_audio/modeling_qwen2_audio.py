@@ -276,7 +276,6 @@ class Qwen2AudioPreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2AudioAttention"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 

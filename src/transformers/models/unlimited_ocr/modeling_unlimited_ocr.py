@@ -284,7 +284,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
     _supports_sdpa = True
@@ -299,7 +298,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
         "UnlimitedOcrTextDecoderLayer",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrSamVisionAttention):
@@ -1274,7 +1272,6 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["UnlimitedOcrTextDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1287,7 +1284,6 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, UnlimitedOcrTextTopkRouter):
@@ -1631,6 +1627,20 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
 
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was.
+        """
+        # We don't know yet, so let's be extra careful
+        if self.prefill_length is None:
+            return False
+        return self.prefill_max_cache_len <= self.prefill_length
+
+    # We never want to set it, but this is needed as the parent tries it - so just do nothing
+    @is_croppable.setter
+    def is_croppable(self, x): ...
+
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
@@ -1668,7 +1678,6 @@ class UnlimitedOcrTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

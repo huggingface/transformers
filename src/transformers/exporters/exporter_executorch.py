@@ -122,6 +122,8 @@ class ExecutorchExporter(DynamoExporter):
     export_format = ExportFormat.EXECUTORCH
     config_class = ExecutorchConfig
     program_suffix = ".pte"
+    # `.pte` programs are flatbuffers, loading them runs no code
+    requires_trust_remote_code = False
 
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}

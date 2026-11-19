@@ -114,7 +114,6 @@ class LagunaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -462,7 +461,6 @@ class LagunaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LagunaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -475,7 +473,6 @@ class LagunaPreTrainedModel(PreTrainedModel):
         "attentions": LagunaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range

@@ -268,7 +268,6 @@ class AfmoePreTrainedModel(PreTrainedModel):
     config: AfmoeConfig
     base_model_prefix = "model"
     _no_split_modules = ["AfmoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
@@ -282,8 +281,8 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
-        "expert_bias",
     ]
+    _keep_in_fp32_modules_strict = ["expert_bias"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
