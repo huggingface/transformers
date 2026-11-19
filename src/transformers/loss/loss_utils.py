@@ -23,6 +23,7 @@ from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, Deformab
 from .loss_deimv2 import Deimv2ForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+from .loss_gs1 import GS1ForDecisionLoss
 from .loss_lsd import PocketTTSForConditionalGenerationLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
@@ -185,6 +186,7 @@ LOSS_MAPPING = {
     "ForObjectDetection": ForObjectDetectionLoss,
     "ForCTC": ForCTCLoss,
     "ForConditionalGeneration": ForCausalLMLoss,
+    "ForDecision": GS1ForDecisionLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "DabDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,

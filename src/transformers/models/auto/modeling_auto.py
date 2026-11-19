@@ -2171,6 +2171,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
 MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
         ("gemma4", "JevForDecision"),
+        ("gs1", "GS1ForDecision"),
         ("jev", "JevForDecision"),
         ("qwen2", "JevForDecision"),
         ("qwen3_5", "JevForDecision"),
