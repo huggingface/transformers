@@ -6757,6 +6757,39 @@ class ModelTesterMixin(ExportTesterMixin):
                     self.assertEqual(output_old_name.cache.get_seq_length(), output_new_name.cache.get_seq_length())
                     self.assertTrue(output_old_name.cache.get_seq_length() > 0)
 
+    def test_keep_in_fp32_modules_strict(self):
+        """
+        Test that models using `_keep_in_fp32_modules_strict` actually hardcode the `dtype=torch.float32` in the parameter/buffer
+        creation, as otherwise the dtype is lost when instantiating a model from `__init__` or `from_config`.
+        """
+        from transformers.core_model_loading import build_glob_alternation
+        from transformers.modeling_utils import local_torch_dtype
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Init an empty model in fp16 to check if the params inside _keep_in_fp32_modules_strict are correctly
+                # kept in fp32
+                with local_torch_dtype(torch.float16, model_class.__name__):
+                    model = model_class(config).to(torch_device)
+                    model.eval()
+
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest("No `_keep_in_fp32_modules_strict` defined")
+
+                dtype_policy_alt, _, _ = build_glob_alternation(list(model._keep_in_fp32_modules_strict))
+
+                missing = []
+                for k, v in model.state_dict().items():
+                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32:
+                        missing.append(k)
+
+                self.assertTrue(
+                    len(missing) == 0,
+                    f"The following parameters/buffers are part of `_keep_in_fp32_modules_strict` but do not hardcode their dtype in the __init__: {(*missing,)}",
+                )
+
 
 global_rng = random.Random()
 

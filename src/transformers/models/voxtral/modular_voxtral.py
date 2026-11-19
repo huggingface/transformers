@@ -39,7 +39,7 @@ from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoderLayer,
     Qwen2AudioPreTrainedModel,
 )
-from .configuration_voxtral import VoxtralConfig
+from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 
 
 class VoxtralAttention(Qwen2AudioAttention):
@@ -70,7 +70,7 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    def __init__(self, config: VoxtralConfig):
+    def __init__(self, config: VoxtralEncoderConfig):
         super().__init__(config)
         embed_dim = config.d_model
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim, dtype=torch.float32)

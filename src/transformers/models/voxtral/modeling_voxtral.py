@@ -254,7 +254,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    def __init__(self, config: VoxtralConfig):
+    def __init__(self, config: VoxtralEncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
