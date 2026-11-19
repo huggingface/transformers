@@ -113,9 +113,15 @@ def _tp_class(base: type[nn.Module], wraps_instance_forward: bool) -> type[nn.Mo
                     output = base.forward(self, *args, **kwargs)
             return style.transform_output_post_forward(self, output, mesh)
 
-        # Same `__name__`: modules are looked up by class name (`_no_split_modules`, FSDP auto-wrap). The module
-        # path says where the class comes from.
-        attrs = {"forward": forward, "_tp_base_class": base, "__module__": __name__, "__qualname__": base.__name__}
+        # Same name, module and qualname as `base`: modules are looked up by class name (`_no_split_modules`, FSDP
+        # auto-wrap), and torch.compile treats a module as built-in (e.g. for `guard_filter_fn`s that skip built-in
+        # module guards) when its class module is in `torch.nn.modules`. `_tp_base_class` tells the classes apart.
+        attrs = {
+            "forward": forward,
+            "_tp_base_class": base,
+            "__module__": base.__module__,
+            "__qualname__": base.__qualname__,
+        }
         _TP_CLASSES[key] = type(base)(base.__name__, (base,), attrs)
     return _TP_CLASSES[key]
 

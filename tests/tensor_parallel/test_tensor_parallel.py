@@ -284,7 +284,8 @@ class TestTensorParallelLayer(TestCasePlus):
         self.assertIs(type(first), type(second))
         self.assertIsInstance(first, torch.nn.Linear)
         self.assertEqual(type(first).__name__, "Linear")
-        self.assertEqual(type(first).__module__, tensor_parallel.__name__)
+        self.assertEqual(type(first).__module__, torch.nn.Linear.__module__)  # torch.compile: a built-in module
+        self.assertIs(type(first)._tp_base_class, torch.nn.Linear)
         self.assertIs(first._tp_style, colwise)
         self.assertIs(second._tp_style, rowwise)
 
