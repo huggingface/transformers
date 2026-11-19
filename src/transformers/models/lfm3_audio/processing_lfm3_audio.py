@@ -31,6 +31,7 @@ if is_soundfile_available():
     import soundfile as sf
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class Lfm3AudioProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"

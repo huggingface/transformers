@@ -19,11 +19,13 @@ from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class Lfm3AudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs an LFM3-Audio feature extractor.
