@@ -35,11 +35,16 @@ if is_torch_available():
 class Lfm3ModelTester(CausalLMModelTester):
     base_model_class = Lfm3Model
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.layer_types = ["full_attention", "sliding_attention", "conv"]
-        self.num_hidden_layers = len(self.layer_types)
-        self.conv_L_cache = 7
+    small_config_overrides = {
+        "layer_types": ["full_attention", "sliding_attention", "conv"],
+        "conv_L_cache": 7,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_hidden_layers"] = len(values["layer_types"])
+        return values
 
 
 @require_torch

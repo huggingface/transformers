@@ -184,7 +184,6 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DINOv3ConvNextLayer"]
     _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

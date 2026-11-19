@@ -414,7 +414,6 @@ class AXK2DecoderLayer(DeepseekV32DecoderLayer):
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AXK2TopkRouter):

@@ -539,7 +539,6 @@ class ZayaPreTrainedModel(LlamaPreTrainedModel):
         "attentions": ZayaAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, ZayaResidualScaling):

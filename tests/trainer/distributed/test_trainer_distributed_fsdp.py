@@ -372,7 +372,7 @@ class TestFSDPConfig(TestCasePlus):
 class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
-        execute_subprocess_async(cmd, env=self.get_env())
+        execute_subprocess_async(cmd, env=self.get_env(), allow_empty_output=True)
         # output_dir is always the last script_arg value
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []

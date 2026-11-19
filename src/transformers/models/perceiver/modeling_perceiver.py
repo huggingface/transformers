@@ -532,7 +532,6 @@ class PerceiverPreTrainedModel(PreTrainedModel):
     main_input_name = "inputs"
     input_modalities = ("image",)  # technically can be anything but HF impl has only image processor
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
