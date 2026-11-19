@@ -26,6 +26,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -34,7 +35,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
@@ -1176,6 +1177,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Multimod
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1266,8 +1268,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Multimod
                 return_dict=True,
             )
         language_model_inputs = mm_encoder_outputs["image"].pooler_output
-        if not isinstance(language_model_inputs, torch.Tensor):
-            language_model_inputs = torch.cat(language_model_inputs, dim=0)
         qformer_outputs = mm_encoder_outputs["image"].qformer_outputs
         vision_outputs = mm_encoder_outputs["image"].vision_outputs
 

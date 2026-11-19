@@ -97,7 +97,7 @@ class BaseModelOutputWithPooling(ModelOutput):
     """
 
     last_hidden_state: torch.Tensor | None = None
-    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | None = None
+    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | list[torch.Tensor] | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
     split_sizes: torch.LongTensor | None = None
