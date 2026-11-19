@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_deterministic_for_xpu,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
@@ -204,7 +205,33 @@ class FalconMambaModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the original mamba does not support decoding more than 1 token neither do we
+
+    def create_and_check_falcon_mamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        model = FalconMambaModel(config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        split = input_ids.shape[1] // 2
+
+        with torch.no_grad():
+            full_output = model(input_ids, use_cache=False).last_hidden_state
+            chunked_cache = model(input_ids[:, :split], use_cache=True).cache_params
+            chunked_output = model(input_ids[:, split:], use_cache=True, cache_params=chunked_cache).last_hidden_state
+
+            full_cache = model(input_ids, use_cache=True).cache_params
+
+        full_recurrent_state = full_cache.get_recurrent_state(0)
+        chunked_recurrent_state = chunked_cache.get_recurrent_state(0)
+
+        self.parent.assertTrue(
+            torch.allclose(full_recurrent_state, chunked_recurrent_state, atol=1e-6, rtol=1e-4),
+            msg=f"Max diff between chunked cache and full cache: {(full_recurrent_state - chunked_recurrent_state).abs().max().item()}",
+        )
+        self.parent.assertTrue(
+            torch.allclose(full_output[:, split:], chunked_output, atol=1e-5, rtol=1e-4),
+            msg=f"Max diff between chunked and full: {(full_output[:, split:] - chunked_output).abs().max().item()}",
+        )
 
     def create_and_check_falcon_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
@@ -315,6 +342,16 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
+    def test_falcon_mamba_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_falcon_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_falcon_mamba_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_falcon_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
+
     def test_falcon_mamba_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_falcon_mamba_cached_slow_forward_and_backwards(*config_and_inputs)
@@ -392,10 +429,8 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
     @unittest.skip(
-        "FalconMamba shares Mamba1's conv path, which has no chunked-continuation support: on a cached "
-        "multi-token forward it rebuilds conv_state from the zero-padded current chunk instead of bridging "
-        "the previous window (and multiplies the raw full-history mask against the local chunk), so the "
-        "split-vs-single comparison cannot match regardless of padding masking — out of Mamba1's contract."
+        "On a cached multi-token forward, the mixer multiplies the full attention mask "
+        "covering the whole history, against just the new chunk, so the sizes don't match"
     )
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
         pass
