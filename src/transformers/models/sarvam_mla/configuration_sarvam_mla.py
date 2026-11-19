@@ -135,7 +135,8 @@ class SarvamMLAConfig(PreTrainedConfig):
         # `deepseek_yarn` is the same as standard YaRN
         rope_scaling = kwargs.get("rope_scaling") or {}
         if "deepseek_yarn" in (rope_scaling.get("type"), rope_scaling.get("rope_type")):
-            kwargs["rope_scaling"] = {k: v for k, v in rope_scaling.items() if k != "type"} | {"rope_type": "yarn"}
+            del kwargs["rope_scaling"]
+            self.rope_parameters = {k: v for k, v in rope_scaling.items() if k != "type"} | {"rope_type": "yarn"}
             legacy_keys.append("rope_scaling.type='deepseek_yarn'")
         if legacy_keys:
             logger.warning_once(
