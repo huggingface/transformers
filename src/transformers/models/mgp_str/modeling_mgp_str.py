@@ -274,7 +274,6 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mgp_str"
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)

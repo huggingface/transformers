@@ -659,7 +659,6 @@ class Gemma4UnifiedTextScaledWordEmbedding(Gemma4TextScaledWordEmbedding):
 class Gemma4UnifiedPreTrainedModel(Gemma4PreTrainedModel):
     _no_split_modules = ["Gemma4UnifiedTextDecoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma4UnifiedTextRotaryEmbedding):

@@ -1002,7 +1002,6 @@ class SamPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, SamVisionAttention):

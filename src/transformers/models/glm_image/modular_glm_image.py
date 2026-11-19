@@ -170,7 +170,6 @@ class GlmImageConfig(PreTrainedConfig):
         "vision_config": GlmImageVisionConfig,
         "vq_config": GlmImageVQVAEConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

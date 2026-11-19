@@ -168,7 +168,6 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -181,7 +180,6 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
         "attentions": "LlamaAttention",
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LlavaNextVideoModel):

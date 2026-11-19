@@ -443,7 +443,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconH1DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _is_stateful = True
@@ -454,7 +453,6 @@ class FalconH1PreTrainedModel(PreTrainedModel):
         "attentions": FalconH1Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, FalconH1Mixer):

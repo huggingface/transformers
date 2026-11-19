@@ -2027,6 +2027,7 @@ class ProcessorTesterMixin:
             "Kosmos2_5Processor",  # Hub config doesn't match processor defaults
             "LlavaNextProcessor",  # Hub config doesn't match processor defaults
             "Pix2StructProcessor",  # __call__ relies on add_special_tokens default
+            "Qwen3ASRProcessor",  # Original checkpoints use WhisperFeatureExtractor
             "ShieldGemma2Processor",  # Hub config doesn't match processor defaults
             "VideoLlama3Processor",  # Hub config doesn't match processor defaults
         }

@@ -138,14 +138,12 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = []
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -357,6 +355,7 @@ class UltraVBertPredictionHead(nn.Module):
 @auto_docstring
 class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)

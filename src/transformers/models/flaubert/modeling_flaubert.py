@@ -665,7 +665,6 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             langs_list = None
         return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)

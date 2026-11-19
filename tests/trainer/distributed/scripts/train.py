@@ -161,6 +161,9 @@ def main():
         with open(loss_output_file, "w", encoding="utf-8") as f:
             json.dump(losses, f)
 
+    # Destroy process groups before interpreter shutdown tears down CUDA.
+    trainer.accelerator.end_training()
+
 
 if __name__ == "__main__":
     main()

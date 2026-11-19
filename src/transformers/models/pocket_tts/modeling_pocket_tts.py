@@ -413,7 +413,6 @@ class PocketTTSPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     # the flow head runs as one unit per step: split across devices, its blocks would mix devices mid-computation
     _no_split_modules = ["PocketTTSDecoderLayer", "PocketTTSFlowHead"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -426,7 +425,6 @@ class PocketTTSPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("text", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, PocketTTSTimestepNorm):
@@ -480,7 +478,6 @@ class PocketTTSRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

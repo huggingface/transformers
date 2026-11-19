@@ -66,7 +66,6 @@ class LasrEncoderConfig(PreTrainedConfig):
     """
 
     model_type = "lasr_encoder"
-    keys_to_ignore_at_inference = ["cache"]
 
     hidden_size: int = 512
     num_hidden_layers: int = 17

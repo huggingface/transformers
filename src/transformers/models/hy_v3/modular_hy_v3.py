@@ -72,7 +72,6 @@ class HYV3Config(PreTrainedConfig):
 
     model_type = "hy_v3"
     default_theta = 11_158_840.0
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_local_experts": "num_experts",
     }
@@ -237,7 +236,6 @@ class HYV3PreTrainedModel(LlamaPreTrainedModel):
         "attentions": HYV3Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
