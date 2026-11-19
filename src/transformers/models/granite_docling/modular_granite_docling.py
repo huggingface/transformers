@@ -1196,8 +1196,6 @@ class GraniteDoclingModel(Idefics3Model):
                 )
             image_outputs = mm_encoder_outputs["image"]
             image_hidden_states = image_outputs.pooler_output
-            if not isinstance(image_hidden_states, torch.Tensor):
-                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
             router_logits = image_outputs.router_logits
             deepstack_visual_embeds = image_outputs.deepstack_features

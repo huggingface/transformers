@@ -565,16 +565,12 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_features, torch.Tensor):
-                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output
-            if not isinstance(video_features, torch.Tensor):
-                video_features = torch.cat(video_features, dim=0)
             video_features = video_features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
