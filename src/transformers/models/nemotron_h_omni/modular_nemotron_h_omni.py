@@ -13,8 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-from itertools import accumulate
-
 import torch
 from torch import nn
 
@@ -309,48 +307,9 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         )
         return special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.LongTensor | None = None,
-    ) -> dict[str, dict]:
-        # override -> video placeholders reuse the image token, so both modalities count `image_token_id`
-        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            # interleaving on the first dim matches `input_ids.repeat_interleave` on the batch dim
-            if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
-            return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
-
-        for modality in ["image", "video"]:
-            modality_outputs = mm_encoder_output.get(modality)
-            if modality_outputs is None or getattr(modality_outputs, "pooler_output", None) is None:
-                continue
-
-            # 1. cumulative number of placeholder tokens per text sample and per encoded image/video
-            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-                special_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.full((), self.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                num_tokens_in_text = special_mask.all(-1).sum(-1)
-            else:
-                num_tokens_in_text = (input_ids == self.image_token_id).sum(-1)
-            num_tokens_in_text = list(accumulate(num_tokens_in_text))
-            num_tokens_in_encoder = list(accumulate(len(out) for out in modality_outputs.pooler_output))
-
-            # 2. split the encoder outputs into one group per text sample and repeat each group
-            offsets = [0] + [i + 1 for i, num in enumerate(num_tokens_in_encoder) if num in num_tokens_in_text]
-            is_split = not isinstance(modality_outputs.pooler_output, torch.Tensor)
-            modality_outputs.pooler_output = [
-                out
-                for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(modality_outputs.pooler_output[start:end], expand_size)
-            ]
-
-            if not is_split:
-                modality_outputs.pooler_output = torch.stack(modality_outputs.pooler_output, dim=0)
-        return mm_encoder_output
+    def _placeholder_token_id(self, modality: str) -> int:
+        # Video placeholders reuse the image token
+        return self.image_token_id
 
     @can_return_tuple
     @auto_docstring

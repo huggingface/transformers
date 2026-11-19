@@ -1156,8 +1156,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration):
             router_logits=outputs.router_logits,
         )
 
-    def _expand_multimodal_outputs(self, **super_kwargs):
-        raise AttributeError("Uses normal super call")
+    def _placeholder_token_id(self, **super_kwargs):
+        raise AttributeError("Uses its own video token")
 
 
 class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):

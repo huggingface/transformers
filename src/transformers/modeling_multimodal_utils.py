@@ -13,6 +13,7 @@
 # limitations under the License.
 """Shared getters of models that take images or videos."""
 
+import copy
 import functools
 
 import torch
@@ -51,10 +52,11 @@ class MultimodalMixin:
         """Concatenates per-item outputs back into the flat layout of `get_*_embeddings`."""
         if not isinstance(outputs.pooler_output, (tuple, list)):
             return outputs
-        merged = {"pooler_output": torch.cat(outputs.pooler_output)}
+        merged = copy.copy(outputs)
+        merged.pooler_output = torch.cat(outputs.pooler_output)
         if getattr(outputs, "deepstack_features", None) is not None:
-            merged["deepstack_features"] = [torch.cat(features) for features in outputs.deepstack_features]
-        return type(outputs)(**{**outputs, **merged})
+            merged.deepstack_features = [torch.cat(features) for features in outputs.deepstack_features]
+        return merged
 
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
@@ -70,8 +72,8 @@ class MultimodalMixin:
 
 
 def merge_mm_encoder_outputs(forward):
-    """Lets `forward` take per-item `mm_encoder_outputs` (passed by users, or split by beam search) by merging them
-    into the flat layout it consumes."""
+    """Lets `forward` take per-item `mm_encoder_outputs`, as returned by `get_*_features`, by merging them into the
+    flat layout it consumes. Only for backward compatibility with users passing them: to be deprecated."""
 
     @functools.wraps(forward)
     def wrapper(self, *args, mm_encoder_outputs=None, **kwargs):
