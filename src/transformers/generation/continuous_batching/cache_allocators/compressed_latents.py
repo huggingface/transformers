@@ -107,9 +107,9 @@ class MLACacheAllocator(FullAttentionCacheAllocator):
 
 
 class IndexedMLACacheAllocator(MLACacheAllocator):
-    """Cache allocator for a group of MLA layers with a sparse attention indexer (DSA), which also cache the indexer key
-    of each token, after its two latents. The model caches the indexer keys through `update_indexer`, right after the
-    latents of the same layer, so they reuse the indices of that update.
+    """Cache allocator for a group of MLA layers with a sparse attention indexer (DSA), which also cache the indexer
+    key of each token, after its two latents. The model caches the indexer keys through `update_indexer`, right after
+    the latents of the same layer, so they reuse the indices of that update.
 
         [  (KV LATENT 0 | ROTATED KEY 0 | INDEXER KEY 0)  |  (KV LATENT 1 | ROTATED KEY 1 | INDEXER KEY 1)  |  ...  ]
     """
@@ -126,7 +126,7 @@ class IndexedMLACacheAllocator(MLACacheAllocator):
         layer_indices: list[int],
         allow_block_sharing: bool,
     ) -> None:
-        """Initializes the cache allocator for a group of indexed MLA layers, with the arguments of the parent class."""
+        """Initializes the cache allocator for a group of indexed MLA layers, with the parent class arguments."""
         self.index_head_dim = config.index_head_dim
         super().__init__(
             index, config, num_key_value_heads, cache_dtype, page_size, layer_indices, allow_block_sharing
