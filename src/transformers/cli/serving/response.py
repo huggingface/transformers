@@ -18,6 +18,7 @@ Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -141,6 +142,20 @@ class _ResponseStreamBuilder:
 
     def start_reasoning(self) -> list[str]:
         self.reasoning_open = True
+        self.reasoning_delta_template = BaseHandler.sse_template(
+            BaseHandler.chunk_to_sse(
+                ResponseReasoningTextDeltaEvent(
+                    type="response.reasoning_text.delta",
+                    item_id=self.reasoning_id,
+                    sequence_number=-1,
+                    output_index=self.output_index,
+                    content_index=0,
+                    delta="<text>",
+                )
+            ),
+            delta="<text>",
+            sequence_number=-1,
+        )
         return [
             self._emit(
                 ResponseOutputItemAddedEvent(
@@ -154,20 +169,16 @@ class _ResponseStreamBuilder:
             )
         ]
 
+    def _delta(self, template: str, text: str) -> str:
+        """The event of a token of text or reasoning, from its `template` (see `BaseHandler.sse_template`): one per
+        token, so it isn't built as the others are (`_emit`)."""
+        sse = template.format(delta=json.dumps(text, ensure_ascii=False), sequence_number=self.seq)
+        self.seq += 1
+        return sse
+
     def reasoning_delta(self, text: str) -> list[str]:
         self.full_reasoning += text
-        return [
-            self._emit(
-                ResponseReasoningTextDeltaEvent(
-                    type="response.reasoning_text.delta",
-                    item_id=self.reasoning_id,
-                    sequence_number=self.seq,
-                    output_index=self.output_index,
-                    content_index=0,
-                    delta=text,
-                )
-            )
-        ]
+        return [self._delta(self.reasoning_delta_template, text)]
 
     def finish_reasoning(self) -> list[str]:
         self.reasoning_item = ResponseReasoningItem(
@@ -203,6 +214,21 @@ class _ResponseStreamBuilder:
 
     def start_message(self) -> list[str]:
         self.message_open = True
+        self.text_delta_template = BaseHandler.sse_template(
+            BaseHandler.chunk_to_sse(
+                ResponseTextDeltaEvent(
+                    type="response.output_text.delta",
+                    item_id=self.msg_id,
+                    sequence_number=-1,
+                    output_index=self.output_index,
+                    content_index=0,
+                    delta="<text>",
+                    logprobs=[],
+                )
+            ),
+            delta="<text>",
+            sequence_number=-1,
+        )
         return [
             self._emit(
                 ResponseOutputItemAddedEvent(
@@ -228,19 +254,7 @@ class _ResponseStreamBuilder:
 
     def text_delta(self, text: str) -> list[str]:
         self.content += text
-        return [
-            self._emit(
-                ResponseTextDeltaEvent(
-                    type="response.output_text.delta",
-                    item_id=self.msg_id,
-                    sequence_number=self.seq,
-                    output_index=self.output_index,
-                    content_index=0,
-                    delta=text,
-                    logprobs=[],
-                )
-            )
-        ]
+        return [self._delta(self.text_delta_template, text)]
 
     def finish_message(self) -> list[str]:
         output_text_part = ResponseOutputText(type="output_text", text=self.content, annotations=[])

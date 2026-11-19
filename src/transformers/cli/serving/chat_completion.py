@@ -18,6 +18,7 @@ Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -140,10 +141,18 @@ class ChatCompletionHandler(BaseHandler):
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        created = int(time.time())
+        content_template = self.sse_template(
+            self._build_chunk_sse(request_id, model=model_id, created=created, content="<text>"), content="<text>"
+        )
+        reasoning_template = self.sse_template(
+            self._build_chunk_sse(request_id, model=model_id, created=created, reasoning_content="<text>"),
+            reasoning_content="<text>",
+        )
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
-                yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
+                yield self._build_chunk_sse(request_id, role="assistant", model=model_id, created=created)
 
                 tool_call_index = 0
                 has_tool_calls = False
@@ -180,13 +189,16 @@ class ChatCompletionHandler(BaseHandler):
                                             function={"name": item.name, "arguments": item.arguments},
                                         )
                                     ],
+                                    created=created,
                                 )
                             )
                             tool_call_index += 1
                         elif isinstance(item, ReasoningText):
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=item))
+                            text = json.dumps(item, ensure_ascii=False)
+                            sse_parts.append(reasoning_template.format(reasoning_content=text))
                         else:
-                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=item))
+                            text = json.dumps(item, ensure_ascii=False)
+                            sse_parts.append(content_template.format(content=text))
 
                     if sse_parts:
                         yield "".join(sse_parts)
@@ -208,6 +220,7 @@ class ChatCompletionHandler(BaseHandler):
                     finish_reason=finish_reason,
                     model=model_id,
                     usage=usage,
+                    created=created,
                 )
             except (GeneratorExit, asyncio.CancelledError):
                 # Client disconnected — abort generation to free GPU.
@@ -349,6 +362,7 @@ class ChatCompletionHandler(BaseHandler):
         tool_calls: list | None = None,
         usage: CompletionUsage | None = None,
         reasoning_content: str | None = None,
+        created: int | None = None,
     ) -> str:
         """Build a streaming ``ChatCompletionChunk`` and format it as an SSE ``data:`` line.
 
@@ -372,7 +386,7 @@ class ChatCompletionHandler(BaseHandler):
         )
         chunk = ChatCompletionChunk(
             id=request_id,
-            created=int(time.time()),
+            created=int(time.time()) if created is None else created,
             model=model,
             choices=[ChoiceChunk(delta=delta, index=0, finish_reason=finish_reason)],
             usage=usage,

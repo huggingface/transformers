@@ -1040,6 +1040,23 @@ class BaseHandler:
             return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
+    @staticmethod
+    def sse_template(sse: str, **fields: Any) -> str:
+        """
+        Turns an SSE event into a `str.format` template, with a hole in place of the value of each of `fields` (the
+        JSON fields that change from one event to the next, given with the value they have in `sse`).
+
+        Streaming sends an event per token, all alike but for their text: the event is built once, as any other, and
+        each token's is then ``template.format(<field>=json.dumps(text, ensure_ascii=False))``.
+        """
+        template = sse.replace("{", "{{").replace("}", "}}")
+        for name, value in fields.items():
+            field = f"{json.dumps(name)}:{json.dumps(value)}"
+            if template.count(field) != 1:
+                raise ValueError(f"Expected {field} once in the event {sse!r}")
+            template = template.replace(field, f"{json.dumps(name)}:{{{name}}}")
+        return template
+
     def _get_engine(self, body: dict) -> "EngineClient":
         """The request's model's engine (see `ModelManager.get_engine`). Sets the body's model to the one served."""
         engine = self.model_manager.get_engine(body.get("model"))

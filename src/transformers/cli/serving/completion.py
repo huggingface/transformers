@@ -20,6 +20,7 @@ fill-in-the-middle text insertion.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -122,6 +123,7 @@ class CompletionHandler(BaseHandler):
         queue, streamer = engine.generate_streaming(inputs, gen_config)
         input_ids = inputs["input_ids"]
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        text_template = self.sse_template(self._build_chunk_sse(request_id, model_id, text="<text>"), text="<text>")
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
@@ -145,7 +147,7 @@ class CompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        sse_parts.append(self._build_chunk_sse(request_id, model_id, text=text))
+                        sse_parts.append(text_template.format(text=json.dumps(text, ensure_ascii=False)))
 
                     if sse_parts:
                         yield "".join(sse_parts)
