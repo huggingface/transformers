@@ -438,6 +438,8 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(self, config, layer_idx)
         self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
+        self.input_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

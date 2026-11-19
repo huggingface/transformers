@@ -637,10 +637,8 @@ class HYV4VLDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.self_attn = HYV4VLAttention(config, layer_idx)
         self.mlp = HYV4VLMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4VLMLP(config)
-        self.input_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
-        self.post_attention_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(
-            dtype=torch.float32
-        )
+        self.input_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
         self.ffn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
 

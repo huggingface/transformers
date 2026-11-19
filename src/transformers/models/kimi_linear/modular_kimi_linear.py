@@ -245,6 +245,14 @@ class KimiLinearDeltaAttention(Glm5NextTextLinearAttention):
         super().__init__(config, layer_idx)
         self.forget_gate = KimiLinearForgetGate(config)
         self.o_norm = KimiLinearRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
+        self.conv1d = nn.Conv1d(
+            in_channels=self.conv_dim,
+            out_channels=self.conv_dim,
+            bias=False,
+            kernel_size=self.conv_kernel_size,
+            groups=self.conv_dim,
+            padding=self.conv_kernel_size - 1,
+        )
 
 
 class KimiLinearTopkRouter(DeepseekV3TopkRouter):
@@ -312,7 +320,7 @@ class KimiLinearPreTrainedModel(Qwen3NextPreTrainedModel):
         "hidden_states": KimiLinearDecoderLayer,
         "attentions": KimiLinearAttention,
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight", "dt_bias"]
     _keys_to_ignore_on_load_unexpected = None
 
     def _init_weights(self, module):

@@ -596,7 +596,6 @@ class KimiLinearDeltaAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
-            dtype=torch.float32,
         )
         self.forget_gate = KimiLinearForgetGate(config)
         self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
@@ -854,7 +853,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
     }
     _is_stateful = True
     _can_compile_fullgraph = True
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight", "dt_bias"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
