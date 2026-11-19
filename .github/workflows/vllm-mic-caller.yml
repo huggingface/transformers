@@ -1,0 +1,22 @@
+name: vLLM MIC contracts (vllm-mic verification)
+
+# Temporary caller to verify the vLLM model integration contracts job on the vllm-mic branches of
+# huggingface/transformers-ci and huggingface/transformers-mic. In PR CI the job is called from
+# transformers-ci's pr-ci_dynamic_caller_example.yml (`vllm-integration`).
+
+on:
+  push:
+    branches:
+      - vllm-mic
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vllm-integration:
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_vllm_contracts.yml@vllm-mic
+    with:
+      docker_image: "huggingface/transformers-torch-light"
+      runner:       "aws-m8i-l-cache"
+      ci_sha:       "vllm-mic"
