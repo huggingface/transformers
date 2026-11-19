@@ -1,0 +1,406 @@
+# Copyright 2021 The EleutherAI and HuggingFace Teams. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch GPT-J model."""
+
+from collections.abc import Callable
+
+import torch
+from torch import nn
+
+from ... import initialization as init
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
+from ...modeling_layers import (
+    GenericForQuestionAnswering,
+    GenericForSequenceClassification,
+    GradientCheckpointingLayer,
+)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..codegen.modeling_codegen import CodeGenMLP, apply_rotary_pos_emb, create_sinusoidal_positions
+from ..llama.modeling_llama import LlamaPreTrainedModel
+from .configuration_gptj import GPTJConfig
+
+
+class GPTJRotaryEmbedding(nn.Module):
+    def __init__(self, config: GPTJConfig):
+        super().__init__()
+        self.max_positions = config.max_position_embeddings
+        self.pos_embd_dim = config.rotary_dim or config.hidden_size
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        )
+
+    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
+        sincos = self.embed_positions[position_ids].to(x.dtype)
+        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
+        return sin, cos
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Keep the attention weights computation in fp32 to avoid overflow issues
+    attn_weights = torch.matmul(query.to(torch.float32), key.to(torch.float32).transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(value.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class GPTJAttention(nn.Module):
+    def __init__(self, config: GPTJConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.is_causal = True
+
+        self.embed_dim = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_attention_heads
+        if self.head_dim * self.num_attention_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
+                f" `num_attention_heads`: {self.num_attention_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attn_pdrop
+        self.rotary_dim = config.rotary_dim
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query = self.q_proj(hidden_states).view(hidden_shape)
+        key = self.k_proj(hidden_states).view(hidden_shape)
+        value = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        sin, cos = position_embeddings
+        if self.rotary_dim is not None:
+            k_rot = key[:, :, :, : self.rotary_dim]
+            k_pass = key[:, :, :, self.rotary_dim :]
+
+            q_rot = query[:, :, :, : self.rotary_dim]
+            q_pass = query[:, :, :, self.rotary_dim :]
+
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
+
+            key = torch.cat([k_rot, k_pass], dim=-1)
+            query = torch.cat([q_rot, q_pass], dim=-1)
+        else:
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
+
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+
+        if cache is not None:
+            key, value = cache.update(key, value, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        return attn_output, attn_weights
+
+
+class GPTJMLP(CodeGenMLP):
+    pass
+
+
+class GPTJBlock(GradientCheckpointingLayer):
+    def __init__(self, config: GPTJConfig, layer_idx: int):
+        super().__init__()
+        inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
+        self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+        self.attn = GPTJAttention(config, layer_idx)
+        self.mlp = GPTJMLP(inner_dim, config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.ln_1(hidden_states)
+        attn_output, _ = self.attn(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cache=cache,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        feed_forward_hidden_states = self.mlp(hidden_states)
+        return attn_output + feed_forward_hidden_states + residual
+
+
+class GPTJPreTrainedModel(LlamaPreTrainedModel):
+    base_model_prefix = "transformer"
+    _no_split_modules = ["GPTJBlock"]
+    _can_record_outputs = {
+        "hidden_states": GPTJBlock,
+        "attentions": GPTJAttention,
+    }
+    _keys_to_ignore_on_load_unexpected = [r"attn.bias", r"attn.masked_bias"]
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, GPTJRotaryEmbedding):
+            init.copy_(module.embed_positions, create_sinusoidal_positions(module.max_positions, module.pos_embd_dim))
+
+
+@auto_docstring
+class GPTJModel(GPTJPreTrainedModel):
+    def __init__(self, config: GPTJConfig):
+        super().__init__(config)
+
+        self.embed_dim = config.n_embd
+        self.vocab_size = config.vocab_size
+        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.drop = nn.Dropout(config.embd_pdrop)
+        self.h = nn.ModuleList([GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)])
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.rotary_emb = GPTJRotaryEmbedding(config)
+
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.wte
+
+    def set_input_embeddings(self, new_embeddings):
+        self.wte = new_embeddings
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        r"""
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.wte(input_ids)
+
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        seq_length = inputs_embeds.shape[1]
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.view(-1, seq_length)
+            hidden_states = hidden_states + self.wte(token_type_ids)
+
+        hidden_states = self.drop(hidden_states)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        for block in self.h:
+            hidden_states = block(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                cache=cache,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = self.ln_f(hidden_states)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            cache=cache,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The GPT-J Model transformer with a language modeling head on top.
+    """
+)
+class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    def __init__(self, config: GPTJConfig):
+        super().__init__(config)
+        self.transformer = GPTJModel(config)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        """
+        outputs: BaseModelOutputWithPast = self.transformer(
+            input_ids,
+            cache=cache,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class GPTJForSequenceClassification(GenericForSequenceClassification, GPTJPreTrainedModel):
+    base_model_prefix = "transformer"
+
+
+class GPTJForQuestionAnswering(GenericForQuestionAnswering, GPTJPreTrainedModel):
+    base_model_prefix = "transformer"
+
+    def get_input_embeddings(self):
+        return self.transformer.wte
+
+    def set_input_embeddings(self, value):
+        self.transformer.wte = value
+
+
+__all__ = [
+    "GPTJForCausalLM",
+    "GPTJForQuestionAnswering",
+    "GPTJForSequenceClassification",
+    "GPTJModel",
+    "GPTJPreTrainedModel",
+]
