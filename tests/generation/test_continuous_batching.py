@@ -39,6 +39,7 @@ from transformers import (
     ContinuousBatchingConfig,
     GenerationConfig,
     GenerationMixin,
+    LlamaConfig,
     StaticCache,
 )
 from transformers.generation.continuous_batching.cache import (
@@ -2502,7 +2503,6 @@ class ContinuousBatchingMemoryTests(unittest.TestCase):
             self.assertIsNone(_get_numa_nodes_memory({0, 2}))  # node 2 unreadable
 
 
-@require_torch_accelerator
 class TestMemoryHandlerPrediction(unittest.TestCase):
     """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
 
@@ -2569,6 +2569,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         )
 
     @parameterized.expand(CONFIGS)
+    @require_torch_accelerator
     def test_memory_prediction(
         self,
         block_size: int,
