@@ -699,8 +699,8 @@ class SpmConverter(Converter):
             )
 
         elif model_type == 2:
-            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+            merges = generate_merges(bpe_vocab, dict(vocab_scores))
             tokenizer = Tokenizer(
                 BPE(
                     bpe_vocab,
