@@ -326,6 +326,43 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         self.assertEqual(len(STOP_STRING_EMBEDDING_CACHE), 2)
         STOP_STRING_EMBEDDING_CACHE.clear()
 
+    def test_stop_string_cache_decoder_state(self):
+        from tokenizers import Tokenizer, decoders, models, pre_tokenizers
+
+        from transformers import PreTrainedTokenizerFast
+
+        vocab = {"[UNK]": 0, "abcdef": 1, "a": 2, ",": 3, "b": 4}
+        tokenizers = []
+        for cleanup in (True, False):
+            backend = Tokenizer(models.WordPiece(vocab, unk_token="[UNK]"))
+            backend.pre_tokenizer = pre_tokenizers.Whitespace()
+            backend.decoder = decoders.WordPiece(cleanup=cleanup)
+            tokenizers.append(PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]"))
+
+        input_ids = torch.tensor([[2, 3, 4]], device=torch_device)
+        self.assertEqual(tokenizers[0].decode(input_ids[0]), "a, b")
+        self.assertEqual(tokenizers[1].decode(input_ids[0]), "a , b")
+        self.addCleanup(STOP_STRING_EMBEDDING_CACHE.clear)
+        for order in ((0, 1), (1, 0)):
+            with self.subTest(order=order):
+                STOP_STRING_EMBEDDING_CACHE.clear()
+                criteria = {}
+                for index in order:
+                    criteria[index] = StopStringCriteria(tokenizers[index], ["a, b"])
+                    self.assertEqual(criteria[index](input_ids, None).item(), index == 0)
+                self.assertIsNot(criteria[0].embedding_vec, criteria[1].embedding_vec)
+                self.assertEqual(len(STOP_STRING_EMBEDDING_CACHE), 2)
+
+                # An unchanged decoder must still reuse the cached embedding.
+                repeated = StopStringCriteria(tokenizers[0], ["a, b"])
+                self.assertIs(repeated.embedding_vec, criteria[0].embedding_vec)
+                # Changing a decoder on an existing tokenizer must not reuse its old embedding.
+                tokenizers[0].backend_tokenizer.decoder = decoders.WordPiece(cleanup=False)
+                changed = StopStringCriteria(tokenizers[0], ["a, b"])
+                self.assertIs(changed.embedding_vec, criteria[1].embedding_vec)
+                self.assertFalse(changed(input_ids, None).item())
+                tokenizers[0].backend_tokenizer.decoder = decoders.WordPiece(cleanup=True)
+
     def test_stop_string_matching_positions(self):
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
