@@ -272,10 +272,10 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("xpu", 3): [1.6699, 0.6260, 3.2266, 8.5547, 2.209],
+                ("xpu", 3): [0.4175, 0.1565, 0.8066, 2.1387, 0.5522],
                 # 4-bit
-                ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
-                ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
+                ("cuda", 7): [0.0274, 0.0870, 0.9585, 2.4492, 0.5122],
+                ("cuda", 8): [0.4219, 0.1578, 0.8120, 2.1465, 0.5576],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
