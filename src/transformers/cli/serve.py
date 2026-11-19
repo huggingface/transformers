@@ -16,6 +16,7 @@ CLI entry point for `transformers serve`.
 """
 
 import enum
+import gc
 import json
 from typing import TYPE_CHECKING, Annotated
 
@@ -182,7 +183,7 @@ class Serve:
         from .serving.server import build_server
         from .serving.systemone import SystemOneHandler
         from .serving.transcription import TranscriptionHandler
-        from .serving.utils import exit_with_parent
+        from .serving.utils import exit_with_parent, freeze_garbage_collector
 
         logging.set_verbosity(self.log_level)  # again for an API server's process, which starts with the default
         exit_with_parent()
@@ -244,7 +245,9 @@ class Serve:
             timeout_notify=5,
         )
         server = uvicorn.Server(config)
+        freeze_garbage_collector()
         server.run(sockets=None if socket is None else [socket])
+        gc.unfreeze()  # the server has stopped: if the process goes on (tests), what it held can be freed again
         if model_manager.is_dead:
             raise RuntimeError("An engine died (see the error above): stopping the server")
 

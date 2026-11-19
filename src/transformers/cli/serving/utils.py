@@ -18,6 +18,7 @@ Shared types, constants, and utilities for the serving layer.
 import asyncio
 import copy
 import enum
+import gc
 import json
 import multiprocessing
 import os
@@ -185,6 +186,13 @@ def exit_with_parent() -> None:
         os._exit(1)
 
     threading.Thread(target=wait_and_exit, name="exit-with-parent", daemon=True).start()
+
+
+def freeze_garbage_collector() -> None:
+    """Runs a full collection, then freezes all the objects the garbage collector tracks. To call once a process is
+    initialized (model loaded, server built), to reduce the collector's overhead from static objects while serving."""
+    gc.collect()
+    gc.freeze()
 
 
 # Errors

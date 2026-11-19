@@ -45,6 +45,7 @@ from .utils import (
     canonical_model_id,
     decision_model_class,
     exit_with_parent,
+    freeze_garbage_collector,
     get_gen_models,
     make_progress_tqdm_class,
     model_owner,
@@ -373,6 +374,7 @@ class EngineClient:
             return
         writer.send(None)  # loaded
         writer.close()
+        freeze_garbage_collector()
 
         while True:
             method, request_id, *args = requests.get()
