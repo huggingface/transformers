@@ -465,6 +465,17 @@ class AutoImageProcessorTest(unittest.TestCase):
                 del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]
 
     @require_vision
+    def test_dynamic_module_lookup_finds_registered_image_processor(self):
+        try:
+            AutoImageProcessor.register(CustomConfig, image_processor_classes={"pil": CustomImageProcessor})
+            self.assertIs(
+                transformers.ProcessorMixin.get_possibly_dynamic_module("CustomImageProcessor"), CustomImageProcessor
+            )
+        finally:
+            if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
+                del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]
+
+    @require_vision
     def test_register_legacy_slow_fast_params(self):
         # slow_image_processor_class= and fast_image_processor_class= are deprecated but
         # must still work; they map to "pil" and "torchvision" backends respectively.
