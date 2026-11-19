@@ -1234,54 +1234,66 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
-        loop_layer_index_start, loop_layer_index_end = (
-            self.config.loop_layer_index_start,
-            self.config.loop_layer_index_end,
-        )
-        # pre loop layers, then `num_passes` times the loop layers, then post loop layers
-        layer_and_loop_indices = [(layer_idx, 0) for layer_idx in range(loop_layer_index_start)]
-        layer_and_loop_indices += [
-            (layer_idx, loop_idx)
-            for loop_idx in range(self.config.loop_num_passes)
-            for layer_idx in range(loop_layer_index_start, loop_layer_index_end)
-        ]
-        layer_and_loop_indices += [
-            (layer_idx, 0) for layer_idx in range(loop_layer_index_end, self.config.num_hidden_layers)
-        ]
-
-        cache_layer_indices = [[] for _ in range(self.config.num_hidden_layers)]
-        for cache_layer_idx, layer_idx in enumerate(self.config.cache_layer_indices):
-            cache_layer_indices[layer_idx].append(cache_layer_idx)
+        loop_start = self.config.loop_layer_index_start
+        loop_end = self.config.loop_layer_index_end
+        num_loop_layers = loop_end - loop_start
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
-        for layer_idx, loop_idx in layer_and_loop_indices:
-            decoder_layer = self.layers[layer_idx]
-
-            if layer_idx == loop_layer_index_start and loop_idx == 0:
-                pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
-            elif layer_idx == loop_layer_index_start:
-                num_pre_loop_blocks = pre_loop_block_states.shape[-2] + 1
-                previous_block_states = block_states[..., num_pre_loop_blocks:, :]
-                previous_hidden_states = hidden_states
-                hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
-
-            messages = []
-            if loop_idx > 0:
-                messages.append(
-                    self.message_input(
-                        previous_block_states, previous_hidden_states, layer_idx - loop_layer_index_start
-                    )
-                )
-
+        for decoder_layer in self.layers[:loop_start]:
             new_hidden_states = decoder_layer(
                 hidden_states,
                 block_states,
-                *messages,  # pass positionally for gradient checkpointing
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
-                cache_layer_idx=cache_layer_indices[layer_idx][loop_idx],
+                position_ids=position_ids,
+                **kwargs,
+            )
+            if decoder_layer.is_block_boundary:
+                block_states = torch.cat([block_states.to(hidden_states.device), hidden_states.unsqueeze(-2)], dim=-2)
+            hidden_states = new_hidden_states
+
+        pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
+        num_pre_loop_blocks = pre_loop_block_states.shape[-2]
+        for loop_idx in range(self.config.loop_num_passes):
+            cache_layer_start = loop_start
+            if loop_idx > 0:
+                # +1 to skip the states appended by the first loop block
+                previous_block_states = block_states[..., num_pre_loop_blocks + 1 :, :]
+                previous_hidden_states = hidden_states
+                # Pass i > 0 uses its own copies of the loop cache layers, appended after the model's layers
+                cache_layer_start = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers
+
+            hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
+            for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
+                messages = None
+                if loop_idx > 0:
+                    messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
+                new_hidden_states = decoder_layer(
+                    hidden_states,
+                    block_states,
+                    messages,  # pass positionally for gradient checkpointing
+                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                    conv_mask=causal_mask_mapping["linear_attention"],
+                    cache=cache,
+                    cache_layer_idx=cache_layer_start + loop_layer_idx,
+                    position_ids=position_ids,
+                    **kwargs,
+                )
+                if decoder_layer.is_block_boundary:
+                    block_states = torch.cat(
+                        [block_states.to(hidden_states.device), hidden_states.unsqueeze(-2)], dim=-2
+                    )
+                hidden_states = new_hidden_states
+
+        for decoder_layer in self.layers[loop_end:]:
+            new_hidden_states = decoder_layer(
+                hidden_states,
+                block_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                conv_mask=causal_mask_mapping["linear_attention"],
+                cache=cache,
                 position_ids=position_ids,
                 **kwargs,
             )
