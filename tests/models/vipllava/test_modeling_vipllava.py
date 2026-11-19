@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -46,17 +47,17 @@ if is_torch_available():
 
 
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaVisionText2TextModelTester with Llava->VipLlava
-class VipLlavaVisionText2TextModelTester:
+class VipLlavaVisionText2TextModelTester(ModelTesterConfigMixin):
     # Ignore copy
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_layer=[0, 0, 1, 1, 0],
-        text_config={
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "projector_hidden_act": "gelu",
+        "seq_length": 7,
+        "vision_feature_layer": [0, 0, 1, 1, 0],
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -79,8 +80,8 @@ class VipLlavaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "batch_size": 12,
             "image_size": 8,
             "patch_size": 2,
@@ -95,28 +96,30 @@ class VipLlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+        "batch_size": 3,
+        "num_channels": 3,
+        "image_size": 336,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["num_image_tokens"] = (
+            values["vision_config"]["image_size"] // values["vision_config"]["patch_size"]
+        ) ** 2
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VipLlavaConfig(
@@ -164,6 +167,8 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     """
     Model tester for `VipLlavaForConditionalGeneration`.
     """
+
+    model_tester_class = VipLlavaVisionText2TextModelTester
 
     all_model_classes = (
         (
