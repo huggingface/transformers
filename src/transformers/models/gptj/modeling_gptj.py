@@ -13,7 +13,7 @@
 # limitations under the License.
 """PyTorch GPT-J model."""
 
-import math
+from collections.abc import Callable
 
 import torch
 from torch import nn
@@ -24,7 +24,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -32,15 +31,13 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...utils import auto_docstring, logging
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_gptj import GPTJConfig
-
-
-if is_flash_attn_available(kernels_fallback_ok=True):
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -50,10 +47,6 @@ def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
     sinusoid_inp = torch.arange(num_pos, dtype=torch.int64).float()[:, None] * inv_freq
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
-
-def get_embed_positions(embed_positions, position_ids):
-    return embed_positions.to(position_ids.device).repeat(position_ids.shape[0], 1, 1)
 
 
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
@@ -69,23 +62,52 @@ def apply_rotary_pos_emb(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Ten
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
+class GPTJRotaryEmbedding(nn.Module):
+    def __init__(self, config: GPTJConfig):
+        super().__init__()
+        self.max_positions = config.max_position_embeddings
+        self.pos_embd_dim = config.rotary_dim or config.hidden_size
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        )
+
+    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
+        sincos = self.embed_positions[position_ids].to(x.dtype)
+        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
+        return sin, cos
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Keep the attention weights computation in fp32 to avoid overflow issues
+    attn_weights = torch.matmul(query.to(torch.float32), key.to(torch.float32).transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(value.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class GPTJAttention(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config: GPTJConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.max_positions = config.max_position_embeddings
-
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
-
-        self.is_causal = True
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
+        self.is_causal = True
 
         self.embed_dim = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
@@ -95,271 +117,74 @@ class GPTJAttention(nn.Module):
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
                 f" `num_attention_heads`: {self.num_attention_heads})."
             )
-        self.scale_attn = math.sqrt(self.head_dim)
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attn_pdrop
+        self.rotary_dim = config.rotary_dim
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.rotary_dim = config.rotary_dim
-        self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = nn.Buffer(
-            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query = self.q_proj(hidden_states).view(hidden_shape)
+        key = self.k_proj(hidden_states).view(hidden_shape)
+        value = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        sin, cos = position_embeddings
+        if self.rotary_dim is not None:
+            k_rot = key[:, :, :, : self.rotary_dim]
+            k_pass = key[:, :, :, self.rotary_dim :]
+
+            q_rot = query[:, :, :, : self.rotary_dim]
+            q_pass = query[:, :, :, self.rotary_dim :]
+
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
+
+            key = torch.cat([k_rot, k_pass], dim=-1)
+            query = torch.cat([q_rot, q_pass], dim=-1)
+        else:
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
+
+        query = query.transpose(1, 2)
+        key = key.transpose(1, 2)
+
+        if cache is not None:
+            key, value = cache.update(key, value, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
         )
 
-    def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
-        """
-        Splits hidden dim into attn_head_size and num_attention_heads
-        """
-        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
-        tensor = tensor.view(new_shape)
-        if rotary:
-            return tensor
-        if len(tensor.shape) == 5:
-            return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
-        elif len(tensor.shape) == 4:
-            return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
-        else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
-
-    def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden dim
-        """
-        if len(tensor.shape) == 5:
-            tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
-        elif len(tensor.shape) == 4:
-            tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
-        new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
-        return tensor.view(new_shape)
-
-    def _attn(
-        self,
-        query,
-        key,
-        value,
-        attention_mask=None,
-    ):
-        # Keep the attention weights computation in fp32 to avoid overflow issues
-        query = query.to(torch.float32)
-        key = key.to(torch.float32)
-
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
-        attn_weights = attn_weights / self.scale_attn
-
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        attn_weights = attn_weights.to(value.dtype)
-        attn_weights = self.attn_dropout(attn_weights)
-
-        attn_output = torch.matmul(attn_weights, value)
-
-        return attn_output, attn_weights
-
-    def _get_embed_positions(self, position_ids):
-        embed_positions = self.embed_positions
-        if embed_positions.device != position_ids.device:
-            embed_positions = embed_positions.to(position_ids.device)
-            self.embed_positions = embed_positions
-        return embed_positions.repeat(position_ids.shape[0], 1, 1)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        layer_past: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        use_cache: bool | None = False,
-        output_attentions: bool | None = False,
-        **kwargs,
-    ) -> (
-        tuple[torch.Tensor, tuple[torch.Tensor]]
-        | tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]
-        | None
-    ):
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
-
-        query = self._split_heads(query, self.num_attention_heads, self.head_dim, True)
-        key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
-        value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
-
-        embed_positions = self._get_embed_positions(position_ids)
-
-        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
-        sincos = torch.gather(embed_positions, 1, repeated_position_ids).to(key.dtype)
-        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
-
-        if self.rotary_dim is not None:
-            k_rot = key[:, :, :, : self.rotary_dim]
-            k_pass = key[:, :, :, self.rotary_dim :]
-
-            q_rot = query[:, :, :, : self.rotary_dim]
-            q_pass = query[:, :, :, self.rotary_dim :]
-
-            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
-            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
-
-            key = torch.cat([k_rot, k_pass], dim=-1)
-            query = torch.cat([q_rot, q_pass], dim=-1)
-        else:
-            key = apply_rotary_pos_emb(key, sin, cos)
-            query = apply_rotary_pos_emb(query, sin, cos)
-
-        key = key.permute(0, 2, 1, 3)
-        query = query.permute(0, 2, 1, 3)
-
-        if layer_past is not None:
-            key, value = layer_past.update(key, value, self.layer_idx)
-
-        # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask)
-
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
-        attn_output = self.out_proj(attn_output)
-        attn_output = self.resid_dropout(attn_output)
-
-        return attn_output, attn_weights
-
-
-class GPTJFlashAttention2(GPTJAttention):
-    """
-    GPTJ flash attention module. This module inherits from `GPTJAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        layer_past: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        use_cache: bool | None = False,
-        output_attentions: bool | None = False,
-        **kwargs,
-    ) -> (
-        tuple[torch.Tensor, tuple[torch.Tensor]]
-        | tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]
-        | None
-    ):
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
-
-        query = self._split_heads(query, self.num_attention_heads, self.head_dim, True)
-        key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
-        value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
-
-        embed_positions = self._get_embed_positions(position_ids)
-
-        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
-        sincos = torch.gather(embed_positions, 1, repeated_position_ids).to(key.dtype)
-        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
-
-        if self.rotary_dim is not None:
-            k_rot = key[:, :, :, : self.rotary_dim]
-            k_pass = key[:, :, :, self.rotary_dim :]
-
-            q_rot = query[:, :, :, : self.rotary_dim]
-            q_pass = query[:, :, :, self.rotary_dim :]
-
-            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
-            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
-
-            key = torch.cat([k_rot, k_pass], dim=-1)
-            query = torch.cat([q_rot, q_pass], dim=-1)
-        else:
-            key = apply_rotary_pos_emb(key, sin, cos)
-            query = apply_rotary_pos_emb(query, sin, cos)
-
-        # transpose to have the desired shape
-        # before transpose: batch_size x seq_length x num_attention_heads x head_dim
-        # after transpose: batch_size x num_attention_heads x seq_length x head_dim
-        key = key.permute(0, 2, 1, 3)
-        query = query.permute(0, 2, 1, 3)
-        # value: batch_size x num_attention_heads x seq_length x head_dim
-
-        if layer_past is not None:
-            key, value = layer_past.update(key, value, self.layer_idx)
-
-        # The Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we need to keep the original shape for query and key, and reshape value
-        # to have the correct shape.
-        key = key.permute(0, 2, 1, 3).contiguous()
-        query = query.permute(0, 2, 1, 3).contiguous()
-        value = value.permute(0, 2, 1, 3).contiguous()
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
-
-        input_dtype = query.dtype
-        device_type = query.device.type
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled(device_type):
-                target_dtype = torch.get_autocast_dtype(device_type)
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_is_quantized"):
-                target_dtype = self.config.dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query = query.to(target_dtype)
-            key = key.to(target_dtype)
-            value = value.to(target_dtype)
-
-        attention_dropout = self.config.attn_pdrop if self.training else 0.0  # attn_pdrop in gptj
-
-        query_length = query.shape[1]
-
-        # Compute attention
-        attn_weights = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query,
             key,
             value,
             attention_mask,
-            query_length,
-            dropout=attention_dropout,
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
 
-        # Reshape outputs
-        attn_output = attn_weights.reshape(
-            attn_weights.shape[0], attn_weights.shape[1], attn_weights.shape[2] * attn_weights.shape[3]
-        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
+
         return attn_output, attn_weights
-
-
-GPTJ_ATTENTION_CLASSES = {
-    "eager": GPTJAttention,
-    "flash_attention_2": GPTJFlashAttention2,
-}
 
 
 class GPTJMLP(nn.Module):
@@ -382,40 +207,36 @@ class GPTJMLP(nn.Module):
 
 
 class GPTJBlock(GradientCheckpointingLayer):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config: GPTJConfig, layer_idx: int):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        attn_implementation = (
-            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
-        )
-        self.attn = GPTJ_ATTENTION_CLASSES[attn_implementation](config, layer_idx)
+        self.attn = GPTJAttention(config, layer_idx)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
         self,
-        hidden_states: torch.Tensor | None,
-        layer_past: Cache | None = None,
+        hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
-        output_attentions: bool | None = False,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.Tensor, ...]] | None:
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
-        attn_outputs, attn_weights = self.attn(
+        attn_output, _ = self.attn(
             hidden_states=hidden_states,
-            layer_past=layer_past,
+            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            cache=cache,
             use_cache=use_cache,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
-        hidden_states = attn_outputs + feed_forward_hidden_states + residual
-
-        return hidden_states, attn_weights
+        return attn_output + feed_forward_hidden_states + residual
 
 
 @auto_docstring
@@ -425,11 +246,19 @@ class GPTJPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
     _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
     _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": GPTJBlock,
+        "attentions": GPTJAttention,
+    }
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GPTJAttention):
+        if isinstance(module, GPTJRotaryEmbedding):
             init.copy_(module.embed_positions, create_sinusoidal_positions(module.max_positions, module.pos_embd_dim))
 
 
@@ -444,6 +273,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.rotary_emb = GPTJRotaryEmbedding(config)
 
         self.gradient_checkpointing = False
 
@@ -456,6 +286,8 @@ class GPTJModel(GPTJPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -467,33 +299,16 @@ class GPTJModel(GPTJPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         r"""
         inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
@@ -503,8 +318,8 @@ class GPTJModel(GPTJPreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         if position_ids is None:
-            cache_length = cache.get_seq_length() if cache is not None else 0
-            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + cache_length
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
@@ -519,46 +334,27 @@ class GPTJModel(GPTJPreTrainedModel):
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, seq_length)
-            token_type_embeds = self.wte(token_type_ids)
-            hidden_states = hidden_states + token_type_embeds
+            hidden_states = hidden_states + self.wte(token_type_ids)
 
         hidden_states = self.drop(hidden_states)
-        output_shape = (-1, seq_length, hidden_states.size(-1))
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        all_self_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-        for i, block in enumerate(self.h):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            outputs = block(
+        for block in self.h:
+            hidden_states = block(
                 hidden_states,
-                layer_past=cache,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
+                cache=cache,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
+                position_embeddings=position_embeddings,
+                **kwargs,
             )
 
-            hidden_states = outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
-
         hidden_states = self.ln_f(hidden_states)
-
-        hidden_states = hidden_states.view(output_shape)
-        # Add last hidden state
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, cache, all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             cache=cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -569,6 +365,8 @@ class GPTJModel(GPTJPreTrainedModel):
 )
 class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: GPTJConfig):
         super().__init__(config)
@@ -578,6 +376,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -590,12 +389,9 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
         r"""
         inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
@@ -606,9 +402,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        transformer_outputs = self.transformer(
+        outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
             cache=cache,
             attention_mask=attention_mask,
@@ -616,29 +410,22 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        hidden_states = transformer_outputs[0]
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            cache=transformer_outputs.cache,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -666,6 +453,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -678,20 +466,15 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | SequenceClassifierOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
         r"""
         inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        transformer_outputs = self.transformer(
+        transformer_outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
             cache=cache,
             attention_mask=attention_mask,
@@ -699,11 +482,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs.last_hidden_state
         logits = self.score(hidden_states)
 
         if input_ids is not None:
@@ -752,9 +533,6 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -776,6 +554,7 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -786,31 +565,24 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | QuestionAnsweringModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> QuestionAnsweringModelOutput:
         r"""
         inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        outputs = self.transformer(
+        outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -833,10 +605,6 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,
