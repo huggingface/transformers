@@ -23,6 +23,7 @@ from ..generation import GenerationConfig
 from ..image_utils import ImageInput
 from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
+    ModelOutput,
     add_end_docstrings,
     is_torch_available,
     is_vision_available,
@@ -436,6 +437,8 @@ class AnyToAnyPipeline(Pipeline):
         generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
+        if isinstance(generated_sequence, ModelOutput) and "sequences" in generated_sequence:
+            generated_sequence = generated_sequence.sequences
         if (
             isinstance(generated_sequence, torch.Tensor)
             and input_ids is not None
