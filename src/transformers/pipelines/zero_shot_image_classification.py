@@ -125,6 +125,8 @@ class ZeroShotImageClassificationPipeline(Pipeline):
 
     def _sanitize_parameters(self, tokenizer_kwargs=None, **kwargs):
         preprocess_params = {}
+        if tokenizer_kwargs is not None:
+            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
         if "timeout" in kwargs:
