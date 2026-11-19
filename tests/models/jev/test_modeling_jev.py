@@ -24,7 +24,12 @@ from transformers import AutoProcessor, is_torch_available, pipeline
 from transformers.decision import DecisionConfig, Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, render
+from ...test_decision_head_common import (
+    DecisionHeadTesterMixin,
+    DecisionHeadTrainingTesterMixin,
+    check_decision,
+    render,
+)
 
 
 if is_torch_available():
@@ -86,22 +91,28 @@ class JevLossTest(unittest.TestCase):
                         torch.testing.assert_close(actual_gradient.double(), expected_gradient)
 
     def test_accumulated_loss(self):
-        loss = JevForDecisionLoss(
-            self.logits, self.soft_labels, self.num_options, self.is_score, loss_weights=self.weights
-        )
+        labels = self.labels.clone()
+        labels[1] = -100
+        num_items = labels.ne(-100).sum()
+        loss = JevForDecisionLoss(self.logits, labels, self.num_options, self.is_score, loss_weights=self.weights)
         expected_gradient = torch.autograd.grad(loss, self.logits)[0]
-        start = 0
-        for index, count in enumerate(self.num_options.tolist()):
-            end = start + count
-            JevForDecisionLoss(
-                self.logits[start:end],
-                self.soft_labels[start:end],
-                self.num_options[index : index + 1],
-                self.is_score[index : index + 1],
-                loss_weights=self.weights[index : index + 1],
-                num_items_in_batch=4,
-            ).backward()
-            start = end
+
+        # One prompt has one valid question, the other has two.
+        split = self.num_options[:2].sum()
+        accumulated_loss = 0.0
+        for options, questions in ((slice(None, split), slice(None, 2)), (slice(split, None), slice(2, None))):
+            microbatch_loss = JevForDecisionLoss(
+                self.logits[options],
+                labels[questions],
+                self.num_options[questions],
+                self.is_score[questions],
+                loss_weights=self.weights[questions],
+                num_items_in_batch=num_items,
+            )
+            microbatch_loss.backward()
+            accumulated_loss += microbatch_loss.detach()
+
+        torch.testing.assert_close(accumulated_loss, loss)
         torch.testing.assert_close(self.logits.grad, expected_gradient)
 
     def test_confident_prediction_gradients(self):
@@ -117,36 +128,10 @@ class JevLossTest(unittest.TestCase):
 
 
 @require_torch
-class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
+class JevForDecisionTest(DecisionHeadTesterMixin, DecisionHeadTrainingTesterMixin, unittest.TestCase):
     all_model_classes = (JevForDecision,) if is_torch_available() else ()
     decision_repo = "hf-internal-testing/decision-gev"
     tiny_sizes = {"hidden_size": 16}
-
-    def test_loss_backward(self):
-        inputs = {
-            "input_ids": torch.arange(12)[None],
-            "marks": torch.tensor([[4, 8, 12]]),
-            "num_options": torch.tensor([[2, 6, 4]]),
-            "question_type_ids": torch.tensor(
-                [[Question.questions_types.index(kind) for kind in ("noul", "score", "choice")]]
-            ),
-            "labels": torch.tensor([[1, 3, 2]]),
-        }
-        for dtype in (torch.float32, torch.bfloat16):
-            with self.subTest(dtype=dtype):
-                model = JevForDecision(self.config).to(dtype).eval()
-                output = model(**inputs)
-                self.assertEqual(output.loss.dtype, torch.float32)
-                output.loss.backward()
-                self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
-                self.assertGreater(model.proj.weight.grad.abs().sum(), 0)
-                self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum(), 0)
-                active = torch.zeros(self.config.num_verbalizers, dtype=torch.bool)
-                for kind, count in zip(("noul", "score", "choice"), inputs["num_options"][0]):
-                    start = self.config.offsets[kind]
-                    active[start : start + count] = True
-                inactive_gradients = model.proj.weight.grad[~active]
-                torch.testing.assert_close(inactive_gradients, torch.zeros_like(inactive_gradients))
 
     @require_vision
     def test_chat_template_reproduces_the_model_code(self):
@@ -190,6 +175,22 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         torch.testing.assert_close(model.proj.weight, readout)
         self.assertIsInstance(decide.model, JevForDecision)
         self.assertEqual(decide.decision_config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
+
+    def test_choice_loss_matches_cross_entropy(self):
+        model = JevForDecision(self.config).eval()
+        inputs = {
+            "input_ids": torch.tensor([[1, 2, 3]]),
+            "marks": torch.tensor([[3]]),
+            "num_options": torch.tensor([[3]]),
+            "question_type_ids": torch.tensor([[Question.questions_types.index("choice")]]),
+        }
+        labels = torch.tensor([1])
+
+        with torch.no_grad():
+            logits = model(**inputs).logits
+            loss = model(**inputs, labels=labels[None]).loss
+
+        torch.testing.assert_close(loss, torch.nn.functional.cross_entropy(logits[None], labels))
 
     def test_config_json_cannot_add_extra_files(self):
         # Only the config classes of decision models name the files read next to the weights, never a `config.json`

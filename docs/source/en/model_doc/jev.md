@@ -83,18 +83,26 @@ pipeline("decision", model="vllm-sr/d3")(request)  # or perplexity-ai/pplx-decid
 
 ## Training
 
-`JevForDecision` returns `loss` and `logits` and can train with the standard `Trainer` or TRL.
-The default loss follows [AutoTrust JEV-9B](https://huggingface.co/autotrust/JEV-9B#training-details): KL divergence
-over each question's active options, plus `0.5 × RPS` for ordered Score questions. Set `config.rps_weight` to adjust
-the ordinal term. Training uses raw logits; calibration is applied by `decide`.
+[JEV](https://huggingface.co/autotrust/JEV-9B#training-details) uses KL divergence over the active options and adds
+a ranked probability score for ordered Score questions.
+Using the model and request above, train on the first option of each question:
 
-Pass integer `labels` of shape `(1, num_questions)`, using `-100` to ignore a question, or soft target distributions
-of shape `(1, total_num_options)`, concatenated in question order. Each distribution must sum to one.
-`outputs.logits` uses the same packed option order.
+```python
+from transformers.decision import Question
 
-Optional `loss_weights` weight individual questions. The loss is averaged over valid questions, rather than the sum
-of weights. When accumulating prompts with different question counts, pass their total valid-question count as
-`num_items_in_batch` explicitly.
+model.train()
+inputs, questions = config.prepare_inputs(request, tokenizer)[0]
+inputs = {name: tensor.to(model.device) for name, tensor in inputs.items()}
+counts = torch.tensor([[len(q.options) for q in questions]], device=model.device)
+types = torch.tensor([[Question.questions_types.index(q.type) for q in questions]], device=model.device)
+
+inputs["marks"] = inputs["marks"][None]
+outputs = model(**inputs, num_options=counts, question_type_ids=types, labels=torch.zeros_like(counts))
+outputs.loss.backward()
+```
+
+For a custom accumulation loop, pass the total valid-question count as `num_items_in_batch` to weight prompts with
+different numbers of questions correctly. The standard `Trainer` averages the microbatch losses.
 
 ## JevConfig
 

@@ -111,7 +111,9 @@ class DecisionMixin:
         `Question.answer` turns into answers.
         """
         decision_config = decision_config or self.decision_config
-        inputs = {"input_ids": input_ids, **kwargs, "return_dict": True}
+        # Override any caller preference because we read `.logits` below.
+        kwargs["return_dict"] = True
+        inputs = {"input_ids": input_ids, **kwargs}
         num_options = torch.tensor([[len(question.options) for question in decision_questions]])
         question_types = [Question.questions_types.index(question.type) for question in decision_questions]
         scores = self(

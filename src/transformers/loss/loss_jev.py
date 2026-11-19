@@ -15,6 +15,24 @@ import torch
 from torch.nn import functional as F
 
 
+def _masked_log_softmax(scores: torch.Tensor, option_mask: torch.Tensor) -> torch.Tensor:
+    scores = scores.masked_fill(~option_mask, -torch.inf)
+    # Exclude the maximum before log1p to retain tiny losses and target gradients at confident predictions.
+    maximum = scores.argmax(-1, keepdim=True)
+    is_maximum = torch.arange(scores.shape[-1], device=scores.device) == maximum
+    shifted = torch.where(is_maximum, 0.0, scores - scores.gather(-1, maximum))
+    others = shifted.exp().masked_fill(is_maximum, 0.0).sum(-1, keepdim=True)
+    return (shifted - torch.log1p(others)).masked_fill(~option_mask, 0.0)
+
+
+def _ranked_probability_score(
+    probabilities: torch.Tensor, targets: torch.Tensor, num_options: torch.Tensor
+) -> torch.Tensor:
+    difference = probabilities.cumsum(-1) - targets.cumsum(-1)
+    gaps = torch.arange(probabilities.shape[-1], device=probabilities.device) < (num_options - 1)[:, None]
+    return (difference.square() * gaps).sum(-1) / (num_options - 1).clamp_min(1)
+
+
 def JevForDecisionLoss(
     logits: torch.Tensor,
     labels: torch.Tensor,
@@ -36,13 +54,9 @@ def JevForDecisionLoss(
     option_mask = positions[None] < num_options[:, None]
     starts = num_options.cumsum(0) - num_options
     indices = (starts[:, None] + positions).clamp_max(logits.numel() - 1)
-    scores = logits[indices].masked_fill(~option_mask, -torch.inf)
-    # Exclude the maximum before log1p to retain tiny losses and target gradients at confident predictions.
-    maximum = scores.argmax(-1, keepdim=True)
-    is_maximum = positions[None] == maximum
-    shifted = torch.where(is_maximum, 0.0, scores - scores.gather(-1, maximum))
-    others = shifted.exp().masked_fill(is_maximum, 0.0).sum(-1, keepdim=True)
-    log_probabilities = (shifted - torch.log1p(others)).masked_fill(~option_mask, 0.0)
+
+    log_probabilities = _masked_log_softmax(logits[indices], option_mask)
+
     if labels.is_floating_point():
         if labels.numel() != logits.numel():
             raise ValueError("Soft labels must contain one probability per active option.")
@@ -56,16 +70,16 @@ def JevForDecisionLoss(
             raise ValueError("Each integer label must select an active option of its question.")
         targets = F.one_hot(labels.masked_fill(~valid, 0).long(), num_classes=positions.shape[0]).float()
         targets = targets * valid[:, None]
+
     # Keep target entropy: soft-target CE has the same gradients, but a different loss value.
     losses = F.kl_div(log_probabilities, targets, reduction="none").sum(-1)
     if rps_weight:
-        probabilities = log_probabilities.exp() * option_mask
-        difference = probabilities.cumsum(-1) - targets.cumsum(-1)
-        gaps = positions[None] < (num_options - 1)[:, None]
-        rps = (difference.square() * gaps).sum(-1) / (num_options - 1).clamp_min(1)
+        rps = _ranked_probability_score(log_probabilities.exp() * option_mask, targets, num_options)
         losses = losses + rps_weight * rps * is_score.to(logits.device).reshape(-1)
+
     if loss_weights is not None:
         losses = losses * loss_weights.to(logits.device).reshape(-1)
+
     # Normalize over valid questions, including when question weights are supplied.
     normalizer = valid.sum().clamp_min(1) if num_items_in_batch is None else num_items_in_batch
     normalizer = torch.as_tensor(normalizer, device=logits.device)

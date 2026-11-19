@@ -52,7 +52,7 @@ class JevDecisionOutput(ModelOutput):
     """
 )
 class JevForDecision(DecisionMixin, JevPreTrainedModel):
-    # Packed soft labels count options, so Trainer must not infer a question count from their shape.
+    # Trainer averages microbatch losses. Its automatic item count would count options for soft labels.
     accepts_loss_kwargs = False
 
     def __init__(self, config: JevConfig):
