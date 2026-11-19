@@ -1460,6 +1460,7 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
+    _keep_in_fp32_modules = ["router.proj"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
