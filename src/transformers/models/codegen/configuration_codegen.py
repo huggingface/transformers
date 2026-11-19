@@ -53,6 +53,19 @@ class CodeGenConfig(PreTrainedConfig):
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
     }
+    base_model_tp_plan = {
+        "wte": "embedding_rowwise",
+        "h.*.attn.qkv_proj": "colwise",
+        "h.*.attn.out_proj": "rowwise",
+        "h.*.mlp.fc_in": "colwise",
+        "h.*.mlp.fc_out": "rowwise",
+    }
+    base_model_pp_plan = {
+        "wte": (["input_ids"], ["inputs_embeds"]),
+        "drop": (["inputs_embeds"], ["hidden_states"]),
+        "h": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "ln_f": (["hidden_states"], ["hidden_states"]),
+    }
 
     vocab_size: int = 50400
     n_positions: int = 2048
