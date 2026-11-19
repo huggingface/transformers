@@ -58,6 +58,7 @@ from ..inkling2.modeling_inkling2 import (
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 
 
+# TODO: update before release
 @auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
 @strict
 class Inkling2LoopTextConfig(Inkling2TextConfig):
