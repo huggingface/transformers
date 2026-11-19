@@ -39,10 +39,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
-    sliding_windows (`list[int]`, *optional*):
-        Sliding window size of each layer, with `0` for full-attention layers. Converted to `per_layer_config`
-        overrides of `sliding_window` for the layers that differ from it. Takes precedence over `sliding_window`, which
-        is set to the most common non-zero entry.
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
@@ -52,10 +48,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
         Number of groups for routed experts.
     swiglu_limit (`float`, *optional*):
         Bound that the SwiGLU gate (from above) and up projections (from both sides) are clamped to before the
-        activation. `None` means no clamping.
-    swiglu_limits (`list[float]`, *optional*):
-        `swiglu_limit` of each layer, with `0` for no clamping. Converted to `per_layer_config` overrides of
-        `swiglu_limit`.
+        activation. `None` means no clamping. Like `sliding_window`, it can be set per layer with `per_layer_config`.
 
     Example:
 
@@ -119,7 +112,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
     }
-    sliding_windows: list[int] | None = None
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1
     moe_intermediate_size: int = 1024
@@ -132,7 +124,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     swiglu_limit: float | None = None
-    swiglu_limits: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
@@ -140,33 +131,25 @@ class ExaoneMoeConfig(PreTrainedConfig):
                 "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
 
-        # `sliding_windows` and `swiglu_limits` are the Hub's per-layer format, kept as fields because other
-        # libraries read them. Here they become `per_layer_config` overrides, unless a saved config already has them.
-        for name in ("sliding_windows", "swiglu_limits"):
-            values = getattr(self, name)
-            if values is None:
-                continue
-            if len(values) != self.num_hidden_layers:
+        # K-EXAONE 2.0 Hub configs store per-layer values as lists (`0` meaning none), which become `per_layer_config`
+        sliding_windows = kwargs.pop("sliding_windows", None)
+        swiglu_limits = kwargs.pop("swiglu_limits", None)
+        for name, values in (("sliding_windows", sliding_windows), ("swiglu_limits", swiglu_limits)):
+            if values is not None and len(values) != self.num_hidden_layers:
                 raise ValueError(
                     f"`{name}` must have one entry per layer ({self.num_hidden_layers}), but got {len(values)}."
                 )
-            if any(value < 0 for value in values):
-                raise ValueError(f"`{name}` entries must be non-negative, but got {values}.")
-        if self.sliding_windows is not None and self.layer_types is not None:
-            for layer_idx, (layer_type, window) in enumerate(zip(self.layer_types, self.sliding_windows)):
-                if layer_type == "sliding_attention" and window == 0:
-                    raise ValueError(f"Layer {layer_idx} is a sliding attention layer but has sliding window 0.")
 
         per_layer_config = {}
-        if self.sliding_windows is not None:
-            windows = [window for window in self.sliding_windows if window]
+        if sliding_windows is not None:
+            windows = [window for window in sliding_windows if window]
             if windows:
                 self.sliding_window = max(set(windows), key=windows.count)
-            for layer_idx, window in enumerate(self.sliding_windows):
+            for layer_idx, window in enumerate(sliding_windows):
                 if window and window != self.sliding_window:
                     per_layer_config.setdefault(layer_idx, {})["sliding_window"] = window
-        if self.swiglu_limits is not None:
-            for layer_idx, limit in enumerate(self.swiglu_limits):
+        if swiglu_limits is not None:
+            for layer_idx, limit in enumerate(swiglu_limits):
                 if limit:
                     per_layer_config.setdefault(layer_idx, {})["swiglu_limit"] = limit
         if per_layer_config:

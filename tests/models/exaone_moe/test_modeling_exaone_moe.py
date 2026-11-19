@@ -74,8 +74,10 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual([c.sliding_window for c in config.per_layer_config], [128, 4096, 128, 128])
         self.assertEqual([c.swiglu_limit for c in config.per_layer_config], [None, None, 7.0, None])
 
-        reloaded = ExaoneMoeConfig.from_dict(config.to_dict())
-        self.assertEqual(reloaded.sliding_windows, config.sliding_windows)
+        config_dict = config.to_dict()
+        self.assertNotIn("sliding_windows", config_dict)
+        self.assertNotIn("swiglu_limits", config_dict)
+        reloaded = ExaoneMoeConfig.from_dict(config_dict)
         self.assertEqual([c.sliding_window for c in reloaded.per_layer_config], [128, 4096, 128, 128])
 
         # Original K-EXAONE style: every sliding layer uses the global window, so the config stays homogeneous

@@ -94,8 +94,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
-    # BC for other frameworks; the per-layer lists become `per_layer_config` in `__post_init__`
-    "ExaoneMoeConfig": ["first_k_dense_replace", "sliding_windows", "swiglu_limits"],
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
     # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
