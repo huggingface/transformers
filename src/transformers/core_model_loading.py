@@ -1429,6 +1429,10 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
+        if callable(in_place):  # the engine's loader: it checks the shape (a padded param, a mismatch)
+            in_place(ref, param_value)
+            return
+
         # For DTensor parameters, compare against the local shard loaded on this rank.
         expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
         if in_place and param_value.shape != expected_shape and param_value.numel() == ref.numel():
@@ -1449,7 +1453,7 @@ def set_param_for_module(
                     dtensor_param, requires_grad=ref.requires_grad and dtensor_param.is_floating_point()
                 )
             if in_place:  # the engine's own param, e.g. a vLLM param with its sharding attributes
-                ref.data.copy_(param_value) if in_place is True else in_place(ref, param_value)
+                ref.data.copy_(param_value)
                 return
             # super important otherwise _init_weight will re-init the param
             param_value._is_hf_initialized = True
