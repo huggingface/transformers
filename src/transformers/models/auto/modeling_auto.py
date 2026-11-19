@@ -332,6 +332,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("lightglue", "LightGlueForKeypointMatching"),
         ("lighton_ocr", "LightOnOcrModel"),
         ("lilt", "LiltModel"),
+        ("liquid_codec", "LiquidCodecModel"),
+        ("liquid_codec_decoder", "LiquidCodecDecoderModel"),
+        ("liquid_codec_encoder", "LiquidCodecEncoderModel"),
         ("llama", "LlamaModel"),
         ("llama4", "Llama4ForConditionalGeneration"),
         ("llama4_text", "Llama4TextModel"),
@@ -2165,6 +2168,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     [
         ("dac", "DacModel"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerModel"),
+        ("liquid_codec", "LiquidCodecModel"),
         ("neucodec", "NeuCodecModel"),
         ("pocket_tts_audio_tokenizer", "PocketTTSAudioTokenizerModel"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerModel"),
