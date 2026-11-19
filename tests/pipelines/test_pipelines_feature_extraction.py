@@ -73,6 +73,23 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         )
         self.assertEqual(np.squeeze(outputs).shape, (5, 4, 32))
 
+        self.assertEqual(tokenize_kwargs, {"padding": True, "max_length": 4})
+        repeated_outputs = feature_extractor(
+            ["This is a test", "This", "This is", "This is a", "This is a test test test test"],
+            truncation=True,
+            tokenize_kwargs=tokenize_kwargs,
+        )
+        self.assertEqual(repeated_outputs, outputs)
+
+        configured_extractor = FeatureExtractionPipeline(
+            model=feature_extractor.model,
+            tokenizer=feature_extractor.tokenizer,
+            truncation=True,
+            tokenize_kwargs=tokenize_kwargs,
+        )
+        self.assertEqual(tokenize_kwargs, {"padding": True, "max_length": 4})
+        self.assertEqual(configured_extractor("This is a test"), outputs[0])
+
         # raise value error if truncation parameter given for two places
         tokenize_kwargs = {"truncation": True}
         with self.assertRaises(ValueError):
