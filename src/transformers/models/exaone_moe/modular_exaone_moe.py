@@ -14,16 +14,20 @@
 # limitations under the License.
 """LG AI Research EXAONE Lab"""
 
+import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...modeling_outputs import MoeCausalLMOutputWithPast
+from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.output_capturing import OutputRecorder
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
@@ -34,10 +38,10 @@ from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
     Exaone4PreTrainedModel,
 )
+from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts, Glm5NextTextMLP
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
@@ -55,6 +59,10 @@ class ExaoneMoeConfig(Exaone4Config):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
+    sliding_windows (`list[int]`, *optional*):
+        Sliding window size of each layer, with `0` for full-attention layers. Converted to `per_layer_config`
+        overrides of `sliding_window` for the layers that differ from it. Takes precedence over `sliding_window`, which
+        is set to the most common non-zero entry.
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
@@ -62,6 +70,12 @@ class ExaoneMoeConfig(Exaone4Config):
                                                     \--k dense layers--/
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
+    swiglu_limit (`float`, *optional*):
+        Bound that the SwiGLU gate (from above) and up projections (from both sides) are clamped to before the
+        activation. `None` means no clamping.
+    swiglu_limits (`list[float]`, *optional*):
+        `swiglu_limit` of each layer, with `0` for no clamping. Converted to `per_layer_config` overrides of
+        `swiglu_limit`.
 
     Example:
 
@@ -115,9 +129,10 @@ class ExaoneMoeConfig(Exaone4Config):
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
-    sliding_window: int = 4096
+    sliding_window: int | None = 4096
     sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
+    sliding_windows: list[int] | None = None
     mlp_layer_types: list[str] | None = None
     first_k_dense_replace: int = 1
     moe_intermediate_size: int = 1024
@@ -129,6 +144,8 @@ class ExaoneMoeConfig(Exaone4Config):
     routed_scaling_factor: float = 2.5
     n_group: int = 1
     topk_group: int = 1
+    swiglu_limit: float | None = None
+    swiglu_limits: list[float] | None = None
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
@@ -136,15 +153,75 @@ class ExaoneMoeConfig(Exaone4Config):
                 "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
 
+        # `sliding_windows` and `swiglu_limits` are the Hub's per-layer format, kept as fields because other
+        # libraries read them. Here they become `per_layer_config` overrides, unless a saved config already has them.
+        for name in ("sliding_windows", "swiglu_limits"):
+            values = getattr(self, name)
+            if values is None:
+                continue
+            if len(values) != self.num_hidden_layers:
+                raise ValueError(
+                    f"`{name}` must have one entry per layer ({self.num_hidden_layers}), but got {len(values)}."
+                )
+            if any(value < 0 for value in values):
+                raise ValueError(f"`{name}` entries must be non-negative, but got {values}.")
+        if self.sliding_windows is not None and self.layer_types is not None:
+            for layer_idx, (layer_type, window) in enumerate(zip(self.layer_types, self.sliding_windows)):
+                if layer_type == "sliding_attention" and window == 0:
+                    raise ValueError(f"Layer {layer_idx} is a sliding attention layer but has sliding window 0.")
+
+        per_layer_config = {}
+        if self.sliding_windows is not None:
+            windows = [window for window in self.sliding_windows if window]
+            if windows:
+                self.sliding_window = max(set(windows), key=windows.count)
+            for layer_idx, window in enumerate(self.sliding_windows):
+                if window and window != self.sliding_window:
+                    per_layer_config.setdefault(layer_idx, {})["sliding_window"] = window
+        if self.swiglu_limits is not None:
+            for layer_idx, limit in enumerate(self.swiglu_limits):
+                if limit:
+                    per_layer_config.setdefault(layer_idx, {})["swiglu_limit"] = limit
+        if per_layer_config:
+            kwargs.setdefault("per_layer_config", per_layer_config)
+
         super().__post_init__(**kwargs)
+
+
+def get_mask_keys(config: ExaoneMoeConfig) -> list[str]:
+    """Key of each layer's mask. Sliding layers get one key per window size when the window varies across layers."""
+    per_layer_windows = "sliding_window" in (config.per_layer_attributes or ())
+    return [
+        f"sliding_attention_{layer_config.sliding_window}"
+        if per_layer_windows and layer_type == "sliding_attention"
+        else layer_type
+        for layer_type, layer_config in zip(config.layer_types, config.per_layer_config)
+    ]
+
+
+def create_masks(config: ExaoneMoeConfig, **mask_kwargs) -> dict:
+    """Creates one mask per key of `get_mask_keys`, using each layer's own `sliding_window`."""
+    causal_mask_mapping = {}
+    for layer_idx, mask_key in enumerate(get_mask_keys(config)):
+        if mask_key in causal_mask_mapping:
+            continue
+        if mask_key == "full_attention":
+            causal_mask_mapping[mask_key] = create_causal_mask(config=config, **mask_kwargs)
+        else:
+            causal_mask_mapping[mask_key] = create_sliding_window_causal_mask(
+                config=config.per_layer_config[layer_idx], layer_idx=layer_idx, **mask_kwargs
+            )
+    return causal_mask_mapping
 
 
 class ExaoneMoeAttention(Exaone4Attention):
     pass
 
 
-class ExaoneMoeMLP(Qwen2MoeMLP):
-    pass
+class ExaoneMoeMLP(Glm5NextTextMLP):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config, intermediate_size)
+        self.swiglu_limit = config.swiglu_limit or float("inf")
 
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
@@ -153,10 +230,11 @@ class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
         self.num_experts = config.num_experts
 
 
-class ExaoneMoeExperts(DeepseekV3Experts):
+class ExaoneMoeExperts(Glm5NextTextExperts):
     def __init__(self, config):
-        super().__init__(self, config)
+        super().__init__(config)
         self.num_experts = config.num_experts
+        self.swiglu_limit = config.swiglu_limit or float("inf")
 
 
 class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
@@ -170,6 +248,8 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
 
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
+        # K-EXAONE 2.0 sets `sliding_window` and `swiglu_limit` per layer
+        config = config.per_layer_config[layer_idx]
         super().__init__(config, layer_idx)
         self.mlp = (
             ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
@@ -199,10 +279,89 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
 
 
 class ExaoneMoeModel(Dots1Model):
-    pass
+    def __init__(self, config: ExaoneMoeConfig):
+        super().__init__(config)
+        self.mask_keys = get_mask_keys(config)
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            causal_mask_mapping = create_masks(
+                self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+                position_ids=position_ids,
+            )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.mask_keys[i]],
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                cache=cache,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            cache=cache,
+        )
 
 
 class ExaoneMoeForCausalLM(DeepseekV3ForCausalLM):
+    @staticmethod
+    def create_masks_for_generate(
+        config: ExaoneMoeConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None,
+        position_ids: torch.Tensor | None = None,
+        block_sequence_ids: torch.Tensor | None = None,
+        **kwargs,
+    ) -> dict:
+        # Used by `generate` with compilable caches: the generic version assumes a single `sliding_window`
+        return create_masks(
+            config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+            block_sequence_ids=block_sequence_ids,
+        )
+
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],

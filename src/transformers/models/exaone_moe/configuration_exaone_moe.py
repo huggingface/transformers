@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -40,9 +39,10 @@ class ExaoneMoeConfig(PreTrainedConfig):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
-    sliding_windows (`list`, *optional*):
-        Sliding window sizes for each layer. 0 means full attention, otherwise must be positive integer.
-        Prioritized over `sliding_window` and `sliding_window_pattern`.
+    sliding_windows (`list[int]`, *optional*):
+        Sliding window size of each layer, with `0` for full-attention layers. Converted to `per_layer_config`
+        overrides of `sliding_window` for the layers that differ from it. Takes precedence over `sliding_window`, which
+        is set to the most common non-zero entry.
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
@@ -50,8 +50,12 @@ class ExaoneMoeConfig(PreTrainedConfig):
                                                     \--k dense layers--/
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
-    swiglu_limits (`list`, *optional*):
-        Swiglu limits for each layer. 0 means no swiglu limit, otherwise must be positive float.
+    swiglu_limit (`float`, *optional*):
+        Bound that the SwiGLU gate (from above) and up projections (from both sides) are clamped to before the
+        activation. `None` means no clamping.
+    swiglu_limits (`list[float]`, *optional*):
+        `swiglu_limit` of each layer, with `0` for no clamping. Converted to `per_layer_config` overrides of
+        `swiglu_limit`.
 
     Example:
 
@@ -107,7 +111,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
-    sliding_window: int = 4096
+    sliding_window: int | None = 4096
     sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
     base_model_ep_plan = {
@@ -127,6 +131,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     routed_scaling_factor: float = 2.5
     n_group: int = 1
     topk_group: int = 1
+    swiglu_limit: float | None = None
     swiglu_limits: list[float] | None = None
 
     def __post_init__(self, **kwargs):
@@ -135,29 +140,37 @@ class ExaoneMoeConfig(PreTrainedConfig):
                 "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
 
-        # Validate sliding windows
-        if self.sliding_windows is not None:
-            if len(self.sliding_windows) != self.num_hidden_layers:
+        # `sliding_windows` and `swiglu_limits` are the Hub's per-layer format, kept as fields because other
+        # libraries read them. Here they become `per_layer_config` overrides, unless a saved config already has them.
+        for name in ("sliding_windows", "swiglu_limits"):
+            values = getattr(self, name)
+            if values is None:
+                continue
+            if len(values) != self.num_hidden_layers:
                 raise ValueError(
-                    f"Number of sliding windows must be equal to the number of hidden layers ({self.num_hidden_layers}), but got {len(self.sliding_windows)}"
+                    f"`{name}` must have one entry per layer ({self.num_hidden_layers}), but got {len(values)}."
                 )
-            for layer_idx, (layer_type, window_size) in enumerate(zip(self.layer_types, self.sliding_windows)):
-                if window_size < 0:
-                    raise ValueError(
-                        f"Sliding window size must be greater than 0, but got {window_size} at layer {layer_idx}"
-                    )
-                if layer_type == "sliding_attention" and window_size == 0:
-                    raise ValueError(f"Found sliding window size 0 for layer {layer_idx}")
+            if any(value < 0 for value in values):
+                raise ValueError(f"`{name}` entries must be non-negative, but got {values}.")
+        if self.sliding_windows is not None and self.layer_types is not None:
+            for layer_idx, (layer_type, window) in enumerate(zip(self.layer_types, self.sliding_windows)):
+                if layer_type == "sliding_attention" and window == 0:
+                    raise ValueError(f"Layer {layer_idx} is a sliding attention layer but has sliding window 0.")
 
-        # Validate swiglu limits
+        per_layer_config = {}
+        if self.sliding_windows is not None:
+            windows = [window for window in self.sliding_windows if window]
+            if windows:
+                self.sliding_window = max(set(windows), key=windows.count)
+            for layer_idx, window in enumerate(self.sliding_windows):
+                if window and window != self.sliding_window:
+                    per_layer_config.setdefault(layer_idx, {})["sliding_window"] = window
         if self.swiglu_limits is not None:
-            if len(self.swiglu_limits) != self.num_hidden_layers:
-                raise ValueError(
-                    f"Number of swiglu limits must be equal to the number of hidden layers ({self.num_hidden_layers}), but got {len(self.swiglu_limits)}"
-                )
             for layer_idx, limit in enumerate(self.swiglu_limits):
-                if limit < 0:
-                    raise ValueError(f"Swiglu limit must be non-negative, but got {limit} at layer {layer_idx}")
+                if limit:
+                    per_layer_config.setdefault(layer_idx, {})["swiglu_limit"] = limit
+        if per_layer_config:
+            kwargs.setdefault("per_layer_config", per_layer_config)
         if self.sliding_window is None:
             self.sliding_window_pattern = 0
         if self.layer_types is None:

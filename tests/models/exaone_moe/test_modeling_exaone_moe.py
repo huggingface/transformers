@@ -26,10 +26,12 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     slow,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -42,7 +44,6 @@ if is_torch_available():
         ExaoneMoeModel,
         StaticCache,
     )
-    from transformers.masking_utils import create_sliding_window_causal_mask
     from transformers.models.exaone_moe.modeling_exaone_moe import ExaoneMoeExperts, ExaoneMoeMLP
 
 
@@ -60,6 +61,33 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
+    def test_hub_per_layer_fields_become_per_layer_config(self):
+        # K-EXAONE 2.0 style: no global `sliding_window`, one layer with a longer window, some clamped layers
+        config = ExaoneMoeConfig(
+            num_hidden_layers=4,
+            layer_types=["full_attention", "sliding_attention", "sliding_attention", "sliding_attention"],
+            sliding_window=None,
+            sliding_windows=[0, 4096, 128, 128],
+            swiglu_limits=[0.0, 0.0, 7.0, 0.0],
+        )
+        self.assertTrue(config.is_heterogeneous)
+        self.assertEqual([c.sliding_window for c in config.per_layer_config], [128, 4096, 128, 128])
+        self.assertEqual([c.swiglu_limit for c in config.per_layer_config], [None, None, 7.0, None])
+
+        reloaded = ExaoneMoeConfig.from_dict(config.to_dict())
+        self.assertEqual(reloaded.sliding_windows, config.sliding_windows)
+        self.assertEqual([c.sliding_window for c in reloaded.per_layer_config], [128, 4096, 128, 128])
+
+        # Original K-EXAONE style: every sliding layer uses the global window, so the config stays homogeneous
+        config = ExaoneMoeConfig(
+            num_hidden_layers=4,
+            sliding_window=128,
+            layer_types=["sliding_attention", "sliding_attention", "sliding_attention", "full_attention"],
+            sliding_windows=[128, 128, 128, 0],
+        )
+        self.assertFalse(config.is_heterogeneous)
+        self.assertEqual(config.sliding_window, 128)
+
     def test_per_layer_sliding_window_cache(self):
         config = ExaoneMoeConfig(
             num_hidden_layers=4,
@@ -75,28 +103,44 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(static_cache.layers[1].get_max_length(), 4096)
         self.assertEqual(static_cache.layers[2].get_max_length(), 128)
 
-    def test_per_layer_sliding_window_masks(self):
-        config = ExaoneMoeConfig(num_hidden_layers=2)
+    def test_per_layer_sliding_window_attention(self):
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 2
+        config.layer_types = ["sliding_attention", "sliding_attention"]
+        config.mlp_layer_types = ["dense", "dense"]
+        config.sliding_window = 2
+        config.per_layer_config = {1: {"sliding_window": 4}}
         config._attn_implementation = "eager"
-        inputs_embeds = torch.zeros(1, 6, config.hidden_size)
-        mask_kwargs = {
-            "config": config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": None,
-            "past_key_values": None,
-            "allow_is_causal_skip": False,
-        }
+        model = ExaoneMoeModel(config).to(torch_device).eval()
 
-        short_mask = create_sliding_window_causal_mask(**mask_kwargs, sliding_window=2)
-        long_mask = create_sliding_window_causal_mask(**mask_kwargs, sliding_window=4)
+        input_ids = ids_tensor([1, 6], config.vocab_size).to(torch_device)
+        with torch.no_grad():
+            attentions = model(input_ids, output_attentions=True).attentions
 
-        torch.testing.assert_close(short_mask[0, 0, -1] == 0, torch.tensor([False, False, False, False, True, True]))
-        torch.testing.assert_close(long_mask[0, 0, -1] == 0, torch.tensor([False, False, True, True, True, True]))
+        # Last query position: a window of 2 sees the last 2 tokens, a window of 4 the last 4
+        self.assertEqual((attentions[0][0, 0, -1] > 0).tolist(), [False] * 4 + [True] * 2)
+        self.assertEqual((attentions[1][0, 0, -1] > 0).tolist(), [False] * 2 + [True] * 4)
+
+    def test_per_layer_sliding_window_static_cache_generate(self):
+        config = self.model_tester.get_config()
+        config.num_hidden_layers = 3
+        config.layer_types = ["full_attention", "sliding_attention", "sliding_attention"]
+        config.mlp_layer_types = ["dense", "sparse", "sparse"]
+        config.sliding_window = 4
+        config.per_layer_config = {1: {"sliding_window": 8}}
+        model = ExaoneMoeForCausalLM(config).to(torch_device).eval()
+
+        input_ids = ids_tensor([1, 10], config.vocab_size).to(torch_device)
+        dynamic = model.generate(input_ids, max_new_tokens=4, do_sample=False)
+        static = model.generate(input_ids, max_new_tokens=4, do_sample=False, cache_implementation="static")
+        self.assertEqual(dynamic.tolist(), static.tolist())
 
     def test_swiglu_limit_is_applied_before_activation(self):
-        config = ExaoneMoeConfig(hidden_size=1, intermediate_size=1, num_experts=1, moe_intermediate_size=1)
-        mlp = ExaoneMoeMLP(config, swiglu_limit=1.0)
-        experts = ExaoneMoeExperts(config, swiglu_limit=1.0)
+        config = ExaoneMoeConfig(
+            hidden_size=1, intermediate_size=1, num_experts=1, moe_intermediate_size=1, swiglu_limit=1.0
+        )
+        mlp = ExaoneMoeMLP(config)
+        experts = ExaoneMoeExperts(config)
         with torch.no_grad():
             mlp.gate_proj.weight.fill_(1.0)
             mlp.up_proj.weight.fill_(1.0)
