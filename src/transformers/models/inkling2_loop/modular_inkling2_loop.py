@@ -122,10 +122,6 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
         if self.loop_config is None:
             # TODO: Better naming: layer_index_start, layer_index_end, num_passes, gate_rank
             self.loop_config = {"core_start": 6, "core_end": 18, "num_passes": 3, "gate_rank": 64}
-
-        # TODO: remove before merge. Currently needed because vision_config.text_hidden_size is missing from
-        # the hub config.
-        self.vision_config.text_hidden_size = self.text_config.hidden_size
         super().__post_init__(**kwargs)
 
     @property
@@ -160,6 +156,12 @@ class Inkling2LoopConfig(Inkling2Config):
     }
 
     vision_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        PreTrainedConfig.__post_init__(self, **kwargs)
+        # TODO: remove before merge. Currently needed because vision_config.text_hidden_size is missing from
+        # the hub config.
+        self.vision_config.text_hidden_size = self.text_config.hidden_size
 
 
 class Inkling2LoopUnweightedRMSNorm(Inkling2UnweightedRMSNorm):

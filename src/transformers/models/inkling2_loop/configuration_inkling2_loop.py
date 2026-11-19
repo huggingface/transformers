@@ -139,10 +139,6 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
         if self.loop_config is None:
             # TODO: Better naming: layer_index_start, layer_index_end, num_passes, gate_rank
             self.loop_config = {"core_start": 6, "core_end": 18, "num_passes": 3, "gate_rank": 64}
-
-        # TODO: remove before merge. Currently needed because vision_config.text_hidden_size is missing from
-        # the hub config.
-        self.vision_config.text_hidden_size = self.text_config.hidden_size
         if self.layer_types is None:
             self.layer_types = [
                 "hybrid" if (i + 1) % 6 == 0 else "hybrid_sliding" for i in range(self.num_hidden_layers)
@@ -191,6 +187,12 @@ class Inkling2LoopConfig(PreTrainedConfig):
                 f"`vision_config.text_hidden_size` ({self.vision_config.text_hidden_size}) must match "
                 f"`text_config.hidden_size` ({self.text_config.hidden_size})."
             )
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        # TODO: remove before merge. Currently needed because vision_config.text_hidden_size is missing from
+        # the hub config.
+        self.vision_config.text_hidden_size = self.text_config.hidden_size
 
 
 __all__ = ["Inkling2LoopConfig", "Inkling2LoopTextConfig"]
