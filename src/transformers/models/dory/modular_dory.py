@@ -13,20 +13,14 @@
 # limitations under the License.
 """Dory: a looped normalized transformer (nGPT, https://huggingface.co/papers/2410.01131)."""
 
+import copy
 from collections.abc import Callable
 
 import torch
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import (
-    Cache,
-    DynamicCache,
-    DynamicLayer,
-    DynamicSlidingWindowLayer,
-    StaticLayer,
-    StaticSlidingWindowLayer,
-)
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, DynamicSlidingWindowLayer
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -57,120 +51,6 @@ class DoryL2Norm(Llama4TextL2Norm):
         return x * torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + self.eps)
 
 
-class DoryRecurrentLayerMixin:
-    """
-    Cache of a recurrent layer, which runs once per loop. The loop count and the cache mode are settled at init, so
-    `update` only needs the `loop_idx` of the loop it is called from:
-
-        per_loop:  every loop keeps its own history, loop 0 in this layer and loops 1, 2, ... in `later_loops`
-        last_loop: (`share_across_loops`) only the last loop is cached; earlier loops `read` the cache and their own
-                   tokens without writing, like KV-shared layers, so memory does not grow with the loops
-    """
-
-    def __init__(self, *args, config: DoryConfig, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_args, self.init_kwargs = args, {**kwargs, "config": config}
-        self.n_recurrent_loops = config.n_recurrent_loops
-        self.share_across_loops = config.recurrent_kv_cache_mode == "last_loop"
-        self.later_loops = []
-
-    def update(self, key_states, value_states, *args, loop_idx: int = 0, **kwargs):
-        if self.share_across_loops and loop_idx < self.n_recurrent_loops - 1:
-            return self.read(key_states, value_states)
-        if self.share_across_loops or loop_idx == 0:
-            return super().update(key_states, value_states, *args, **kwargs)
-        while len(self.later_loops) < loop_idx:
-            self.later_loops.append(type(self)(*self.init_args, **self.init_kwargs))
-            if getattr(self, "record_past", False):
-                self.later_loops[-1].activate_past_recording()
-        return self.later_loops[loop_idx - 1].update(key_states, value_states, *args, **kwargs)
-
-    def crop(self, tokens_to_remove: int) -> None:
-        super().crop(tokens_to_remove)
-        for layer in self.later_loops:
-            layer.crop(tokens_to_remove)
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        for layer in self.later_loops:
-            layer.reorder_cache(beam_idx)
-
-    def batch_repeat_interleave(self, repeats: int) -> None:
-        super().batch_repeat_interleave(repeats)
-        for layer in self.later_loops:
-            layer.batch_repeat_interleave(repeats)
-
-    def batch_select_indices(self, indices: torch.Tensor) -> None:
-        super().batch_select_indices(indices)
-        for layer in self.later_loops:
-            layer.batch_select_indices(indices)
-
-    def reset(self) -> None:
-        super().reset()
-        self.later_loops = []
-
-
-class DoryRecurrentLayer(DoryRecurrentLayerMixin, DynamicLayer):
-    _layer_type = "recurrent_full_attention"
-
-    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if not self.is_initialized:
-            return key_states, value_states
-        return torch.cat([self.keys, key_states], dim=-2), torch.cat([self.values, value_states], dim=-2)
-
-
-class DoryRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, DynamicSlidingWindowLayer):
-    _layer_type = "recurrent_sliding_attention"
-
-    def activate_past_recording(self):
-        # Generation turns recording on after prefill, when the later loops already exist
-        super().activate_past_recording()
-        for layer in self.later_loops:
-            layer.activate_past_recording()
-
-    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if not self.is_initialized:
-            return key_states, value_states
-        # The cache may hold more than the window if past recording is on
-        num_visible = self.sliding_window - 1 + key_states.shape[-2]
-        key_states = torch.cat([self.keys, key_states], dim=-2)[..., -num_visible:, :]
-        value_states = torch.cat([self.values, value_states], dim=-2)[..., -num_visible:, :]
-        return key_states, value_states
-
-
-class DoryStaticRecurrentLayer(DoryRecurrentLayerMixin, StaticLayer):
-    _layer_type = "recurrent_full_attention"
-
-    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # Write at the next positions without moving past them: the last loop overwrites the same slots
-        kv_length = key_states.shape[-2]
-        key_states, value_states = StaticLayer.update(self, key_states, value_states)
-        self.cumulative_length.sub_(kv_length)
-        return key_states, value_states
-
-
-class DoryStaticRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, StaticSlidingWindowLayer):
-    _layer_type = "recurrent_sliding_attention"
-
-    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # Same states `update` returns, without rolling the window
-        kv_length = key_states.shape[-2]
-        current_length = self.cumulative_length_int
-        if current_length >= self.max_cache_len:
-            key_states = torch.cat([self.keys[:, :, 1:, :], key_states], dim=-2)
-            value_states = torch.cat([self.values[:, :, 1:, :], value_states], dim=-2)
-        elif current_length + kv_length > self.max_cache_len:
-            if current_length > 0:
-                key_states = torch.cat([self.keys[:, :, :current_length, :], key_states], dim=-2)
-                value_states = torch.cat([self.values[:, :, :current_length, :], value_states], dim=-2)
-        else:
-            # Room left: write at the next positions without moving past them, the last loop overwrites them
-            key_states, value_states = StaticSlidingWindowLayer.update(self, key_states, value_states)
-            self.cumulative_length_int -= kv_length
-            self.cumulative_length.sub_(kv_length)
-        return key_states, value_states
-
-
 class DoryRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: DoryConfig, device=None):
         super().__init__(config)
@@ -184,7 +64,7 @@ class DoryRotaryEmbedding(Gemma3RotaryEmbedding):
 class DoryAttention(AfmoeAttention):
     """
     Afmoe attention with nGPT details: unit-norm queries and keys, queries rescaled per channel by `sqk` after rope,
-    a learned scale `s_gate` inside the output gate, and a cache that follows the recurrent loops.
+    and a learned scale `s_gate` inside the output gate.
     """
 
     def __init__(self, config: DoryConfig, layer_idx: int):
@@ -196,7 +76,7 @@ class DoryAttention(AfmoeAttention):
         self.s_gate = nn.Parameter(torch.full((config.num_attention_heads * self.head_dim,), config.initializer_range))
         self.sqk_scale = self.head_dim**0.5 / config.initializer_range
         self.s_gate_scale = config.hidden_size**0.25 / config.initializer_range
-        self.is_local_attention = config.layer_types[layer_idx].endswith("sliding_attention")
+        self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
         self.sliding_window = config.sliding_window if self.is_local_attention else None
 
     def forward(
@@ -205,7 +85,8 @@ class DoryAttention(AfmoeAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        loop_idx: int = 0,
+        cache_offset: int = 0,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -225,11 +106,18 @@ class DoryAttention(AfmoeAttention):
         query_scale = (self.sqk * self.sqk_scale).view(-1, 1, self.head_dim)
         query_states = query_states * query_scale.square()
 
-        if past_key_values is not None:
-            # The cache knows the loop count and the cache mode, it only needs to know which loop it is called from
-            key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, loop_idx=loop_idx
-            )
+        if shared_kv_states is not None:
+            # `last_loop`: earlier loops attend over the last loop's cached past and their own tokens, without writing
+            if (past := shared_kv_states.get(self.layer_idx)) is not None:
+                key_states = torch.cat([past[0], key_states], dim=-2)
+                value_states = torch.cat([past[1], value_states], dim=-2)
+                if self.sliding_window is not None:
+                    # The cache may hold more than the window if past recording is on
+                    num_visible = self.sliding_window - 1 + query_states.shape[-2]
+                    key_states, value_states = key_states[..., -num_visible:, :], value_states[..., -num_visible:, :]
+        elif past_key_values is not None:
+            # `per_loop` loops past the first write to their own copy of this layer's cache, see `DoryModel.forward`
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx + cache_offset)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -274,9 +162,7 @@ class DoryDecoderLayer(Gemma2DecoderLayer):
 
     def __init__(self, config: DoryConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.layer_type = config.layer_types[layer_idx]
-        # A recurrent layer is a plain attention layer: it takes the mask and the rope of its attention type
-        self.attention_type = self.layer_type.removeprefix("recurrent_")
+        self.attention_type = config.layer_types[layer_idx]
         self.input_layernorm = DoryL2Norm()
         self.post_attention_layernorm = DoryL2Norm()
         self.pre_feedforward_layernorm = DoryL2Norm()
@@ -396,14 +282,32 @@ class DoryModel(LlamaModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        # One rope per attention type: the recurrent layers reuse the rope of the type they strip down to
         position_embeddings = {
             attention_type: self.rotary_emb(inputs_embeds, position_ids, attention_type)
             for attention_type in {layer.attention_type for layer in self.layers}
         }
 
+        n_loops = self.config.n_recurrent_loops
         recurrent_start = self.config.n_input_layers
         recurrent_end = recurrent_start + self.config.n_recurrent_layers
+        last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
+
+        shared_kv_states = None
+        if past_key_values is not None and last_loop_only:
+            # Only the last loop writes: earlier loops read this snapshot of the past, see `DoryAttention`
+            recurrent_cache = past_key_values.layers[recurrent_start:recurrent_end]
+            if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer) for layer in recurrent_cache):
+                raise ValueError("`recurrent_kv_cache_mode='last_loop'` needs a dynamic cache")
+            shared_kv_states = {
+                recurrent_start + i: (layer.keys, layer.values)
+                for i, layer in enumerate(recurrent_cache)
+                if layer.is_initialized
+            }
+        elif past_key_values is not None and len(past_key_values.layers) == self.config.num_hidden_layers:
+            # `per_loop`: loops 1, 2, ... get their own copies of the recurrent cache layers, appended at the end
+            # ponytail: copied at the first forward, a cache filled with another loop count is not resized
+            recurrent_cache = past_key_values.layers[recurrent_start:recurrent_end]
+            past_key_values.layers += [copy.deepcopy(layer) for _ in range(n_loops - 1) for layer in recurrent_cache]
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
@@ -417,15 +321,22 @@ class DoryModel(LlamaModel):
 
         # Each loop restarts from the input section's output
         input_hidden_states = self.norm(hidden_states)
-        for loop_idx in range(self.config.n_recurrent_loops):
+        for loop_idx in range(n_loops):
             hidden_states = self.norm(hidden_states) + input_hidden_states
+            is_read_only = last_loop_only and loop_idx < n_loops - 1
+            # Shifts each layer's cache index to this loop's copies (0 for loop 0 and for `last_loop`)
+            cache_offset = 0
+            if loop_idx > 0 and not last_loop_only:
+                cache_offset = self.config.num_hidden_layers + (loop_idx - 1) * (recurrent_end - recurrent_start)
+                cache_offset -= recurrent_start
             for decoder_layer in self.layers[recurrent_start:recurrent_end]:
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     position_embeddings=position_embeddings[decoder_layer.attention_type],
-                    past_key_values=past_key_values,
-                    loop_idx=loop_idx,
+                    past_key_values=None if is_read_only else past_key_values,
+                    cache_offset=cache_offset,
+                    shared_kv_states=shared_kv_states if is_read_only else None,
                     **kwargs,
                 )
 

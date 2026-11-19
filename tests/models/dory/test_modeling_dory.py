@@ -17,7 +17,7 @@ import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import AutoTokenizer, DoryConfig, DynamicCache, is_torch_available
+from transformers import AutoTokenizer, DoryConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -81,29 +81,20 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(StrictDataclassClassValidationError):
             DoryConfig(n_recurrent_loops=0)
 
-    def test_recurrent_layers_only_change_the_cache(self):
-        # The recurrent section is made of plain attention layers: only the cache knows about the loops
-        config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
-        self.assertEqual(
-            config.layer_types,
-            ["sliding_attention", "recurrent_sliding_attention", "recurrent_sliding_attention", "full_attention"],
-        )
-
-        cache = DynamicCache(config=config)
-        self.assertEqual(
-            [type(layer).__name__ for layer in cache.layers],
-            ["DynamicSlidingWindowLayer", "DoryRecurrentSlidingWindowLayer", "DoryRecurrentSlidingWindowLayer", "DynamicLayer"],
-        )
-        # The loop count and the cache mode are settled at init, `update` only takes the loop index
-        recurrent_layer = cache.layers[1]
-        self.assertEqual(recurrent_layer.n_recurrent_loops, 2)
-        self.assertFalse(recurrent_layer.share_across_loops)
-
-        config.recurrent_kv_cache_mode = "last_loop"
-        self.assertTrue(DynamicCache(config=config).layers[1].share_across_loops)
+    def test_recurrent_cache_layout(self):
+        # Plain cache layers: `per_loop` appends one copy of the recurrent layers per extra loop, `last_loop` adds none
+        config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=3)
+        input_ids = torch.tensor([[1, 2, 3]])
+        for mode, expected in [
+            ("per_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"] + ["DynamicSlidingWindowLayer"] * 4),
+            ("last_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"]),
+        ]:
+            config.recurrent_kv_cache_mode = mode
+            cache = DoryModel(config).eval()(input_ids, use_cache=True).past_key_values
+            self.assertEqual([type(layer).__name__ for layer in cache.layers], expected)
+            self.assertTrue(all(layer.get_seq_length() == 3 for layer in cache.layers))
 
     def test_recurrent_layers_use_the_mask_and_rope_of_their_attention_type(self):
-        # The `recurrent_` prefix only selects the cache layer, the decoder layer strips it for mask and rope lookups
         config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
         model = DoryModel(config)
         self.assertEqual(

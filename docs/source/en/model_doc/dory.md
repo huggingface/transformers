@@ -65,7 +65,19 @@ print(tokenizer.decode(outputs[0, inputs["input_ids"].shape[1] :], skip_special_
 ## Notes
 
 - Set `n_recurrent_loops` to balance compute and accuracy. The released checkpoints default to 2. Try 1 for lower compute per token or 4 for higher accuracy. More loops can shorten responses, so measure end-to-end latency.
-- Set `recurrent_kv_cache_mode="last_loop"` to share KV history across loops instead of keeping separate histories with the default `per_loop`. Cache memory then stays independent of loop count.
+- Set `recurrent_kv_cache_mode="last_loop"` to share KV history across loops instead of keeping separate histories with the default `per_loop`. Cache memory then stays independent of loop count. Every loop still computes its own Q, K and V, but only the last loop writes them to the cache. Earlier loops read the cached past and attend over it plus their own new keys, without writing. The diagram below shows one recurrent layer `L` with 3 loops.
+
+  ```text
+  prefill "a b c":   cache[L] empty
+    loop0: attend [k0(abc)]
+    loop1: attend [k1(abc)]
+    loop2: attend [k2(abc)]  → cache[L] = k2(abc)    (write)
+
+  decode "d":        cache[L] = k2(abc)              (read)
+    loop0: attend [k2(abc) | k0(d)]
+    loop1: attend [k2(abc) | k1(d)]
+    loop2: attend [k2(abc) | k2(d)] → cache[L] = k2(abcd)
+  ```
 
 ## DoryConfig
 
