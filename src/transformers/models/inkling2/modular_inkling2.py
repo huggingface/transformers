@@ -422,6 +422,72 @@ class Inkling2DynamicShortConvolution(nn.Module):
         return hidden_states.to(input_dtype)
 
 
+class Inkling2SlidingKeyValueProjection(nn.Module):
+    """Key or value states of the sliding-attention layers: projection, short convolution and per-head norm."""
+
+    def __init__(self, config: Inkling2TextConfig, layer_idx: int, is_key: bool):
+        super().__init__()
+        self.head_dim = config.swa_head_dim
+        hidden_size = config.swa_num_key_value_heads * config.swa_head_dim
+        self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
+        self.sconv = Inkling2ShortConvolution(
+            hidden_size, config.sconv_kernel_size, layer_idx, conv_idx=0 if is_key else 1
+        )
+        if is_key:
+            self.norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        else:
+            self.norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache: Cache | None = None,
+        conv_mask: torch.Tensor | None = None,
+        cache_offset: int = 0,
+    ) -> torch.Tensor:
+        states = self.linear(hidden_states)
+        states = self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
+        states = states.view(*hidden_states.shape[:-1], -1, self.head_dim)
+        return self.norm(states.float()).to(states.dtype).transpose(1, 2)
+
+
+class Inkling2FullKeyValueProjection(nn.Module):
+    """
+    Key or value states of the full-attention layers: projection, dynamic short convolution and per-head norm. The
+    convolution weights are computed from the same input as the projection.
+    """
+
+    def __init__(self, config: Inkling2TextConfig, layer_idx: int, is_key: bool):
+        super().__init__()
+        self.head_dim = config.head_dim
+        hidden_size = config.num_key_value_heads * config.head_dim
+        self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
+        self.sconv = Inkling2DynamicShortConvolution(
+            hidden_size,
+            config.hidden_size,
+            config.num_key_value_heads,
+            config.sconv_kernel_size,
+            layer_idx,
+            conv_idx=0 if is_key else 1,
+        )
+        if is_key:
+            self.norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        else:
+            self.norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache: Cache | None = None,
+        conv_mask: torch.Tensor | None = None,
+        cache_offset: int = 0,
+    ) -> torch.Tensor:
+        states = self.linear(hidden_states)
+        states = self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
+        states = states.view(*hidden_states.shape[:-1], -1, self.head_dim)
+        return self.norm(states.float()).to(states.dtype).transpose(1, 2)
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -463,9 +529,11 @@ class Inkling2SlidingAttention(InklingAttention):
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
-        self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.k_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, is_key=True)
+        self.v_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, is_key=False)
         self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
-        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
+        del self.k_sconv
+        del self.v_sconv
         del self.q_norm
         del self.k_norm
 
@@ -497,21 +565,13 @@ class Inkling2SlidingAttention(InklingAttention):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(
-            self.k_proj(key_hidden_states), cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
-        )
-        value_states = self.v_sconv(
-            self.v_proj(value_hidden_states), cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
-        )
+        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
+        value_states = self.v_proj(value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
         relative_states = self.r_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
 
         query_states = self.q_l2_clip(query_states.view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = value_states.view(hidden_shape)
-        value_states = self.v_norm(value_states.float()).to(value_states.dtype)
-        value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
         position_bias = self.rel_logits_proj(relative_states, cache=cache, layer_idx=cache_layer_idx)
 
@@ -546,28 +606,14 @@ class Inkling2FullAttention(InklingAttention):
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = self.head_dim**-0.5
-        self.k_sconv = Inkling2DynamicShortConvolution(
-            self.num_key_value_heads * self.head_dim,
-            config.hidden_size,
-            self.num_key_value_heads,
-            config.sconv_kernel_size,
-            layer_idx,
-            conv_idx=0,
-        )
-        self.v_sconv = Inkling2DynamicShortConvolution(
-            self.num_key_value_heads * self.head_dim,
-            config.hidden_size,
-            self.num_key_value_heads,
-            config.sconv_kernel_size,
-            layer_idx,
-            conv_idx=1,
-        )
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
-        self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.k_proj = Inkling2FullKeyValueProjection(config, layer_idx, is_key=True)
+        self.v_proj = Inkling2FullKeyValueProjection(config, layer_idx, is_key=False)
         self.rel_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
-        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
+        del self.k_sconv
+        del self.v_sconv
         del self.q_norm
         del self.k_norm
 
@@ -597,20 +643,8 @@ class Inkling2FullAttention(InklingAttention):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(
-            self.k_proj(key_hidden_states),
-            key_hidden_states,
-            cache=cache,
-            conv_mask=conv_mask,
-            cache_offset=cache_offset,
-        )
-        value_states = self.v_sconv(
-            self.v_proj(value_hidden_states),
-            value_hidden_states,
-            cache=cache,
-            conv_mask=conv_mask,
-            cache_offset=cache_offset,
-        )
+        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
+        value_states = self.v_proj(value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
         relative_states = self.r_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
@@ -623,10 +657,6 @@ class Inkling2FullAttention(InklingAttention):
 
         query_states = self.q_l2_clip(query_states.view(hidden_shape))
         query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
-        key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = value_states.view(hidden_shape)
-        value_states = self.v_norm(value_states.float()).to(value_states.dtype)
-        value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
         relative_states = (relative_states.float() * tau).to(relative_states.dtype)
         position_bias = self.rel_logits_proj(relative_states, cache=cache, layer_idx=cache_layer_idx)
@@ -995,8 +1025,7 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         "mlp.gate.weight",
         "post_attention_convolution",
         "post_mlp_convolution",
-        "k_sconv.conv1d",
-        "v_sconv.conv1d",
+        "sconv.conv1d",
         "attention_input",
         "mlp_input",
         "final_input",
