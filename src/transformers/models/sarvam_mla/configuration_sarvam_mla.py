@@ -22,15 +22,23 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
+
+# Keys used by the original `sarvamai/sarvam-105b` config, renamed to their DeepSeek-V3 equivalents
+LEGACY_KEY_RENAMES = {"num_experts": "n_routed_experts", "num_shared_experts": "n_shared_experts"}
 
 
 @auto_docstring(checkpoint="sarvamai/sarvam-105b")
 @strict(accept_kwargs=True)
 class SarvamMLAConfig(PreTrainedConfig):
     r"""
-    n_group (`int`, *optional*, defaults to 16):
-        Number of groups for routed experts.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts. The released checkpoints route over all experts at once.
+    topk_group (`int`, *optional*, defaults to 1):
+        Number of selected groups for each token.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
@@ -96,8 +104,8 @@ class SarvamMLAConfig(PreTrainedConfig):
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 128
-    n_group: int | None = 16
-    topk_group: int | None = 2
+    n_group: int | None = 1
+    topk_group: int | None = 1
     num_experts_per_tok: int | None = 8
     first_k_dense_replace: int | None = 1
     norm_topk_prob: bool | None = True
@@ -118,6 +126,26 @@ class SarvamMLAConfig(PreTrainedConfig):
     num_mtp_layers: int = 0
 
     def __post_init__(self, **kwargs):
+        # Translate the original Sarvam config format (written for the remote code) to the DeepSeek-V3 format
+        legacy_keys = [key for key in (*LEGACY_KEY_RENAMES, "q_head_dim") if key in kwargs]
+        for old_key, new_key in LEGACY_KEY_RENAMES.items():
+            if old_key in kwargs:
+                setattr(self, new_key, kwargs.pop(old_key))
+        kwargs.pop("q_head_dim", None)
+        # `head_dim` is derived; the original config stored `kv_lora_rank + qk_rope_head_dim` for vLLM's MLA
+        head_dim = kwargs.pop("head_dim", None)
+        if head_dim is not None and head_dim != self.qk_rope_head_dim:
+            legacy_keys.append("head_dim")
+        # `deepseek_yarn` is the same as standard YaRN
+        rope_scaling = kwargs.get("rope_scaling") or {}
+        if "deepseek_yarn" in (rope_scaling.get("type"), rope_scaling.get("rope_type")):
+            kwargs["rope_scaling"] = {k: v for k, v in rope_scaling.items() if k != "type"} | {"rope_type": "yarn"}
+            legacy_keys.append("rope_scaling.type='deepseek_yarn'")
+        if legacy_keys:
+            logger.warning_once(
+                f"Loading a SarvamMLA config in the deprecated format (found {', '.join(legacy_keys)}). It has been "
+                "converted to the DeepSeek-V3 format; re-save it with `config.save_pretrained()` to update it."
+            )
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
