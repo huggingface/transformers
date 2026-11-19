@@ -49,7 +49,8 @@ class TextStreamer(BaseStreamer):
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         decode_kwargs (`dict`, *optional*):
-            Additional keyword arguments to pass to the tokenizer's `decode` method.
+            Additional keyword arguments to pass to the tokenizer's `decode` method. When tokenization-space cleanup is
+            enabled, incomplete words and separators are buffered because cleanup can still change them.
 
     Examples:
 
@@ -93,6 +94,9 @@ class TextStreamer(BaseStreamer):
         # Add the new token to the cache and decodes the entire thing.
         self.token_cache.extend(value.tolist())
         text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
+        cleanup = self.decode_kwargs.get("clean_up_tokenization_spaces")
+        if cleanup is None:
+            cleanup = getattr(self.tokenizer, "clean_up_tokenization_spaces", False)
 
         # After the symbol for a new line, we flush the cache.
         if text.endswith("\n"):
@@ -106,13 +110,25 @@ class TextStreamer(BaseStreamer):
         # Letters (with their combining marks), digits and spaces are printed right away, so text without spaces (long
         # words, Thai) streams too. Symbols wait for the next space: they may start some formatting (`\n`, `<br>`) or
         # be an incomplete character (`\ufffd`).
-        elif all(char.isspace() or unicodedata.category(char)[0] in "LMN" for char in text[self.print_len :]):
+        elif not cleanup and all(
+            char.isspace() or unicodedata.category(char)[0] in "LMN" for char in text[self.print_len :]
+        ):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
         # which may change with the subsequent token -- there are probably smarter ways to do this!)
         else:
-            printable_text = text[self.print_len : text.rfind(" ") + 1]
+            print_end = text.rfind(" ") + 1
+            if cleanup:
+                # Cleanup can remove the separator before punctuation or a contraction.
+                print_end = max(0, print_end - 1)
+                if text[print_end:] in (" ", " '"):
+                    # " n ' t" and "  ' m" each lose an earlier separator too.
+                    if text[max(0, print_end - 2) : print_end] == " n":
+                        print_end -= 2
+                    elif print_end > 0 and text[print_end - 1] == " ":
+                        print_end -= 1
+            printable_text = text[self.print_len : max(0, print_end)]
             self.print_len += len(printable_text)
 
         self.on_finalized_text(printable_text)
