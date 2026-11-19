@@ -82,7 +82,7 @@ class DiffusionGemmaVisionText2TextModelTester(ModelTesterConfigMixin):
             # model-specific text config values
             "layer_types": ["sliding_attention", "full_attention"],  # we want to test both types
             # full-attention layer overrides (head_dim is hidden_size // num_attention_heads)
-            "per_layer_config": {1: {"head_dim": 32 // 2, "num_key_value_heads": 2}},
+            "per_layer_config": {1: {"head_dim": 16, "num_key_value_heads": 2}},
             "top_k_experts": 2,  # key introduced by the gemma4 family
             "use_bidirectional_attention": "vision",  # Test if bidirectional image mask path works
         },
