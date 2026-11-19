@@ -16,6 +16,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -136,7 +138,10 @@ class DepthEstimationPipeline(Pipeline):
 
         formatted_outputs = []
         for output in outputs:
-            depth = output["predicted_depth"].detach().cpu().numpy()
+            depth = output["predicted_depth"].detach().cpu()
+            if depth.dtype == torch.bfloat16:
+                depth = depth.float()
+            depth = depth.numpy()
             depth = (depth - depth.min()) / (depth.max() - depth.min())
             depth = Image.fromarray((depth * 255).astype("uint8"))
 
