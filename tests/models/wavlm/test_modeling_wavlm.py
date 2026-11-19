@@ -314,6 +314,12 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_training(*config_and_inputs)
 
+    def test_ctc_train_with_mask_feature_prob(self):
+        config, input_values, attention_mask = self.model_tester.prepare_config_and_inputs()
+        config.mask_feature_prob = 0.2
+        config.mask_feature_length = 2
+        self.model_tester.check_ctc_training(config, input_values, attention_mask)
+
     def test_seq_classifier_train(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
