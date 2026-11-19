@@ -117,6 +117,10 @@ class FlintMLP(Qwen3MoeMLP):
 
 
 class FlintTopKRouter(Qwen3MoeTopKRouter):
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         # `device.type` is a proxy under FX tracing, which vLLM uses to fuse this router

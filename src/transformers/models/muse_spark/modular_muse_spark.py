@@ -319,6 +319,7 @@ class MuseSparkTopkRouter(MiniMaxM2TopKRouter):
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)

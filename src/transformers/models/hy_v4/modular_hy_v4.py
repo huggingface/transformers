@@ -600,7 +600,7 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
 
     def __init__(self, config: HYV4Config):
         super().__init__(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

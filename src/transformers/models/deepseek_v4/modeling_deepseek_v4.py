@@ -803,7 +803,7 @@ class DeepseekV4Attention(nn.Module):
             self.num_heads * self.head_dim // config.o_groups, config.o_groups * config.o_lora_rank, config.o_groups
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(self.num_heads, torch.float32))
+        self.sinks = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
         self.compressor = (
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )

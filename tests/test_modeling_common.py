@@ -6782,7 +6782,8 @@ class ModelTesterMixin(ExportTesterMixin):
 
                 missing = []
                 for k, v in model.state_dict().items():
-                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32:
+                    # Check is_floating_point as well, as some params (e.g. norm's `num_batches_tracked` buffers) can be int
+                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32 and v.is_floating_point():
                         missing.append(k)
 
                 self.assertTrue(

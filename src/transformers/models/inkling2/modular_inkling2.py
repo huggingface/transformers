@@ -672,6 +672,10 @@ class Inkling2Experts(InklingExperts):
 
 
 class Inkling2TopKRouter(DeepseekV4TopKRouter):
+    def __init__(self, config: Inkling2TextConfig):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
+
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # routing runs in fp32, as in the original
         hidden_states = hidden_states.float()

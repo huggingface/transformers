@@ -921,7 +921,7 @@ class Dots3NoteVisionPreTrainedModel(Qwen2VLPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)

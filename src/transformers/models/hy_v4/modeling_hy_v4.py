@@ -879,7 +879,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = HYV4Model(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, dtype=torch.float32)
 
         # Initialize weights and apply final processing
         self.post_init()

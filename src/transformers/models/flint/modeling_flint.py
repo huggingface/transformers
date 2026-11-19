@@ -86,7 +86,7 @@ class FlintTopKRouter(nn.Module):
         self.num_experts = config.num_experts
         self.norm_topk_prob = config.norm_topk_prob
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
