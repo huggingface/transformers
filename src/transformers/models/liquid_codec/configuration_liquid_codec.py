@@ -27,7 +27,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@auto_docstring(checkpoint="LiquidAI/Liquid-Codec")
 @strict
 class LiquidCodecEncoderConfig(PreTrainedConfig):
     r"""
@@ -107,7 +107,7 @@ class LiquidCodecEncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@auto_docstring(checkpoint="LiquidAI/Liquid-Codec")
 @strict
 class LiquidCodecDecoderConfig(PreTrainedConfig):
     r"""
@@ -186,7 +186,7 @@ class LiquidCodecDecoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@auto_docstring(checkpoint="LiquidAI/Liquid-Codec")
 @strict
 class LiquidCodecConfig(PreTrainedConfig):
     r"""
