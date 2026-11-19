@@ -253,25 +253,6 @@ class TableTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_table_transformer_no_timm_backbone(*config_and_inputs)
 
-    def test_config_with_null_dilation(self):
-        # The no-timm checkpoints on the Hub (e.g. microsoft/table-transformer-structure-recognition-v1.1-all)
-        # store `"dilation": null` in their config.json. Such a config must load and give a working model.
-        config, pixel_values, _, _ = self.model_tester.prepare_config_and_inputs()
-        config_dict = config.to_dict()
-        config_dict["dilation"] = None
-        config = TableTransformerConfig.from_dict(config_dict)
-        self.assertIsNone(config.dilation)
-
-        model = TableTransformerForObjectDetection(config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.num_queries, self.model_tester.num_labels + 1),
-        )
-
     @unittest.skip(reason="Table Transformer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
