@@ -93,28 +93,31 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
-_TP_CLASSES: dict[type[nn.Module], type[nn.Module]] = {}
+# (module class, wraps an instance forward) -> its tensor-parallel subclass, see `TensorParallelLayer.install_forward`
+_TP_CLASSES: dict[tuple[type[nn.Module], bool], type[nn.Module]] = {}
 
 
-def _tp_class(cls: type[nn.Module]) -> type[nn.Module]:
-    """Subclass of `cls` whose forward wraps `cls.forward` in the module's TP style (see `install_forward`)."""
-    if cls not in _TP_CLASSES:
+def _tp_class(base: type[nn.Module], wraps_instance_forward: bool) -> type[nn.Module]:
+    """Subclass of `base` whose forward runs the module's TP style around `base.forward`, or around the forward that
+    was set on the instance (`module._tp_inner_forward`) when `wraps_instance_forward`."""
+    key = (base, wraps_instance_forward)
+    if key not in _TP_CLASSES:
 
         def forward(self, *args, **kwargs):
             style, mesh = self._tp_style, self._tp_mesh
             args, kwargs = style.transform_inputs_pre_forward(self, args, kwargs, mesh)
             with style.context_around_forward(self, mesh):
-                output = cls.forward(self, *args, **kwargs)
+                if wraps_instance_forward:
+                    output = self._tp_inner_forward(*args, **kwargs)
+                else:
+                    output = base.forward(self, *args, **kwargs)
             return style.transform_output_post_forward(self, output, mesh)
 
-        attrs = {
-            "forward": forward,
-            "_is_tp_class": True,
-            "__module__": cls.__module__,
-            "__qualname__": cls.__qualname__,
-        }
-        _TP_CLASSES[cls] = type(cls)(cls.__name__, (cls,), attrs)
-    return _TP_CLASSES[cls]
+        # Same `__name__`: modules are looked up by class name (`_no_split_modules`, FSDP auto-wrap). The module
+        # path says where the class comes from.
+        attrs = {"forward": forward, "_tp_base_class": base, "__module__": __name__, "__qualname__": base.__name__}
+        _TP_CLASSES[key] = type(base)(base.__name__, (base,), attrs)
+    return _TP_CLASSES[key]
 
 
 class TensorParallelLayer:
@@ -153,26 +156,20 @@ class TensorParallelLayer:
     def install_forward(self, module, mesh):
         """Install pre / around / post transforms around module.forward.
 
-        The module's class is swapped for a subclass, shared by all the modules of that class, whose forward reads
-        the style and mesh from the module. A forward set on each instance works too, but torch.compile then guards
-        every sharded module's forward and closure before each call: about 1 ms per decoding step for a 7B model on
-        2 GPUs. A module whose forward was already replaced on the instance keeps a per-instance wrapper."""
-        if "forward" in module.__dict__:
-            original_forward = module.forward
-
-            def tp_forward(*args, **kwargs):
-                args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
-                with self.context_around_forward(module, mesh):
-                    output = original_forward(*args, **kwargs)
-                return self.transform_output_post_forward(module, output, mesh)
-
-            module.forward = tp_forward
-            return module
-
+        This is a torch.compile workaround. A forward closure set on each module would work, but Dynamo guards every
+        instance-level forward before each call: about 1 ms per decoding step for a 7B model on 2 GPUs. Instead, the
+        module's class is swapped for a subclass shared by all the modules of that class (`isinstance` checks and the
+        class name are unchanged), whose forward reads the style and mesh stored on the module. A forward already set
+        on the instance is kept and wrapped. Installing again replaces the style and mesh: wrappers never nest."""
+        base = getattr(type(module), "_tp_base_class", type(module))
+        wraps_instance_forward = "forward" in module.__dict__
+        if wraps_instance_forward:
+            module._tp_inner_forward = module.__dict__.pop("forward")
+        else:
+            wraps_instance_forward = "_tp_inner_forward" in module.__dict__
         module._tp_style = self
         module._tp_mesh = mesh
-        if not getattr(type(module), "_is_tp_class", False):
-            module.__class__ = _tp_class(type(module))
+        module.__class__ = _tp_class(base, wraps_instance_forward)
         return module
 
 

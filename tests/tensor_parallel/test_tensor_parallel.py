@@ -274,7 +274,7 @@ class TestTensorParallelLayer(TestCasePlus):
                 self.assertIn("linear layers", str(context.exception))
 
     def test_install_forward_shares_one_forward_per_class(self):
-        # A forward closure per sharded module makes torch.compile guard each module's closure before every call
+        # A forward closure per sharded module makes torch.compile guard each module's forward before every call
         colwise, rowwise = ALL_PARALLEL_STYLES["colwise"], ALL_PARALLEL_STYLES["rowwise"]
         first, second = torch.nn.Linear(4, 8), torch.nn.Linear(8, 4)
         colwise.install_forward(first, mesh=None)
@@ -284,12 +284,13 @@ class TestTensorParallelLayer(TestCasePlus):
         self.assertIs(type(first), type(second))
         self.assertIsInstance(first, torch.nn.Linear)
         self.assertEqual(type(first).__name__, "Linear")
+        self.assertEqual(type(first).__module__, tensor_parallel.__name__)
         self.assertIs(first._tp_style, colwise)
         self.assertIs(second._tp_style, rowwise)
 
-        # Installing again replaces the style instead of nesting subclasses
+        # Installing again replaces the style instead of nesting
         rowwise.install_forward(first, mesh=None)
-        self.assertIs(type(first).__mro__[1], torch.nn.Linear)
+        self.assertIs(type(first).__base__, torch.nn.Linear)
         self.assertIs(first._tp_style, rowwise)
 
     def test_install_forward_runs_the_module_forward(self):
@@ -298,6 +299,43 @@ class TestTensorParallelLayer(TestCasePlus):
         expected = module(inputs)
         ALL_PARALLEL_STYLES["replicate"].install_forward(module, mesh=None)
         torch.testing.assert_close(module(inputs), expected)
+
+    def test_install_forward_wraps_an_instance_forward(self):
+        module = torch.nn.Linear(4, 8)
+        calls = []
+
+        def custom_forward(x):
+            calls.append(x)
+            return torch.nn.Linear.forward(module, x) * 2
+
+        module.forward = custom_forward
+        inputs = torch.randn(2, 4)
+        expected = module(inputs)
+        replicate = ALL_PARALLEL_STYLES["replicate"]
+        replicate.install_forward(module, mesh=None)
+        replicate.install_forward(module, mesh=None)
+        calls.clear()
+
+        torch.testing.assert_close(module(inputs), expected)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("forward", module.__dict__)
+        self.assertIs(type(module).__base__, torch.nn.Linear)
+
+    def test_install_forward_compiles_once_without_graph_breaks(self):
+        from torch._dynamo.testing import CompileCounter
+
+        model = torch.nn.Sequential(torch.nn.Linear(4, 8), torch.nn.Linear(8, 8), torch.nn.Linear(8, 4))
+        inputs = torch.randn(2, 4)
+        expected = model(inputs)
+        for layer in model:
+            ALL_PARALLEL_STYLES["replicate"].install_forward(layer, mesh=None)
+
+        torch._dynamo.reset()
+        counter = CompileCounter()
+        compiled = torch.compile(model, backend=counter, fullgraph=True)
+        for _ in range(3):
+            torch.testing.assert_close(compiled(inputs), expected)
+        self.assertEqual(counter.frame_count, 1)
 
     def test_embedding_uneven_local_shapes(self):
         rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
