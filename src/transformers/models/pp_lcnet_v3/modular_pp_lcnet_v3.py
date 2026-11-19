@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
@@ -36,7 +37,7 @@ from ..pp_lcnet.modeling_pp_lcnet import (
 
 
 @auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
-@strict(accept_kwargs=True)
+@strict
 class PPLCNetV3Config(PPLCNetConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):
@@ -53,9 +54,6 @@ class PPLCNetV3Config(PPLCNetConfig):
     reduction (`int`, *optional*, defaults to 4):
         The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
         reduce the number of model parameters and computational complexity while maintaining feature representability.
-    class_expand (`int`, *optional*, defaults to 1280):
-        The number of hidden units in the expansion layer of the classification head, used to enhance the model's
-        feature representation capability before the final classification layer.
     divisor (`int`, *optional*, defaults to 8):
         The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
         multiples of this value, promoting efficient model implementation and resource utilization.
@@ -236,12 +234,11 @@ class PPLCNetV3DepthwiseSeparableConvLayer(PPLCNetDepthwiseSeparableConvLayer):
 
 
 class PPLCNetV3PreTrainedModel(PPLCNetPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, (PPLCNetV3LearnableAffineBlock)):
-            nn.init.ones_(module.scale)
-            nn.init.zeros_(module.bias)
+            init.ones_(module.scale)
+            init.zeros_(module.bias)
 
 
 class PPLCNetV3Backbone(PPLCNetBackbone):

@@ -22,19 +22,22 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="meituan-longcat/LongCat-Flash-Chat")
-@strict(accept_kwargs=True)
+@strict
 class LongcatFlashConfig(PreTrainedConfig):
     r"""
+    num_layers (`int`, *optional*, defaults to 28):
+        Number of decoder layers. Each holds two attention sublayers, so
+        `num_hidden_layers` is always derived as `2 * num_layers`.
     ffn_hidden_size (`int`, *optional*, defaults to 12288):
         Dimension of the MLP representations.
-    zero_expert_num (`int`, *optional*, defaults to 256):
-        Number of zero experts (identity function) to add to the expert pool.
-    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
-        Hidden size of individual expert FFN layers.
     qk_head_dim (`int`, *optional*):
         The total dimension of query/key heads. If not specified, set to `qk_nope_head_dim + qk_rope_head_dim`.
     moe_topk (`int`, *optional*, defaults to 12):
         Number of experts to route to for each token in the MoE layer.
+    zero_expert_num (`int`, *optional*, defaults to 256):
+        Number of zero experts (identity function) to add to the expert pool.
+    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
+        Hidden size of individual expert FFN layers.
 
     ```python
     >>> from transformers import LongcatFlashModel, LongcatFlashConfig
@@ -47,10 +50,16 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "longcat_flash"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "num_experts_per_tok": "moe_topk",
+        "intermediate_size": "ffn_hidden_size",
+        "moe_intermediate_size": "expert_ffn_hidden_size",
+    }
     default_theta = 10000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.*.q_b_proj": "colwise",
@@ -74,7 +83,6 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     vocab_size: int = 131072
     hidden_size: int = 6144
-    num_hidden_layers: int = 56
     num_layers: int = 28
     num_attention_heads: int = 64
     num_key_value_heads: int | None = None
@@ -100,9 +108,18 @@ class LongcatFlashConfig(PreTrainedConfig):
     qk_head_dim: int | None = None
     moe_topk: int = 12
     n_routed_experts: int = 512
+    output_router_logits: bool = False
     zero_expert_num: int = 256
     expert_ffn_hidden_size: int = 2048
     routed_scaling_factor: float = 6.0
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return 2 * self.num_layers
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value: int):
+        self.num_layers = value // 2
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -112,21 +129,6 @@ class LongcatFlashConfig(PreTrainedConfig):
             self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
 
         super().__post_init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-        self.standardize_rope_params()
-
-        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
-        for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_parameters:
-                self.rope_parameters[key] = float(self.rope_parameters[key])
-        return kwargs
 
 
 __all__ = ["LongcatFlashConfig"]

@@ -20,16 +20,16 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/led-base-16384")
-@strict(accept_kwargs=True)
+@strict
 class LEDConfig(PreTrainedConfig):
     r"""
-    attention_window (`int` or `list[int]`, *optional*, defaults to 512):
-        Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
-        different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
     max_encoder_position_embeddings (`int`, *optional*, defaults to 16384):
         The maximum sequence length that the encoder might ever be used with.
     max_decoder_position_embeddings (`int`, *optional*, defaults to 16384):
         The maximum sequence length that the decoder might ever be used with.
+    attention_window (`int` or `list[int]`, *optional*, defaults to 512):
+        Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
+        different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
 
     Example:
 
@@ -78,7 +78,7 @@ class LEDConfig(PreTrainedConfig):
     classifier_dropout: float | int = 0.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     attention_window: list[int] | int = 512
     tie_word_embeddings: bool = True
 

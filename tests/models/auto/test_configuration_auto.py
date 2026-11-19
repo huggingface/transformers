@@ -134,7 +134,12 @@ class AutoConfigTest(unittest.TestCase):
             config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
             self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
 
-            # If remote is enabled, we load from the Hub
+            # If remote code is enabled but the user explicitly registered the local one, we load the local one.
+            config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(config.__class__.__name__, "NewModelConfigLocal")
+
+            # If remote code is enabled but local code originated from transformers, we load the remote one.
+            NewModelConfigLocal.__module__ = "transformers.models.new_model.configuration_new_model"
             config = AutoConfig.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
             self.assertEqual(config.__class__.__name__, "NewModelConfig")
 
@@ -151,7 +156,7 @@ class AutoConfigTest(unittest.TestCase):
             }
             config_path = os.path.join(tmp_dir, "config.json")
 
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config_dict, f)
 
             with self.assertRaisesRegex(ValueError, "Should have a `model_type` key"):

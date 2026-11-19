@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/gemma2-7b")
-@strict(accept_kwargs=True)
+@strict
 class Gemma2Config(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -49,7 +49,6 @@ class Gemma2Config(PreTrainedConfig):
     ```"""
 
     model_type = "gemma2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

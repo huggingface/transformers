@@ -15,14 +15,13 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="openmmlab/upernet-convnext-tiny")
-@strict(accept_kwargs=True)
+@strict
 class UperNetConfig(PreTrainedConfig):
     r"""
     pool_scales (`tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
@@ -31,7 +30,7 @@ class UperNetConfig(PreTrainedConfig):
         Whether to use an auxiliary head during training.
     auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
         Weight of the cross-entropy loss of the auxiliary head.
-    auxiliary_in_channels(`int`, *optional*, defaults to 256):
+    auxiliary_in_channels (`int`, *optional*, defaults to 256):
         Number of input channels in the auxiliary head.
     auxiliary_channels (`int`, *optional*, defaults to 256):
         Number of channels to use in the auxiliary head.
@@ -58,7 +57,15 @@ class UperNetConfig(PreTrainedConfig):
     ```"""
 
     model_type = "upernet"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="resnet",
+            init_kwargs={
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     hidden_size: int = 512
@@ -71,17 +78,6 @@ class UperNetConfig(PreTrainedConfig):
     auxiliary_num_convs: int = 1
     auxiliary_concat_input: bool = False
     loss_ignore_index: int = 255
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="resnet",
-            default_config_kwargs={
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["UperNetConfig"]

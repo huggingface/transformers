@@ -45,11 +45,18 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# NOTE: this file is not consistent with image processing backends and is still using an old format.
+# Emu3 needs a fast image processor after which we can add the new backends. We keep it current way
+# for now so there's one model to test BC.
+
+
 class Emu3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
-    ratio (`str`, *optional*, defaults to `"1:1"`):
+    ratio (`str`, *optional*):
+        Deprecated, use [`Emu3ProcessorKwargs.ratio`] instead.
         The ratio of the image to resize the image.
-    image_area (`int`, *optional*, defaults to `518400`):
+    image_area (`int`, *optional*):
+        Deprecated, use [`Emu3ProcessorKwargs.image_area`] instead.
         The area of the image to resize the image.
     """
 
@@ -203,7 +210,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+            images = [convert_to_rgb(image, return_numpy=True) for image in images]
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -306,6 +313,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
+        **kwargs,
     ):
         """
         Args:
@@ -400,9 +408,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 )
                 pixel_values.extend(image)
 
-        image_sizes = [get_image_size(image, input_data_format) for image in pixel_values]
+        image_sizes = [get_image_size(image, data_format) for image in pixel_values]
         if do_pad:
-            pixel_values = self._pad_for_batching(pixel_values, image_sizes)
+            pixel_values = self._pad_for_batching(pixel_values, image_sizes, input_data_format=data_format)
             pixel_values = np.array(pixel_values)
 
         return BatchFeature(

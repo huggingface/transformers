@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import re
 from typing import TYPE_CHECKING
 
@@ -27,11 +28,7 @@ from safetensors import safe_open
 from ..utils import is_torch_available, is_torchao_available, logging
 
 
-MIN_TORCH_VERSION = "2.5.0"
-
-
-if is_torch_available():
-    from ..core_model_loading import WeightConverter
+MIN_TORCH_VERSION = "2.6.0"
 
 
 if is_torch_available():
@@ -63,11 +60,9 @@ class TorchAoHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "TorchAoConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
-        size_digit = _fuzzy_match_size(type(self.quantization_config.quant_type).__name__)
-        self.quantized_param_size = 0.5 if size_digit == "4" else 1
+    @property
+    def quantized_element_size(self) -> float:
+        return 0.5 if _fuzzy_match_size(type(self.quantization_config.quant_type).__name__) == "4" else 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -89,13 +84,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
         return flatten_tensor_state_dict(model.state_dict())
-
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
-            return self.quantized_param_size
-
-        return super().param_element_size(model, param_name, param)
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
@@ -172,24 +160,45 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         return TorchAoQuantize(self)
 
-    def get_weight_conversions(self):
+    def _discover_quantized_param_names(self) -> set[str]:
+        """Extract unique parameter names of quantized params from torchao safetensors metadata.
+
+        The metadata keys are the original fully-qualified parameter names,
+        e.g. "model.layers.0.self_attn.q_proj.weight" or
+            "model.decoder.layers.0.experts.gate_up_proj".
+        Only entries representing tensor subclasses (not plain Tensors) are included.
+        """
+        if not hasattr(self, "metadata") or not self.metadata:
+            return {"weight"}  # conservative fallback
+
+        from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
+
+        if not is_metadata_torchao(self.metadata):
+            raise ValueError("Invalid torchao safetensors metadata")
+
+        param_names = set()
+        for meta_key, meta_value in self.metadata.items():
+            if "." not in meta_key:
+                continue
+            try:
+                meta = json.loads(meta_value)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if meta.get("_type") == "Tensor":
+                continue  # skip non-quantized params
+            param_names.add(meta_key.rsplit(".", 1)[-1])
+
+        return param_names or {"weight"}
+
+    @property
+    def serialized_names(self):
+        # Read from the checkpoint's torchao metadata, so only pre-quantized checkpoints have them
+        if not self.pre_quantized:
+            return {}
+        suffixes = ["qdata", "scale_and_zero", "per_tensor_scale", "scale", "zero_point", "act_pre_scale"]
+        return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
+
+    def get_load_operations(self):
         from ..integrations.torchao import TorchAoDeserialize
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    # TODO: incr flexibility by generalizing the source patterns to match the format of "_weight_"
-                    # note that the matching logic is greedy, so for ex, if _weight_scale is before _weight_scale_and_zero in this list, it will match _weight_scale always (this is incorrect)
-                    # thus, the order of source_patterns is intentional
-                    source_patterns=[
-                        "_weight_qdata",
-                        "_weight_scale_and_zero",
-                        "_weight_scale",
-                        "_weight_zero_point",
-                        "_weight_act_pre_scale",
-                    ],
-                    target_patterns="weight",
-                    operations=[TorchAoDeserialize(self)],
-                ),
-            ]
-        return []
+        return {"deserialize": TorchAoDeserialize}

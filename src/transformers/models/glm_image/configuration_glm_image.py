@@ -26,13 +26,8 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageVQVAEConfig(PreTrainedConfig):
-    r"""
-    num_embeddings (`int`, *optional*, defaults to 16384):
-        Number of codebook embeddings.
-    """
-
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
@@ -44,21 +39,18 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
-    out_hidden_size (`int`, *optional*, defaults to 4096):
-        The output hidden size of the vision model.
-
     Example:
 
     ```python
     >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
 
-    >>> # Initializing a GlmImageVisionConfig GLM-4.1V-9B style configuration
+    >>> # Initializing a GlmImageVisionConfig GLM-Image style configuration
     >>> configuration = GlmImageVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+    >>> # Initializing a model (with random weights) from the GLM-Image configuration
     >>> model = GlmImageVisionModel(configuration)
 
     >>> # Accessing the model configuration
@@ -67,6 +59,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 40
     hidden_size: int = 1536
@@ -84,7 +78,7 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageTextConfig(PreTrainedConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -108,7 +102,6 @@ class GlmImageTextConfig(PreTrainedConfig):
 
     model_type = "glm_image_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `GlmImage`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -151,7 +144,7 @@ class GlmImageTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):
@@ -173,12 +166,11 @@ class GlmImageConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_image"
-    sub_configs = {
-        "vision_config": GlmImageVisionConfig,
+    sub_configs_defaults = {
         "text_config": GlmImageTextConfig,
+        "vision_config": GlmImageVisionConfig,
         "vq_config": GlmImageVQVAEConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -187,24 +179,6 @@ class GlmImageConfig(PreTrainedConfig):
     image_start_token_id: int = 16384
     image_end_token_id: int = 16385
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"](**kwargs)
-
-        if isinstance(self.vq_config, dict):
-            self.vq_config = self.sub_configs["vq_config"](**self.vq_config)
-        elif self.vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"](**kwargs)
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["GlmImageVQVAEConfig", "GlmImageVisionConfig", "GlmImageTextConfig", "GlmImageConfig"]

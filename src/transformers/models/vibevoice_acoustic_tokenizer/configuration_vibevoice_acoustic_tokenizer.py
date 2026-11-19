@@ -17,13 +17,13 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
-@strict(accept_kwargs=True)
-class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
+@strict
+class VibeVoiceAcousticTokenizerConfig(PreTrainedConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
         Number of input channels.
@@ -40,7 +40,8 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     ffn_expansion (`int`, *optional*, defaults to 4):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
-        Standard deviation used for VAE sampling after encoder.
+        Standard deviation of the Gaussian from which the per-sample noise scale is drawn when noise is added to
+        the encoder latents (`sample=True`).
 
     Example:
 
@@ -88,7 +89,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
-@strict(accept_kwargs=True)
+@strict
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -106,7 +107,8 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     ffn_expansion (`int`, *optional*, defaults to 4):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
-        Standard deviation used for VAE sampling after encoder.
+        Standard deviation of the Gaussian from which the per-sample noise scale is drawn when noise is added to
+        the encoder latents (`sample=True`).
     """
 
     model_type = "vibevoice_acoustic_tokenizer_encoder"
@@ -118,7 +120,7 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
-@strict(accept_kwargs=True)
+@strict
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -136,7 +138,8 @@ class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     ffn_expansion (`int`, *optional*, defaults to 4):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
-        Standard deviation used for VAE sampling after encoder.
+        Standard deviation of the Gaussian from which the per-sample noise scale is drawn when noise is added to
+        the encoder latents (`sample=True`).
     """
 
     model_type = "vibevoice_acoustic_tokenizer_decoder"

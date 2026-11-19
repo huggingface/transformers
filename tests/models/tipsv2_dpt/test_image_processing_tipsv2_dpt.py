@@ -1,0 +1,97 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
+
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import Tipsv2DptImageProcessor
+    from transformers.modeling_outputs import DepthEstimatorOutput
+    from transformers.models.tipsv2_dpt.modeling_tipsv2_dpt import Tipsv2DptNormalEstimatorOutput
+
+
+class Tipsv2DptImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 3)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class Tipsv2DptImageProcessingTest(
+    ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
+    image_processor_tester_class = Tipsv2DptImageProcessingTester
+
+    def test_post_process_depth_estimation(self):
+        image_processor = Tipsv2DptImageProcessor()
+
+        batch_size = 2
+        height = width = 16
+        outputs = DepthEstimatorOutput(predicted_depth=torch.randn(batch_size, height, width))
+
+        # without target_sizes: spatial dims match predicted_depth
+        result = image_processor.post_process_depth_estimation(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["predicted_depth"].shape, torch.Size([height, width]))
+
+        # with target_sizes: output is resized to requested size
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_depth_estimation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["predicted_depth"].shape, torch.Size([height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_depth_estimation(outputs, target_sizes=[(100, 100)])
+
+    def test_post_process_normal_estimation(self):
+        image_processor = Tipsv2DptImageProcessor()
+
+        batch_size = 2
+        height = width = 16
+        outputs = Tipsv2DptNormalEstimatorOutput(normals=torch.randn(batch_size, 3, height, width))
+
+        # without target_sizes: spatial dims match normals, values are L2-normalized
+        result = image_processor.post_process_normal_estimation(outputs)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["normals"].shape, torch.Size([3, height, width]))
+        norms = result[0]["normals"].norm(p=2, dim=0)
+        torch.testing.assert_close(norms, torch.ones_like(norms), rtol=1e-4, atol=1e-4)
+
+        # with target_sizes: output is resized and re-normalized
+        target_sizes = [(height * 2, width * 2)] * batch_size
+        result = image_processor.post_process_normal_estimation(outputs, target_sizes=target_sizes)
+        self.assertEqual(len(result), batch_size)
+        self.assertEqual(result[0]["normals"].shape, torch.Size([3, height * 2, width * 2]))
+
+        # mismatched batch size raises ValueError
+        with self.assertRaises(ValueError):
+            image_processor.post_process_normal_estimation(outputs, target_sizes=[(100, 100)])

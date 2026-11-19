@@ -33,7 +33,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -65,11 +65,13 @@ class PaddleOCRVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
+    default_rope_type = "axial"
     spatial_merge_size: int = 2
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRTextConfig(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
@@ -91,7 +93,6 @@ class PaddleOCRTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "paddleocr_vl_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     # Default tensor parallel plan for base model `PaddleOCRTextModel`
     base_model_tp_plan = {
@@ -119,7 +120,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
     max_position_embeddings: int = 131072
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-05
-    use_cache: int | None = True
+    use_cache: bool | None = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
@@ -137,7 +138,7 @@ class PaddleOCRTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVLConfig(PreTrainedConfig):
     r"""
     Example:
@@ -157,8 +158,10 @@ class PaddleOCRVLConfig(PreTrainedConfig):
 
     model_type = "paddleocr_vl"
 
-    sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vision_config": PaddleOCRVisionConfig,
+        "text_config": PaddleOCRTextConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -167,27 +170,28 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     video_token_id: int = 100296
     vision_start_token_id: int = 101305
     vision_end_token_id: int = 101306
-    tie_word_embeddings: int = True
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
         # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-        text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
-        text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
-        text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+        if self.text_config is None:
+            text_params = inspect.signature(
+                self.sub_configs_defaults["text_config"].config_class.__init__
+            ).parameters.keys()
+            text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
+            self.text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            self.text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
 
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-            text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "paddleocr_vl":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "paddleocr_vl_vision"
 
         super().__post_init__(**kwargs)
+        # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
+        # config (where v5's tying logic looks) when the root value is the default. Checked after
+        # text_config init so it also covers a text config passed as an already-initialized instance.
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
 __all__ = ["PaddleOCRVLConfig", "PaddleOCRVisionConfig", "PaddleOCRTextConfig"]

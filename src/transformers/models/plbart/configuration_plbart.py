@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uclanlp/plbart-base")
-@strict(accept_kwargs=True)
+@strict
 class PLBartConfig(PreTrainedConfig):
     r"""
     Example:
@@ -39,7 +39,6 @@ class PLBartConfig(PreTrainedConfig):
     ```"""
 
     model_type = "plbart"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -69,8 +68,8 @@ class PLBartConfig(PreTrainedConfig):
     scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
-    forced_eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
+    forced_eos_token_id: int | list[int] | None = 2
     is_decoder: bool = False
     tie_word_embeddings: bool = True
 

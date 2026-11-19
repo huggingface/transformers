@@ -22,14 +22,11 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
-@strict(accept_kwargs=True)
+@strict
 class Siglip2TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -72,9 +69,11 @@ class Siglip2TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
-@strict(accept_kwargs=True)
+@strict
 class Siglip2VisionConfig(PreTrainedConfig):
     r"""
+    vision_use_head ('bool', *optional*):
+        Whether to use a vision head module or not.
     num_patches (`int`, *optional*, defaults to 256):
         The number of patches in the image with the size of (`patch_size`, `patch_size`).
         The image is resized to fill maximum of this number of patches, and to preserve
@@ -108,12 +107,13 @@ class Siglip2VisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
+    vision_use_head: bool = True
 
     num_patches: int = 256
 
 
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
-@strict(accept_kwargs=True)
+@strict
 class Siglip2Config(PreTrainedConfig):
     r"""
     Example:
@@ -141,26 +141,14 @@ class Siglip2Config(PreTrainedConfig):
     ```"""
 
     model_type = "siglip2"
-    sub_configs = {"text_config": Siglip2TextConfig, "vision_config": Siglip2VisionConfig}
+    sub_configs_defaults = {
+        "vision_config": Siglip2VisionConfig,
+        "text_config": Siglip2TextConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Siglip2TextConfig()
-            logger.info("`text_config` is `None`. Initializing the `Siglip2TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Siglip2TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Siglip2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Siglip2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Siglip2VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Siglip2Config", "Siglip2TextConfig", "Siglip2VisionConfig"]

@@ -26,14 +26,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteMoeConfig(PreTrainedConfig):
     r"""
-        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-
     ```python
     >>> from transformers import GraniteMoeModel, GraniteMoeConfig
 
@@ -45,10 +40,20 @@ class GraniteMoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "granitemoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
+        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.block_sparse_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.block_sparse_moe.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 32000
     hidden_size: int = 4096
@@ -68,10 +73,10 @@ class GraniteMoeConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
-    embedding_multiplier: float | None = 1.0
-    logits_scaling: float | None = 1.0
-    residual_multiplier: float | None = 1.0
-    attention_multiplier: float | None = 1.0
+    embedding_multiplier: float | int | None = 1.0
+    logits_scaling: float | int | None = 1.0
+    residual_multiplier: float | int | None = 1.0
+    attention_multiplier: float | int | None = 1.0
     num_local_experts: int | None = 8
     num_experts_per_tok: int | None = 2
     output_router_logits: bool | None = False

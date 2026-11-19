@@ -16,7 +16,8 @@ import copy
 import inspect
 import unittest
 
-from transformers import AutoBackbone
+from transformers import AutoBackbone, MaskFormerConfig
+from transformers.backbone_utils import load_backbone
 from transformers.testing_utils import is_flaky, require_timm, require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
@@ -259,3 +260,26 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
             self.assertEqual(len(result.feature_maps), 1)
             self.assertEqual(len(model.channels), 1)
+
+
+@require_torch
+@require_timm
+class TimmBackboneIntegrationTest(unittest.TestCase):
+    def test_load_timm_backbone_from_config(self):
+        config = MaskFormerConfig(backbone_config=TimmBackboneConfig(backbone="resnet18", out_indices=[0, 2]))
+        backbone = load_backbone(config)
+        self.assertEqual(backbone.out_indices, [0, 2])
+        self.assertIsInstance(backbone, TimmBackbone)
+
+    def test_load_timm_backbone_from_checkpoint(self):
+        config = MaskFormerConfig(backbone="resnet18", use_timm_backbone=True)
+        backbone = load_backbone(config)
+        self.assertEqual(backbone.out_indices, [-1])
+        self.assertEqual(backbone.out_features, ["layer4"])
+        self.assertIsInstance(backbone, TimmBackbone)
+
+    def test_load_timm_backbone_with_kwargs(self):
+        config = MaskFormerConfig(backbone="resnet18", use_timm_backbone=True, backbone_kwargs={"out_indices": (0, 1)})
+        backbone = load_backbone(config)
+        self.assertEqual(backbone.out_indices, [0, 1])
+        self.assertIsInstance(backbone, TimmBackbone)

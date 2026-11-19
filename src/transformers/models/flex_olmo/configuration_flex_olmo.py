@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
-@strict(accept_kwargs=True)
+@strict
 class FlexOlmoConfig(PreTrainedConfig):
     r"""
     Example:
@@ -46,7 +46,6 @@ class FlexOlmoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "flex_olmo"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 500000.0
     base_model_tp_plan = {
@@ -62,6 +61,11 @@ class FlexOlmoConfig(PreTrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 100352

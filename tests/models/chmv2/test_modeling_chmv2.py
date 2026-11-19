@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CHMv2ImageProcessorFast
+    from transformers import CHMv2ImageProcessor
 
 
 class CHMv2ModelTester:
@@ -175,14 +175,12 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 class CHMv2IntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        processor = CHMv2ImageProcessorFast.from_pretrained(
-            "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
-        )
+        processor = CHMv2ImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1")
         model = CHMv2ForDepthEstimation.from_pretrained(
             "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
         ).to(torch_device)
 
-        img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/chmv2_example.tif"
+        img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/chmv2_example.tif"
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
         inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
@@ -190,19 +188,19 @@ class CHMv2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_shape = torch.Size([1, 448, 448])
+        expected_shape = torch.Size([1, 736, 736])
         self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [[0.1028, 0.0562, 0.0575], [0.4136, 0.5476, 0.4333], [1.8045, 2.3640, 1.6928]]
-        ).to(torch_device)
+        expected_slice = torch.tensor([[0.0104, 0.01, 0.0101], [0.0104, 0.0098, 0.0098], [0.0106, 0.0099, 0.0098]]).to(
+            torch_device
+        )
         print(outputs.predicted_depth[0, :3, :3])
         print(expected_slice)
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, atol=5e-3, rtol=5e-3)
 
         # post-processing: without target_sizes keeps the model's native output resolution
         depth = processor.post_process_depth_estimation(outputs)[0]["predicted_depth"]
-        self.assertEqual(depth.shape, torch.Size([448, 448]))
+        self.assertEqual(depth.shape, torch.Size([736, 736]))
 
         # post-processing: with target_sizes resizes to the original image dimensions
         depth_resized = processor.post_process_depth_estimation(

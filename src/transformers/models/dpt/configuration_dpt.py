@@ -13,22 +13,31 @@
 # limitations under the License.
 """DPT model configuration"""
 
+from typing import Literal
+
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="Intel/dpt-large")
-@strict(accept_kwargs=True)
+@strict
 class DPTConfig(PreTrainedConfig):
     r"""
     is_hybrid (`bool`, *optional*, defaults to `False`):
         Whether to use a hybrid backbone. Useful in the context of loading DPT-Hybrid models.
     backbone_out_indices (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         Indices of the intermediate hidden states to use from backbone.
+    readout_type (`str`, *optional*, defaults to `"project"`):
+        The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
+        the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
+        - "ignore" simply ignores the CLS token.
+        - "add" passes the information from the CLS token to all other tokens by adding the representations.
+        - "project" passes information to the other tokens by concatenating the readout to all other tokens before
+          projecting the
+        representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
     reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
         The up/downsampling factors of the reassemble layers.
     neck_hidden_sizes (`list[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
@@ -54,17 +63,9 @@ class DPTConfig(PreTrainedConfig):
     neck_ignore_stages (`list[int]`, *optional*, defaults to `[0, 1]`):
         Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
     pooler_output_size (`int`, *optional*):
-       Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
     pooler_act (`str`, *optional*, defaults to `"tanh"`):
-       The activation function to be used by the pooler.
-    readout_type (`str`, *optional*, defaults to `"project"`):
-        The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
-        the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
-        - "ignore" simply ignores the CLS token.
-        - "add" passes the information from the CLS token to all other tokens by adding the representations.
-        - "project" passes information to the other tokens by concatenating the readout to all other tokens before
-          projecting the
-        representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
+        The activation function to be used by the pooler.
 
     Example:
 
@@ -82,7 +83,21 @@ class DPTConfig(PreTrainedConfig):
     ```"""
 
     model_type = "dpt"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="bit",
+            init_kwargs={
+                "model_type": "bit",
+                "global_padding": "same",
+                "layer_type": "bottleneck",
+                "depths": [3, 4, 9],
+                "out_features": ["stage1", "stage2", "stage3"],
+                "embedding_dynamic_padding": True,
+            },
+            optional=True,
+        ),
+    }
 
     # NOTE: some values are typed as `None` on purpose
     # DPT creates one of: backbone or the general model only
@@ -102,7 +117,7 @@ class DPTConfig(PreTrainedConfig):
     is_hybrid: bool = False
     qkv_bias: bool | None = True
     backbone_out_indices: list[int] | tuple[int, ...] | None = (2, 5, 8, 11)
-    readout_type: str = "project"
+    readout_type: Literal["ignore", "add", "project"] = "project"
     reassemble_factors: list[int | float] | tuple[int | float, ...] = (4, 2, 1, 0.5)
     neck_hidden_sizes: list[int] | tuple[int, ...] = (96, 192, 384, 768)
     fusion_hidden_size: int = 256
@@ -121,31 +136,20 @@ class DPTConfig(PreTrainedConfig):
     pooler_act: str = "tanh"
 
     def __post_init__(self, **kwargs):
-        if self.readout_type not in ["ignore", "add", "project"]:
-            raise ValueError("Readout_type must be one of ['ignore', 'add', 'project']")
-
+        # DPT creates backbone depending on model arch (is_hybrid) and on user-provided dict
+        # Base class cannot handle complex inter-dependencies between config fields and sub-configs
         if self.is_hybrid:
             if isinstance(self.backbone_config, dict):
                 self.backbone_config.setdefault("model_type", "bit")
-
-            self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-                backbone_config=self.backbone_config,
-                default_config_type="bit",
-                default_config_kwargs={
-                    "global_padding": "same",
-                    "layer_type": "bottleneck",
-                    "depths": [3, 4, 9],
-                    "out_features": ["stage1", "stage2", "stage3"],
-                    "embedding_dynamic_padding": True,
-                },
-                **kwargs,
+            self.backbone_config, kwargs = self.sub_configs_defaults["backbone_config"].create_subconfig(
+                "backbone_config", self.backbone_config, **kwargs
             )
             if self.readout_type != "project":
                 raise ValueError("Readout type must be 'project' when using `DPT-hybrid` mode.")
-        elif kwargs.get("backbone") is not None or self.backbone_config is not None:
-            self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-                backbone_config=self.backbone_config,
-                **kwargs,
+
+        elif kwargs.get("backbone") is not None:
+            self.backbone_config, kwargs = self.sub_configs_defaults["backbone_config"].create_subconfig(
+                "backbone_config", self.backbone_config, **kwargs
             )
             self.backbone_out_indices = None
 

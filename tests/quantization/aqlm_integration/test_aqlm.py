@@ -203,12 +203,11 @@ class AqlmTest(unittest.TestCase):
         """
 
         # Sample tokens greedily
-        def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_values):
+        def decode_one_tokens(model, cur_token, input_pos, cache):
             logits = model(
                 cur_token,
                 position_ids=input_pos,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
+                cache=cache,
                 return_dict=False,
                 use_cache=True,
             )[0]
@@ -221,22 +220,21 @@ class AqlmTest(unittest.TestCase):
         seq_length = input_ids.shape[1]
 
         # Setup static KV cache for generation
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=self.quantized_model.config,
             batch_size=input_ids.shape[0],
             max_cache_len=seq_length + self.max_new_tokens + 1,
         )
 
         # Allocate token ids to be generated and copy prefix ids
-        cache_position = torch.arange(seq_length, device=torch_device)
+        positions = torch.arange(seq_length, device=torch_device)
         generated_ids = torch.zeros(1, seq_length + self.max_new_tokens, dtype=torch.int, device=torch_device)
-        generated_ids[:, cache_position] = input_ids.to(torch_device).to(torch.int)
+        generated_ids[:, positions] = input_ids.to(torch_device).to(torch.int)
 
         # Do a forward pass to fill the prefix cache and compile the kernels if necessary
         logits = self.quantized_model(
             input_ids,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
+            cache=cache,
             return_dict=False,
             use_cache=True,
         )[0]
@@ -248,14 +246,12 @@ class AqlmTest(unittest.TestCase):
             decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
 
             # Generate tokens one by one
-            cache_position = torch.tensor([seq_length + 1], device=torch_device)
+            positions = torch.tensor([seq_length + 1], device=torch_device)
             for _ in range(1, self.max_new_tokens):
                 with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-                    next_token = decode_one_tokens(
-                        self.quantized_model, next_token.clone(), None, cache_position, past_key_values
-                    )
-                    generated_ids.index_copy_(1, cache_position, next_token)
-                cache_position += 1
+                    next_token = decode_one_tokens(self.quantized_model, next_token.clone(), None, cache)
+                    generated_ids.index_copy_(1, positions, next_token)
+                positions += 1
 
         # Check generated text
         self.assertEqual(self.tokenizer.decode(generated_ids[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)

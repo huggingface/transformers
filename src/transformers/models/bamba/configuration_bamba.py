@@ -20,7 +20,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="""
     The BambaModel is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
@@ -30,20 +30,21 @@ from ...utils import auto_docstring
 )
 class BambaConfig(PreTrainedConfig):
     r"""
-    attn_layer_indices (`list`, *optional*):
-        Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
     num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated. If an
         integer value, only last `num_logits_to_keep` logits will be calculated. Default is 1 because only the
         logits of the last prompt token are needed for generation. For long sequences, the logits for the entire
         sequence may use a lot of memory so, setting `num_logits_to_keep=1` will reduce memory footprint
         significantly.
+    attn_layer_indices (`list`, *optional*):
+        Specifies the layer indices that will have full attention. Must contain values at most num_hidden_layers.
     z_loss_coefficient (`float`, *optional*, defaults to 0.0):
         Coefficient for auxiliary z-loss used to control logit growth during training
     """
 
     model_type = "bamba"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
+    attribute_map = {"layer_types": "layers_block_type"}
 
     vocab_size: int = 128000
     tie_word_embeddings: bool = False
@@ -72,8 +73,6 @@ class BambaConfig(PreTrainedConfig):
     mamba_chunk_size: int | None = 256
     mamba_conv_bias: bool | None = True
     mamba_proj_bias: bool | None = False
-    time_step_min: float | None = 0.001
-    time_step_max: float | None = 0.1
     time_step_limit: list[float] | tuple[float, float] | None = (0.0, float("inf"))
     z_loss_coefficient: float | None = 0.0
     rope_parameters: RopeParameters | dict | None = None
@@ -97,7 +96,7 @@ class BambaConfig(PreTrainedConfig):
     @property
     def layers_block_type(self):
         return [
-            "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
+            "full_attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "linear_attention"
             for i in range(self.num_hidden_layers)
         ]
 

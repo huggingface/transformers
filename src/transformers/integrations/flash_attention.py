@@ -12,8 +12,9 @@ _use_top_left_mask = flash_attn_supports_top_left_mask()
 def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
     """If the query is in float32, return a target dtype compatible with flash attention. Return None otherwise."""
     if query.dtype == torch.float32:
-        if torch.is_autocast_enabled("cuda"):
-            return torch.get_autocast_dtype("cuda")
+        device_type = query.device.type
+        if torch.is_autocast_enabled(device_type):
+            return torch.get_autocast_dtype(device_type)
         # Handle the case where the model is quantized
         elif hasattr(module.config, "_is_quantized"):
             return module.config.dtype
@@ -33,6 +34,7 @@ def flash_attention_forward(
     sliding_window: int | None = None,
     softcap: float | None = None,
     is_causal: bool | None = None,
+    s_aux: torch.Tensor | None = None,  # alias: learnable attention sink
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -44,16 +46,23 @@ def flash_attention_forward(
     # This is before the transpose
     seq_len = query.shape[2]
 
-    if any(dim == 0 for dim in query.shape):
+    if any(dim == 0 for dim in query.shape):  # TODO (remi-or) remove this check, it was added because of a TP error
         raise ValueError(
             "Tensor query has shape  with a zero dimension.\n"
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
         )
-    # FA2 uses non-transposed inputs
+
+    # FA uses non-transposed inputs. After this, shape is [batch_size, seq_len, num_heads, head_dim]
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
+
+    # FlashAttention requires the query and value to share a head dim; pad `value` up to the
+    # query head dim (e.g. MLA, where `v_head_dim < qk_head_dim`) and crop the output below.
+    head_dim, v_head_dim = query.shape[-1], value.shape[-1]
+    if v_head_dim != head_dim:
+        value = torch.nn.functional.pad(value, [0, head_dim - v_head_dim])
 
     # In PEFT, usually we cast the layer norms in float32 for training stability reasons
     # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -78,9 +87,13 @@ def flash_attention_forward(
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
-        attn_implementation=module.config._attn_implementation,
+        attn_implementation=module.config._attn_implementation,  # type: ignore <- the config is cached on the module
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
+        s_aux=(s_aux.to(query.dtype) if s_aux is not None else None),  # FA only accepts half precision
         **kwargs,
     )
+
+    if v_head_dim != head_dim:
+        attn_output = attn_output[..., :v_head_dim]
 
     return attn_output, None

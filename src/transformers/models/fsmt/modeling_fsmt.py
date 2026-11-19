@@ -27,7 +27,6 @@
 """PyTorch Fairseq model, ported from https://github.com/pytorch/fairseq/tree/master/examples/wmt19"""
 
 import math
-from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -45,6 +44,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_fsmt import FSMTConfig
 
 
@@ -178,14 +178,11 @@ def invert_mask(attention_mask):
 
 
 def triu_onnx(x, diagonal=0):
-    l = x.shape[0]
-    arange = torch.arange(l, device=x.device)
-    mask = arange.expand(l, l)
-    arange = arange.unsqueeze(-1)
-    if diagonal:
-        arange = arange + diagonal
-    mask = mask >= arange
-    return x.masked_fill(mask == 0, 0)
+    logger.warning_once(
+        "`triu_onnx` is deprecated and will be removed in v5.22. It emulated `torch.triu`, which now "
+        "exports cleanly — use `torch.triu` instead."
+    )
+    return torch.triu(x, diagonal)
 
 
 def _prepare_fsmt_decoder_inputs(
@@ -208,8 +205,9 @@ def _prepare_fsmt_decoder_inputs(
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype)), 1).to(
-        device=decoder_input_ids.device
+    causal_mask = torch.triu(
+        fill_with_neg_inf(torch.zeros(tgt_len, tgt_len, dtype=causal_mask_dtype, device=decoder_input_ids.device)),
+        diagonal=1,
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
@@ -219,21 +217,11 @@ class PretrainedFSMTModel(PreTrainedModel):
     config: FSMTConfig
     base_model_prefix = "model"
 
-    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, SinusoidalPositionalEmbedding):
+        super()._init_weights(module)
+        if isinstance(module, SinusoidalPositionalEmbedding):
             weight = module.get_embedding(*module.weight.shape, module.padding_idx)
             init.copy_(module.weight, weight)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
 
     @property
     def dummy_inputs(self):
@@ -364,16 +352,16 @@ class FSMTEncoder(nn.Module):
             input_ids (`torch.LongTensor`): tokens in the source language of shape
                 *(batch, src_len)*
             attention_mask (`torch.LongTensor`): indicating which indices are padding tokens
-            inputs_embeds (`torch.FloatTensor`):
+            inputs_embeds (`torch.Tensor`):
                 embedding vectors of shape *(batch, src_len, embed_dim)*
 
         Returns:
             BaseModelOutput or Tuple comprised of:
 
                 - **x** (`torch.Tensor`): the last encoder layer's output of shape *(src_len, batch, embed_dim)*
-                - **encoder_states** (`Tuple(torch.FloatTensor)`): all intermediate hidden states of shape *(src_len,
+                - **encoder_states** (`Tuple(torch.Tensor)`): all intermediate hidden states of shape *(src_len,
                   batch, embed_dim)*. Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (`Tuple(torch.FloatTensor)`): Attention weights for each layer.
+                - **all_attentions** (`Tuple(torch.Tensor)`): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
@@ -412,8 +400,13 @@ class FSMTEncoder(nn.Module):
                 encoder_states += (x,)
                 x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training and self.layerdrop > 0.0:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 attn = None
             else:
                 x, attn = encoder_layer(
@@ -473,7 +466,7 @@ class DecoderLayer(nn.Module):
         causal_mask=None,
         decoder_padding_mask=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         residual = x
 
@@ -485,7 +478,6 @@ class DecoderLayer(nn.Module):
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -500,7 +492,6 @@ class DecoderLayer(nn.Module):
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -544,6 +535,7 @@ class FSMTDecoder(nn.Module):
         self.layers = nn.ModuleList([DecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])  # type: list[DecoderLayer]
         self.output_projection = nn.Linear(config.d_model, config.tgt_vocab_size, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -552,12 +544,12 @@ class FSMTDecoder(nn.Module):
         decoder_padding_mask: torch.Tensor,
         decoder_causal_mask: torch.Tensor,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -569,7 +561,7 @@ class FSMTDecoder(nn.Module):
             encoder_hidden_states: output from the encoder, used for
                 encoder-side attention
             encoder_padding_mask: for ignoring pad tokens
-            past_key_values (dict or None): dictionary used for storing state during generation
+            cache (dict or None): dictionary used for storing state during generation
 
         Returns:
             BaseModelOutputWithPast or tuple:
@@ -586,11 +578,9 @@ class FSMTDecoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            # embed positions
-            positions = self.embed_positions(input_ids)
-            if use_cache:
-                input_ids = input_ids[:, -1:]
-                positions = positions[:, -1:]  # happens after we embed them
+            # Embed positions, accounting for the tokens already in the cache
+            cache_length = cache.get_seq_length() if cache is not None else 0
+            positions = self.embed_positions(input_ids, cache_length=cache_length)
             x = self.embed_tokens(input_ids) * self.embed_scale
         elif inputs_embeds is not None:
             # We assume zeros hidden states correspond to padding tokens
@@ -621,7 +611,7 @@ class FSMTDecoder(nn.Module):
                 x = x.transpose(0, 1)
                 all_hidden_states += (x,)
                 x = x.transpose(0, 1)
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
@@ -631,10 +621,9 @@ class FSMTDecoder(nn.Module):
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
                 decoder_padding_mask=decoder_padding_mask,
-                layer_state=past_key_values,
+                layer_state=cache,
                 causal_mask=decoder_causal_mask,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             if output_attentions:
@@ -654,12 +643,10 @@ class FSMTDecoder(nn.Module):
         x = self.output_projection(x)
 
         if not return_dict:
-            return tuple(
-                v for v in [x, past_key_values, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
-            )
+            return tuple(v for v in [x, cache, all_hidden_states, all_self_attns, all_cross_attns] if v is not None)
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=x,
-            past_key_values=past_key_values,
+            cache=cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attns,
@@ -709,7 +696,7 @@ class Attention(nn.Module):
         layer_state: Cache | None = None,
         attn_mask: Tensor | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[Tensor, Tensor | None]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         tgt_len, bsz, embed_dim = query.size()
@@ -721,18 +708,18 @@ class Attention(nn.Module):
                 is_updated = layer_state.is_updated.get(self.layer_idx)
                 if self.encoder_decoder_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_values = layer_state.cross_attention_cache
+                    curr_cache = layer_state.cross_attention_cache
                 else:
-                    curr_past_key_values = layer_state.self_attention_cache
+                    curr_cache = layer_state.self_attention_cache
             else:
-                curr_past_key_values = layer_state
+                curr_cache = layer_state
 
         # NOTE: FSMT has format (seq_len, BS, model_dim) for inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_values.layers[self.layer_idx].keys
-            value_states = curr_past_key_values.layers[self.layer_idx].values
+            key_states = curr_cache.layers[self.layer_idx].keys
+            value_states = curr_cache.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
@@ -741,10 +728,7 @@ class Attention(nn.Module):
 
             if layer_state is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not self.encoder_decoder_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if self.encoder_decoder_attention:
                     layer_state.is_updated[self.layer_idx] = True
@@ -804,7 +788,7 @@ class Attention(nn.Module):
 
 
 def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a input_ids with -inf."""
+    """FP16-compatible function that fills an input_ids with -inf."""
     return t.float().fill_(torch.finfo(t.dtype).min).type_as(t)
 
 
@@ -827,21 +811,21 @@ class FSMTModel(PretrainedFSMTModel):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
@@ -853,8 +837,8 @@ class FSMTModel(PretrainedFSMTModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `cache`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `cache`).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -884,8 +868,8 @@ class FSMTModel(PretrainedFSMTModel):
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             raise ValueError("Make sure that `decoder_input_ids` or `decoder_inputs_embeds` are passed.")
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -912,12 +896,11 @@ class FSMTModel(PretrainedFSMTModel):
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -925,7 +908,7 @@ class FSMTModel(PretrainedFSMTModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -964,14 +947,15 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -979,7 +963,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -991,15 +974,11 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
-            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            FSMT uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `cache`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `cache`).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Translation:
 
@@ -1030,12 +1009,11 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
             decoder_inputs_embeds=decoder_inputs_embeds,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         lm_logits = outputs[0]
 
@@ -1052,7 +1030,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         return Seq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1127,19 +1105,14 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         mask = tensor.ne(padding_idx).int()
         return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
-    def forward(
-        self,
-        input,
-        incremental_state: Any | None = None,
-        timestep: Tensor | None = None,
-    ):
+    def forward(self, input, *, cache_length: int = 0):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]
-        max_pos = self.padding_idx + 1 + seq_len
+        max_pos = self.padding_idx + 1 + cache_length + seq_len
         if max_pos > self.weight.size(0):
             # expand embeddings if needed
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
-        positions = self.make_positions(input, self.padding_idx)
+        positions = self.make_positions(input, self.padding_idx) + cache_length
         return super().forward(positions)
 
 

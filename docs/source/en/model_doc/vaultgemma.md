@@ -15,14 +15,14 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2016-07-01 and added to Hugging Face Transformers on 2025-09-12.*
+*This model was published in HF papers on 2016-07-01 and contributed to Hugging Face Transformers on 2025-09-12.*
 
 # VaultGemma
 
 ## Overview
 
 [VaultGemma](https://services.google.com/fh/files/blogs/vaultgemma_tech_report.pdf) is a text-only decoder model
-derived from [Gemma 2](https://huggingface.co/docs/transformers/en/model_doc/gemma2), notably it drops the norms after
+derived from [Gemma 2](./gemma2), notably it drops the norms after
 the Attention and MLP blocks, and uses full attention for all layers instead of alternating between full attention and
 local sliding attention. VaultGemma is available as a pretrained model with 1B parameters that uses a 1024 token
 sequence length.
@@ -47,10 +47,10 @@ command line.
 ```python
 from transformers import pipeline
 
+
 pipe = pipeline(
     task="text-generation",
     model="google/vaultgemma-1b",
-    dtype="auto",
     device_map="auto",
 )
 
@@ -65,11 +65,12 @@ print(response)
 
 ```python
 # pip install accelerate
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "google/vaultgemma-1b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 text = "Tell me an unknown interesting biology fact about the brain."
 input_ids = tokenizer(text, return_tensors="pt").to(model.device)

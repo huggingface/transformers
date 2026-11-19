@@ -15,24 +15,23 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/detr-resnet-50")
-@strict(accept_kwargs=True)
+@strict
 class DetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 100):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
+    position_embedding_type (`str`, *optional*, defaults to `"sine"`):
+        Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
     dilation (`bool`, *optional*, defaults to `False`):
         Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
         `use_timm_backbone` = `True`.
-    position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-        Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
 
     Examples:
 
@@ -50,8 +49,13 @@ class DetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "detr"
-    sub_configs = {"backbone_config": AutoConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="resnet",
+            init_kwargs={"out_features": ["stage4"]},
+        ),
+    }
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -90,24 +94,22 @@ class DetrConfig(PreTrainedConfig):
     eos_coefficient: float = 0.1
 
     def __post_init__(self, **kwargs):
-        backbone_kwargs = kwargs.get("backbone_kwargs", {})
-        timm_default_kwargs = {
-            "num_channels": backbone_kwargs.get("num_channels", self.num_channels),
-            "features_only": True,
-            "use_pretrained_backbone": False,
-            "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
-        }
-        if self.dilation:
-            timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_backbone="resnet50",
-            default_config_type="resnet",
-            default_config_kwargs={"out_features": ["stage4"]},
-            timm_default_kwargs=timm_default_kwargs,
-            **kwargs,
-        )
+        if (
+            self.backbone_config is None
+            and kwargs.pop("use_timm_backbone", True)
+            and not kwargs.get("backbone_kwargs")
+        ):
+            backbone_kwargs = kwargs.get("backbone_kwargs", {})
+            self.backbone_config = {
+                "model_type": "timm_backbone",
+                "backbone": kwargs.pop("backbone", None) or "resnet50",
+                "num_channels": backbone_kwargs.get("num_channels", self.num_channels),
+                "features_only": True,
+                "use_pretrained_backbone": False,
+                "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
+            }
+            if self.dilation:
+                self.backbone_config["output_stride"] = backbone_kwargs.get("output_stride", 16)
         super().__post_init__(**kwargs)
 
 

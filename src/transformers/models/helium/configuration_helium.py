@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="kyutai/helium-1-preview")
-@strict(accept_kwargs=True)
+@strict
 class HeliumConfig(PreTrainedConfig):
     r"""
     Example:
@@ -38,7 +38,6 @@ class HeliumConfig(PreTrainedConfig):
     ```"""
 
     model_type = "helium"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 100000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

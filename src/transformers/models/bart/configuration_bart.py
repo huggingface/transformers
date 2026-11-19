@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/bart-large")
-@strict(accept_kwargs=True)
+@strict
 class BartConfig(PreTrainedConfig):
     r"""
     Example:
@@ -39,7 +39,6 @@ class BartConfig(PreTrainedConfig):
     ```"""
 
     model_type = "bart"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",

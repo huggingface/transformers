@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
-@strict(accept_kwargs=True)
+@strict
 class Llama4VisionConfig(PreTrainedConfig):
     r"""
     vision_output_dim (`int`, *optional*, defaults to 7680):
@@ -75,7 +75,7 @@ class Llama4VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
-@strict(accept_kwargs=True)
+@strict
 class Llama4TextConfig(PreTrainedConfig):
     r"""
     intermediate_size_mlp (`int`, *optional*, defaults to 16384):
@@ -107,7 +107,6 @@ class Llama4TextConfig(PreTrainedConfig):
     """
 
     model_type = "llama4_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -119,22 +118,13 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
         "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
         "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
+        "layers.*.feed_forward.experts": "moe_tp_experts",
         "layers.*.feed_forward.gate_proj": "colwise",
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise",
     }
-    base_model_ep_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
-        "layers.*.feed_forward.gate_proj": "colwise",
-        "layers.*.feed_forward.up_proj": "colwise",
-        "layers.*.feed_forward.down_proj": "rowwise",
-        "layers.*.feed_forward.router": "ep_router",
-    }
+    # No `base_model_ep_plan`: the experts take every token pre-scaled by its router score rather than the routing,
+    # so there is nothing to dispatch. They shard with the tensor-parallel plan above.
 
     vocab_size: int = 202048
     hidden_size: int = 5120
@@ -151,7 +141,7 @@ class Llama4TextConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 1
@@ -165,8 +155,8 @@ class Llama4TextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
-    attention_chunk_size: int = 8192
-    layer_types: list[int] | None = None
+    attention_chunk_size: int | None = 8192
+    layer_types: list[str] | None = None
     attn_temperature_tuning: bool = True
     floor_scale: int = 8192
     attn_scale: float = 0.1
@@ -196,14 +186,15 @@ class Llama4TextConfig(PreTrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
+                "chunked_attention" if no_rope and self.attention_chunk_size is not None else "full_attention"
+                for no_rope in self.no_rope_layers
             ]
 
         super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
-@strict(accept_kwargs=True)
+@strict
 class Llama4Config(PreTrainedConfig):
     r"""
     boi_token_index (`int`, *optional*, defaults to 200080):
@@ -222,7 +213,8 @@ class Llama4Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "llama4"
     attribute_map = {
@@ -230,9 +222,13 @@ class Llama4Config(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
-    sub_configs = {"text_config": Llama4TextConfig, "vision_config": Llama4VisionConfig}
+    sub_configs_defaults = {
+        "text_config": Llama4TextConfig,
+        "vision_config": Llama4VisionConfig,
+    }
+
     base_model_tp_plan = {
-        "multi_modal_projector.linear_1": "colwise_rep",
+        "multi_modal_projector.linear_1": "colwise_gather_output",
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -241,20 +237,6 @@ class Llama4Config(PreTrainedConfig):
     eoi_token_index: int = 200081
     image_token_index: int = 200092
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = Llama4VisionConfig()
-            logger.info("vision_config is None, using default llama4 vision config")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Llama4VisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = Llama4TextConfig()
-            logger.info("text_config is None, using default llama4 text config")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Llama4TextConfig(**self.text_config)
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

@@ -19,20 +19,15 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 12):
-        The window size of the model.
     depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
         The depth of the model.
     patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
@@ -43,6 +38,8 @@ class Florence2VisionConfig(PreTrainedConfig):
         Whether to apply layer normalization before the patch embedding layer.
     num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
         The number of groups.
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
     max_temporal_embeddings (`int`, *optional*, defaults to 100):
         The configuration of the visual temporal embedding.
 
@@ -73,7 +70,7 @@ class Florence2VisionConfig(PreTrainedConfig):
     num_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     num_groups: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     window_size: int = 12
-    drop_path_rate: float = 0.1
+    drop_path_rate: float | int = 0.1
     mlp_ratio: float = 4.0
     qkv_bias: bool = True
     activation_function: str = "gelu"
@@ -84,7 +81,7 @@ class Florence2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:
@@ -109,9 +106,9 @@ class Florence2Config(PreTrainedConfig):
     ```"""
 
     model_type = "florence2"
-    sub_configs = {
-        "text_config": AutoConfig,
+    sub_configs_defaults = {
         "vision_config": Florence2VisionConfig,
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bart"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -119,21 +116,6 @@ class Florence2Config(PreTrainedConfig):
     image_token_id: int = 51289
     is_encoder_decoder: bool = True
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bart")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["bart"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Florence2VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-            self.vision_config = Florence2VisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Florence2Config", "Florence2VisionConfig"]

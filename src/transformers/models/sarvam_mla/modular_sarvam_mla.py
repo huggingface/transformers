@@ -24,11 +24,14 @@ class SarvamMLAConfig(DeepseekV3Config):
     r"""
     n_group (`int`, *optional*, defaults to 16):
         Number of groups for routed experts.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether to interleave the rotary position embeddings.
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. The
+        released checkpoints do not include MTP weights.
 
     Example:
 
@@ -56,9 +59,7 @@ class SarvamMLAConfig(DeepseekV3Config):
     topk_group: int | None = 2
     first_k_dense_replace: int | None = 1
     initializer_range: float = 0.006
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        raise AttributeError("No BC behavior needed!")
+    num_mtp_layers: int = 0
 
 
 __all__ = ["SarvamMLAConfig"]

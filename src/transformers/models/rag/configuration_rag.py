@@ -17,13 +17,19 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto.configuration_auto import AutoConfig
+from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 @auto_docstring(checkpoint="")
-@strict(accept_kwargs=True)
+@strict
 class RagConfig(PreTrainedConfig):
     r"""
+    question_encoder (`PreTrainedConfig | dict`, *optional*):
+        The config object or dictionary of the question encoder backbone
+    generator (`PreTrainedConfig | dict`, *optional*):
+        The config object or dictionary of the answer generator backbone
+    prefix (`str`, *optional*):
+        A string prefix prepended to every input before passing to the generator model.
     title_sep (`str`, *optional*, defaults to  `" / "`):
         Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
     doc_sep (`str`, *optional*, defaults to  `" // "`):
@@ -53,31 +59,30 @@ class RagConfig(PreTrainedConfig):
         [`~models.rag.retrieval_rag.LegacyIndex`]
     use_dummy_dataset (`bool`, *optional*, defaults to `False`):
         Whether to load a "dummy" variant of the dataset specified by `dataset`.
+    reduce_loss (`bool`, *optional*, defaults to `False`):
+        Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
     label_smoothing (`float`, *optional*, defaults to 0.0):
         Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
         in the loss calculation. If set to 0, no label smoothing is performed.
-    do_marginalize (`bool`, *optional*, defaults to `False`):
-        If `True`, the logits are marginalized over all documents by making use of
-        `torch.nn.functional.log_softmax`.
-    reduce_loss (`bool`, *optional*, defaults to `False`):
-        Whether or not to reduce the NLL loss using the `torch.Tensor.sum` operation.
     do_deduplication (`bool`, *optional*, defaults to `True`):
         Whether or not to deduplicate the generations from different context documents for a given input. Has to be
         set to `False` if used while training with distributed backend.
     exclude_bos_score (`bool`, *optional*, defaults to `False`):
         Whether or not to disregard the BOS token when computing the loss.
-    output_retrieved(`bool`, *optional*, defaults to `False`):
+    do_marginalize (`bool`, *optional*, defaults to `False`):
+        If `True`, the logits are marginalized over all documents by making use of
+        `torch.nn.functional.log_softmax`.
+    output_retrieved (`bool`, *optional*, defaults to `False`):
         If set to `True`, `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
         `context_attention_mask` are returned. See returned tensors for more detail.
-    prefix (`str`, *optional*):
-        A string prefix prepended to every input before passing to the generator model.
     dataset_revision (`str`, *optional*,):
         The revision (commit hash, tag, or branch) of the Hugging Face dataset used for retrieval.
     """
 
     model_type = "rag"
-    has_no_defaults_at_init = True
 
+    question_encoder: PreTrainedConfig | dict | None = None
+    generator: PreTrainedConfig | dict | None = None
     vocab_size: int | None = None
     is_encoder_decoder: bool = True
     prefix: str | None = None
@@ -107,19 +112,17 @@ class RagConfig(PreTrainedConfig):
     dataset_revision: str | None = None
 
     def __post_init__(self, **kwargs):
-        if "question_encoder" not in kwargs or "generator" not in kwargs:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because not both `question_encoder` and"
-                f" `generator` sub-configurations are passed, but only {kwargs}"
-            )
+        if isinstance(self.question_encoder, dict):
+            self.question_encoder["model_type"] = self.question_encoder.get("model_type", "dpr")
+            self.question_encoder = CONFIG_MAPPING[self.question_encoder["model_type"]](**self.question_encoder)
+        elif self.question_encoder is None:
+            self.question_encoder = CONFIG_MAPPING["dpr"]()
 
-        question_encoder_config = kwargs.pop("question_encoder")
-        question_encoder_model_type = question_encoder_config.pop("model_type")
-        decoder_config = kwargs.pop("generator")
-        decoder_model_type = decoder_config.pop("model_type")
-
-        self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
-        self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
+        if isinstance(self.generator, dict):
+            self.generator["model_type"] = self.generator.get("model_type", "bart")
+            self.generator = CONFIG_MAPPING[self.generator["model_type"]](**self.generator)
+        elif self.generator is None:
+            self.generator = CONFIG_MAPPING["bart"]()
 
         super().__post_init__(**kwargs)
 

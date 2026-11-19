@@ -23,10 +23,12 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2VLVisionConfig(PreTrainedConfig):
-    model_type = "qwen2_vl"
+    model_type = "qwen2_vl_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     embed_dim: int = 1280
@@ -39,16 +41,13 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     spatial_merge_size: int = 2
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2VLTextConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 80):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
-
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig
 
@@ -60,11 +59,11 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "qwen2_vl_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
     # Default tensor parallel plan for base model `Qwen2VL`
     base_model_tp_plan = {
@@ -103,7 +102,6 @@ class Qwen2VLTextConfig(PreTrainedConfig):
     bos_token_id: int | None = 151643
     eos_token_id: int | list[int] | None = 151645
     pad_token_id: int | None = None
-    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
@@ -136,7 +134,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2VLConfig(PreTrainedConfig):
     r"""
     Example:
@@ -155,8 +153,10 @@ class Qwen2VLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_vl"
-    sub_configs = {"vision_config": Qwen2VLVisionConfig, "text_config": Qwen2VLTextConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vision_config": Qwen2VLVisionConfig,
+        "text_config": Qwen2VLTextConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -167,24 +167,25 @@ class Qwen2VLConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
         # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-        text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
-        text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
-        text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+        if self.text_config is None:
+            text_params = inspect.signature(
+                self.sub_configs_defaults["text_config"].config_class.__init__
+            ).parameters.keys()
+            text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
+            self.text_config = {key: kwargs.pop(key) for key in text_params if key in kwargs}
+            self.text_config["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
 
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-            text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen2_vl":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "qwen2_vl_vision"
 
         super().__post_init__(**kwargs)
+        # BC: pre-v5 saves placed `tie_word_embeddings` inside text_config. Forward it to the outer
+        # config (where v5's tying logic looks) when the root value is the default. Checked after
+        # text_config init so it also covers a text config passed as an already-initialized instance.
+        if not self.tie_word_embeddings and getattr(self.text_config, "tie_word_embeddings", False):
+            self.tie_word_embeddings = True
 
 
-__all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig"]
+__all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig", "Qwen2VLVisionConfig"]

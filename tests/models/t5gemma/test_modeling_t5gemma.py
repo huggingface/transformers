@@ -31,7 +31,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -68,14 +68,14 @@ class T5GemmaModelTester:
         vocab_size=99,
         # decoder-specific
         seq_length=7,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
         # encoder-specific
         encoder_seq_length=7,
-        encoder_hidden_size=32,
+        encoder_hidden_size=64,
         encoder_num_hidden_layers=2,
         encoder_num_attention_heads=4,
         encoder_num_key_value_heads=2,
@@ -214,8 +214,8 @@ class T5GemmaModelTester:
         attention_mask = None
         decoder_attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.encoder_seq_length])
+            decoder_attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         lm_labels = None
         if self.use_labels:
@@ -270,7 +270,7 @@ class T5GemmaModelTester:
         )
 
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(
@@ -408,7 +408,7 @@ class T5GemmaModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -417,9 +417,9 @@ class T5GemmaModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, encoder_hidden_states=encoder_hidden_states)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, encoder_hidden_states=encoder_hidden_states, past_key_values=past_key_values
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, encoder_hidden_states=encoder_hidden_states, cache=cache)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -450,7 +450,7 @@ class T5GemmaModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(
+        output, cache = model(
             input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attn_mask, use_cache=True
         ).to_tuple()
 
@@ -476,7 +476,7 @@ class T5GemmaModelTester:
         output_from_past = model(
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attn_mask,
         )["last_hidden_state"]
 
@@ -507,7 +507,7 @@ class T5GemmaModelTester:
             input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attention_mask, use_cache=True
         )
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -524,7 +524,7 @@ class T5GemmaModelTester:
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )["last_hidden_state"]
 
         # select random slice
@@ -537,7 +537,7 @@ class T5GemmaModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_values(
+    def create_and_check_generate_with_cache(
         self,
         config,
         input_ids,
@@ -598,8 +598,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     _torch_compile_train_cls = T5GemmaForConditionalGeneration if is_torch_available() else None
     # `t5gemma` will give warning or raise error if it is not `eager` during training.
     _torch_compile_train_attn_implementation = "eager"
-
-    # won't fix
 
     def setUp(self):
         self.model_tester = T5GemmaModelTester(self)
@@ -745,9 +743,9 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -932,8 +930,8 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -994,10 +992,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_load_with_mismatched_shapes(self):
         pass
 
-    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_past_key_values
+    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_cache
     # Updated decoder_attention_mask to consider the appended bos token
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if model_class == self.model_tester.token_classification_class:
@@ -1031,10 +1029,10 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -1055,7 +1053,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
 
             # It must be encoder-decoder models
@@ -1083,7 +1081,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             # The two sets of generated text and past kv should be equal to each other
             assert_similar_generate_outputs(outputs, outputs_cached)
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
     # Update encoder and decoder embeddings
@@ -1224,7 +1222,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
             if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
 
@@ -1280,6 +1277,24 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # Only generate beyond prefill, we don't care about the output as it only checks for crashes
         _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
+
+    def test_generate_cross_attention_cache_is_not_sliding(self):
+        # Fast (CPU-friendly, no flash-attn) regression test for the same fix as
+        # `test_generate_beyond_sliding_window_with_flash_attn`: even when the decoder declares sliding-window
+        # layers, `_prepare_cache_for_generation` must build a full-attention cross-attention cache.
+        config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.decoder.sliding_window = 2  # arbitrary but less than seq_len
+
+        model = self.model_tester.causal_lm_class(config=config).to(torch_device).eval()
+
+        out = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=4,  # beyond the sliding window
+            use_cache=True,
+            return_dict_in_generate=True,
+        )
+        self.assertFalse(any(out.cache.cross_attention_cache.is_sliding))
 
 
 class T5GemmaEncoderOnlyModelTester:
@@ -1391,7 +1406,7 @@ class T5GemmaEncoderOnlyModelTester:
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config()
 
@@ -1516,41 +1531,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
-
-    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
-    # Update hidden size for encoder
-    @require_torch_accelerator
-    def test_flex_attention_with_grads(self):
-        for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
-                self.skipTest(reason="This model does not support flex attention")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config._attn_implementation = "flex_attention"
-            # Flex Attention cannot use dropout
-            config.encoder.attention_dropout = 0
-
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            config.encoder.hidden_size *= max(
-                16
-                // getattr(
-                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
-                ),
-                1,
-            )
-            config.encoder.head_dim = max(16, config.encoder.head_dim)
-
-            model = model_class(config).to(device=torch_device)
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
-
-            # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-
-            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(**dummy_inputs)
 
 
 # Based on tests.models.t5.test_modeling_t5.TestAsymmetricT5

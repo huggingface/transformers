@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
@@ -43,7 +43,7 @@ class DiaEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
     cross_num_attention_heads (`int`, *optional*, defaults to 16):
@@ -78,12 +78,12 @@ class DiaDecoderConfig(PreTrainedConfig):
     use_cache: bool = True
     is_encoder_decoder: bool = True
     pad_token_id: int | None = 1025
-    eos_token_id: int | None = 1024
+    eos_token_id: int | list[int] | None = 1024
     bos_token_id: int | None = 1026
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaConfig(PreTrainedConfig):
     r"""
     delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
@@ -106,8 +106,10 @@ class DiaConfig(PreTrainedConfig):
     """
 
     model_type = "dia"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": DiaEncoderConfig, "decoder_config": DiaDecoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": DiaEncoderConfig,
+        "decoder_config": DiaDecoderConfig,
+    }
 
     encoder_config: DiaEncoderConfig | dict | None = None
     decoder_config: DiaDecoderConfig | dict | None = None
@@ -121,13 +123,7 @@ class DiaConfig(PreTrainedConfig):
     use_cache: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = DiaEncoderConfig(**self.encoder_config)
-        if isinstance(self.decoder_config, dict):
-            self.decoder_config = DiaDecoderConfig(**self.decoder_config)
-
-        self.encoder_config = self.encoder_config if self.encoder_config is not None else DiaEncoderConfig()
-        self.decoder_config = self.decoder_config if self.decoder_config is not None else DiaDecoderConfig()
+        super().__post_init__(**kwargs)
         self.delay_pattern = (
             self.delay_pattern if self.delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         )
@@ -153,8 +149,6 @@ class DiaConfig(PreTrainedConfig):
                 "Please set it directly on `DiaDecoderConfig` instead."
             )
             self.decoder_config.bos_token_id = self.bos_token_id
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

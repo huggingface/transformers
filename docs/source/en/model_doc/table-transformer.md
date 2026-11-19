@@ -9,17 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-30 and added to Hugging Face Transformers on 2022-10-18.*
+*This model was published in HF papers on 2021-09-30 and contributed to Hugging Face Transformers on 2022-10-18.*
 
 # Table Transformer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -49,6 +46,9 @@ documents, one for [table structure recognition](https://huggingface.co/microsof
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be
 found [here](https://github.com/microsoft/table-transformer).
+
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 ## Resources
 

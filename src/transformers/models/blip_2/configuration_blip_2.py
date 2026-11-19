@@ -15,17 +15,17 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
-@strict(accept_kwargs=True)
+@strict
 class Blip2VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -60,7 +60,7 @@ class Blip2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
-@strict(accept_kwargs=True)
+@strict
 class Blip2QFormerConfig(PreTrainedConfig):
     r"""
     cross_attention_frequency (`int`, *optional*, defaults to 2):
@@ -91,8 +91,8 @@ class Blip2QFormerConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
@@ -103,7 +103,7 @@ class Blip2QFormerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Salesforce/blip2-opt-2.7b")
-@strict(accept_kwargs=True)
+@strict
 class Blip2Config(PreTrainedConfig):
     r"""
     qformer_config (`dict`, *optional*):
@@ -144,10 +144,12 @@ class Blip2Config(PreTrainedConfig):
     ```"""
 
     model_type = "blip-2"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="opt"),
+        "vision_config": Blip2VisionConfig,
+        "qformer_config": Blip2QFormerConfig,
     }
-    sub_configs = {"text_config": AutoConfig, "qformer_config": Blip2QFormerConfig, "vision_config": Blip2VisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     qformer_config: dict | PreTrainedConfig | None = None
@@ -159,29 +161,10 @@ class Blip2Config(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = CONFIG_MAPPING["opt"]()
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
-        elif isinstance(self.text_config, dict):
-            text_model_type = self.text_config.get("model_type", "opt")
-            self.text_config = CONFIG_MAPPING[text_model_type](**self.text_config)
-
-        if self.qformer_config is None:
-            self.qformer_config = Blip2QFormerConfig()
-            logger.info("qformer_config is None. Initializing the Blip2QFormerConfig with default values.")
-        elif isinstance(self.qformer_config, dict):
-            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
-
-        if self.vision_config is None:
-            self.vision_config = Blip2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Blip2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Blip2VisionConfig(**self.vision_config)
-
+        super().__post_init__(**kwargs)
+        self.is_encoder_decoder = self.text_config.is_encoder_decoder
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        kwargs["is_encoder_decoder"] = self.text_config.is_encoder_decoder
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Blip2Config", "Blip2QFormerConfig", "Blip2VisionConfig"]

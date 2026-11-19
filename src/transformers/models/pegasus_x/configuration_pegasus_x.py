@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/pegasus-x-large")
-@strict(accept_kwargs=True)
+@strict
 class PegasusXConfig(PreTrainedConfig):
     r"""
     num_global_tokens (`int`, *optional*, defaults to 128):
@@ -47,7 +47,6 @@ class PegasusXConfig(PreTrainedConfig):
     ```"""
 
     model_type = "pegasus_x"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -75,8 +74,8 @@ class PegasusXConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 0
     scale_embedding: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
-    forced_eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
+    forced_eos_token_id: int | list[int] | None = 1
     num_global_tokens: int = 32
     block_size: int = 512
     stagger_local_blocks: bool = True

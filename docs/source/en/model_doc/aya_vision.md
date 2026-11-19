@@ -9,17 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-13 and added to Hugging Face Transformers on 2025-03-04.*
+*This model was published in HF papers on 2025-05-13 and contributed to Hugging Face Transformers on 2025-03-04.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # Aya Vision
 
@@ -39,6 +34,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 
 ```python
 from transformers import pipeline
+
 
 pipe = pipeline(model="CohereLabs/aya-vision-8b", task="image-text-to-text", device_map="auto")
 
@@ -60,14 +56,14 @@ print(outputs)
 
 ```python
 # pip install 'git+https://github.com/huggingface/transformers.git@v4.49.0-Aya Vision'
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_id = "CohereLabs/aya-vision-8b"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="auto", dtype=torch.float16
+    model_id, device_map="auto"
 )
 
 # Format message with the aya-vision chat template
@@ -102,17 +98,15 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```python
 import torch
-from transformers import (
-    AutoProcessor,
-    AutoModelForImageTextToText,
-    BitsAndBytesConfig
-)
+
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True
+    bit_use_double_quant=True
 )
 
 processor = AutoProcessor.from_pretrained("CohereLabs/aya-vision-32b", use_fast=True)
@@ -153,7 +147,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="auto", dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="auto"
     )
     
     messages = [
@@ -162,11 +156,11 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
             "content": [
                 {
                     "type": "image",
-                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                 },
                 {
                     "type": "image",
-                    "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                 },
                 {
                     "type": "text",
@@ -199,7 +193,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
-        "CohereForAI/aya-vision-8b", device_map="auto", dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="auto"
     )
     
     batch_messages = [
@@ -207,7 +201,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                    {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"},
                     {"type": "text", "text": "Write a haiku for this image"},
                 ],
             },
@@ -218,11 +212,11 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                     },
                     {
                         "type": "image",
-                        "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
                     },
                     {
                         "type": "text",

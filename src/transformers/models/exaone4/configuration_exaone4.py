@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
-@strict(accept_kwargs=True)
+@strict
 class Exaone4Config(PreTrainedConfig):
     r"""
     sliding_window_pattern (`str`, *optional*):
@@ -57,7 +57,6 @@ class Exaone4Config(PreTrainedConfig):
     ```"""
 
     model_type = "exaone4"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `LlamaModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

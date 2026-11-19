@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -24,7 +24,7 @@ Translation converts a sequence of text from one language to another. It is one 
 
 This guide will show you how to:
 
-1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the English-French subset of the [OPUS Books](https://huggingface.co/datasets/opus_books) dataset to translate English text to French.
+1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the English-French subset of the [OPUS Books](https://huggingface.co/datasets/Helsinki-NLP/opus_books) dataset to translate English text to French.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -49,12 +49,12 @@ We encourage you to login to your Hugging Face account so you can upload and sha
 
 ## Load OPUS Books dataset
 
-Start by loading the English-French subset of the [OPUS Books](https://huggingface.co/datasets/opus_books) dataset from the 🤗 Datasets library:
+Start by loading the English-French subset of the [OPUS Books](https://huggingface.co/datasets/Helsinki-NLP/opus_books) dataset from the 🤗 Datasets library:
 
 ```py
 >>> from datasets import load_dataset
 
->>> books = load_dataset("opus_books", "en-fr")
+>>> books = load_dataset("Helsinki-NLP/opus_books", "en-fr")
 ```
 
 Split the dataset into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -169,7 +169,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 

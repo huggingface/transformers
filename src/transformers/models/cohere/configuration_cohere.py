@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
-@strict(accept_kwargs=True)
+@strict
 class CohereConfig(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):
@@ -43,10 +43,10 @@ class CohereConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config # doctest: +SKIP
-    ```"""
+    ```
+    """
 
     model_type = "cohere"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -62,6 +62,7 @@ class CohereConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     vocab_size: int = 256000
     hidden_size: int = 8192
     intermediate_size: int = 22528

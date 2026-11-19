@@ -144,6 +144,13 @@ def orthogonal_(
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     if not getattr(tensor, "_is_hf_initialized", False):
+        # The QR decomposition (`geqrf`) used by `torch.nn.init.orthogonal_` is only implemented for
+        # float32/float64, so for lower-precision dtypes we run the init in float32 and copy back
+        if tensor.is_floating_point() and torch.finfo(tensor.dtype).bits < 32:
+            fp32_tensor = torch.empty_like(tensor, dtype=torch.float32)
+            TORCH_INIT_FUNCTIONS["orthogonal_"](fp32_tensor, gain=gain, generator=generator)
+            with torch.no_grad():
+                return tensor.copy_(fp32_tensor)
         return TORCH_INIT_FUNCTIONS["orthogonal_"](tensor, gain=gain, generator=generator)
     return tensor
 
@@ -300,3 +307,34 @@ def no_tie_weights():
     finally:
         # Set back the original
         PreTrainedModel.tie_weights = original_tie_weights
+
+
+@contextmanager
+def meta_device_safe_creation_ops():
+    """
+    During meta-device model initialisation, ``torch.linspace`` produces meta
+    tensors that have no data.  Custom models loaded from the Hub (remote code)
+    often call ``.item()`` on these tensors to compute scalar hyperparameters
+    (e.g. stochastic-depth / drop-path schedules).  Native transformers models
+    already pass ``device="cpu"`` explicitly for such calls (see e.g.
+    ``modeling_swin.py``, ``modeling_pvt_v2.py``), but remote-code models
+    written before v5 do not.
+
+    This context manager patches ``torch.linspace`` to default to
+    ``device="cpu"`` when no explicit device is requested, matching the best
+    practice already used throughout transformers.  Calls that supply an
+    explicit ``device`` argument (e.g. ``device=self.logits.device``) are left
+    untouched.  ``torch.arange`` is intentionally NOT patched because it is
+    used in RoPE computations where the device must match model parameters.
+    """
+    original_linspace = torch.linspace
+
+    def _safe_linspace(*args, **kwargs):
+        kwargs.setdefault("device", "cpu")
+        return original_linspace(*args, **kwargs)
+
+    torch.linspace = _safe_linspace
+    try:
+        yield
+    finally:
+        torch.linspace = original_linspace

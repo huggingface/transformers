@@ -243,7 +243,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 
 ### 테스트 [[tests]]
 
-라이브러리 동작과 여러 예제를 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에, 예제 테스트는 [examples](https://github.com/huggingface/transformers/tree/main/examples) 폴더에 있습니다.
+라이브러리 동작을 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에 있습니다.
 
 속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉터리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요:
 
@@ -251,14 +251,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-마찬가지로 `examples` 디렉터리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉터리의 텍스트 분류 하위 폴더를 테스트합니다:
-
-```bash
-pip install -r examples/xxx/requirements.txt  # only needed the first time
-python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
-```
-
-이것이 실제로 `make test` 및 `make test-examples` 명령이 구현되는 방식입니다 (`pip install`은 제외합니다)!
+이것이 실제로 `make test` 명령이 구현되는 방식입니다!
 
 또한 특정 기능만 테스트하기 위한 더 작은 테스트를 지정할 수 있습니다.
 
@@ -272,7 +265,6 @@ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classific
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
-RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 느린 테스트와 마찬가지로, 다음과 같이 테스트 중에 기본적으로 활성화되지 않는 다른 환경 변수도 있습니다:
@@ -286,7 +278,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 ```bash
 python -m unittest discover -s tests -t . -v
-python -m unittest discover -s examples -t examples -v
 ```
 
 ### 스타일 가이드 [[style-guide]]

@@ -18,8 +18,8 @@ URL: https://github.com/IDEA-Research/GroundingDINO"""
 import argparse
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 from torchvision import transforms as T
 

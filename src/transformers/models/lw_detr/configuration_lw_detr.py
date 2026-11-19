@@ -21,14 +21,17 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...backbone_utils import BackboneConfigMixin
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 
 
+logger = logging.get_logger(__name__)
+
+
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
-@strict(accept_kwargs=True)
+@strict
 class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -65,7 +68,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 12
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    dropout_prob: float = 0.0
+    dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
 
@@ -102,7 +105,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
-@strict(accept_kwargs=True)
+@strict
 class LwDetrConfig(PreTrainedConfig):
     r"""
     projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):
@@ -131,11 +134,11 @@ class LwDetrConfig(PreTrainedConfig):
         [`LwDetrModel`] can detect in a single image.
     group_detr (`int`, *optional*, defaults to 13):
         Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
-    init_std (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
         kernels are not supported by PyTorch ONNX export.
+    class_loss_coefficient (`float`, *optional*, defaults to 1):
+        Relative weight of the classification loss in the Hungarian matching cost.
 
     Examples:
 
@@ -153,7 +156,19 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="lw_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     projector_scale_factors: list[float] | tuple[float, ...] = ()
@@ -175,31 +190,25 @@ class LwDetrConfig(PreTrainedConfig):
     group_detr: int = 13
     init_std: float = 0.02
     disable_custom_kernels: bool = True
-    class_cost: int = 2
-    bbox_cost: int = 5
-    giou_cost: int = 2
-    mask_loss_coefficient: int = 1
-    dice_loss_coefficient: int = 1
-    bbox_loss_coefficient: int = 5
-    giou_loss_coefficient: int = 2
+    class_cost: int | float = 2
+    bbox_cost: int | float = 5
+    giou_cost: int | float = 2
+    class_loss_coefficient: int | float = 1
+    dice_loss_coefficient: int | float = 1
+    bbox_loss_coefficient: int | float = 5
+    giou_loss_coefficient: int | float = 2
     eos_coefficient: float = 0.1
     focal_alpha: float = 0.25
     auxiliary_loss: bool = True
     d_model: int = 256
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="lw_detr_vit",
-            default_config_kwargs={
-                "image_size": 1024,
-                "hidden_size": 192,
-                "num_hidden_layers": 10,
-                "window_block_indices": [0, 1, 3, 6, 7, 9],
-                "out_indices": [2, 4, 5, 9],
-            },
-            **kwargs,
-        )
+        if "mask_loss_coefficient" in kwargs:
+            logger.warning_once(
+                "The parameter `mask_loss_coefficient` was renamed to `class_loss_coefficient` in LW-DETR. "
+                "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
+            )
+            self.class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
 
         self.projector_in_channels = [self.d_model] * len(self.projector_scale_factors)
         self.projector_out_channels = self.d_model

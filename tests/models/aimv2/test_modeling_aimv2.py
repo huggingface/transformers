@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 from parameterized import parameterized
 
 from transformers import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
@@ -35,6 +34,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -58,8 +58,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoImageProcessor, AutoProcessor
 
 
@@ -417,10 +415,6 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("Size mismatch on CUDA")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -479,7 +473,7 @@ class Aimv2ModelIntegrationTest(unittest.TestCase):
         model = Aimv2Model.from_pretrained(model_name, device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
         inputs = processor(
             text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
         ).to(model.device)
@@ -513,7 +507,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map=torch_device)
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():
@@ -544,7 +538,7 @@ class Aimv2VisionModelIntegrationTests(unittest.TestCase):
         model = Aimv2VisionModel.from_pretrained(model_name, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_name)
 
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        image = load_coco_image("000000039769.jpg")
         inputs = processor(image, return_tensors="pt").to(model.device)
 
         with torch.no_grad():

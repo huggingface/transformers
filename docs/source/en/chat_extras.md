@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -95,8 +95,12 @@ print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 
 The chat model called the `get_current_temperature` tool with the correct parameters from the docstring. It inferred France as the location based on Paris, and that it should use Celsius for the units of temperature.
 
-A model **cannot actually call the tool itself**. It requests a tool call, and it's your job to handle the call and append it and the result to the chat history. You'll need to manually translate the output
-string into a tool call dict. The tool call should go in the `tool_calls` key of an `assistant` message. This is the recommended API, and should be supported by the chat template of most tool-using models.
+A model **cannot actually call the tool itself**. It requests a tool call, and it's your job to handle the call and append it and the result to the chat history. For
+models that support [response parsing](./chat_response_parsing), the response parsing will be handled automatically, and you can just use
+[`~PreTrainedTokenizer.parse_response`] to extract the tool call. For other models, you'll need to manually translate the output
+string into a tool call dict.
+
+Regardless of the approach you use, the tool call should go in the `tool_calls` key of an `assistant` message. This is the recommended API, and should be supported by the chat template of most tool-using models.
 
 > [!WARNING]
 > Although `tool_calls` is similar to the OpenAI API, the OpenAI API uses a JSON string as its `tool_calls` format. This may cause errors or strange model behavior if used in Transformers, which expects a dict.
@@ -136,6 +140,8 @@ You can also manually call the low-level functions that convert Python functions
 for chat template authors who need to access the JSON schema to render the tool definitions.
 
 The [`~PreTrainedTokenizerBase.apply_chat_template`] method uses the [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) function to convert Python callables to a JSON schema. This includes methods: `self` and `cls` are treated as implicit receiver arguments and are ignored.
+
+Type hints can be basic types like `int`, `float`, `str` and `bool`, `Literal` or `Enum` classes (which both become an `enum` of the allowed values), and `list`, `tuple`, `dict` and `Union` types containing those. Other classes, like dataclasses or Pydantic models, raise an error when they're used as an argument type, because there's no way to know what JSON they expect. If your tool needs one of those, write its JSON schema by hand and pass that instead. Return types are more relaxed, since the model never has to generate them: if the return type hint can't be converted, it's just left out of the schema.
 
 ```py
 from transformers.utils import get_json_schema

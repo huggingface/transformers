@@ -41,7 +41,7 @@ class GetFromCacheTests(unittest.TestCase):
         # Cache should contain at least those three subfolders:
         for subfolder in ["blobs", "refs", "snapshots"]:
             self.assertTrue(os.path.isdir(os.path.join(CACHE_DIR, subfolder)))
-        with open(os.path.join(CACHE_DIR, "refs", "main")) as f:
+        with open(os.path.join(CACHE_DIR, "refs", "main"), encoding="utf-8") as f:
             main_commit = f.read()
         self.assertEqual(archive_file, os.path.join(CACHE_DIR, "snapshots", main_commit, CONFIG_NAME))
         self.assertTrue(os.path.isfile(archive_file))
@@ -68,7 +68,7 @@ class GetFromCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "does not appear to have a file named"):
             _ = cached_file(RANDOM_BERT, "conf")
 
-        with open(os.path.join(CACHE_DIR, "refs", "main")) as f:
+        with open(os.path.join(CACHE_DIR, "refs", "main"), encoding="utf-8") as f:
             main_commit = f.read()
         self.assertTrue(os.path.isfile(os.path.join(CACHE_DIR, ".no_exist", main_commit, "conf")))
 
@@ -99,7 +99,9 @@ class GetFromCacheTests(unittest.TestCase):
             assert not has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
 
             # Populate cache dir
-            hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                hf_hub_download(TINY_BERT_PT_ONLY, WEIGHTS_NAME, cache_dir=tmp_dir)
 
             # Cache dir + offline mode => return True
             assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
@@ -145,7 +147,7 @@ class GetFromCacheTests(unittest.TestCase):
             _raise_exceptions_for_connection_errors=False,
         )
         # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file).read())
+        config = json.loads(open(resolved_file, encoding="utf-8").read())
         self.assertEqual(config["hidden_size"], 768)
 
     def test_get_file_from_repo_local(self):
@@ -197,8 +199,9 @@ class GetFromCacheTests(unittest.TestCase):
 
 class OfflineModeTests(unittest.TestCase):
     def test_list_repo_templates_w_offline(self):
-        with mock.patch("transformers.utils.hub.list_repo_tree", side_effect=OfflineModeIsEnabled()):
+        with mock.patch("transformers.utils.hub.HfApi.list_repo_tree", side_effect=OfflineModeIsEnabled()):
             with mock.patch(
-                "transformers.utils.hub.snapshot_download", side_effect=LocalEntryNotFoundError("no snapshot found")
+                "transformers.utils.hub.HfApi.snapshot_download",
+                side_effect=LocalEntryNotFoundError("no snapshot found"),
             ):
                 self.assertEqual(list_repo_templates(RANDOM_BERT, local_files_only=False), [])

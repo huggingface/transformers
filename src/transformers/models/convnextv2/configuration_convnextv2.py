@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/convnextv2-tiny-1k-224")
-@strict(accept_kwargs=True)
+@strict
 class ConvNextV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     num_stages (`int`, *optional*, defaults to 4):
@@ -42,6 +42,7 @@ class ConvNextV2Config(BackboneConfigMixin, PreTrainedConfig):
     ```"""
 
     model_type = "convnextv2"
+    attribute_map = {"num_hidden_layers": "num_stages"}
 
     num_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 4
@@ -51,7 +52,7 @@ class ConvNextV2Config(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "gelu"
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     image_size: int | list[int] | tuple[int, int] = 224
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None

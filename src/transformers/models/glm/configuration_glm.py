@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="THUDM/glm-4-9b-chat")
-@strict(accept_kwargs=True)
+@strict
 class GlmConfig(PreTrainedConfig):
     r"""
     Example:
@@ -38,7 +38,6 @@ class GlmConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

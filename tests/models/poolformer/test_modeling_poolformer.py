@@ -33,7 +33,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import PoolFormerImageProcessor
+    from transformers import PoolFormerImageProcessorPil
 
 
 class PoolFormerConfigTester(ConfigTester):
@@ -221,7 +221,7 @@ def prepare_img():
 class PoolFormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
-        image_processor = PoolFormerImageProcessor()
+        image_processor = PoolFormerImageProcessorPil()
         model = PoolFormerForImageClassification.from_pretrained("sail/poolformer_s12").to(torch_device)
 
         inputs = image_processor(images=prepare_img(), return_tensors="pt").to(torch_device)

@@ -21,16 +21,17 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tencent/Hunyuan-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class HunYuanDenseV1Config(PreTrainedConfig):
     r"""
     eod_token_id (int, *optional*, defaults to 3):
         Token ID representing the end-of-document marker. Used to indicate the termination of a text sequence.
+
         Example: In multi-document processing, this token helps the model distinguish between separate documents.
     """
 
     model_type = "hunyuan_v1_dense"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
 
     vocab_size: int = 290943
     hidden_size: int = 4096

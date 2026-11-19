@@ -652,10 +652,10 @@ class BlipVQAModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "decoder_input_ids": input_ids,
+            "decoder_input_ids": input_ids.clone(),
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "labels": input_ids,
+            "labels": input_ids.clone(),
         }
         return config, inputs_dict
 
@@ -821,7 +821,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
@@ -937,7 +937,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 

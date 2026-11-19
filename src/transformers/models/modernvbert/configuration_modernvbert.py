@@ -22,19 +22,23 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="ModernVBERT/modernvbert")
-@strict(accept_kwargs=True)
+@strict
 class ModernVBertConfig(PreTrainedConfig):
     r"""
-    pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
-    initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-    classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks.
-    classifier_bias (`bool | None`, *optional*, defaults to `False`): Whether to add a bias term to the classification head
+    pixel_shuffle_factor (`int | None`, *optional*, defaults to 4):
+        Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+    initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0):
+        The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+    classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`):
+        The pooling strategy to use for classification tasks.
+    classifier_bias (`bool | None`, *optional*, defaults to `False`):
+        Whether to add a bias term to the classification head
 
     Example:
     ```python
@@ -54,7 +58,10 @@ class ModernVBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernvbert"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="modernbert"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+    }
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: PreTrainedConfig | dict | None = None
@@ -63,22 +70,9 @@ class ModernVBertConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     initializer_cutoff_factor: float = 2.0
     classifier_pooling: Literal["cls", "mean"] = "cls"
-    classifier_dropout: float = 0.0
+    classifier_dropout: float | int = 0.0
     classifier_bias: bool = False
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = CONFIG_MAPPING["modernbert"]()
-        elif isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING["modernbert"](**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["ModernVBertConfig"]

@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/medasr")
-@strict(accept_kwargs=True)
+@strict
 class LasrEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -48,25 +48,24 @@ class LasrEncoderConfig(PreTrainedConfig):
         The momentum for the batch normalization layers
 
     Example:
-        ```python
-        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
+    ```python
+    >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LasrEncoder` configuration
-        >>> configuration = LasrEncoderConfig()
+    >>> # Initializing a `LasrEncoder` configuration
+    >>> configuration = LasrEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LasrEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LasrEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     hidden_size: int = 512
     num_hidden_layers: int = 17
@@ -81,7 +80,7 @@ class LasrEncoderConfig(PreTrainedConfig):
     subsampling_conv_kernel_size: int = 5
     subsampling_conv_stride: int = 2
     dropout: float | int = 0.1
-    dropout_positions: float = 0.0
+    dropout_positions: float | int = 0.0
     layerdrop: float | int = 0.1
     activation_dropout: float | int = 0.1
     attention_dropout: float | int = 0.1
@@ -99,33 +98,35 @@ class LasrEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/medasr")
-@strict(accept_kwargs=True)
+@strict
 class LasrCTCConfig(PreTrainedConfig):
     r"""
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`LasrForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`LasrForCTC`].
+    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+        instance of [`LasrForCTC`].
+    ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`LasrForCTC`].
 
     Example:
-        ```python
-        >>> from transformers import LasrForCTC, LasrCTCConfig
-        >>> # Initializing a Lasr configuration
-        >>> configuration = LasrCTCConfig()
-        >>> # Initializing a model from the configuration
-        >>> model = LasrForCTC(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    ```python
+    >>> from transformers import LasrForCTC, LasrCTCConfig
+    >>> # Initializing a Lasr configuration
+    >>> configuration = LasrCTCConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = LasrForCTC(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_ctc"
-    sub_configs = {"encoder_config": LasrEncoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": LasrEncoderConfig,
+    }
 
     vocab_size: int = 512
     ctc_loss_reduction: str = "mean"
@@ -134,12 +135,8 @@ class LasrCTCConfig(PreTrainedConfig):
     pad_token_id: int = 0
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = LasrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = LasrEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
+        self.initializer_range = self.encoder_config.initializer_range
 
     @property
     def inputs_to_logits_ratio(self):

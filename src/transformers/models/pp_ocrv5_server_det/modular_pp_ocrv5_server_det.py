@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional
 
 import numpy as np
 import torch
@@ -23,17 +22,12 @@ import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import (
-    SizeDict,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
@@ -43,7 +37,6 @@ from ...utils import (
     can_return_tuple,
     is_cv2_available,
     logging,
-    requires_backends,
 )
 from ...utils.generic import TensorType
 from ...utils.import_utils import requires
@@ -57,8 +50,8 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
-@strict(accept_kwargs=True)
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_det_safetensors")
+@strict
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
@@ -79,7 +72,21 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
     """
 
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
     model_type = "pp_ocrv5_server_det"
 
     interpolate_mode: str = "nearest"
@@ -95,21 +102,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     id2label: dict[int, str] | dict[str, str] | None = None
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                "return_idx": [0, 1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
         # For object detection pipeline compatibility: single class "text"
         self.id2label = {0: "text"} if self.id2label is None else self.id2label
         super().__post_init__(**kwargs)
@@ -131,8 +123,7 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
-class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
+class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
     image_std = [0.225, 0.224, 0.229]
@@ -150,7 +141,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -179,7 +170,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                     stacked_images[0], limit_side_len, limit_type, max_side_limit
                 )
                 target_shape_per_shape[shape] = target_shape
-                stacked_images = self.resize(image=stacked_images, size=resize_size, interpolation=interpolation)
+                stacked_images = self.resize(image=stacked_images.float(), size=resize_size, resample=resample)
             resized_images_grouped[shape] = stacked_images
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -422,7 +413,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         elif limit_type == "resize_long":
             ratio = float(limit_side_len) / max(height, width)
         else:
-            raise ValueError(f"PPOCRV5ServerDetImageProcessorFast does not support limit type: {limit_type}")
+            raise ValueError(f"PPOCRV5ServerDetImageProcessor does not support limit type: {limit_type}")
 
         resize_height = int(height * ratio)
         resize_width = int(width * ratio)
@@ -435,18 +426,11 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         resize_height = max(int(round(resize_height / 32) * 32), 32)
         resize_width = max(int(round(resize_width / 32) * 32), 32)
 
-        if resize_height == height and resize_width == width:
-            return SizeDict(height=resize_height, width=resize_width), torch.tensor(
-                [height, width], dtype=torch.float32, device=image.device
-            )
-
-        if resize_width <= 0 or resize_height <= 0:
-            return None, (None, None)
-
         return SizeDict(height=resize_height, width=resize_width), torch.tensor(
             [height, width], dtype=torch.float32, device=image.device
         )
 
+    @requires(backends=("torch", "cv2"))
     def post_process_object_detection(
         self,
         predictions,
@@ -475,7 +459,6 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
                 - "scores": `torch.Tensor` of shape `(N,)`
                 - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
-        requires_backends(self, ["torch", "cv2"])
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
@@ -853,7 +836,7 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV5ServerDetConfig
-    base_model_prefix = "pp_ocrv5_server_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
@@ -871,9 +854,9 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
@@ -902,9 +885,9 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.last_hidden_state)
 
@@ -916,7 +899,7 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
 
 __all__ = [
     "PPOCRV5ServerDetForObjectDetection",
-    "PPOCRV5ServerDetImageProcessorFast",
+    "PPOCRV5ServerDetImageProcessor",
     "PPOCRV5ServerDetConfig",
     "PPOCRV5ServerDetModel",
     "PPOCRV5ServerDetPreTrainedModel",

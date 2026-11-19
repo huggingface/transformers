@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/cwm")
-@strict(accept_kwargs=True)
+@strict
 class CwmConfig(PreTrainedConfig):
     r"""
     ```python
@@ -43,7 +43,6 @@ class CwmConfig(PreTrainedConfig):
     ```"""
 
     model_type = "cwm"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `CwmModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

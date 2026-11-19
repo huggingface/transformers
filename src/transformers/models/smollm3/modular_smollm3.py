@@ -24,6 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -42,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
-@strict(accept_kwargs=True)
+@strict
 class SmolLM3Config(PreTrainedConfig):
     r"""
     no_rope_layers (`List[int]`, *optional*):
@@ -52,7 +53,6 @@ class SmolLM3Config(PreTrainedConfig):
     no_rope_layer_interval (`int`, *optional*, defaults to 4):
         If `no_rope_layers` is `None`, it will be created using a NoPE layer every
         `no_rope_layer_interval` layers.
-
 
     ```python
     >>> from transformers import SmolLM3Model, SmolLM3Config
@@ -68,7 +68,6 @@ class SmolLM3Config(PreTrainedConfig):
     ```"""
 
     model_type = "smollm3"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 2000000.0
 
     base_model_tp_plan = {
@@ -147,12 +146,13 @@ class SmolLM3Attention(LlamaAttention):
             else None
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -166,8 +166,8 @@ class SmolLM3Attention(LlamaAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -191,9 +191,7 @@ class SmolLM3Attention(LlamaAttention):
 
 
 class SmolLM3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: SmolLM3Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
+    pass
 
 
 class SmolLM3PreTrainedModel(LlamaPreTrainedModel):

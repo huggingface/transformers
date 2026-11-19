@@ -27,7 +27,7 @@ from ...modeling_rope_utils import RopeParameters
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
-@strict(accept_kwargs=True)
+@strict
 class ArceeConfig(PreTrainedConfig):
     r"""
     ```python
@@ -44,7 +44,6 @@ class ArceeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "arcee"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

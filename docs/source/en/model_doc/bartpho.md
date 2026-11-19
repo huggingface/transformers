@@ -13,13 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-20 and added to Hugging Face Transformers on 2021-10-18.*
-
-<div style="float: right;">
-   <div class="flex flex-wrap space-x-1">
-      <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-   </div>
-</div>
+*This model was published in HF papers on 2021-09-20 and contributed to Hugging Face Transformers on 2021-10-18.*
 
 # BARTpho
 
@@ -37,15 +31,14 @@ The example below demonstrates how to summarize text with [`Pipeline`] or the [`
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import BartForConditionalGeneration, AutoTokenizer
+from transformers import AutoTokenizer, BartForConditionalGeneration
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "vinai/bartpho-word",
 )
 model = BartForConditionalGeneration.from_pretrained(
     "vinai/bartpho-word",
-    dtype=torch.float16,
     device_map="auto",
 )
 

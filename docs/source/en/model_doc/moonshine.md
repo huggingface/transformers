@@ -13,21 +13,20 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-21 and added to Hugging Face Transformers on 2025-01-10.*
+*This model was published in HF papers on 2024-10-21 and contributed to Hugging Face Transformers on 2025-01-10.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-          <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
           <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
 
 # Moonshine
 
-[Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
+[Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice commands. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
 
-You can find all the original Moonshine checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
+You can find all the original Moonshine checkpoints under the [Moonshine AI](https://huggingface.co/moonshine-ai) organization.
 
 > [!TIP]
 > Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
@@ -37,14 +36,13 @@ The example below demonstrates how to transcribe speech into text with [`Pipelin
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="automatic-speech-recognition",
-    model="UsefulSensors/moonshine-base",
-    dtype=torch.float16,
+    model="moonshine-ai/moonshine-base",
     device=0
 )
 pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -53,13 +51,14 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from datasets import load_dataset
+
 from transformers import AutoProcessor, MoonshineForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
-model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base", device_map="auto")
+
+processor = AutoProcessor.from_pretrained("moonshine-ai/moonshine-base")
+model = MoonshineForConditionalGeneration.from_pretrained("moonshine-ai/moonshine-base", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
 audio_sample = ds[0]["audio"]

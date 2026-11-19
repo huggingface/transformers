@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2Config(PreTrainedConfig):
     r"""
     Example:
@@ -40,7 +40,6 @@ class Qwen2Config(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Qwen2`
     base_model_tp_plan = {

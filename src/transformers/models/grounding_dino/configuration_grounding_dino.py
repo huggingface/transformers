@@ -15,17 +15,16 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="IDEA-Research/grounding-dino-tiny")
-@strict(accept_kwargs=True)
+@strict
 class GroundingDinoConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 900):
@@ -81,7 +80,12 @@ class GroundingDinoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "grounding-dino"
-    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="swin", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bert"),
+    }
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -107,7 +111,7 @@ class GroundingDinoConfig(PreTrainedConfig):
     num_feature_levels: int = 4
     encoder_n_points: int = 4
     decoder_n_points: int = 4
-    two_stage: int = True
+    two_stage: bool = True
     class_cost: float = 1.0
     bbox_cost: float = 5.0
     giou_cost: float = 2.0
@@ -117,7 +121,7 @@ class GroundingDinoConfig(PreTrainedConfig):
     disable_custom_kernels: bool = False
     max_text_len: int = 256
     text_enhancer_dropout: float | int = 0.0
-    fusion_droppath: float = 0.1
+    fusion_droppath: float | int = 0.1
     fusion_dropout: float | int = 0.0
     embedding_init_target: bool = True
     query_dim: int = 4
@@ -127,23 +131,6 @@ class GroundingDinoConfig(PreTrainedConfig):
     init_std: float = 0.02
     layer_norm_eps: float = 1e-5
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bert")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["bert"]()
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

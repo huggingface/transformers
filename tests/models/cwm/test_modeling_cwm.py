@@ -17,7 +17,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
+    backend_device_count,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -87,12 +88,19 @@ class CwmModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 @slow
-class CwmIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+class CwmIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # `facebook/cwm` (~64 GB in bf16) does not fit on the GPUs, so `device_map="auto"` offloads part of it (incl.
+        # `lm_head`, 1.47 GiB) to CPU and fills the GPUs almost entirely. The offloaded modules are moved to GPU 0 at
+        # forward time, which then OOMs. A 70% per-GPU cap keeps room for them and for the activations.
+        cls.max_memory = None
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            cls.max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
 
     @slow
     @require_deterministic_for_xpu
@@ -100,7 +108,9 @@ class CwmIntegrationTest(unittest.TestCase):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
-        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
+        model = CwmForCausalLM.from_pretrained(
+            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, max_memory=self.max_memory
+        )
 
         self.assertIsNotNone(model.config.sliding_window)
         self.assertIsNotNone(model.config.layer_types)
@@ -109,7 +119,7 @@ class CwmIntegrationTest(unittest.TestCase):
 
         for i, layer in enumerate(model.model.layers):
             expected_type = model.config.layer_types[i]
-            self.assertEqual(layer.attention_type, expected_type)
+            self.assertEqual(layer.self_attn.layer_type, expected_type)
             if expected_type == "sliding_attention":
                 self.assertEqual(layer.self_attn.sliding_window, model.config.sliding_window)
 
@@ -148,7 +158,11 @@ class CwmIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
         # original `sliding_window` is `8192`, but it causes GPU OOM on A10
         model = CwmForCausalLM.from_pretrained(
-            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, sliding_window=4096
+            "facebook/cwm",
+            device_map="auto",
+            dtype=torch.bfloat16,
+            sliding_window=4096,
+            max_memory=self.max_memory,
         )
 
         sliding_window = model.config.sliding_window
@@ -170,6 +184,9 @@ class CwmIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): torch.tensor(
                     [5.2812, 6.4688, 12.8125, 4.6875, 5.2500, 4.2500, 6.9688, 4.9375, 2.7656, 6.5938, 4.9688, 1.1016, 5.9375, 3.7500, 3.1094, 5.5312, 6.1250, 4.7500, 4.5312, 2.8281, 4.0625, 3.3125, 3.9219, 3.3906, 3.1406, 3.6719, 3.2031, 7.0938, 4.8750, 6.0000, 2.7188, 6.2500]
+                ),
+                ("cuda", 8): torch.tensor(
+                    [5.2500, 6.4062, 12.7500, 4.6562, 5.2812, 4.2812, 6.9688, 4.9688, 2.7344, 6.6250, 4.9375, 1.1562, 5.9688, 3.7344, 3.1094, 5.5000, 6.1250, 4.7500, 4.5000, 2.7812, 4.0625, 3.2812, 3.9062, 3.3594, 3.0938, 3.7031, 3.2344, 7.1250, 4.9062, 6.0000, 2.7344, 6.2188]
                 ),
                 ("xpu", None): torch.Tensor(
                     [5.2500, 6.4688, 12.8125, 4.6562, 5.2812, 4.2812, 7.0000, 4.9062, 2.7344, 6.5938, 4.9062, 1.1094, 5.9375, 3.7188, 3.0469, 5.5000, 6.0938, 4.7188, 4.5000, 2.7344, 4.0312, 3.2812, 3.8750, 3.3438, 3.1094, 3.6406, 3.2031, 7.1250, 4.8750, 6.0000, 2.7031, 6.2188]
@@ -197,7 +214,9 @@ class CwmIntegrationTest(unittest.TestCase):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/cwm")
-        model = CwmForCausalLM.from_pretrained("facebook/cwm", device_map="auto", dtype=torch.bfloat16)
+        model = CwmForCausalLM.from_pretrained(
+            "facebook/cwm", device_map="auto", dtype=torch.bfloat16, max_memory=self.max_memory
+        )
 
         system_prompt = "You are a helpful AI assistant. You always reason before responding, using the following format:\n\n<think>\nyour internal reasoning\n</think>\nyour external response"
         messages = [

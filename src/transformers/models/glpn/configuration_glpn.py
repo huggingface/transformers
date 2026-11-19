@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="vinvino02/glpn-kitti")
-@strict(accept_kwargs=True)
+@strict
 class GLPNConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):
@@ -38,8 +38,6 @@ class GLPNConfig(PreTrainedConfig):
     mlp_ratios (`list[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
         Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
         encoder blocks.
-    hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
     decoder_hidden_size (`int`, *optional*, defaults to 64):
         The dimension of the decoder.
     max_depth (`int`, *optional*, defaults to 10):
@@ -74,10 +72,10 @@ class GLPNConfig(PreTrainedConfig):
     num_attention_heads: list[int] | tuple[int, ...] = (1, 2, 5, 8)
     mlp_ratios: list[int] | tuple[int, ...] = (4, 4, 4, 4)
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
-    drop_path_rate: float = 0.1
+    drop_path_rate: float | int = 0.1
     layer_norm_eps: float = 1e-6
     decoder_hidden_size: int = 64
     max_depth: int = 10

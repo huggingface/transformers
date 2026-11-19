@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
-@strict(accept_kwargs=True)
+@strict
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
     num_key_value_groups (`int`, *optional*, defaults to 1):
@@ -47,6 +47,7 @@ class MLCDVisionConfig(PreTrainedConfig):
 
     model_type = "mlcd_vision_model"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
 
     hidden_size: int = 1664
     intermediate_size: int = 8192
@@ -61,6 +62,7 @@ class MLCDVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     initializer_factor: float = 1.0
+    rope_parameters: dict | None = None
 
 
 __all__ = ["MLCDVisionConfig"]

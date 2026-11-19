@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/vaultgemma-1b")
-@strict(accept_kwargs=True)
+@strict
 class VaultGemmaConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -36,8 +36,6 @@ class VaultGemmaConfig(PreTrainedConfig):
         scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
         scaling factor when applying tanh softcapping on the attention scores.
-    use_bidirectional_attention (`bool`, *optional*):
-        If True, the model will attend to all text tokens instead of using a causal mask.
 
     ```python
     >>> from transformers import VaultGemmaModel, VaultGemmaConfig
@@ -50,7 +48,6 @@ class VaultGemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vaultgemma"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",

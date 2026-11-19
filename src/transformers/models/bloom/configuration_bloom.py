@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="bigscience/bloom")
-@strict(accept_kwargs=True)
+@strict
 class BloomConfig(PreTrainedConfig):
     r"""
     apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
@@ -49,7 +49,6 @@ class BloomConfig(PreTrainedConfig):
     ```"""
 
     model_type = "bloom"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_hidden_layers": "n_layer",
         "num_attention_heads": "n_head",

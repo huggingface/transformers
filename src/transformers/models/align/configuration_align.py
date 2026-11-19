@@ -13,6 +13,8 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
+import math
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -23,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
-@strict(accept_kwargs=True)
+@strict
 class AlignTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -50,8 +52,8 @@ class AlignTextConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 2
     initializer_range: float = 0.02
@@ -62,7 +64,7 @@ class AlignTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
-@strict(accept_kwargs=True)
+@strict
 class AlignVisionConfig(PreTrainedConfig):
     r"""
     width_coefficient (`float`, *optional*, defaults to 2.0):
@@ -87,17 +89,15 @@ class AlignVisionConfig(PreTrainedConfig):
         List of scaling coefficient of each block.
     squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
         Squeeze expansion ratio.
+    hidden_dim (`int`, *optional*, defaults to 1280):
+        The hidden dimension of the layer before the classification head.
     pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
         Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
         `"max"`]
-    batch_norm_eps (`float`, *optional*, defaults to 1e-3):
-        The epsilon used by the batch normalization layers.
     batch_norm_momentum (`float`, *optional*, defaults to 0.99):
         The momentum used by the batch normalization layers.
     drop_connect_rate (`float`, *optional*, defaults to 0.2):
         The drop rate for skip connections.
-    hidden_dim (`int`, *optional*, defaults to 1280):
-        The hidden dimension of the layer before the classification head.
 
     Example:
 
@@ -136,10 +136,11 @@ class AlignVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     batch_norm_eps: float = 0.001
     batch_norm_momentum: float = 0.99
-    drop_connect_rate: float = 0.2
+    drop_connect_rate: float | int = 0.2
 
     def __post_init__(self, **kwargs):
-        self.num_hidden_layers = sum(self.num_block_repeats) * 4
+        # The encoder repeats each base block `ceil(depth_coefficient * repeats)` times
+        self.num_hidden_layers = sum(math.ceil(self.depth_coefficient * n) for n in self.num_block_repeats)
         for attr in [
             "kernel_sizes",
             "in_channels",
@@ -155,7 +156,7 @@ class AlignVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="kakaobrain/align-base")
-@strict(accept_kwargs=True)
+@strict
 class AlignConfig(PreTrainedConfig):
     r"""
     temperature_init_value (`float`, *optional*, defaults to 1.0):
@@ -186,28 +187,16 @@ class AlignConfig(PreTrainedConfig):
     ```"""
 
     model_type = "align"
-    sub_configs = {"text_config": AlignTextConfig, "vision_config": AlignVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": AlignVisionConfig,
+        "text_config": AlignTextConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     projection_dim: int = 640
     temperature_init_value: float = 1.0
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = AlignTextConfig()
-            logger.info("`text_config` is `None`. Initializing the `AlignTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = AlignTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = AlignVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `AlignVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = AlignVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["AlignTextConfig", "AlignVisionConfig", "AlignConfig"]

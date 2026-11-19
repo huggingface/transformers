@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -24,10 +23,9 @@ from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import (
-    SizeDict,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -41,14 +39,13 @@ from ...utils import (
     can_return_tuple,
 )
 from ...utils.generic import TensorType, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ..resnet.modeling_resnet import ResNetConvLayer
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):
@@ -85,7 +82,7 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "hardswish"
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
-    hidden_dropout_prob: float = 0.2
+    hidden_dropout_prob: float | int = 0.2
 
     def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNet
@@ -140,8 +137,7 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
-class PPLCNetImageProcessorFast(BaseImageProcessorFast):
+class PPLCNetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
     image_std = [0.225, 0.224, 0.229]
@@ -160,6 +156,9 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resize_short: int,
+        size_divisor: int,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -168,55 +167,53 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
-        interpolation: Optional["tvF.InterpolationMode"],
+        disable_grouping: bool | None = False,
         **kwargs,
     ) -> BatchFeature:
-        data = {}
-        resize_images = []
-        if do_resize:
-            for image in images:
-                # Unlike BaseImageProcessorFast, which resizes to a fixed target,
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                # Unlike TorchvisionBackend, which resizes to a fixed target,
                 # this implementation first calculates the target size dynamically to preserve
                 # the aspect ratio, using the shorter edge as a reference.
+                resize_size = size
                 if self.resize_short is not None:
-                    size = self.get_image_size(
-                        image, target_short_edge=self.resize_short, size_divisor=self.size_divisor
+                    resize_size = self.get_image_size(
+                        stacked_images[0], target_short_edge=resize_short, size_divisor=size_divisor
                     )
+                stacked_images = self.resize(stacked_images, size=resize_size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-                image = self.resize(image, size=size, interpolation=interpolation)
-                resize_images.append(image)
-            images = resize_images
-
-        crop_images = []
-        if do_center_crop:
-            for image in images:
-                image = self.center_crop(image, crop_size)
-                crop_images.append(image)
-            images = crop_images
-
-        processed_images = []
-        for image in images:
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(image)
-        images = processed_images
+        # Group images by size for further processing
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # RGB -> BGR
-        images = [image[[2, 1, 0], :, :] for image in images]
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-
-        return BatchFeature(data, tensor_type=return_tensors)
+        images = [image[[2, 1, 0], :, :] for image in processed_images]
+        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
     def get_image_size(
         self,
         image: "torch.Tensor",
         target_short_edge: int | None,
-        size_divisor: int | None = None,
+        size_divisor: int | None,
     ) -> tuple[SizeDict, torch.Tensor]:
         _, height, width = image.shape
         resize_scale = target_short_edge / min(height, width)
         resized_height = round(height * resize_scale)
         resized_width = round(width * resize_scale)
-        if self.size_divisor is not None:
+        if size_divisor is not None:
             resized_height = math.ceil(resized_height / size_divisor) * size_divisor
             resized_width = math.ceil(resized_width / size_divisor) * size_divisor
 
@@ -230,17 +227,20 @@ class PPLCNetConvLayer(ResNetConvLayer):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        activation: str = "hardswish",
+        bias: bool = False,
+        dilation: int | tuple[int, int] = 1,
         groups: int = 1,
+        activation: str = "hardswish",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels,
-            out_channels,
+            in_channels=in_channels,
+            out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=kernel_size // 2,
-            bias=False,
+            bias=bias,
+            dilation=dilation,
             groups=groups,
         )
 
@@ -448,7 +448,6 @@ class PPLCNetBackbone(BackboneMixin, PPLCNetPreTrainedModel):
         >>> feature_maps = outputs.feature_maps
         >>> list(feature_maps[-1].shape)
         ```"""
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.encoder(pixel_values, **kwargs).hidden_states
 
         feature_maps = ()
@@ -494,14 +493,15 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithNoAttention:
         r"""
         Examples:
 
         ```python
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoModelForImageClassification, AutoImageProcessor
 
@@ -509,8 +509,9 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
         >>> model = AutoModelForImageClassification.from_pretrained(model_path)
         >>> image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -535,7 +536,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
 __all__ = [
     "PPLCNetBackbone",
     "PPLCNetForImageClassification",
-    "PPLCNetImageProcessorFast",
+    "PPLCNetImageProcessor",
     "PPLCNetConfig",
     "PPLCNetPreTrainedModel",
 ]

@@ -39,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTImageProcessor
+    from transformers import ImageGPTImageProcessorPil
 
 
 class ImageGPTModelTester:
@@ -172,7 +172,7 @@ class ImageGPTModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
+        self.parent.assertEqual(len(result.cache), config.n_layer)
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = ImageGPTForCausalImageModeling(config)
@@ -293,7 +293,7 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @unittest.skip(reason="Model inputs don't fit test pattern")  # and it's not used enough to be worth fixing :)
-    def test_past_key_values_format(self):
+    def test_cache_format(self):
         pass
 
 
@@ -308,7 +308,7 @@ def prepare_img():
 class ImageGPTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
+        return ImageGPTImageProcessorPil.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
 
     @slow
     def test_inference_causal_lm_head(self):

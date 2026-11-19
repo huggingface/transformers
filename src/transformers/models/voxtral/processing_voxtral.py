@@ -14,7 +14,15 @@
 
 import io
 
-from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import (
+    auto_docstring,
+    is_mistral_common_available,
+    is_soundfile_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+)
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -25,11 +33,13 @@ if is_soundfile_available():
 
 if is_mistral_common_available():
     from mistral_common.protocol.transcription.request import TranscriptionRequest
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
 
 from ...audio_utils import AudioInput, load_audio_as, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.chat_template_utils import _get_template_variables
 
 
 logger = logging.get_logger(__name__)
@@ -46,27 +56,28 @@ class VoxtralAudioKwargs(AudioKwargs, total=False):
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: VoxtralAudioKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "pad_to_multiple_of": 480000,
-            "max_source_positions": 3000,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "return_dict": True,
-            "tokenize": True,
-        },
-    }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class VoxtralProcessor(ProcessorMixin):
+    valid_processor_kwargs = VoxtralProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "tokenize": True,
+        "return_dict": True,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "truncation": False,
+        "pad_to_multiple_of": 480000,
+        "max_source_positions": 3000,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         feature_extractor,
@@ -97,7 +108,18 @@ class VoxtralProcessor(ProcessorMixin):
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
-        **kwargs: Unpack[AllKwargsForChatTemplate],
+        chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: bool = False,
+        return_tensors: str | None = None,
+        return_dict: bool = False,
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
     ) -> str:
         """
         This method applies the model's chat completion template given a conversation. It relies on MistralCommonBackend's
@@ -139,12 +161,12 @@ class VoxtralProcessor(ProcessorMixin):
             conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
                 The conversation to format.
         """
-        if kwargs.get("continue_final_message", False):
-            if kwargs.get("add_generation_prompt", False):
+        if continue_final_message:
+            if add_generation_prompt:
                 raise ValueError(
                     "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
                 )
-            if kwargs.get("return_assistant_tokens_mask", False):
+            if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         if isinstance(conversation, (list, tuple)) and (
@@ -156,21 +178,22 @@ class VoxtralProcessor(ProcessorMixin):
             is_batched = False
             conversations = [conversation]
 
-        # - `sampling_rate` is already fixed in `VoxtralProcessorKwargs._defaults` and audio loading is
-        #   delegated to `mistral_common`'s tokenizer which handles it internally.
-        # - `load_audio_from_video` is irrelevant as Voxtral is a speech-only model with no video support.
-        # We strip them here to avoid passing unrecognized kwargs to `_merge_kwargs`.
-        unsupported_keys = {"sampling_rate", "load_audio_from_video"} & kwargs.keys()
-        if unsupported_keys:
-            for key in unsupported_keys:
-                kwargs.pop(key)
+        # Users might still be passing processing kwargs in `**kwargs` so we need to filter
+        # out additional kwargs that the template expects via Jinja2 template introspection
+        # We strip unrelated kwargs to avoid passing unrecognized kwargs to `_merge_kwargs`.
+        processor_kwargs = processor_kwargs or {}
+        template_kwargs = _get_template_variables(chat_template)
+        processor_kwargs_from_kwargs = {k: v for k, v in kwargs.items() if k not in template_kwargs}
+        if processor_kwargs_from_kwargs:
             logger.warning(
-                f"{', '.join(sorted(unsupported_keys))} {'is' if len(unsupported_keys) == 1 else 'are'} not supported for VoxtralProcessor's apply_chat_template and will be ignored."
+                "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
+            processor_kwargs = processor_kwargs_from_kwargs
 
+        if return_tensors:
+            processor_kwargs["return_tensors"] = return_tensors
         output_kwargs = self._merge_kwargs(
-            VoxtralProcessorKwargs,
-            **kwargs,
+            **processor_kwargs,
         )
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -181,7 +204,9 @@ class VoxtralProcessor(ProcessorMixin):
 
         tokenizer_kwargs = output_kwargs["text_kwargs"]
         tokenizer_kwargs["return_tensors"] = None  # let's not return tensors here
-        encoded_instruct_inputs = self.tokenizer.apply_chat_template(conversations, **tokenizer_kwargs)
+        encoded_instruct_inputs = self.tokenizer.apply_chat_template(
+            conversations, continue_final_message=continue_final_message, **tokenizer_kwargs
+        )
 
         if text_kwargs.get("tokenize", False):
             if text_kwargs.get("return_dict", False):
@@ -221,12 +246,13 @@ class VoxtralProcessor(ProcessorMixin):
                 f"{self.audio_token} is present in the provided text which is not supported by VoxtralProcessor. Please use the `apply_chat_template` method instead."
             )
 
-        output_kwargs = self._merge_kwargs(VoxtralProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         out = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data=out, tensor_type=output_kwargs["text_kwargs"].get("return_tensors", None))
 
     # TODO: @eustlb, this should be moved to mistral_common + testing
+    @requires(backends=("mistral-common",))
     def apply_transcription_request(
         self,
         audio: str | list[str] | AudioInput,
@@ -274,7 +300,6 @@ class VoxtralProcessor(ProcessorMixin):
                 The format of the audio, necessary if is provided as `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`.
         """
         output_kwargs = self._merge_kwargs(
-            VoxtralProcessorKwargs,
             **kwargs,
         )
         text_kwargs = output_kwargs["text_kwargs"]
@@ -314,11 +339,19 @@ class VoxtralProcessor(ProcessorMixin):
                 load_audio_as(el, return_format="buffer", force_mono=True, sampling_rate=sampling_rate) for el in audio
             ]
         else:
+            requires_backends(self, ["soundfile"])
             audio = make_list_of_audio(audio)
+            if format is None:
+                raise ValueError("`format` must be provided when passing audio arrays to VoxtralProcessor.")
+
+            if isinstance(format, str):
+                format = [format] * len(audio)
+
             if len(audio) != len(format):
                 raise ValueError(
                     f"When passed as a list of audio, the length ({len(audio)}) must match the number of format ({len(format)})"
                 )
+
             audio_buffers = []
             for array, f in zip(audio, format):
                 # Create new BytesIO object and write audio data to it
@@ -357,7 +390,11 @@ class VoxtralProcessor(ProcessorMixin):
             tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(transcription_request)
 
             input_ids.append(tokenized_transcription_request.tokens)
-            texts.append(tokenized_transcription_request.text)
+            texts.append(
+                self.tokenizer.tokenizer.decode(
+                    tokens=tokenized_transcription_request.tokens, special_token_policy=SpecialTokenPolicy.KEEP
+                )
+            )
             audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
 
         if tokenize:

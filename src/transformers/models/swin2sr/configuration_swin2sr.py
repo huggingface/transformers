@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="caidas/swin2sr-classicalsr-x2-64")
-@strict(accept_kwargs=True)
+@strict
 class Swin2SRConfig(PreTrainedConfig):
     r"""
     num_channels_out (`int`, *optional*, defaults to `num_channels`):
@@ -74,9 +74,9 @@ class Swin2SRConfig(PreTrainedConfig):
     window_size: int = 8
     mlp_ratio: float = 2.0
     qkv_bias: bool = True
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
-    drop_path_rate: float = 0.1
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
+    drop_path_rate: float | int = 0.1
     hidden_act: str = "gelu"
     use_absolute_embeddings: bool = False
     initializer_range: float = 0.02

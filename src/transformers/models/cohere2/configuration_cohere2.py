@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
-@strict(accept_kwargs=True)
+@strict
 class Cohere2Config(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):
@@ -47,7 +47,6 @@ class Cohere2Config(PreTrainedConfig):
     """
 
     model_type = "cohere2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -74,7 +73,7 @@ class Cohere2Config(PreTrainedConfig):
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
-    use_cache: int = True
+    use_cache: bool = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 5
     eos_token_id: int | list[int] | None = 255001

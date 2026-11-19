@@ -19,17 +19,25 @@ import json
 import os
 import re
 import subprocess
+from collections import defaultdict
 
 import git
-import requests
+from github_utils import get_github_json
 
 
-def create_script(target_test):
+# Temporary workaround similar to https://github.com/huggingface/transformers-ci/pull/184 to avoid CPU OOM.
+if os.path.isdir("/mnt/efs_cache"):
+    os.environ["HF_HOME"] = "/mnt/efs_cache"
+    print("Using EFS cache: HF_HOME=/mnt/efs_cache")
+
+
+def create_script(target_test, flake_runs=4):
     """Create a python script to be run by `git bisect run` to determine if `target_test` passes or fails.
     If a test is not found in a commit, the script with exit code `0` (i.e. `Success`).
 
     Args:
         target_test (`str`): The test to check.
+        flake_runs (`int`): Number of times to run the test to detect flakiness. Defaults to 4.
 
     Returns:
         `str`: The script to be run by `git bisect run`.
@@ -46,7 +54,7 @@ _ = subprocess.run(
 )
 
 result = subprocess.run(
-    ["python3", "-m", "pytest", "-v", "--flake-finder", "--flake-runs=4", "-rfEp", f"{target_test}"],
+    ["python3", "-m", "pytest", "-v", "--flake-finder", "--flake-runs={flake_runs}", "-rfEp", f"{target_test}"],
     capture_output = True,
     text=True,
 )
@@ -73,11 +81,11 @@ print(f"pytest runs successfully.")
 exit(0)
 """
 
-    with open("target_script.py", "w") as fp:
+    with open("target_script.py", "w", encoding="utf-8") as fp:
         fp.write(script.strip())
 
 
-def is_bad_commit(target_test, commit):
+def is_bad_commit(target_test, commit, flake_runs=4):
     repo = git.Repo(".")  # or specify path to your repo
 
     # Save the current HEAD reference
@@ -86,7 +94,7 @@ def is_bad_commit(target_test, commit):
     # Checkout to the commit
     repo.git.checkout(commit)
 
-    create_script(target_test=target_test)
+    create_script(target_test=target_test, flake_runs=flake_runs)
 
     result = subprocess.run(
         ["python3", "target_script.py"],
@@ -135,6 +143,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     }
 
     is_pr_ci = os.environ.get("GITHUB_EVENT_NAME") in ["issue_comment", "pull_request"]
+    flake_runs = 1 if is_pr_ci else 4
 
     # For PR comment CI, we "assume" all tests at `end_commit` passed, so any failing test during a PR CI run is
     # "a new failing test", and we can perform more detailed checks with this script.
@@ -146,7 +155,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
     #   - if both failing and passing at end_commit: mark it as flaky
 
     # check if `end_commit` fails the test
-    failed_before, n_failed, n_passed, failure_at_base_commit = is_bad_commit(target_test, end_commit)
+    failed_before, n_failed, n_passed, failure_at_base_commit = is_bad_commit(
+        target_test, end_commit, flake_runs=flake_runs
+    )
     # We only need one failure to conclude the test is flaky on the previous run with `end_commit`.
     # However, when running on CI, we need at least one failure and one pass to conclude.
     is_flaky_at_end_commit = ((not is_pr_ci) and n_failed > 0) or (is_pr_ci and n_failed > 0 and n_passed > 0)
@@ -176,7 +187,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # Now, we are (almost) sure `target_test` is not failing at `end_commit`. (For a PR CI, it may fail at `end_commit`)
     # Check if `start_commit` fails the test.
     # **IMPORTANT** we only need one pass to conclude the test is flaky on the current run with `start_commit`!
-    _, n_failed, n_passed, failure_at_workflow_commit = is_bad_commit(target_test, start_commit)
+    _, n_failed, n_passed, failure_at_workflow_commit = is_bad_commit(target_test, start_commit, flake_runs=flake_runs)
     if n_passed > 0:
         # failed on CI run, but not reproducible here --> don't report
         result["status"] = (
@@ -187,7 +198,18 @@ def find_bad_commit(target_test, start_commit, end_commit):
     # The test fails on `start_commit`, and
     #   - if the CI is run on PR: this block checks if the test also failed on `start_commit`.
     #   - otherwise: the test passed on `end_commit` --> an actual new failing test, this block is skipped.
-    if is_pr_ci and failure_at_base_commit != "" and failure_at_workflow_commit != failure_at_base_commit:
+
+    # TODO: A helper method to handle this and other possible error messages in a clean and centralized way.
+    failure_at_workflow_commit_processed = failure_at_workflow_commit
+    failure_at_base_commit_processed = failure_at_base_commit
+    if "torch.OutOfMemoryError: CUDA out of memory" in failure_at_workflow_commit_processed:
+        failure_at_workflow_commit_processed = "torch.OutOfMemoryError: CUDA out of memory"
+    if "torch.OutOfMemoryError: CUDA out of memory" in failure_at_base_commit_processed:
+        failure_at_base_commit_processed = "torch.OutOfMemoryError: CUDA out of memory"
+
+    different_failures = failure_at_workflow_commit_processed != failure_at_base_commit_processed
+
+    if is_pr_ci and failure_at_base_commit != "" and different_failures:
         result["bad_commit"] = start_commit
         result["status"] = (
             f"test fails both on the current commit ({start_commit}) and the previous commit ({end_commit}), but with DIFFERENT error message!"
@@ -197,7 +219,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
         result["failure_at_bad_commit"] = failure_at_workflow_commit
         return result
     # Fail on both commits but with the same error message ==> don't include
-    elif is_pr_ci and failure_at_workflow_commit == failure_at_base_commit:
+    elif is_pr_ci and not different_failures:
         result["bad_commit"] = None
         result["status"] = (
             f"test fails both on the current commit ({start_commit}) and the previous commit ({end_commit}) with the SAME error message!"
@@ -208,7 +230,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
         return result
 
     # The test fails on `start_commit` but passed on `end_commit`.
-    create_script(target_test=target_test)
+    create_script(target_test=target_test, flake_runs=flake_runs)
 
     bash = f"""
 git bisect reset
@@ -216,7 +238,7 @@ git bisect start --first-parent {start_commit} {end_commit}
 git bisect run python3 target_script.py
 """
 
-    with open("run_git_bisect.sh", "w") as fp:
+    with open("run_git_bisect.sh", "w", encoding="utf-8") as fp:
         fp.write(bash.strip())
 
     bash_result = subprocess.run(
@@ -241,7 +263,7 @@ git bisect run python3 target_script.py
     failure_at_bad_commit = ""
     if len(commits) > 0:
         bad_commit = commits[0]
-        _, _, _, failure_at_bad_commit = is_bad_commit(target_test, bad_commit)
+        _, _, _, failure_at_bad_commit = is_bad_commit(target_test, bad_commit, flake_runs=flake_runs)
 
     print(f"Between `start_commit` {start_commit} and `end_commit` {end_commit}")
     print(f"bad_commit: {bad_commit}\n")
@@ -254,10 +276,10 @@ git bisect run python3 target_script.py
     return result
 
 
-def get_commit_info(commit, pr_number=None):
+def get_commit_info(commit, pr_number=None, github_token=None):
     """Get information for a commit via `api.github.com`."""
     if commit is None:
-        return {"commit": None, "pr_number": None, "author": None, "merged_by": None}
+        return {"commit": None, "pr_number": None, "author": None, "merged_by": None, "parent": None}
 
     author = None
     merged_author = None
@@ -268,7 +290,7 @@ def get_commit_info(commit, pr_number=None):
 
     # First, get commit info to check if it's a merge commit
     url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
-    commit_info = requests.get(url).json()
+    commit_info = get_github_json(url, token=github_token)
 
     commit_to_query = commit
 
@@ -283,24 +305,30 @@ def get_commit_info(commit, pr_number=None):
             # Use the first SHA (the PR commit)
             commit_to_query = match.group(1)
 
-    # If no PR number yet, try to discover it from the commit
+    # If no PR number yet, try to discover it from the commit.
+    # get_github_json either returns valid data or raises. Guard with isinstance in case the endpoint
+    # returns an unexpected shape (e.g. a single object instead of a list).
     if not pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit_to_query}/pulls"
-        pr_info_for_commit = requests.get(url).json()
-        if len(pr_info_for_commit) > 0:
-            pr_number = pr_info_for_commit[0]["number"]
+        pr_info_for_commit = get_github_json(url, token=github_token)
+        if isinstance(pr_info_for_commit, list) and len(pr_info_for_commit) > 0:
+            pr_number = pr_info_for_commit[0].get("number")
 
-    # If we have a PR number, get author and merged_by info
+    # If we have a PR number, get author and merged_by info.
+    # get_github_json either returns valid data or raises. Use .get() defensively in case the
+    # response shape differs from what is expected (e.g. API changes or missing fields).
     if pr_number:
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
-        pr_for_commit = requests.get(url).json()
-        author = pr_for_commit["user"]["login"]
-        if pr_for_commit["merged_by"] is not None:
-            merged_author = pr_for_commit["merged_by"]["login"]
+        pr_for_commit = get_github_json(url, token=github_token)
+        author = pr_for_commit.get("user", {}).get("login")
+        merged_by = pr_for_commit.get("merged_by")
+        if merged_by is not None:
+            merged_author = merged_by.get("login")
 
-    parent = commit_info["parents"][0]["sha"]
+    parents = commit_info.get("parents", [])
+    parent = parents[0]["sha"] if parents else None
     if author is None:
-        author = commit_info["author"]["login"]
+        author = (commit_info.get("author") or {}).get("login")
 
     return {"commit": commit, "pr_number": pr_number, "author": author, "merged_by": merged_author, "parent": parent}
 
@@ -312,15 +340,23 @@ if __name__ == "__main__":
     parser.add_argument("--test", type=str, help="The test to check.")
     parser.add_argument("--file", type=str, help="The report file.")
     parser.add_argument("--output_file", type=str, required=True, help="The path of the output file.")
+    parser.add_argument(
+        "--github_token",
+        type=str,
+        default=None,
+        help="GitHub token to avoid API rate limits. Falls back to GITHUB_TOKEN env var.",
+    )
     args = parser.parse_args()
+    if args.github_token is None:
+        args.github_token = os.environ.get("GITHUB_TOKEN")
+
+    run_idx = os.environ.get("run_idx")
+    n_runners = os.environ.get("n_runners")
 
     print(f"start_commit: {args.start_commit}")
     print(f"end_commit: {args.end_commit}")
 
-    # `get_commit_info` uses `requests.get()` to request info. via `api.github.com` without using token.
-    # If there are many new failed tests in a workflow run, this script may fail at some point with `KeyError` at
-    # `pr_number = pr_info_for_commit[0]["number"]` due to the rate limit.
-    # Let's cache the commit info. and reuse them whenever possible.
+    # Cache commit info to avoid redundant API calls and reduce rate limit pressure.
     commit_info_cache = {}
 
     if len({args.test is None, args.file is None}) != 2:
@@ -335,6 +371,8 @@ if __name__ == "__main__":
     elif os.path.isfile(args.file):
         with open(args.file, "r", encoding="UTF-8") as fp:
             reports = json.load(fp)
+
+        model_with_failures = []
 
         for model in reports:
             # We change the format of "new_failures.json" in PR #XXXXX, let's handle both formats for a few weeks.
@@ -351,42 +389,49 @@ if __name__ == "__main__":
             reports[model].pop("multi-gpu", None)
             failed_tests = reports[model].get("single-gpu", [])
 
-            failed_tests_with_bad_commits = []
-            for failure in failed_tests:
-                test = failure["line"]
-                bad_commit_info = find_bad_commit(
-                    target_test=test, start_commit=args.start_commit, end_commit=args.end_commit
-                )
-                info = {"test": test}
-                info.update(bad_commit_info)
+            model_with_failures.extend([(model, test) for test in failed_tests])
 
-                bad_commit = bad_commit_info["bad_commit"]
+        if run_idx is not None:
+            run_idx = int(run_idx)
+            n_runners = int(n_runners)
 
-                if bad_commit in commit_info_cache:
-                    commit_info = commit_info_cache[bad_commit]
-                else:
-                    commit_info = get_commit_info(bad_commit)
-                    commit_info_cache[bad_commit] = commit_info
+            num_failed_tests_to_run = len(model_with_failures) // n_runners
 
-                commit_info_copied = copy.deepcopy(commit_info)
-                commit_info_copied.pop("commit")
-                commit_info_copied.update({"workflow_commit": args.start_commit, "base_commit": args.end_commit})
-                info.update(commit_info_copied)
-                # put failure message toward the end
-                info = {k: v for k, v in info.items() if not k.startswith(("failure_at_", "job_link"))} | {
-                    k: v for k, v in info.items() if k.startswith(("failure_at_", "job_link"))
-                }
+            start_idx = num_failed_tests_to_run * run_idx
+            end_idx = num_failed_tests_to_run * (run_idx + 1) if run_idx < n_runners - 1 else len(model_with_failures)
 
-                failed_tests_with_bad_commits.append(info)
+            model_with_failures_to_check = model_with_failures[start_idx:end_idx]
+            model_with_failures = model_with_failures_to_check
 
-            # If no single-gpu test failures, remove the key
-            if len(failed_tests_with_bad_commits) > 0:
-                reports[model]["single-gpu"] = failed_tests_with_bad_commits
+        failed_tests_with_bad_commits = defaultdict(list)
+        for model, failure in model_with_failures:
+            test = failure["line"]
+            bad_commit_info = find_bad_commit(
+                target_test=test, start_commit=args.start_commit, end_commit=args.end_commit
+            )
+            info = {"test": test}
+            info.update(bad_commit_info)
+
+            bad_commit = bad_commit_info["bad_commit"]
+
+            if bad_commit in commit_info_cache:
+                commit_info = commit_info_cache[bad_commit]
             else:
-                reports[model].pop("single-gpu", None)
+                commit_info = get_commit_info(bad_commit, github_token=args.github_token)
+                commit_info_cache[bad_commit] = commit_info
 
-        # remove the models without any test failure
-        reports = {k: v for k, v in reports.items() if len(v) > 0}
+            commit_info_copied = copy.deepcopy(commit_info)
+            commit_info_copied.pop("commit")
+            commit_info_copied.update({"workflow_commit": args.start_commit, "base_commit": args.end_commit})
+            info.update(commit_info_copied)
+            # put failure message toward the end
+            info = {k: v for k, v in info.items() if not k.startswith(("failure_at_", "job_link"))} | {
+                k: v for k, v in info.items() if k.startswith(("failure_at_", "job_link"))
+            }
+
+            failed_tests_with_bad_commits[model].append(info)
+
+        reports = {model: {"single-gpu": tests} for model, tests in failed_tests_with_bad_commits.items() if tests}
 
         with open(args.output_file, "w", encoding="UTF-8") as fp:
             json.dump(reports, fp, ensure_ascii=False, indent=4)

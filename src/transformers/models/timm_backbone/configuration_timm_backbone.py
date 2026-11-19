@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="")
-@strict(accept_kwargs=True)
+@strict
 class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     backbone (`str`, *optional*):

@@ -13,7 +13,7 @@
 # limitations under the License.
 import io
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from ..masking_utils import create_causal_mask
@@ -213,14 +213,12 @@ class AttentionMaskVisualizer:
 
         batch_size, seq_length = attention_mask.shape
         inputs_embeds = torch.zeros((batch_size, seq_length, model.config.hidden_size), dtype=self.model.dtype)
-        cache_position = torch.arange(seq_length)
 
         causal_mask = create_causal_mask(
             config=model.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=None,
+            cache=None,
         )
 
         if causal_mask is None:

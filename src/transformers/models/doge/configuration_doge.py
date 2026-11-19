@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="SmallDoge/Doge-320M")
-@strict(accept_kwargs=True)
+@strict
 class DogeConfig(PreTrainedConfig):
     r"""
     keep_window_size (`int`, *optional*, defaults to 2048):
@@ -49,7 +49,6 @@ class DogeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "doge"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `DogeModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -61,8 +60,8 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.router_gate": "colwise_gather_output",
-        "layers.*.mlp.down_embed": "rowwise_split_input",
-        "layers.*.mlp.up_embed": "rowwise_split_input",
+        "layers.*.mlp.down_embed": "embedding_rowwise",
+        "layers.*.mlp.up_embed": "embedding_rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

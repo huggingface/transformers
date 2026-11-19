@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -25,38 +23,21 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
-from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
-    is_vision_available,
     logging,
     torch_compilable_check,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..blip.image_processing_blip import BlipImageProcessor
+from ...utils.deprecation import deprecate_kwarg
+from ..auto import AutoConfig, AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
@@ -72,22 +53,19 @@ from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
 
 
-if is_vision_available():
-    import PIL
-
 logger = logging.get_logger(__name__)
 
 # General docstring
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusVisionConfig(SiglipVisionConfig):
     r"""
-    num_image_tokens (`int`, *optional*, defaults to 576):
-        Number of image tokens.
     projection_dropout (`float`, *optional*, defaults to 0.0):
         Dropout probability for the projection layer.
+    num_image_tokens (`int`, *optional*, defaults to 576):
+        Number of image tokens.
     """
 
     hidden_size: int = 1024
@@ -97,7 +75,7 @@ class JanusVisionConfig(SiglipVisionConfig):
     hidden_act: str = "gelu"
     mlp_ratio: float | int = 4.0
     attention_bias: bool = True
-    hidden_dropout_rate: float = 0.0
+    hidden_dropout_rate: float | int = 0.0
     projection_dim: int = 2048
     projection_dropout: float | int = 0.0
     use_qk_norm: bool = False
@@ -105,24 +83,25 @@ class JanusVisionConfig(SiglipVisionConfig):
     depth: int = 2
     num_image_tokens: int = 576
     intermediate_size = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusVQVAEConfig(ChameleonVQVAEConfig):
     r"""
-    image_token_embed_dim (`int`, *optional*, defaults to 2048):
-        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
-    num_patches (`int`, *optional*, defaults to 32):
-        Num of patches the input images can be divided into.
-    out_channels (`int`, *optional*, defaults to 3):
-        Number of out channels.
     base_channels (`int`, *optional*, defaults to 128):
         Base channel count.
     channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
         Channel multipliers for each resolution.
     num_res_blocks (`int`, *optional*, defaults to 2):
         Number of residual blocks.
+    num_patches (`int`, *optional*, defaults to 32):
+        Num of patches the input images can be divided into.
+    out_channels (`int`, *optional*, defaults to 3):
+        Number of out channels.
+    image_token_embed_dim (`int`, *optional*, defaults to 2048):
+        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
     """
 
     embed_dim: int = 8
@@ -140,7 +119,7 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
     projection_dim: int = 2048
     num_hidden_layers: int = 2
     hidden_act: str = "gelu"
-    image_token_embed_dim = 2048
+    image_token_embed_dim: int = 2048
 
     resolution = AttributeError()
     attn_resolutions = AttributeError()
@@ -148,7 +127,7 @@ class JanusVQVAEConfig(ChameleonVQVAEConfig):
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusConfig(PreTrainedConfig):
     r"""
     Example:
@@ -176,8 +155,8 @@ class JanusConfig(PreTrainedConfig):
     ```"""
 
     model_type = "janus"
-    sub_configs = {
-        "text_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
         "vision_config": JanusVisionConfig,
         "vq_config": JanusVQVAEConfig,
     }
@@ -186,30 +165,12 @@ class JanusConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     vq_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 100581
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if self.vision_config is None:
-            logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
-            self.vision_config = JanusVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = JanusVisionConfig(**self.vision_config)
-
-        if self.vq_config is None:
-            logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
-            self.vq_config = JanusVQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = JanusVQVAEConfig(**self.vq_config)
-
+        super().__post_init__(**kwargs)
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -218,8 +179,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _no_split_modules = ["JanusVisionEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -231,22 +191,22 @@ class JanusPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Janus VQ-VAE mode model outputs.
     """
 )
+@dataclass
 class JanusVQVAEOutput(ModelOutput):
     r"""
-    decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+    decoded_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Reconstructed pixel values after encoding and decoding the input.
-    embedding_loss (`torch.FloatTensor`):
+    embedding_loss (`torch.Tensor`):
         Embedding loss.
     """
 
-    decoded_pixel_values: torch.FloatTensor | None = None
-    embedding_loss: torch.FloatTensor | None = None
+    decoded_pixel_values: torch.Tensor | None = None
+    embedding_loss: torch.Tensor | None = None
 
 
 class JanusBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -399,7 +359,7 @@ class JanusVisionModel(Blip2VisionModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -448,7 +408,7 @@ class JanusVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
         super().__init__(config)
         self.quant_state_dims = [config.num_patches] * 2
 
-    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
+    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.Tensor:
         batch_size = image_tokens.shape[0]
         emb_dim: int = self.embedding.weight.shape[-1]
 
@@ -633,7 +593,7 @@ class JanusVQVAEDecoder(nn.Module):
         self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
         self.conv_out = torch.nn.Conv2d(block_in, out_channels, kernel_size=3, stride=1, padding=1)
 
-    def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv_in(hidden_state)
 
         # middle
@@ -674,13 +634,13 @@ class JanusVQVAE(ChameleonVQVAE):
         # Initialize the VQVAE model.
         self.post_init()
 
-    def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
+    def decode(self, image_tokens: torch.LongTensor) -> torch.Tensor:
         """
         Decodes quantized token IDs into pixel values.
         Args:
             image_tokens (torch.LongTensor): Batch of token IDs.
         Returns:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Pixel values decoded from the token IDs.
         """
         if image_tokens.shape[1] != self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]:
@@ -697,9 +657,9 @@ class JanusVQVAE(ChameleonVQVAE):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = pixel_values.shape[0]
         encode_outputs = self.encode(pixel_values, return_dict=True, **kwargs)
         decoded_pixel_values = self.decode(encode_outputs.image_tokens.view(batch_size, -1))
@@ -768,16 +728,10 @@ class JanusModel(JanusPreTrainedModel):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
@@ -785,7 +739,7 @@ class JanusModel(JanusPreTrainedModel):
         return vision_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -793,7 +747,7 @@ class JanusModel(JanusPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -801,37 +755,45 @@ class JanusModel(JanusPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> JanusBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError(
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, return_dict=True).pooler_output
-            image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -842,18 +804,17 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
         return JanusBaseModelOutputWithPast(
             last_hidden_state=lm_output.last_hidden_state,
-            past_key_values=lm_output.past_key_values,
+            cache=lm_output.cache,
             hidden_states=lm_output.hidden_states,
             attentions=lm_output.attentions,
-            image_hidden_states=image_embeds if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -861,6 +822,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("image", "text")
     _can_compile_fullgraph = True
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -871,12 +833,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing.
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
-
     def prepare_embeddings_for_image_generation(self, inputs: torch.Tensor) -> torch.Tensor:
         hidden_state = self.model.generation_embeddings(inputs)
         hidden_state = self.model.generation_aligner(hidden_state)
@@ -884,39 +840,35 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> JanusCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -927,43 +879,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         return JanusCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        pixel_values=None,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- extra custom processing
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache)
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
     def decode_image_tokens(self, image_tokens: torch.Tensor):
         """
@@ -986,11 +906,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # 1. Handle generation config and model kwargs
-        generation_config = kwargs.pop("generation_config", self.generation_config)
-        generation_config = copy.deepcopy(generation_config)
+        # Pop generation_mode first since it's specific to Janus
+        generation_mode = kwargs.pop("generation_mode", "text")
+        generation_config, model_kwargs = self._prepare_generation_config(
+            kwargs.pop("generation_config", None), **kwargs
+        )
 
         # Default to "text" generation if mode isn't provided
-        generation_mode = kwargs.pop("generation_mode", "text")
         if generation_mode == "text":
             # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
@@ -998,10 +920,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 generation_config=generation_config,
                 guidance_scale=None,
-                **kwargs,
+                **model_kwargs,
             )
-
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
         # Validate generation mode
         if generation_config.get_generation_mode() not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
@@ -1081,16 +1001,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
-        model_kwargs = self._get_initial_cache_position(seq_len, device, model_kwargs)
-
-        if model_kwargs.get("past_key_values", None) is None:
+        if model_kwargs.get("cache", None) is None:
             # Prepare cache if not provided.
-            model_kwargs["past_key_values"] = self._prepare_static_cache(
+            model_kwargs["cache"] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
                 # batch_size should account for both conditional/unconditional input; hence multiplied by 2.
                 batch_size=batch_size * 2,
                 # we should have at least a cache len of seq_len + num_image_tokens.
                 max_cache_len=max(generation_config.max_length, num_image_tokens + seq_len),
+                prefill_chunk_size=generation_config.prefill_chunk_size,
                 model_kwargs=model_kwargs,
             )
 
@@ -1110,12 +1029,17 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         for i in range(num_image_tokens):
+            # Set `is_first_iteration=True` to force using `inputs_embeds` instead of `input_ids`.
+            # Without this, `prepare_inputs_for_generation` would use `input_ids` (the full prompt)
+            # instead of our prepared `inputs_embeds` (1 new token).
+            # This causes CUDA error: device-side assert triggered, seen around the call to ` self.self_attn`.
+            # Set this to `True` is also necessary to match the expected output, see the more detailed comment
+            # https://github.com/huggingface/transformers/pull/45044#discussion_r3020805374.
             model_inputs = self.prepare_inputs_for_generation(
-                inputs_embeds=inputs_embeds, input_ids=input_tokens, **model_kwargs
+                inputs_embeds=inputs_embeds, input_ids=input_tokens, is_first_iteration=True, **model_kwargs
             )
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
-            model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
                 **model_inputs,
@@ -1123,7 +1047,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 output_hidden_states=output_hidden_states,
             )
 
-            # Update model_kwargs like cache_position for next generation.
+            # Update model_kwargs like attention_mask for next generation.
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
@@ -1163,477 +1087,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=outputs.past_key_values,
+                cache=outputs.cache,
             )
         else:
             return generated_tokens
 
 
-class JanusImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
-
-
-class JanusImageProcessor(BlipImageProcessor):
-    r"""
-    Constructs a JANUS image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        min_size (`int`, *optional*, defaults to 14):
-            The minimum allowed size for the resized image. Ensures that neither the height nor width
-            falls below this value after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to square or not.
-    """
-
-    valid_kwargs = JanusImageProcessorKwargs
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        min_size: int = 14,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool | None = None,
-        do_pad: bool | None = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.do_pad = do_pad
-        self.min_size = min_size
-        if image_mean is None:
-            self.background_color = (127, 127, 127)
-        else:
-            self.background_color = tuple(int(x * 255) for x in image_mean)
-
-    def pad_to_square(
-        self,
-        image: np.ndarray,
-        background_color: int | tuple[int, int, int] = 0,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """
-        Pads an image to a square based on the longest edge.
-
-        Args:
-            image (`np.ndarray`):
-                The image to pad.
-            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
-                The color to use for the padding. Can be an integer for single channel or a
-                tuple of integers representing for multi-channel images. If passed as integer
-                in multi-channel mode, it will default to `0` in subsequent channels.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                If unset, will use same as the input image.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image. Can be one of:
-                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The padded image.
-        """
-        height, width = get_image_size(image, input_data_format)
-        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
-
-        if height == width:
-            image = (
-                to_channel_dimension_format(image, data_format, input_data_format)
-                if data_format is not None
-                else image
-            )
-            return image
-
-        max_dim = max(height, width)
-
-        # Ensure background_color is the correct shape
-        if isinstance(background_color, int):
-            background_color = [background_color]
-        elif len(background_color) != num_channels:
-            raise ValueError(
-                f"background_color must have no more than {num_channels} elements to match the number of channels"
-            )
-
-        if input_data_format == ChannelDimension.FIRST:
-            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[i, :, :] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[:, start : start + height, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, :, start : start + width] = image
-        else:
-            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[:, :, i] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[start : start + height, :, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, start : start + width, :] = image
-
-        return result
-
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int] | int,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image to dynamically calculated size.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]` or `int`):
-                The size to resize the image to. If a dictionary, it should have the keys `"height"` and `"width"`.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `None`: will be inferred from input
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
-        height, width = get_image_size(image, input_data_format)
-        max_size = max(height, width)
-
-        size = get_size_dict(size, default_to_square=True)
-        if size["height"] != size["width"]:
-            raise ValueError(
-                f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
-            )
-        size = size["height"]
-
-        delta = size / max_size
-        # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
-        output_size_nonpadded = [
-            max(round(height * delta), self.min_size),
-            max(round(width * delta), self.min_size),
-        ]
-
-        image = resize(
-            image,
-            size=output_size_nonpadded,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
-        return image
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        do_convert_rgb: bool | None = None,
-        background_color: int | tuple[int, int, int] | None = None,
-        do_pad: bool | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Controls the size of the image after `resize`. The shortest edge of the image is resized to
-                `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
-                is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
-                edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            background_color (`tuple[int, int, int]`):
-                The background color to use for the padding.
-            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image to square or not.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        background_color = background_color if background_color is not None else self.background_color
-
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_pad:
-            # Expand and pad the images to obtain a square image of dimensions `size x size`
-            images = [
-                self.pad_to_square(
-                    image=image,
-                    background_color=background_color,
-                    input_data_format=input_data_format,
-                )
-                for image in images
-            ]
-
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
-
-        return encoded_outputs
-
-    def postprocess(
-        self,
-        images: ImageInput,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: list[float] | None = None,
-        image_std: list[float] | None = None,
-        input_data_format: str | None = None,
-        return_tensors: str | None = None,
-    ):
-        """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-
-        images = make_flat_list_of_images(images)  # Ensures input is a list
-
-        if isinstance(images[0], PIL.Image.Image):
-            return images if len(images) > 1 else images[0]
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])  # Determine format dynamically
-
-        pixel_values = []
-
-        for image in images:
-            image = to_numpy_array(image)  # Ensure NumPy format
-
-            if do_normalize:
-                image = self.unnormalize(
-                    image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
-                )
-
-            if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
-                image = image.clip(0, 255).astype(np.uint8)
-
-            if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
-                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                image = PIL.Image.fromarray(image)
-
-            pixel_values.append(image)
-
-        data = {"pixel_values": pixel_values}
-        return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def unnormalize(
-        self,
-        image: np.ndarray,
-        image_mean: float | Iterable[float],
-        image_std: float | Iterable[float],
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """
-        Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
-        image = (image * image_std) + image_mean
-        Args:
-            image (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
-                Batch of pixel values to postprocess.
-            image_mean (`float` or `Iterable[float]`):
-                The mean to use for unnormalization.
-            image_std (`float` or `Iterable[float]`):
-                The standard deviation to use for unnormalization.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        num_channels = 3
-
-        if isinstance(image_mean, Iterable):
-            if len(image_mean) != num_channels:
-                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(image_mean)}")
-        else:
-            image_mean = [image_mean] * num_channels
-
-        if isinstance(image_std, Iterable):
-            if len(image_std) != num_channels:
-                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(image_std)}")
-        else:
-            image_std = [image_std] * num_channels
-
-        rev_image_mean = tuple(-mean / std for mean, std in zip(image_mean, image_std))
-        rev_image_std = tuple(1 / std for std in image_std)
-        image = self.normalize(
-            image=image, mean=rev_image_mean, std=rev_image_std, input_data_format=input_data_format
-        )
-        return image
-
-
 __all__ = [
-    "JanusImageProcessor",
     "JanusPreTrainedModel",
     "JanusForConditionalGeneration",
     "JanusModel",

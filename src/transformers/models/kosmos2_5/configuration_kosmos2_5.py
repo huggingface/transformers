@@ -23,16 +23,10 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5TextConfig(PreTrainedConfig):
-    r"""
-    activation_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for activations inside the fully connected layer.
-    ```"""
-
     model_type = "kosmos_2_5_text_model"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
         "hidden_size": "embed_dim",
@@ -54,22 +48,23 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
     init_std: float = 0.02
     scale_embedding: bool = True
     use_cache: bool = True
+    tie_word_embeddings: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
-    dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
-        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-        `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
-    max_num_patches (`int`, *optional*, defaults to 4096):
-        Maximum sequence length (here number of patches) supported by the model.
     patch_embed_hidden_size (`int`, *optional*, defaults to 768):
         Dimensionality of the input patch_embedding layer in the Transformer encoder.
+    dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"selu"` and `"gelu_new"` or `"gelu"` are supported.
+    max_num_patches (`int`, *optional*, defaults to 4096):
+        Maximum sequence length (here number of patches) supported by the model.
 
     Example:
 
@@ -97,7 +92,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
     num_attention_heads: int = 24
     dense_act_fn: str = "gelu_new"
     layer_norm_eps: float = 1e-6
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
     max_num_patches: int = 4096
     initializer_factor: float = 1.0
@@ -105,7 +100,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5Config(PreTrainedConfig):
     r"""
     latent_query_num (`int`, *optional*, defaults to 2048):
@@ -113,27 +108,15 @@ class Kosmos2_5Config(PreTrainedConfig):
     """
 
     model_type = "kosmos-2.5"
-    sub_configs = {"text_config": Kosmos2_5TextConfig, "vision_config": Kosmos2_5VisionConfig}
+    sub_configs_defaults = {
+        "text_config": Kosmos2_5TextConfig,
+        "vision_config": Kosmos2_5VisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     latent_query_num: int = 2048
     tie_word_embeddings: bool = True
 
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Kosmos2_5TextConfig()
-            logger.info("`text_config` is `None`. initializing the `Kosmos2_5TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Kosmos2_5TextConfig(**self.text_config)
 
-        if self.vision_config is None:
-            self.vision_config = Kosmos2_5VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Kosmos2_5VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Kosmos2_5VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
-
-
-__all__ = ["Kosmos2_5Config"]
+__all__ = ["Kosmos2_5Config", "Kosmos2_5TextConfig", "Kosmos2_5VisionConfig"]

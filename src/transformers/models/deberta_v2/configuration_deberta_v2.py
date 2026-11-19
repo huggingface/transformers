@@ -20,23 +20,23 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/deberta-v2-xlarge")
-@strict(accept_kwargs=True)
+@strict
 class DebertaV2Config(PreTrainedConfig):
     r"""
+    relative_attention (`bool`, *optional*, defaults to `True`):
+        Whether use relative position encoding.
     max_relative_positions (`int`, *optional*, defaults to -1):
         The range of relative positions `[-max_position_embeddings, max_position_embeddings]`. Use the same value
         as `max_position_embeddings`.
-    pooler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-        Activation function used in the dropout module.
-    pooler_dropout (`float`, *optional*, defaults to `0`):
-        Dropout rate in the pooler module.
-    relative_attention (`bool`, *optional*, defaults to `True`):
-        Whether use relative position encoding.
     position_biased_input (`bool`, *optional*, defaults to `True`):
         Whether add absolute position embedding to content embedding.
     pos_att_type (`list[str]`, *optional*):
         The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
         `["p2c", "c2p"]`, `["p2c", "c2p"]`.
+    pooler_dropout (`float`, *optional*, defaults to `0`):
+        Dropout rate in the pooler module.
+    pooler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        Activation function used in the dropout module.
     legacy (`bool`, *optional*, defaults to `True`):
         Whether or not the model should use the legacy `LegacyDebertaOnlyMLMHead`, which does not work properly
         for mask infilling tasks.
@@ -64,8 +64,8 @@ class DebertaV2Config(PreTrainedConfig):
     num_attention_heads: int = 24
     intermediate_size: int = 6144
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 0
     initializer_range: float = 0.02

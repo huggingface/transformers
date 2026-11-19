@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="mistral-labs/pixtral-12b")
-@strict(accept_kwargs=True)
+@strict
 class PixtralVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -55,6 +55,8 @@ class PixtralVisionConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.head_dim = self.hidden_size // self.num_attention_heads
         super().__post_init__(**kwargs)
+
+    default_rope_type = "axial"
 
 
 __all__ = ["PixtralVisionConfig"]

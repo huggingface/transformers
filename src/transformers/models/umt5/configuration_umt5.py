@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/umt5-small")
-@strict(accept_kwargs=True)
+@strict
 class UMT5Config(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -29,12 +29,9 @@ class UMT5Config(PreTrainedConfig):
         The maximum distance of the longer sequences for the bucket separation.
     feed_forward_proj (`str`, *optional*, defaults to `"gated-gelu"`):
         Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
-    tokenizer_class (`str`, *optional*, defaults to `"T5Tokenizer"`):
-        The tokenizer's class name
     """
 
     model_type = "umt5"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "num_heads",
@@ -51,15 +48,14 @@ class UMT5Config(PreTrainedConfig):
     num_heads: int = 6
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     feed_forward_proj: str = "gated-gelu"
     is_encoder_decoder: bool = True
     use_cache: bool = True
-    tokenizer_class: str = "T5Tokenizer"
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     decoder_start_token_id: int | None = 0
     classifier_dropout: float | int = 0.0
     is_decoder: bool = False

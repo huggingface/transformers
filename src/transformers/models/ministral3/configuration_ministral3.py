@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="mistralai/Ministral-3-8B-Base-2512")
-@strict(accept_kwargs=True)
+@strict
 class Ministral3Config(PreTrainedConfig):
     r"""
     Example:
@@ -52,7 +52,6 @@ class Ministral3Config(PreTrainedConfig):
     ```"""
 
     model_type = "ministral3"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `MistralModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -68,6 +67,7 @@ class Ministral3Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     ignore_keys_at_rope_validation = {"llama_4_scaling_beta", "max_position_embeddings"}
 
     vocab_size: int = 131072

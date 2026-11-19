@@ -18,11 +18,10 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
-@strict(accept_kwargs=True)
+@strict
 class MoonshineStreamingEncoderConfig(PreTrainedConfig):
     r"""
     sample_rate (`int`, *optional*, defaults to 16000):
@@ -31,7 +30,6 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
         The frame duration in milliseconds for audio processing.
     sliding_windows (`list[tuple[int, int]]`, *optional*, defaults to `[(16, 4), (16, 4), (16, 0), (16, 0), (16, 4), (16, 4)]`):
         List of sliding window configurations for each encoder layer. Each tuple contains (window_size, shift).
-
 
     ```python
     >>> from transformers import MoonshineStreamingEncoder, MoonshineStreamingEncoderConfig
@@ -44,7 +42,8 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "moonshine_streaming_encoder"
 
@@ -77,7 +76,7 @@ class MoonshineStreamingEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-streaming-tiny")
-@strict(accept_kwargs=True)
+@strict
 class MoonshineStreamingConfig(PreTrainedConfig):
     r"""
     pad_head_dim_to_multiple_of (`int`, *optional*):
@@ -94,11 +93,13 @@ class MoonshineStreamingConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "moonshine_streaming"
-    sub_configs = {"encoder_config": MoonshineStreamingEncoderConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "encoder_config": MoonshineStreamingEncoderConfig,
+    }
 
     encoder_config: dict | MoonshineStreamingEncoderConfig | None = None
     vocab_size: int = 32768
@@ -122,12 +123,6 @@ class MoonshineStreamingConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "moonshine_streaming_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["moonshine_streaming_encoder"]()
-
         if self.rope_parameters is None:
             self.rope_parameters = {
                 "rope_type": "default",

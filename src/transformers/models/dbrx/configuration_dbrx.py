@@ -20,7 +20,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="This config is used to instantiate attention layers.",
     checkpoint="transformers-community/dbrx-instruct",
@@ -37,19 +37,20 @@ class DbrxAttentionConfig(PreTrainedConfig):
 
     base_config_key = "attn_config"
 
-    attn_pdrop: float = 0.0
+    attn_pdrop: float | int = 0.0
     clip_qkv: int | float | None = None
     kv_n_heads: int = 1
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="This config is used to instantiate feedforward layers.",
     checkpoint="transformers-community/dbrx-instruct",
 )
 class DbrxFFNConfig(PreTrainedConfig):
     r"""
-    ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
+    ffn_act_fn (`dict`, *optional*, defaults to `None`):
+        A dict specifying activation function for the FFN.
         The dict should have a key 'name' with the value being the name of the activation function along with
         any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
     ffn_hidden_size (`int`, *optional*, defaults to 3584):
@@ -73,33 +74,18 @@ class DbrxFFNConfig(PreTrainedConfig):
     ffn_hidden_size: int = 3584
     moe_num_experts: int = 4
     moe_top_k: int = 1
-    moe_jitter_eps: float | None = None
+    moe_jitter_eps: float | int | None = None
     moe_loss_weight: float = 0.01
     moe_normalize_expert_weights: float | None = 1.0
 
     def __post_init__(self, **kwargs):
         if self.ffn_act_fn is None:
             self.ffn_act_fn = {"name": "silu"}
-
-        for k in [
-            "model_type",
-            "attn_implementation",
-            "experts_implementation",
-            "transformers_version",
-            "_commit_hash",
-            "torch_dtype",
-            "dtype",
-        ]:
-            if k in kwargs:
-                kwargs.pop(k)
-        if len(kwargs) != 0:
-            raise ValueError(f"Found unknown {kwargs=}")
-
         super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="transformers-community/dbrx-instruct")
-@strict(accept_kwargs=True)
+@strict
 class DbrxConfig(PreTrainedConfig):
     r"""
     max_seq_len (`int`, *optional*, defaults to 2048):
@@ -162,6 +148,8 @@ class DbrxConfig(PreTrainedConfig):
         elif isinstance(self.ffn_config, dict):
             self.ffn_config = DbrxFFNConfig(**self.ffn_config)
 
+        # The experts read/write hidden states, so `ffn_config.hidden_size` must mirror the model's `hidden_size`.
+        self.ffn_config.hidden_size = self.d_model
         self.num_key_value_heads = self.attn_config.kv_n_heads
         super().__post_init__(**kwargs)
 

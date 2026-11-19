@@ -41,10 +41,10 @@ class MiniMaxModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MiniMaxModel
 
-    def __init__(self, parent, layer_types=None, block_size=3):
-        super().__init__(parent)
-        self.layer_types = layer_types
-        self.block_size = block_size
+    small_config_overrides = {
+        "layer_types": None,
+        "block_size": 3,
+    }
 
 
 @require_torch
@@ -101,14 +101,14 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
         self.assertEqual(len(attentions), (output_length - prompt_length))
-        use_cache = decoder_past_key_values is not None
+        use_cache = decoder_cache is not None
 
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -127,8 +127,8 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 if config.layer_types[layer_idx] == "full_attention":
                     self.assertEqual(layer_attention.shape, expected_shape)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, MiniMaxCache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, MiniMaxCache)
 
         # (batch, head, seq_length, head_features)
         key_value_cache_expected_shape = (
@@ -147,10 +147,10 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 
         for layer_idx in range(config.num_hidden_layers):
             if config.layer_types[layer_idx] == "full_attention":
-                self.assertEqual(past_key_values.layers[layer_idx].keys.shape, key_value_cache_expected_shape)
-                self.assertEqual(past_key_values.layers[layer_idx].values.shape, key_value_cache_expected_shape)
+                self.assertEqual(cache.layers[layer_idx].keys.shape, key_value_cache_expected_shape)
+                self.assertEqual(cache.layers[layer_idx].values.shape, key_value_cache_expected_shape)
             else:
-                self.assertEqual(past_key_values.linear_cache[layer_idx].shape, linear_cache_expected_shape)
+                self.assertEqual(cache.linear_cache[layer_idx].shape, linear_cache_expected_shape)
 
     def _check_caches_are_equal(self, cache1: MiniMaxCache, cache2: MiniMaxCache):
         if not isinstance(cache1, MiniMaxCache) or not isinstance(cache2, MiniMaxCache):
@@ -183,9 +183,23 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    @unittest.skip("Model needs refactor")
     def test_attention_outputs(self):
-        pass
+        """Overridden: linear-attention layers record their decayed KV state of shape (batch, heads, head_dim,
+        head_dim) in `attentions`, instead of the (batch, heads, seq_len, seq_len) probs of full-attention layers."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiniMaxModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        seq_len = inputs_dict["input_ids"].shape[-1]
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, MiniMaxModel), output_attentions=True)
+
+        self.assertEqual(len(outputs.attentions), config.num_hidden_layers)
+        for layer_type, attention in zip(config.layer_types, outputs.attentions):
+            if layer_type == "full_attention":
+                self.assertEqual(attention.shape[-3:], (config.num_attention_heads, seq_len, seq_len))
+            else:
+                self.assertEqual(attention.shape[-3:], (config.num_attention_heads, head_dim, head_dim))
 
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
@@ -225,7 +239,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[1.0312, -0.5156, -0.3262], [-0.1152, 0.4336, 0.2412], [1.2188, -0.5898, -0.0381]],
-                ("cuda", 8): [[1.0312, -0.5156, -0.3203], [-0.1201, 0.4375, 0.2402], [1.2188, -0.5898, -0.0396]],
+                ("cuda", 8): [[1.0312, -0.5156, -0.3184], [-0.1177, 0.4355, 0.2393], [1.2188, -0.5898, -0.0349]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

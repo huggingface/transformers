@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -45,7 +44,7 @@ if is_torch_available():
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
+        from transformers import MaskFormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
@@ -245,6 +244,12 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_maskformer_instance_segmentation_head_model(*config_and_inputs)
 
+    @unittest.skip(
+        reason="MaskFormer loads only the decoder from DETR and needs 2-3 conversion from the whole mapping"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="MaskFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -259,13 +264,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="MaskFormer does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @slow
@@ -483,6 +481,10 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             elif model.__class__.__name__ == "MaskFormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
+    @unittest.skip(reason="hidden states are concatenated weirdly inside the model")
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
+
 
 TOLERANCE = 2e-4
 
@@ -499,7 +501,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerImageProcessorPil.from_pretrained("facebook/maskformer-swin-small-coco")
             if is_vision_available()
             else None
         )

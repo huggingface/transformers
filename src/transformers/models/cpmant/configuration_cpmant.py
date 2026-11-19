@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="openbmb/cpm-ant-10b")
-@strict(accept_kwargs=True)
+@strict
 class CpmAntConfig(PreTrainedConfig):
     r"""
     position_bias_num_buckets (`int`, *optional*, defaults to 512):
@@ -35,20 +35,20 @@ class CpmAntConfig(PreTrainedConfig):
     segment_types (`int`, *optional*, defaults to 32):
         The type of segment.
 
-     Example:
+    Example:
 
-     ```python
-     >>> from transformers import CpmAntModel, CpmAntConfig
+    ```python
+    >>> from transformers import CpmAntModel, CpmAntConfig
 
-     >>> # Initializing a CPMAnt cpm-ant-10b style configuration
-     >>> configuration = CpmAntConfig()
+    >>> # Initializing a CPMAnt cpm-ant-10b style configuration
+    >>> configuration = CpmAntConfig()
 
-     >>> # Initializing a model from the cpm-ant-10b style configuration
-     >>> model = CpmAntModel(configuration)
+    >>> # Initializing a model from the cpm-ant-10b style configuration
+    >>> model = CpmAntModel(configuration)
 
-     >>> # Accessing the model configuration
-     >>> configuration = model.config
-     ```"""
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "cpmant"
 
@@ -58,7 +58,7 @@ class CpmAntConfig(PreTrainedConfig):
     dim_head: int = 128
     dim_ff: int = 10240
     num_hidden_layers: int = 48
-    dropout_p: float = 0.0
+    dropout_p: float | int = 0.0
     position_bias_num_buckets: int = 512
     position_bias_max_distance: int = 2048
     eps: float = 1e-6

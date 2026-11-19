@@ -21,9 +21,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="adept/persimmon-8b-base")
-@strict(accept_kwargs=True)
+@strict
 class PersimmonConfig(PreTrainedConfig):
-    r""".
+    r"""
     qk_layernorm (`bool`, *optional*, default to `True`):
         Whether or not to normalize the Queries and Keys after projecting the hidden states
 
@@ -37,7 +37,6 @@ class PersimmonConfig(PreTrainedConfig):
     ```"""
 
     model_type = "persimmon"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 262144
     hidden_size: int = 4096

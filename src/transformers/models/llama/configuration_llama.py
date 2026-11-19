@@ -27,7 +27,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-2-7b-hf")
-@strict(accept_kwargs=True)
+@strict
 class LlamaConfig(PreTrainedConfig):
     r"""
     ```python
@@ -44,7 +44,6 @@ class LlamaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "llama"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `LlamaModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

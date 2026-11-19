@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/Phi-3-mini-4k-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi3Config(PreTrainedConfig):
     r"""
     original_max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -45,7 +45,6 @@ class Phi3Config(PreTrainedConfig):
     ```"""
 
     model_type = "phi3"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
@@ -64,8 +63,8 @@ class Phi3Config(PreTrainedConfig):
     num_hidden_layers: int = 32
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None
-    resid_pdrop: float = 0.0
-    embd_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
+    embd_pdrop: float | int = 0.0
     attention_dropout: float | int = 0.0
     hidden_act: str = "silu"
     max_position_embeddings: int = 4096

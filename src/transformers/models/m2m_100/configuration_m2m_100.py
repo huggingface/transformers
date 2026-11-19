@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/m2m100_418M")
-@strict(accept_kwargs=True)
+@strict
 class M2M100Config(PreTrainedConfig):
     r"""
     Example:
@@ -39,7 +39,6 @@ class M2M100Config(PreTrainedConfig):
     ```"""
 
     model_type = "m2m_100"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -65,10 +64,10 @@ class M2M100Config(PreTrainedConfig):
     activation_dropout: float | int = 0.0
     init_std: float = 0.02
     decoder_start_token_id: int | None = 2
-    scale_embedding: int = True
+    scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
 
 

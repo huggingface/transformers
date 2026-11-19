@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/pegasus-large")
-@strict(accept_kwargs=True)
+@strict
 class PegasusConfig(PreTrainedConfig):
     r"""
     Example:
@@ -39,7 +39,6 @@ class PegasusConfig(PreTrainedConfig):
     ```"""
 
     model_type = "pegasus"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -67,8 +66,8 @@ class PegasusConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 0
     scale_embedding: bool = False
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
-    forced_eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
+    forced_eos_token_id: int | list[int] | None = 1
     is_decoder: bool = False
     tie_word_embeddings: bool = True
 

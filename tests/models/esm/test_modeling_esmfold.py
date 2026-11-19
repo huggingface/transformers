@@ -170,7 +170,7 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # unhashable SymInt inside ESMFold fold module
 
     def setUp(self):
         self.model_tester = EsmFoldModelTester(self)
@@ -225,16 +225,29 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="ESMFold doesn't support data parallel.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
+    def test_reverse_loading_mapping(self):
+        # EsmFold defaults to absolute position embeddings, which means it has no
+        # rotary_embeddings.inv_freq keys. Temporarily switch to rotary so the
+        # inv_freq conversion pattern registered for "esm" has keys to match.
+        original = self.model_tester.get_config
+
+        def _get_config_with_rotary():
+            config = original()
+            config.position_embedding_type = "rotary"
+            return config
+
+        self.model_tester.get_config = _get_config_with_rotary
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.get_config = original
 
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_protein_folding(self):
-        model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1").float()
+        model = EsmForProteinFolding.from_pretrained("hf-internal-testing/esmfold_v1-safetensors").float()
         model.eval()
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]

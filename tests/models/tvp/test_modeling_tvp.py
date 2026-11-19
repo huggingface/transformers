@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TvpImageProcessor
+    from transformers import TvpImageProcessorPil
 
 
 # Copied from test.models.videomae.test_modeling_videomae.VideoMAEModelTester with VideoMAE->TVP
@@ -242,7 +242,7 @@ def prepare_img():
 class TvpModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return TvpImageProcessor.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1")
+        return TvpImageProcessorPil.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1")
 
     def test_inference_no_head(self):
         model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp", revision="refs/pr/1").to(torch_device)

@@ -135,7 +135,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[0],
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[0],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -143,7 +143,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[1] // 2,
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[1],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -151,7 +151,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] // 2,
             config.stem_channels[1],
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[2],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -159,7 +159,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] * 2,
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[3],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -167,7 +167,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[2],
             kernel_size=1,
-            stride=1,
+            stride=config.stem_strides[4],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -276,10 +276,11 @@ class HGNetV2Stage(nn.Module):
         light_block = config.stage_light_block[stage_index]
         kernel_size = config.stage_kernel_size[stage_index]
         use_learnable_affine_block = config.use_learnable_affine_block
+        stride = config.stage_downsample_strides[stage_index]
 
         if downsample:
             self.downsample = HGNetV2ConvLayer(
-                in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
+                in_channels, in_channels, kernel_size=3, stride=stride, groups=in_channels, activation=None
             )
         else:
             self.downsample = nn.Identity()
@@ -435,22 +436,17 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> import torch
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image

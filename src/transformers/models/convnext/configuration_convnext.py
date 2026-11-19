@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/convnext-tiny-224")
-@strict(accept_kwargs=True)
+@strict
 class ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     num_stages (`int`, *optional*, defaults to 4):
@@ -42,6 +42,7 @@ class ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     ```"""
 
     model_type = "convnext"
+    attribute_map = {"num_hidden_layers": "num_stages"}
 
     num_channels: int = 3
     patch_size: int | list[int] | tuple[int, int] = 4
@@ -52,7 +53,7 @@ class ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     layer_scale_init_value: float = 1e-6
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     image_size: int | list[int] | tuple[int, int] = 224
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None

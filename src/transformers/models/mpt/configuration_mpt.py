@@ -22,9 +22,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
-@strict(accept_kwargs=True)
+@strict
 class MptAttentionConfig(PreTrainedConfig):
-    """
+    r"""
     attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
         type of attention to use. Options: `"multihead_attention"`, `"multiquery_attention"`.
     attn_pdrop (`float`, *optional*, defaults to `0.0`):
@@ -67,9 +67,9 @@ class MptAttentionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="mosaicml/mpt-7b")
-@strict(accept_kwargs=True)
+@strict
 class MptConfig(PreTrainedConfig):
-    """
+    r"""
     expansion_ratio (`int`, *optional*, defaults to 4):
         The ratio of the up/down scale in the MLP.
     max_seq_len (`int`, *optional*, defaults to 2048):
@@ -122,9 +122,9 @@ class MptConfig(PreTrainedConfig):
     expansion_ratio: int = 4
     max_seq_len: int = 2048
     vocab_size: int = 50368
-    resid_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
     layer_norm_epsilon: float = 1e-5
-    emb_pdrop: float = 0.0
+    emb_pdrop: float | int = 0.0
     learned_pos_emb: bool = True
     attn_config: dict | MptAttentionConfig | None = None
     init_device: str = "cpu"

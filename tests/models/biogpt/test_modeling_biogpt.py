@@ -165,7 +165,7 @@ class BioGptModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -183,7 +183,7 @@ class BioGptModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -194,9 +194,7 @@ class BioGptModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -214,7 +212,7 @@ class BioGptModelTester:
         model = BioGptForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
@@ -383,6 +381,25 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_biogpt_sequence_classification_left_padding(self):
+        # Regression: under left padding the head must pool the last real token.
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.pad_token_id = 0
+        model = BioGptForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        real = input_dict["input_ids"][:1].clamp(min=1)
+        pad = torch.zeros((1, 3), dtype=real.dtype, device=torch_device)
+        input_ids = torch.cat([pad, real], dim=1)
+        attention_mask = input_ids.ne(config.pad_token_id).to(torch_device)
+        with torch.no_grad():
+            pooled_logits = model(input_ids, attention_mask=attention_mask).logits
+            hidden_states = model.biogpt(input_ids, attention_mask=attention_mask).last_hidden_state
+            per_position_logits = model.score(hidden_states)
+        last_real_index = input_ids.shape[1] - 1
+        torch.testing.assert_close(pooled_logits[0], per_position_logits[0, last_real_index])
 
 
 @require_torch

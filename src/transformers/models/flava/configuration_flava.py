@@ -25,13 +25,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaImageConfig(PreTrainedConfig):
     r"""
-    num_blocks_per_group (`int`, *optional*, defaults to 2):
-        Number of conv-based blocks per group.
-    freeze (`bool`, defaults to `True`):
-        Whether to freeze the weights of the model.
     mask_token (`bool`, *optional*, defaults to `True`):
         Whether to use a mask token or not. Used in MIM (Masked Image Modeling) loss for FLAVA.
 
@@ -58,8 +54,8 @@ class FlavaImageConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     image_size: int | list[int] | tuple[int, int] = 224
@@ -71,7 +67,7 @@ class FlavaImageConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -100,8 +96,8 @@ class FlavaTextConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 0
@@ -109,7 +105,7 @@ class FlavaTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     use_cls_token (`bool`, *optional*, defaults to `True`):
@@ -138,8 +134,8 @@ class FlavaMultimodalConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     qkv_bias: bool = True
@@ -147,7 +143,7 @@ class FlavaMultimodalConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaImageCodebookConfig(PreTrainedConfig):
     r"""
     num_groups (`int`, *optional*, defaults to 4):
@@ -173,6 +169,8 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     ```
     """
 
+    model_type = "flava_image_codebook"
+
     num_groups: int = 4
     input_channels: int = 3
     num_blocks_per_group: int = 2
@@ -183,13 +181,17 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaConfig(PreTrainedConfig):
     r"""
     image_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`FlavaImageConfig`].
     multimodal_config (`dict`, *optional*):
         Dictionary of configuration options used to initialize [`FlavaMultimodalConfig`].
+    image_codebook_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`FlavaCodebookConfig`].
+    init_codebook (`bool`, *optional*, defaults to `True`):
+        Whether to initialize the codebook
     logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
         The initial value of the *logit_scale* parameter. Default is used as per the original FLAVA/CLIP
         implementation.
@@ -213,10 +215,6 @@ class FlavaConfig(PreTrainedConfig):
         Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
     return_loss (`bool`, *optional*, defaults to `True`):
         Whether to return loss or not
-    image_codebook_config (`dict`, *optional*):
-        Dictionary of configuration options used to initialize [`FlavaCodebookConfig`].
-    init_codebook (`bool`, *optional*, defaults to `True`):
-        Whether to initialize the codebook
 
     Example:
 
@@ -237,7 +235,7 @@ class FlavaConfig(PreTrainedConfig):
     """
 
     model_type = "flava"
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": FlavaTextConfig,
         "image_config": FlavaImageConfig,
         "multimodal_config": FlavaMultimodalConfig,
@@ -268,52 +266,16 @@ class FlavaConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `FlavaTextConfig` with default values.")
-        elif isinstance(self.text_config, FlavaTextConfig):
-            text_config = self.text_config.to_dict()
-        else:
-            text_config = self.text_config
-
-        if self.image_config is None:
-            image_config = {}
-            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
-        elif isinstance(self.image_config, FlavaImageConfig):
-            image_config = self.image_config.to_dict()
-        else:
-            image_config = self.image_config
-
-        if self.multimodal_config is None:
-            multimodal_config = {}
-            logger.info("`multimodal_config` is `None`. Initializing the `FlavaMultimodalConfig` with default values.")
-        elif isinstance(self.multimodal_config, FlavaMultimodalConfig):
-            multimodal_config = self.multimodal_config.to_dict()
-        else:
-            multimodal_config = self.multimodal_config
-
-        if self.image_codebook_config is None:
-            image_codebook_config = {}
-            logger.info(
-                "`image_codebook_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values."
-            )
-        elif isinstance(self.image_codebook_config, FlavaImageCodebookConfig):
-            image_codebook_config = self.image_codebook_config.to_dict()
-        else:
-            image_codebook_config = self.image_codebook_config
-
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        image_config_dict = kwargs.pop("image_config_dict", None)
-        multimodal_config_dict = kwargs.pop("multimodal_config_dict", None)
-        image_codebook_config_dict = kwargs.pop("image_codebook_config_dict", None)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
-        if text_config_dict is not None:
+        if (text_config_dict := kwargs.pop("text_config_dict", None)) is not None:
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = FlavaTextConfig(**text_config_dict).to_dict()
+            text_config = (
+                self.text_config.to_dict() if isinstance(self.text_config, PreTrainedConfig) else self.text_config
+            )
+            text_config = text_config or {}
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
@@ -334,8 +296,9 @@ class FlavaConfig(PreTrainedConfig):
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
+            self.text_config = text_config
 
-        if image_config_dict is not None:
+        if (image_config_dict := kwargs.pop("image_config_dict", None)) is not None:
             # This is the complete result when using `image_config_dict`.
             _image_config_dict = FlavaImageConfig(**image_config_dict).to_dict()
             # convert keys to string instead of integer
@@ -344,6 +307,10 @@ class FlavaConfig(PreTrainedConfig):
                     str(key): value for key, value in _image_config_dict["id2label"].items()
                 }
 
+            image_config = (
+                self.image_config.to_dict() if isinstance(self.image_config, PreTrainedConfig) else self.image_config
+            )
+            image_config = image_config or {}
             # Give a warning if the values exist in both `_image_config_dict` and `image_config` but being different.
             for key, value in _image_config_dict.items():
                 if key in image_config and value != image_config[key] and key != "transformers_version":
@@ -363,10 +330,17 @@ class FlavaConfig(PreTrainedConfig):
 
             # Update all values in `image_config` with the ones in `_image_config_dict`.
             image_config.update(_image_config_dict)
+            self.image_config = image_config
 
-        if multimodal_config_dict is not None:
+        if (multimodal_config_dict := kwargs.pop("multimodal_config_dict", None)) is not None:
             # This is the complete result when using `multimodal_config_dict`.
             _multimodal_config_dict = FlavaMultimodalConfig(**multimodal_config_dict).to_dict()
+            multimodal_config = (
+                self.multimodal_config.to_dict()
+                if isinstance(self.multimodal_config, PreTrainedConfig)
+                else self.multimodal_config
+            )
+            multimodal_config = multimodal_config or {}
 
             # Give a warning if the values exist in both `_multimodal_config_dict` and `multimodal_config` but being
             # different.
@@ -388,10 +362,17 @@ class FlavaConfig(PreTrainedConfig):
 
             # Update all values in `multimodal_config` with the ones in `_multimodal_config_dict`.
             multimodal_config.update(_multimodal_config_dict)
+            self.multimodal_config = multimodal_config
 
-        if image_codebook_config_dict is not None:
+        if (image_codebook_config_dict := kwargs.pop("image_codebook_config_dict", None)) is not None:
             # This is the complete result when using `image_codebook_config_dict`.
             _image_codebook_config_dict = FlavaImageCodebookConfig(**image_codebook_config_dict).to_dict()
+            image_codebook_config = (
+                self.image_codebook_config.to_dict()
+                if isinstance(self.image_codebook_config, PreTrainedConfig)
+                else self.image_codebook_config
+            )
+            image_codebook_config = image_codebook_config or {}
 
             # Give a warning if the values exist in both `_image_codebook_config_dict` and `image_codebook_config` but
             # being different.
@@ -418,13 +399,7 @@ class FlavaConfig(PreTrainedConfig):
 
             # Update all values in `image_codebook_config` with the ones in `_image_codebook_config_dict`.
             image_codebook_config.update(_image_codebook_config_dict)
-
-        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
-        self.text_config = FlavaTextConfig(**text_config)
-        self.image_config = FlavaImageConfig(**image_config)
-        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
-        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
-
+            self.image_codebook_config = image_codebook_config
         super().__post_init__(**kwargs)
 
 

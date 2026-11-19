@@ -20,7 +20,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a
@@ -30,8 +30,6 @@ from ...utils import auto_docstring
 )
 class AfmoeConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        The base period of the RoPE embeddings.
     global_attn_every_n_layers (`int`, *optional*, defaults to 4):
         The frequency of full attention layers. Every Nth layer will use full attention, while others use sliding
         window attention.
@@ -55,13 +53,22 @@ class AfmoeConfig(PreTrainedConfig):
     """
 
     model_type = "afmoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default pipeline parallel plan for base model
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 200192
@@ -84,9 +91,10 @@ class AfmoeConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 6
     num_shared_experts: int | None = 2
     route_scale: float | None = 1.0
+    output_router_logits: bool = False
     global_attn_every_n_layers: int | None = 4
     sliding_window: int | None = 1024
-    layer_types: list | None = None
+    layer_types: list[str] | None = None
     attention_dropout: float | int | None = 0.0
     mup_enabled: bool | None = False
     eos_token_id: int | list[int] | None = None

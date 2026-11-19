@@ -17,8 +17,10 @@ import copy
 import tempfile
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 import pytest
+from parameterized import parameterized
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
@@ -26,7 +28,9 @@ from transformers.trainer_utils import set_seed
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -243,7 +247,7 @@ class SeamlessM4TModelTester:
             self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
         decoder_output = result.logits
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         if self.input_modality == "text":
@@ -279,7 +283,7 @@ class SeamlessM4TModelTester:
         outputs = model(
             input_ids, decoder_input_ids=decoder_input_ids, decoder_attention_mask=input_mask, use_cache=True
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -300,7 +304,7 @@ class SeamlessM4TModelTester:
             input_ids,
             decoder_input_ids=next_tokens,
             decoder_attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["decoder_hidden_states"][0]
 
@@ -330,6 +334,7 @@ class SeamlessM4TModelTester:
             input_name: input_ids,
             "attention_mask": input_mask,
             "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": input_mask,
             "labels": lm_labels,
         }
         return config, inputs_dict
@@ -364,6 +369,27 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        # `SeamlessM4TModel` defaults to text and switches its `main_input_name` to `input_features` only at
+        # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
+        with patch.object(SeamlessM4TModel, "main_input_name", "input_features"):
+            _test_eager_matches_sdpa_inference(
+                self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            )
+
+    def test_flex_attention_with_grads(self):
+        with patch.object(SeamlessM4TModel, "main_input_name", "input_features"):
+            super().test_flex_attention_with_grads()
+
+    @unittest.skip(
+        reason="Conformer speech encoder uses relative positional embeddings producing dense attention biases incompatible with flash attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -458,8 +484,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 

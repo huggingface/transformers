@@ -18,7 +18,6 @@
 # limitations under the License.
 
 
-import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -42,13 +41,13 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
-@strict(accept_kwargs=True)
+@strict
 class YoutuConfig(DeepseekV3Config):
     r"""
-    embedding_initializer_range (`float`, *optional*):
-        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
+    embedding_initializer_range (`float`, *optional*):
+        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
 
     ```python
     >>> from transformers import YoutuModel, YoutuConfig
@@ -83,6 +82,7 @@ class YoutuConfig(DeepseekV3Config):
     # remove unused attribute
     n_shared_experts = AttributeError()
     n_routed_experts = AttributeError()
+    output_router_logits = AttributeError()
     routed_scaling_factor = AttributeError()
     n_group = AttributeError()
     topk_group = AttributeError()
@@ -91,6 +91,8 @@ class YoutuConfig(DeepseekV3Config):
     norm_topk_prob = AttributeError()
     pretraining_tp = AttributeError()
     moe_intermediate_size = AttributeError()
+    num_mtp_layers = AttributeError()
+    base_model_ep_plan = AttributeError()
 
     def __post_init__(self, **kwargs):
         if self.initializer_range is None:
@@ -101,9 +103,6 @@ class YoutuConfig(DeepseekV3Config):
 
         self.embedding_initializer_range = self.embedding_initializer_range or 2.0 * self.initializer_range
         super().__post_init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        raise AttributeError("Not overwritten for the Youtu model!")
 
 
 class YoutuRMSNorm(LlamaRMSNorm):
@@ -127,7 +126,6 @@ class YoutuDecoderLayer(LlamaDecoderLayer):
 
 
 class YoutuPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)

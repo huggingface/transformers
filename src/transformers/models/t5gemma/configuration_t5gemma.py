@@ -28,7 +28,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
-@strict(accept_kwargs=True)
+@strict
 class T5GemmaModuleConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -49,7 +49,6 @@ class T5GemmaModuleConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5_gemma_module"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -110,7 +109,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
-@strict(accept_kwargs=True)
+@strict
 class T5GemmaConfig(PreTrainedConfig):
     r"""
     encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
@@ -127,8 +126,10 @@ class T5GemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "t5gemma"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder": T5GemmaModuleConfig, "decoder": T5GemmaModuleConfig}
+    sub_configs_defaults = {
+        "encoder": T5GemmaModuleConfig,
+        "decoder": T5GemmaModuleConfig,
+    }
 
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
     decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
@@ -140,16 +141,7 @@ class T5GemmaConfig(PreTrainedConfig):
     vocab_size: int = 256000
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder, dict):
-            self.encoder = T5GemmaModuleConfig(**self.encoder)
-        elif self.encoder is None:
-            self.encoder = T5GemmaModuleConfig()
-
-        if isinstance(self.decoder, dict):
-            self.decoder = T5GemmaModuleConfig(**self.decoder)
-        elif self.decoder is None:
-            self.decoder = T5GemmaModuleConfig()
-
+        super().__post_init__(**kwargs)
         self.encoder.is_decoder = False
         self.encoder.dropout_rate = self.dropout_rate
         self.encoder.attention_dropout = self.attention_dropout
@@ -164,9 +156,7 @@ class T5GemmaConfig(PreTrainedConfig):
 
         for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
             if special_token_key not in kwargs:
-                kwargs[special_token_key] = getattr(self.decoder, special_token_key)
-
-        super().__post_init__(**kwargs)
+                setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]

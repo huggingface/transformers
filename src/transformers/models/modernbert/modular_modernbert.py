@@ -14,7 +14,8 @@
 # limitations under the License.
 
 import math
-from typing import Literal, Optional
+from collections.abc import Callable
+from typing import Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -24,7 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -49,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="answerdotai/ModernBERT-base")
-@strict(accept_kwargs=True)
+@strict
 class ModernBertConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
@@ -60,8 +61,6 @@ class ModernBertConfig(PreTrainedConfig):
         Whether to use bias in the normalization layers.
     local_attention (`int`, *optional*, defaults to 128):
         The window size for local attention.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
     mlp_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the MLP layers.
     decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -79,11 +78,6 @@ class ModernBertConfig(PreTrainedConfig):
         Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
     sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
         The index to ignore for the sparse prediction.
-    reference_compile (`bool`, *optional*):
-        Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
-        the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
-        shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-        be faster in some scenarios. This argument is deprecated and will be removed in a future version
 
     Examples:
 
@@ -101,7 +95,6 @@ class ModernBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     vocab_size: int = 50368
@@ -239,19 +232,15 @@ class ModernBertMLP(nn.Module):
 
 class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
     def __init__(self, config: ModernBertConfig, device=None):
-        super().__init__(config, device)
+        super().__init__(config)
 
-    @staticmethod
     def compute_default_rope_parameters(
-        config: ModernBertConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-        layer_type: str | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
+        config: ModernBertConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config, layer_type)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -338,9 +327,9 @@ class ModernBertAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
-        attention_interface = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -408,8 +397,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         "attentions": ModernBertAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -456,10 +445,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             ),
         ):
             init_weight(module.classifier, stds["final_out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, ModernBertRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -524,7 +509,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             }
 
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:
@@ -653,12 +638,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -743,10 +722,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -888,7 +863,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
                 cls_mask = attention_mask.argmax(dim=-1).to(last_hidden_state.device)
             # if no pad, <cls> is the first token
             else:
-                cls_mask = torch.tensor(0, dtype=torch.long, device=last_hidden_state.device)
+                cls_mask = torch.full((), 0, dtype=torch.long, device=last_hidden_state.device)
             # extract the <cls> token for the logits
             last_hidden_state = last_hidden_state[indices_0, cls_mask]
 

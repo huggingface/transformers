@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tencent/Hunyuan-A13B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class HunYuanMoEV1Config(PreTrainedConfig):
     r"""
     eod_token_id (int, *optional*, defaults to 3):
@@ -32,7 +32,16 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     """
 
     model_type = "hunyuan_v1_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
     attribute_map = {
         "num_experts_per_tok": "moe_topk",
         "num_local_experts": "num_experts",
@@ -60,6 +69,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     num_experts: int = 1
+    output_router_logits: bool = False
     moe_topk: int | list[int] = 1
     head_dim: int | None = None
 

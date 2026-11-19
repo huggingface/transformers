@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/phi-1")
-@strict(accept_kwargs=True)
+@strict
 class PhiConfig(PreTrainedConfig):
     r"""
     qk_layernorm (`bool`, *optional*, defaults to `False`):
@@ -44,7 +44,6 @@ class PhiConfig(PreTrainedConfig):
     ```"""
 
     model_type = "phi"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -66,8 +65,8 @@ class PhiConfig(PreTrainedConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None
-    resid_pdrop: float = 0.0
-    embd_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
+    embd_pdrop: float | int = 0.0
     attention_dropout: float | int | None = 0.0
     hidden_act: str = "gelu_new"
     max_position_embeddings: int = 2048

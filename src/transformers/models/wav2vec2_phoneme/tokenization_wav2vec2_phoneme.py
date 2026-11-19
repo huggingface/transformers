@@ -117,14 +117,22 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         phonemizer_backend="espeak",
         **kwargs,
     ):
+        # Recover delimiters from V5 `*_token` auto-promotion; they aren't vocab tokens.
+        model_specific = kwargs.get("model_specific_special_tokens") or {}
+        if "word_delimiter_token" in model_specific:
+            word_delimiter_token = model_specific.pop("word_delimiter_token")
+        if "phone_delimiter_token" in model_specific:
+            phone_delimiter_token = model_specific.pop("phone_delimiter_token")
+        if not model_specific:
+            kwargs.pop("model_specific_special_tokens", None)
+
         self._word_delimiter_token = word_delimiter_token
         self._phone_delimiter_token = phone_delimiter_token
         self.do_phonemize = do_phonemize
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
-
-        if do_phonemize:
-            self.init_backend(self.phonemizer_lang)
+        # Created on first use so that loading the tokenizer and decoding work without phonemizer / espeak-ng
+        self._phonemizer_backend = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -135,13 +143,13 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            word_delimiter_token=word_delimiter_token,
-            phone_delimiter_token=phone_delimiter_token,
             do_phonemize=do_phonemize,
             phonemizer_lang=phonemizer_lang,
             phonemizer_backend=phonemizer_backend,
             **kwargs,
         )
+        self.init_kwargs["word_delimiter_token"] = word_delimiter_token
+        self.init_kwargs["phone_delimiter_token"] = phone_delimiter_token
 
     @property
     def vocab_size(self) -> int:
@@ -173,7 +181,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         requires_backends(self, "phonemizer")
         from phonemizer.backend import BACKENDS
 
-        self.backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
+        self._phonemizer_backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
 
     def prepare_for_tokenization(
         self,
@@ -181,6 +189,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         is_split_into_words: bool = False,
         phonemizer_lang: str | None = None,
         do_phonemize: bool | None = None,
+        **kwargs,
     ) -> tuple[str, dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -215,7 +224,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # set the correct phonemizer language
         if phonemizer_lang is not None:
             self.phonemizer_lang = phonemizer_lang
-            self.init_backend(phonemizer_lang)
+            self._phonemizer_backend = None
 
         return (text, {})
 
@@ -241,16 +250,17 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return tokens
 
     def phonemize(self, text: str, phonemizer_lang: str | None = None) -> str:
+        if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
+            self.init_backend(phonemizer_lang)
+        elif self._phonemizer_backend is None:
+            self.init_backend(self.phonemizer_lang)
+
         from phonemizer.separator import Separator
 
         word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
-        if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
-            self.init_backend(phonemizer_lang)
-        else:
-            phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
-        phonemes = self.backend.phonemize(
+        phonemes = self._phonemizer_backend.phonemize(
             [text],
             separator=separator,
         )
@@ -346,7 +356,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # filter self.pad_token which is used as CTC-blank token
         processed_chars = list(filter(lambda char: char != self.pad_token, chars))
 
-        # also filter self.word_delimiter_token if not not
+        # also filter self.word_delimiter_token if not
         if filter_word_delimiter_token and self.word_delimiter_token is not None:
             processed_chars = list(filter(lambda token: token != self.word_delimiter_token, processed_chars))
 
@@ -412,14 +422,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
-        result = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            result.append(token)
-
         string_output = self.convert_tokens_to_string(
-            result,
+            filtered_tokens,
             group_tokens=group_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens,
             filter_word_delimiter_token=filter_word_delimiter_token,

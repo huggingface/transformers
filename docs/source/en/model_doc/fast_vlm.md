@@ -13,13 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-
-*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-12-02.*
+*This model was published in HF papers on 2024-12-17 and contributed to Hugging Face Transformers on 2025-12-02.*
 
 # FastVLM
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -34,7 +32,7 @@ The abstract from the paper is the following:
 
 *Scaling the input image resolution is essential for enhancing the performance of Vision Language Models (VLMs), particularly in text-rich image understanding tasks. However, popular visual encoders such as ViTs become inefficient at high resolutions due to the large number of tokens and high encoding latency. At different operational resolutions, the vision encoder of a VLM can be optimized along two axes: reducing encoding latency and  minimizing the number of visual tokens passed to the LLM, thereby lowering overall latency. Based on a comprehensive efficiency analysis of the interplay between image resolution, vision latency, token count, and LLM size, we introduce FastVLM—a model that achieves an optimized trade-off between resolution, latency, and accuracy. FastVLM incorporates FastViTHD, a novel hybrid vision encoder designed to output fewer tokens and significantly reduce encoding time for high-resolution images. Unlike previous methods, FastVLM achieves the optimal balance between visual token count and image resolution solely by scaling the input image, eliminating the need for additional token pruning and simplifying the model design. In the LLaVA-1.5 setup, FastVLM achieves 3.2× improvement in time-to-first-token (TTFT) while maintaining similar performance on VLM benchmarks compared to prior works. Compared to LLaVa-OneVision at the highest resolution (1152×1152), FastVLM achieves better performance on key benchmarks like SeedBench, MMMU and DocVQA, using the same 0.5B LLM, but with 85× faster TTFT and a vision encoder that is 3.4× smaller.*
 
-This model was contributed by [Kamila](https://github.com/kamila-chay).
+This model was contributed by Kamila.
 The original code can be found [here](https://github.com/apple/ml-fastvlm).
 
 ## Usage tips
@@ -49,11 +47,11 @@ Hugging Face models use SDPA by default; however, this model’s visual backbone
 
 If you want to use a different attention implementation in the language decoder, make sure to set it explicitly, for example:
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"})`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"}, device_map="auto")`
 
 Setting it for the entire model, e.g.
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2")`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2", device_map="auto")`
 
 will result in an error.
 
@@ -73,10 +71,12 @@ Each **checkpoint** is trained with a specific prompt format, depending on the u
 
 ```python
 import torch
+
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
+
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 conversation = [
@@ -108,10 +108,12 @@ FastVLM also supports batched inference. Here is how you can do it:
 
 ```python
 import torch
+
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
+
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 

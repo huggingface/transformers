@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/s2t-small-librispeech-asr")
-@strict(accept_kwargs=True)
+@strict
 class Speech2TextConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 6000):
@@ -56,7 +56,6 @@ class Speech2TextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "speech_to_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -84,7 +83,7 @@ class Speech2TextConfig(PreTrainedConfig):
     scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_source_positions: int = 6000
     max_target_positions: int = 1024
     num_conv_layers: int = 2

@@ -12,64 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import time
+import warnings
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import IntEnum
+from typing import TYPE_CHECKING
 
 import torch
 
-from ...utils import is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
-from ...utils.metrics import traced
+from .utils import logger
 
 
-if is_psutil_available():
-    import psutil
+if TYPE_CHECKING:
+    from .cache import PagedAttentionCache
+
 
 # This is a temporary token ID used to represent a token that is not yet generated
+# TODO: update this to 0 and check it breaks nothing + simplify carry over and time new logic
 TMP_TOKEN_ID = -1
 
 
-# We centralize the logger here to coordinate between logging and progress bar
-logger = logging.getLogger("ContinuousBatchingLogger")
-
-
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        total_memory = torch.cuda.get_device_properties(device).total_memory
-        reserved_memory = torch.cuda.memory_reserved(device)
-        allocated_memory = torch.cuda.memory_allocated(device)
-    elif is_torch_xpu_available():
-        device = torch.device("xpu")
-        torch.xpu.empty_cache()
-        torch.xpu.synchronize()
-        total_memory = torch.xpu.get_device_properties(device).total_memory
-        reserved_memory = torch.xpu.memory_reserved(device)
-        allocated_memory = torch.xpu.memory_allocated(device)
-    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        device = torch.device("mps")
-        # MPS memory reporting (PyTorch 2.0+)
-        total_memory = torch.mps.driver_allocated_memory()
-        allocated_memory = total_memory - getattr(torch.mps, "recommended_max_memory")()
-        reserved_memory = 0  # MPS does not track reserved separately
-    else:
-        device = torch.device("cpu")
-        if is_psutil_available():
-            total_memory = psutil.virtual_memory().total
-            allocated_memory = psutil.Process().memory_info().rss
-            reserved_memory = allocated_memory
-        else:
-            logger.error(
-                "Cannot get memory breakdown on CPU without psutil: returning 0 for all memory values. Please install "
-                "psutil to get an actual memory breakdown."
-            )
-            total_memory = 0
-            reserved_memory = 0
-            allocated_memory = 0
+    from .utils import get_device_and_memory_breakdown as utils_version
 
-    return device, total_memory, reserved_memory, allocated_memory
+    warnings.warn(
+        "`get_device_and_memory_breakdown` has been moved to continuous_batching/utils.py and will be deleted from "
+        "requests.py in v5.24. Please import it from there instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+
+    return utils_version()
 
 
 class RequestStatus(IntEnum):
@@ -108,7 +82,8 @@ class GenerationOutput:
     timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
-        return self.status == RequestStatus.FINISHED
+        """Whether the request reached a terminal state, either because it finished generating or because it failed."""
+        return self.status >= RequestStatus.FINISHED
 
 
 @dataclass
@@ -138,29 +113,39 @@ class RequestState:
     # Required fields
     request_id: str
     initial_tokens: list[int]  # Initial prompt tokens # TODO: rename this as prefill tokens
-    # Optional fields
+
+    # Optional fields (CB parameters)
+    streaming: bool = False  # Whether to stream tokens as they're generated
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
-    num_children: int = 0  # Number of children requests
-    # Internal fields
-    tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
-    remaining_prefill_tokens: list[int] = field(
-        default_factory=list
-    )  # Initial tokens left to process (initialized in __post_init__)
-    generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
-    allocated_blocks: int = 0  # Number of blocks allocated to the request
-    position_offset: int = 0  # Current position in the sequence for position_ids
-    _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
+
+    # Optional fields (generation parameters)
     max_new_tokens: int | None = 20  # Maximum number of new tokens to generate. None means no limit. Default to 20.
     eos_token_id: int | list[int] | None = None  # ID(s) of the end-of-sequence tokens. Only used in post-init.
+    num_children: int = 0  # Number of children requests
+    logit_processor_kwargs: dict = field(default_factory=dict)  # Keyword arguments for the logits processor.
+
+    # Internal fields (for scheduling)
+    tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
+    generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
+    logprobs: list[float] = field(default_factory=list)  # Log probabilities of the generated tokens
+    position_offset: int = 0  # Current position in the sequence for position_ids
+    allocated_blocks: int = 0  # Number of blocks allocated to the request
+
+    _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     _eos_token_ids: set[int] = field(default_factory=set)  # IDs of the end-of-sequence tokens, formatted as a set
-    streaming: bool = False  # Whether to stream tokens as they're generated
+
+    # Internal fields (for tracking)
     created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
     _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
     # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
+
+    # Fields overwritten in __post_init__
     _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
+    remaining_prefill_tokens: list[int] = field(default_factory=list)  # Initial tokens left to process
+    is_cpu_offloaded: bool = False  # True when the request's KV cache is in the CPU swap pool
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
@@ -186,11 +171,14 @@ class RequestState:
 
     @status.setter
     def status(self, value: RequestStatus):
+        # Leaving the pending state means the request started: we stamp the start of its lifespan
         if self._status == RequestStatus.PENDING:
             self.lifespan = (time.perf_counter(), -1)
-        elif value == RequestStatus.FINISHED:
+        # Reaching a terminal state means the request is over: we stamp the end of its lifespan
+        if value >= RequestStatus.FINISHED:
             self.lifespan = (self.lifespan[0], time.perf_counter())
-            self.log_end_of_request()
+            if logger.isEnabledFor(logging.DEBUG):
+                self.log_end_of_request()
         self._status = value
 
     @property
@@ -202,7 +190,7 @@ class RequestState:
         decode_len = self.generated_len()
         start_time = self.lifespan[0] - self.created_time
         end_time = self.lifespan[1] - self.created_time
-        logger.info(
+        logger.debug(
             f"Request {self.request_id} finished: {prefill_len = } {decode_len = } {start_time = } {end_time = }"
         )
 
@@ -215,16 +203,9 @@ class RequestState:
         return len(self.generated_tokens)
 
     # TODO: this logic seems one token off, check it out
-    @traced
-    def update_and_check_completion(self, token_id: int) -> bool:
-        """Update the request with a newly generated token and check for completion.
-
-        Args:
-            token_id: The token ID to add to the output sequence
-
-        Returns:
-            bool: True if the request is now complete, False otherwise
-        """
+    def update_and_check_completion(self, token_id: int, logprob: float | None) -> bool:
+        """Update the request with a newly generated token (and optional log probability of the token) and check for
+        completion. Returns True if the request is now complete, False otherwise."""
         # Only update if we're in decoding state # TODO: seems useless (always true) -- remove this
         if self.status != RequestStatus.DECODING:
             return False
@@ -243,9 +224,10 @@ class RequestState:
             self.generated_tokens.append(token_id)
             self.tokens_to_process = [token_id]  # this works for 2 levels of pipelines, but not sure for more
             current_len += 1
+            if logprob is not None:
+                self.logprobs.append(logprob)
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
-            self.generated_tokens.pop()
 
         if is_eos or current_len >= self._new_tokens_limit:
             self.status = RequestStatus.FINISHED
@@ -263,66 +245,76 @@ class RequestState:
             f"full_prompt_length={len(self.initial_tokens)}",
             f"allocated_blocks={self.allocated_blocks}",
             f"generated_tokens={self.generated_tokens}",
+            f"logit_processor_kwargs={self.logit_processor_kwargs}",
         ]
         return "RequestState(\n\t" + ",\n\t".join(msg) + "\n)"
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
         if self._true_initial_tokens:
-            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
-            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
+            generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            prompt_ids = self.initial_tokens[: self._true_initial_tokens]
+        else:
+            generated_tokens = self.generated_tokens[:]
+            prompt_ids = self.initial_tokens
         return GenerationOutput(
             request_id=self.request_id,
-            prompt_ids=self.initial_tokens,
-            generated_tokens=self.generated_tokens,
-            logprobs=[],
+            prompt_ids=prompt_ids,
+            generated_tokens=generated_tokens,
+            logprobs=self.logprobs[:],
             error=self.error,
             status=self.status,
             created_time=self.created_time,
             lifespan=self.lifespan,
-            timestamps=self.timestamps,
+            timestamps=self.timestamps[:] if self.timestamps is not None else None,
         )
 
     def fork(self, new_request_id: str) -> "RequestState":
-        """Fork the request into a new request with the same state expect for request_id, created_time and lifespan."""
-        t = time.perf_counter()
-        new_request = RequestState(
-            request_id=new_request_id,
-            initial_tokens=self.initial_tokens,
-            num_children=self.num_children,
-            tokens_to_process=self.tokens_to_process[:],
-            generated_tokens=self.generated_tokens[:],
-            allocated_blocks=self.allocated_blocks,
-            position_offset=self.position_offset,
-            _status=self.status,
-            max_new_tokens=self.max_new_tokens,
-            eos_token_id=self.eos_token_id,
-            streaming=self.streaming,
-            created_time=t,
-            lifespan=(t, -1),
-            _timestamps=[],
-            error=self.error,
-            record_timestamps=self.record_timestamps,
-        )
-        # Modified by __post_init__
+        """Fork the request into a new request with the same state except for request_id, created_time and lifespan."""
+        new_request = deepcopy(self)
+        # Update tracking fields
+        new_request.request_id = new_request_id
+        new_request.created_time = time.perf_counter()
+        new_request.lifespan = (new_request.created_time, -1)
+        new_request._timestamps = []
+        # Update fields overwritten in __post_init__
         new_request.remaining_prefill_tokens = self.remaining_prefill_tokens[:]
         return new_request
+
+    def get_request_config(self) -> dict:
+        """Get all the fields necessary to create a request that would have the same configuration."""
+        return {
+            "streaming": self.streaming,
+            "record_timestamps": self.record_timestamps,
+            "max_new_tokens": self.max_new_tokens,
+            "eos_token_id": self.eos_token_id,
+            "num_children": self.num_children,
+            "logit_processor_kwargs": deepcopy(self.logit_processor_kwargs),
+        }
 
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
-        the _true_initial_tokens attribute."""
-        max_new_tokens = None if self.max_new_tokens is None else (self.max_new_tokens - len(self.generated_tokens))
+        the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
+
+        request_config = self.get_request_config()
+        # If there is a number of max new tokens, we update it to account for the already generated tokens
+        if self.max_new_tokens is not None:
+            request_config["max_new_tokens"] = self.max_new_tokens - len(self.generated_tokens)
+        # Create new request state
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
-            num_children=self.num_children,
-            record_timestamps=self.record_timestamps,
-            max_new_tokens=max_new_tokens,
-            eos_token_id=self.eos_token_id,
-            streaming=self.streaming,
+            logprobs=self.logprobs[:],
+            _true_initial_tokens=self._true_initial_tokens + len(self.initial_tokens),
+            **request_config,
         )
-        new_state._true_initial_tokens = self._true_initial_tokens + len(self.initial_tokens)
+        # If the request has been soft reset once already, this stays the same
+        if self._true_initial_tokens:
+            new_state._true_initial_tokens = self._true_initial_tokens
+        # Otherwise, we set the true initial tokens to the number of initial tokens
+        else:
+            new_state._true_initial_tokens = len(self.initial_tokens)
         return new_state
 
 
@@ -330,9 +322,52 @@ class FutureRequestState:
     """Tracks the current state of a request and the relevant information to update it."""
 
     # This makes instantiating this class faster
-    __slots__ = ("state", "has_new_token", "complete_blocks")
+    __slots__ = ("state", "has_new_token", "complete_blocks", "query_length")
 
-    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: int) -> None:
+    def __init__(
+        self, state: RequestState, has_new_token: bool, complete_blocks: dict[str, int], query_length: int
+    ) -> None:
         self.state = state
         self.has_new_token = has_new_token
         self.complete_blocks = complete_blocks
+        self.query_length = query_length
+
+
+class FutureBatch:
+    """A container to describe a batch to be scheduled."""
+
+    # This makes instantiating this class faster
+    __slots__ = ("requests", "token_budget", "cache_budget")
+
+    def __init__(self, requests: list[FutureRequestState], token_budget: int, cache_budget: int) -> None:
+        self.requests = requests
+        self.token_budget = token_budget
+        self.cache_budget = cache_budget
+
+
+def create_warmup_future_states(
+    num: int,
+    status: RequestStatus,
+    num_q_tokens: int,
+    max_kv_read: int,
+    cache: "PagedAttentionCache",
+) -> list[FutureRequestState]:
+    """A utility function to create a list of FutureRequestStates for the warmup of CB."""
+    # Setup
+    request_ids = [f"__warmup_{status.name}_{i}__" for i in range(num)]
+    total_tokens = num_q_tokens + max_kv_read
+    # Main loop
+    future_states = []
+    for req_id in request_ids:
+        state = RequestState(request_id=req_id, initial_tokens=[0] * total_tokens, max_new_tokens=1)
+        state._status = status  # bypass the property setter to avoid the lifecycle side effects
+        state.tokens_to_process = [0] * num_q_tokens
+        state.position_offset = max_kv_read
+        # Stop if allocation fails for any request. Since position_offset acts as the past length, this allocates
+        # enough cache for the whole fake request (past + query).
+        if not cache.can_store_request_tokens(state, num_q_tokens):
+            return future_states
+        future_states.append(
+            FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_q_tokens)
+        )
+    return future_states

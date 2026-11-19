@@ -22,9 +22,11 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
-@strict(accept_kwargs=True)
+@strict
 class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
+    embed_dim (`int`, *optional*, defaults to 4):
+        Dimension of the quantized vector in codebook.
     out_channels (`int`, *optional*, defaults to 3):
         Output channel of decoder.
     temporal_downsample_factor (`int`, *optional*, defaults to 4):
@@ -35,8 +37,6 @@ class Emu3VQVAEConfig(PreTrainedConfig):
         Channel scaling factor of the intermediate blocks.
     num_res_blocks (`int`, *optional*, defaults to 2):
         Residual block number in each stage.
-    embed_dim (`int`, *optional*, defaults to 4):
-        Dimension of the quantized vector in codebook.
     attn_resolutions (`list[int]`, *optional*, defaults to `[3]`):
         Stage indices to apply attention.
 
@@ -51,7 +51,8 @@ class Emu3VQVAEConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "emu3_vqgan"
     base_config_key = "vq_config"
@@ -73,7 +74,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
-@strict(accept_kwargs=True)
+@strict
 class Emu3TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -92,8 +93,8 @@ class Emu3TextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "emu3_text_model"
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
 
     vocab_size: int = 184622
@@ -118,7 +119,7 @@ class Emu3TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
-@strict(accept_kwargs=True)
+@strict
 class Emu3Config(PreTrainedConfig):
     r"""
     vocabulary_map (`dict`, *optional*):
@@ -126,8 +127,10 @@ class Emu3Config(PreTrainedConfig):
     """
 
     model_type = "emu3"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"text_config": Emu3TextConfig, "vq_config": Emu3VQVAEConfig}
+    sub_configs_defaults = {
+        "vq_config": Emu3VQVAEConfig,
+        "text_config": Emu3TextConfig,
+    }
 
     vq_config: dict | Emu3VQVAEConfig | None = None
     text_config: dict | Emu3TextConfig | None = None
@@ -135,16 +138,6 @@ class Emu3Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.vq_config is None:
-            self.vq_config = Emu3VQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = Emu3VQVAEConfig(**self.vq_config)
-
-        if self.text_config is None:
-            self.text_config = Emu3TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Emu3TextConfig(**self.text_config)
-
         self.image_token_id = self.vocabulary_map.get("<image>") if self.vocabulary_map is not None else None
         super().__post_init__(**kwargs)
 

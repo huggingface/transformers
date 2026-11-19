@@ -20,9 +20,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="")
-@strict(accept_kwargs=True)
+@strict
 class DecisionTransformerConfig(PreTrainedConfig):
-    """
+    r"""
     state_dim (`int`, *optional*, defaults to 17):
         The state size for the RL environment
     act_dim (`int`, *optional*, defaults to 4):
@@ -55,7 +55,6 @@ class DecisionTransformerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "decision_transformer"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "max_position_embeddings": "n_positions",
         "num_attention_heads": "n_head",
@@ -73,9 +72,9 @@ class DecisionTransformerConfig(PreTrainedConfig):
     n_head: int = 1
     n_inner: int | None = None
     activation_function: str = "relu"
-    resid_pdrop: float = 0.1
-    embd_pdrop: float = 0.1
-    attn_pdrop: float = 0.1
+    resid_pdrop: float | int = 0.1
+    embd_pdrop: float | int = 0.1
+    attn_pdrop: float | int = 0.1
     layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02
     scale_attn_weights: bool = True

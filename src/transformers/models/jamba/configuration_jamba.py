@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ai21labs/Jamba-v0.1")
-@strict(accept_kwargs=True)
+@strict
 class JambaConfig(PreTrainedConfig):
     r"""
     expert_layer_period (`int`, *optional*, defaults to 2):
@@ -33,16 +33,32 @@ class JambaConfig(PreTrainedConfig):
         Once in this many layers, we will have a vanilla attention layer
     attn_layer_offset (`int`, *optional*, defaults to 4):
         The first layer index that contains a vanilla attention mlp layer
+    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
+        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
     mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
         Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
-    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
-        `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
-        `True` and kernels are not available
+    use_mambapy (`bool`, *optional*, defaults to `False`):
+        Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`,
+        the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive
+        version if memory is limited.
+    use_associative_scan (`bool`, *optional*, defaults to `True`):
+        Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
+        sequential implementation. The associative scan is only active during `torch.compile` tracing and
+        requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
+        `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
     """
 
     model_type = "jamba"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
+        "layers.*.feed_forward.experts.down_proj": "rowwise",
+        "layers.*.feed_forward.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts": "ep_dispatch_experts",
+    }
     attribute_map = {
         "num_local_experts": "num_experts",
     }
@@ -62,7 +78,7 @@ class JambaConfig(PreTrainedConfig):
     router_aux_loss_coef: float = 0.001
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_position_embeddings: int = 262144
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 2
@@ -78,6 +94,8 @@ class JambaConfig(PreTrainedConfig):
     mamba_dt_rank: int | str = "auto"
     mamba_conv_bias: bool = True
     mamba_proj_bias: bool = False
+    use_mambapy: bool = False
+    use_associative_scan: bool = True
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -92,6 +110,11 @@ class JambaConfig(PreTrainedConfig):
             "attention" if i % self.attn_layer_period == self.attn_layer_offset else "mamba"
             for i in range(self.num_hidden_layers)
         ]
+
+    @property
+    def layer_types(self):
+        # Follow the `layer_types` conventions
+        return ["linear_attention" if x == "mamba" else "full_attention" for x in self.layers_block_type]
 
     @property
     def layers_num_experts(self):

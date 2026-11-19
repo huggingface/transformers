@@ -28,6 +28,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import AddedToken, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if TYPE_CHECKING:
@@ -43,16 +44,6 @@ def is_url(val) -> bool:
 
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
-
-
-class Idefics2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-    }
 
 
 @auto_docstring
@@ -100,13 +91,12 @@ class Idefics2Processor(ProcessorMixin):
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[Idefics2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
         output_kwargs = self._merge_kwargs(
-            Idefics2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -118,7 +108,7 @@ class Idefics2Processor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
+            elif not isinstance(text, list) or not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
@@ -186,5 +176,7 @@ class Idefics2Processor(ProcessorMixin):
 
         return BatchFeature(inputs, tensor_type=return_tensors)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Idefics2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Idefics2Processor"]

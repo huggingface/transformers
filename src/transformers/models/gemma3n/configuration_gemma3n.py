@@ -24,40 +24,37 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_timm_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, requires_backends
 
 
 if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nTextConfig(PreTrainedConfig):
     r"""
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
         Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
-        Dimension of the hidden representations for per-layer emebeddings.
+        Dimension of the hidden representations for per-layer embeddings.
     altup_active_idx (`int`, *optional*, defaults to 0):
-        The index of the prediction from which AltUp will compute additional predictions or correct
+        The index of the prediction from which AltUp will compute additional predictions or correct the active prediction.
     altup_coef_clip (`float`, *optional*, defaults to 120.0):
         The maximum amplitude of an AltUp prediction or correction coefficient weight.
     altup_correct_scale (`bool`, *optional*, defaults to `True`):
         If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
     altup_num_inputs (`int`, *optional*, defaults to 4):
-        The number of predictions that AltUp should be make given the input sequence.
+        The number of predictions that AltUp should make given the input sequence.
     num_kv_shared_layers (`int`, *optional*, defaults to 15):
-        The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
+        The number of layers that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
         layers in the model "share" the KV values in that each local and global layer in this range uses the KV
         cache values computed for the last local or global layer, respectively, before entering this range. The
         value should be a multiple of the attention pattern size (see `layer_types` parameter).
-    laurel_rank (int, *optional*, defaults to 64):
+    laurel_rank (`int`, *optional*, defaults to 64):
         The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-    activation_sparsity_pattern (Sequence[float], *optional*):
+    activation_sparsity_pattern (`Sequence[float]`, *optional*):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
@@ -77,7 +74,6 @@ class Gemma3nTextConfig(PreTrainedConfig):
     """
 
     model_type = "gemma3n_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -168,6 +164,15 @@ class Gemma3nTextConfig(PreTrainedConfig):
                 f"heads ({self.num_attention_heads})."
             )
 
+    def to_dict(self) -> dict[str, Any]:
+        output = super().to_dict()
+        # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
+        # instead of halving the already-halved window. Configs that inherit this one without the
+        # flag never convert, hence the `False` fallback.
+        if getattr(self, "use_bidirectional_attention", False):
+            output["sliding_window"] = (self.sliding_window - 1) * 2
+        return output
+
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
@@ -197,9 +202,37 @@ class Gemma3nTextConfig(PreTrainedConfig):
         self.standardize_rope_params()
         return kwargs
 
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
+        # After this index, all layers are consumers
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
+
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer][::-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
+
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     vocab_offset (`int`, *optional*, defaults to 262272):
@@ -299,7 +332,7 @@ class Gemma3nAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nVisionConfig(PreTrainedConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -392,7 +425,7 @@ class Gemma3nVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nConfig(PreTrainedConfig):
     r"""
     audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
@@ -433,7 +466,7 @@ class Gemma3nConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma3n"
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": Gemma3nTextConfig,
         "vision_config": Gemma3nVisionConfig,
         "audio_config": Gemma3nAudioConfig,
@@ -452,27 +485,7 @@ class Gemma3nConfig(PreTrainedConfig):
     audio_token_id: int | None = 262_273
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3nTextConfig()
-            logger.info("text_config is None, using default Gemma3nTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3nTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma3nVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Gemma3nVisionConfig()
-            logger.info("vision_config is None, using default Gemma3nVisionConfig vision config.")
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma3nAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Gemma3nAudioConfig()
-            logger.info("audio_config is None. Using default Gemma3nAudioConfig.")
-
-        super().__post_init__(**kwargs)
+    use_cache: bool = True
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

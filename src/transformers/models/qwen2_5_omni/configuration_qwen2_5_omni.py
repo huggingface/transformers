@@ -22,22 +22,19 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     r"""
-    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
-        Indices of layers with full attention
-    out_hidden_size (`int`, *optional*, defaults to 3584):
-        The output hidden size of the vision model.
     window_size (`int`, *optional*, defaults to 11):
         Size of windows.
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
 
     Example:
 
@@ -56,6 +53,8 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_omni_vision_encoder"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     hidden_size: int = 3584
@@ -70,10 +69,11 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -99,7 +99,12 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "intermediate_size": "encoder_ffn_dim",
+    }
 
     num_mel_bins: int = 128
     encoder_layers: int = 32
@@ -119,13 +124,9 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
-
     Example:
 
     ```python
@@ -148,7 +149,6 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen25OmniText`
@@ -207,7 +207,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -251,10 +251,10 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
         "audio_token_id": "audio_token_index",
     }
-    sub_configs = {
-        "audio_config": Qwen2_5OmniAudioEncoderConfig,
-        "vision_config": Qwen2_5OmniVisionEncoderConfig,
+    sub_configs_defaults = {
         "text_config": Qwen2_5OmniTextConfig,
+        "vision_config": Qwen2_5OmniVisionEncoderConfig,
+        "audio_config": Qwen2_5OmniAudioEncoderConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -271,27 +271,9 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = Qwen2_5OmniTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = Qwen2_5OmniTextConfig()
-
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     r"""
     tts_text_start_token_id (`int`, *optional*, defaults to 151860):
@@ -308,9 +290,6 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         The tts codec pad token index to encode the pad of tts codec.
     tts_codec_mask_token_id (`int`, *optional*, defaults to 8296):
         The tts codec mask token index to encode the mask of tts codec.
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
     position_id_per_seconds (`int`, *optional*, defaults to 25):
         The increment of position id per second.
     seconds_per_chunk (`int`, *optional*, defaults to 2):
@@ -407,13 +386,19 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     r"""
     ff_mult (`int`, *optional*, defaults to 2):
         The multiplier for the feedforward layer in each transformer block.
     emb_dim (`int`, *optional*, defaults to 512):
         The dimension of the embedding layer.
+    block_size (`int`, *optional*, defaults to 64):
+        Number of tokens (frames) in each processing block.
+    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
+        Number of transformer layers that are permitted to attend to future blocks
+    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
+        Number of transformer layers that attend to past blocks beyond the current block boundary
     repeats (`int`, *optional*, defaults to 2):
         The number of times the codec embeddings are repeated.
     num_embeds (`int`, *optional*, defaults to 8193):
@@ -436,12 +421,6 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         The scale of the Res2Net block in the encoder.
     enc_se_channels (`int`, *optional*, defaults to 64):
         The number of output channels after squeeze in the SqueezeExcitationBlock.
-    block_size (`int`, *optional*, defaults to 64):
-        Number of tokens (frames) in each processing block.
-    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
-        Number of transformer layers that are permitted to attend to future blocks
-    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
-        Number of transformer layers that attend to past blocks beyond the current block boundary
     """
 
     model_type = "qwen2_5_omni_dit"
@@ -472,7 +451,7 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
     r"""
     mel_dim (`int`, *optional*, defaults to 80):
@@ -500,7 +479,7 @@ class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     r"""
     dit_config ([`DiT_Args`], *optional*):
@@ -539,7 +518,7 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni_token2wav"
-    sub_configs = {
+    sub_configs_defaults = {
         "dit_config": Qwen2_5OmniDiTConfig,
         "bigvgan_config": Qwen2_5OmniBigVGANConfig,
     }
@@ -547,28 +526,19 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     dit_config: dict | PreTrainedConfig | None = None
     bigvgan_config: dict | PreTrainedConfig | None = None
 
-    def __post_init__(self, **kwargs):
-        if self.dit_config is None:
-            self.dit_config = Qwen2_5OmniDiTConfig()
-        elif isinstance(self.dit_config, dict):
-            self.dit_config = Qwen2_5OmniDiTConfig(**self.dit_config)
-
-        if self.bigvgan_config is None:
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig()
-        elif isinstance(self.bigvgan_config, dict):
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**self.bigvgan_config)
-
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniConfig(PreTrainedConfig):
-    """
-    thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-    talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-    token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
-    enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
+    r"""
+    thinker_config (`dict`, *optional*):
+        Configuration of the underlying thinker sub-model.
+    talker_config (`dict`, *optional*):
+        Configuration of the underlying talker sub-model.
+    token2wav_config (`dict`, *optional*):
+        Configuration of the underlying codec sub-model.
+    enable_audio_output (`bool`, *optional*, defaults to `True`):
+        Whether enable audio output and load talker and token2wav module.
 
     Example:
 
@@ -601,7 +571,7 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni"
-    sub_configs = {
+    sub_configs_defaults = {
         "thinker_config": Qwen2_5OmniThinkerConfig,
         "talker_config": Qwen2_5OmniTalkerConfig,
         "token2wav_config": Qwen2_5OmniToken2WavConfig,
@@ -611,27 +581,6 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
     talker_config: dict | PreTrainedConfig | None = None
     token2wav_config: dict | PreTrainedConfig | None = None
     enable_audio_output: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen2_5OmniThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen2_5OmniThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen2_5OmniTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen2_5OmniTalkerConfig(**self.talker_config)
-
-        if self.token2wav_config is None:
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig()
-            logger.info("token2wav_config is None. Initializing token2wav model with default values")
-        elif isinstance(self.token2wav_config, dict):
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig(**self.token2wav_config)
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """
@@ -648,4 +597,14 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config(*args, **kwargs)
 
 
-__all__ = ["Qwen2_5OmniConfig", "Qwen2_5OmniThinkerConfig", "Qwen2_5OmniTalkerConfig", "Qwen2_5OmniToken2WavConfig"]
+__all__ = [
+    "Qwen2_5OmniConfig",
+    "Qwen2_5OmniThinkerConfig",
+    "Qwen2_5OmniTalkerConfig",
+    "Qwen2_5OmniToken2WavConfig",
+    "Qwen2_5OmniAudioEncoderConfig",
+    "Qwen2_5OmniBigVGANConfig",
+    "Qwen2_5OmniDiTConfig",
+    "Qwen2_5OmniTextConfig",
+    "Qwen2_5OmniVisionEncoderConfig",
+]

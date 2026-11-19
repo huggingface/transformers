@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="upstage/Solar-Open-100B")
-@strict(accept_kwargs=True)
+@strict
 class SolarOpenConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -34,7 +34,6 @@ class SolarOpenConfig(PreTrainedConfig):
     """
 
     model_type = "solar_open"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `SolarOpenModel`
     base_model_tp_plan = {
@@ -50,6 +49,11 @@ class SolarOpenConfig(PreTrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
@@ -71,6 +75,7 @@ class SolarOpenConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     moe_intermediate_size: int = 1280
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     n_routed_experts: int = 128
     routed_scaling_factor: float = 1.0
@@ -82,11 +87,6 @@ class SolarOpenConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     default_theta = 1_000_000.0
     head_dim: int = 128
-
-    def __post_init__(self, **kwargs):
-        kwargs.setdefault("partial_rotary_factor", 1.0)
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["SolarOpenConfig"]

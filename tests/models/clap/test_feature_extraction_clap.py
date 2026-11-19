@@ -14,7 +14,6 @@
 
 
 import itertools
-import random
 import unittest
 
 import numpy as np
@@ -25,28 +24,12 @@ from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.trainer_utils import set_seed
 from transformers.utils.import_utils import is_torch_available
 
+from ...test_processing_common import floats_list
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     import torch
-
-global_rng = random.Random()
-
-
-# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
 
 
 @require_torch
@@ -160,6 +143,20 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+    def test_padding_boolean(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = floats_list((1, 800))[0]
+
+        np.random.seed(0)
+        out_default = feature_extractor(speech_inputs, return_tensors="np").input_features
+        np.random.seed(0)
+        out_bool = feature_extractor(speech_inputs, padding=True, return_tensors="np").input_features
+        np.random.seed(0)
+        out_repeatpad = feature_extractor(speech_inputs, padding="repeatpad", return_tensors="np").input_features
+
+        self.assertTrue(np.allclose(out_bool, out_default, atol=1e-3))
+        self.assertTrue(np.allclose(out_bool, out_repeatpad, atol=1e-3))
 
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest._load_datasamples
     def _load_datasamples(self, num_samples):

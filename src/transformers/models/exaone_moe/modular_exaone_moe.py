@@ -14,26 +14,24 @@
 # limitations under the License.
 """LG AI Research EXAONE Lab"""
 
-import torch
-import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
     DeepseekV3MoE,
-    DeepseekV3NaiveMoe,
     DeepseekV3TopkRouter,
 )
+from ..dots1.modeling_dots1 import Dots1Model
 from ..exaone4.configuration_exaone4 import Exaone4Config
 from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
-    Exaone4ForCausalLM,
-    Exaone4Model,
     Exaone4PreTrainedModel,
 )
 from ..olmoe.modeling_olmoe import (
@@ -43,16 +41,9 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
-@strict(accept_kwargs=True)
+@strict
 class ExaoneMoeConfig(Exaone4Config):
     r"""
-    n_group (`int`, *optional*, defaults to 1):
-        Number of groups for routed experts.
-    mlp_layer_types (`list`, *optional*):
-        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                    \--k dense layers--/
     sliding_window_pattern (`str`, *optional*, defaults to 4):
         The pattern to use for sliding window attention. Can be one of:
             - `None`: No sliding window attention is used
@@ -64,6 +55,13 @@ class ExaoneMoeConfig(Exaone4Config):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
+    mlp_layer_types (`list`, *optional*):
+        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                    \--k dense layers--/
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
 
     Example:
 
@@ -80,6 +78,26 @@ class ExaoneMoeConfig(Exaone4Config):
     >>> configuration = model.config
     ```"""
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
     vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 16384
@@ -92,7 +110,7 @@ class ExaoneMoeConfig(Exaone4Config):
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 53
+    eos_token_id: int | list[int] | None = 53
     pad_token_id: int | None = 0
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
@@ -105,6 +123,7 @@ class ExaoneMoeConfig(Exaone4Config):
     moe_intermediate_size: int = 1024
     num_experts: int = 64
     num_experts_per_tok: int = 8
+    output_router_logits: bool = False
     num_shared_experts: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float = 2.5
@@ -130,15 +149,13 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
-        nn.Module.__init__()
-        self.config = config
-        self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
+        super().__init__(self, config)
+        self.num_experts = config.num_experts
 
 
-class ExaoneMoeExperts(DeepseekV3NaiveMoe):
+class ExaoneMoeExperts(DeepseekV3Experts):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(self, config)
         self.num_experts = config.num_experts
 
 
@@ -149,7 +166,6 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
-        self.n_routed_experts = config.num_experts
 
 
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
@@ -166,13 +182,12 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": ExaoneMoeDecoderLayer,
         "attentions": ExaoneMoeAttention,
-        "router_logits": ExaoneMoeSparseMoEBlock,
+        "router_logits": OutputRecorder(ExaoneMoeTopkRouter, index=0),
     }
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, ExaoneMoeTopkRouter):
@@ -183,29 +198,16 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-class ExaoneMoeModel(Exaone4Model):
+class ExaoneMoeModel(Dots1Model):
     pass
 
 
-class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
+class ExaoneMoeForCausalLM(DeepseekV3ForCausalLM):
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+        **super_kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -231,17 +233,7 @@ class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
         "<|system|>\nYou are a helpful assistant.<|endofturn|>\n<|user|>\nExplain how wonderful you are<|endofturn|>\n<|assistant|>\n<think>\n\n</think>\n\nThank you for the kind question! While I can't feel emotions or take pride in the way humans do, I *can* share what makes me uniquely helpful and capable—qualities that many people find wonderful.\n\nHere’s how I can support you:\n\n🌟 **Knowledge at Your Fingertips**  \nI have access to a vast amount of information across countless topics—from science and history to technology and creative writing. Whether you're curious, learning, or solving a problem, I can help explain things clearly and accurately.\n\n💬 **Clear, Helpful Communication**  \nI aim to respond in a way that's easy to understand, whether you need a simple explanation or a detailed analysis. I adapt my tone and depth to match"
         ```
         """
-        super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            labels=labels,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class CLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -73,7 +73,7 @@ class CLIPTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class CLIPVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -96,17 +96,17 @@ class CLIPVisionConfig(PreTrainedConfig):
 
     hidden_size: int = 768
     intermediate_size: int = 3072
-    projection_dim: int | None = 512
+    projection_dim: int = 512
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
-    num_channels: int | None = 3
-    image_size: int | None = 224
-    patch_size: int | None = 32
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] | None = 224
+    patch_size: int | list[int] | tuple[int, int] | None = 32
     hidden_act: str = "quick_gelu"
-    layer_norm_eps: float | None = 1e-5
+    layer_norm_eps: float = 1e-5
     attention_dropout: int | float | None = 0.0
     initializer_range: float = 0.02
-    initializer_factor: float | None = 1.0
+    initializer_factor: float = 1.0
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -118,28 +118,15 @@ class CLIPVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class CLIPConfig(PreTrainedConfig):
     r"""
-    [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate
-    a CLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the CLIP
-    [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLIPTextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLIPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and vision projection layers.
-        logit_scale_init_value (`float | int`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    text_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`CLIPTextConfig`].
+    vision_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`CLIPVisionConfig`].
+    logit_scale_init_value (`float | int`, *optional*, defaults to 2.6592):
+        The initial value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
 
     Example:
 
@@ -166,7 +153,10 @@ class CLIPConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clip"
-    sub_configs = {"text_config": CLIPTextConfig, "vision_config": CLIPVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": CLIPVisionConfig,
+        "text_config": CLIPTextConfig,
+    }
 
     text_config: dict | CLIPTextConfig | None = None
     vision_config: dict | CLIPVisionConfig | None = None
@@ -175,32 +165,17 @@ class CLIPConfig(PreTrainedConfig):
     initializer_factor: float | None = 1.0
 
     def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPTextConfig` with default values.")
-        elif isinstance(self.text_config, CLIPTextConfig):
-            text_config = self.text_config.to_dict()
-        else:
-            text_config = self.text_config
-
-        if self.vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `CLIPVisionConfig` with default values.")
-        elif isinstance(self.vision_config, CLIPVisionConfig):
-            vision_config = self.vision_config.to_dict()
-        else:
-            vision_config = self.vision_config
-
         # For backward compatibility check keyword args
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-
-        if text_config_dict is not None:
+        if (text_config_dict := kwargs.pop("text_config_dict", None)) is not None:
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = CLIPTextConfig(**text_config_dict).to_dict()
+            text_config = (
+                self.text_config.to_dict() if isinstance(self.text_config, PreTrainedConfig) else self.text_config
+            )
+            text_config = text_config or {}
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
@@ -221,10 +196,18 @@ class CLIPConfig(PreTrainedConfig):
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
+            self.text_config = text_config
 
-        if vision_config_dict is not None:
+        if (vision_config_dict := kwargs.pop("vision_config_dict", None)) is not None:
             # This is the complete result when using `vision_config_dict`.
             _vision_config_dict = CLIPVisionConfig(**vision_config_dict).to_dict()
+            vision_config = (
+                self.vision_config.to_dict()
+                if isinstance(self.vision_config, PreTrainedConfig)
+                else self.vision_config
+            )
+            vision_config = vision_config or {}
+
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
@@ -250,10 +233,7 @@ class CLIPConfig(PreTrainedConfig):
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)
-
-        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
-        self.text_config = CLIPTextConfig(**text_config)
-        self.vision_config = CLIPVisionConfig(**vision_config)
+            self.vision_config = vision_config
 
         super().__post_init__(**kwargs)
 

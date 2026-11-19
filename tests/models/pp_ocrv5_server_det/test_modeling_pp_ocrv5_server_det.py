@@ -17,17 +17,17 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
     PPOCRV5ServerDetConfig,
     PPOCRV5ServerDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessor,
     PPOCRV5ServerDetModel,
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_cv2,
     require_torch,
@@ -40,13 +40,11 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class PPOCRV5ServerDetModelTester:
@@ -258,16 +256,15 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 @slow
 class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
+        model_path = "PaddlePaddle/PP-OCRv5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        self.image = Image.open(
-            requests.get(
-                "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png", stream=True
-            ).raw
-        ).convert("RGB")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
@@ -281,11 +278,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
 
         expected_logits = torch.tensor(
-            [
-                [0.0004, 0.0003, 0.0002],
-                [0.0003, 0.0002, 0.0002],
-                [0.0006, 0.0003, 0.0003],
-            ],
+            [[0.0008, 0.0007, 0.0004], [0.0007, 0.0005, 0.0005], [0.0013, 0.0007, 0.0005]],
             device=torch_device,
         )
 
@@ -294,10 +287,10 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[76, 550], [399, 538], [400, 575], [77, 587]],
-                [[14, 505], [517, 484], [519, 532], [16, 553]],
-                [[193, 452], [401, 443], [403, 483], [195, 492]],
-                [[32, 406], [488, 384], [491, 434], [34, 456]],
+                [[86, 361], [305, 361], [305, 407], [86, 407]],
+                [[86, 266], [261, 266], [261, 316], [86, 316]],
+                [[87, 177], [270, 177], [270, 225], [87, 225]],
+                [[89, 88], [575, 88], [575, 144], [89, 144]],
             ],
             dtype=torch.short,
             device=torch_device,
@@ -306,7 +299,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.9023, 0.8941, 0.8937, 0.8781], device=torch_device)
+        expected_scores = torch.tensor([0.9109, 0.9247, 0.9507, 0.8898], device=torch_device)
         self.assertEqual(results[0]["scores"].shape, (4,))
         torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 

@@ -24,12 +24,12 @@ from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, can_return_tuple
-from ..llama import LlamaConfig
+from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
-@strict(accept_kwargs=True)
+@strict
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
@@ -63,11 +63,11 @@ class EuroBertConfig(LlamaConfig):
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-05
     bos_token_id: int | None = 128000
-    eos_token_id: int | None = 128001
+    eos_token_id: int | list[int] | None = 128001
     pad_token_id: int | None = 128001
     mask_token_id: int = 128002
     pretraining_tp: int = 1
-    tie_word_embeddings: int = False
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float = 0.0
@@ -102,7 +102,7 @@ class EuroBertModel(LlamaModel):
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -144,6 +144,8 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.model = EuroBertModel(config)
@@ -159,7 +161,7 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
@@ -224,7 +226,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
@@ -319,7 +321,7 @@ class EuroBertForTokenClassification(EuroBertPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:

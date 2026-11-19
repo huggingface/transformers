@@ -23,16 +23,21 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="bzantium/tiny-deepseek-v3")
-@strict(accept_kwargs=True)
+@strict
 class DeepseekV3Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 8):
         Number of groups for routed experts.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether to interleave the rotary position embeddings.
+    num_mtp_layers (`int`, *optional*, defaults to 1):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
+        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
+        time (speculative decoding via `generate(..., use_mtp=True)`).
+
     Example:
 
     ```python
@@ -46,7 +51,6 @@ class DeepseekV3Config(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_v3"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -63,8 +67,15 @@ class DeepseekV3Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     vocab_size: int = 129280
@@ -76,9 +87,10 @@ class DeepseekV3Config(PreTrainedConfig):
     num_key_value_heads: int | None = 128
     n_shared_experts: int = 1
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
-    q_lora_rank: int = 1536
+    q_lora_rank: int | None = 1536
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 128
@@ -101,6 +113,7 @@ class DeepseekV3Config(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    num_mtp_layers: int = 1
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -109,21 +122,6 @@ class DeepseekV3Config(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-        self.standardize_rope_params()
-
-        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
-        for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_parameters:
-                self.rope_parameters[key] = float(self.rope_parameters[key])
-        return kwargs
 
 
 __all__ = ["DeepseekV3Config"]

@@ -467,24 +467,20 @@ class TokenizersBackendTesterMixin:
         from transformers import AutoTokenizer
 
         pretrained_list = getattr(self, "from_pretrained_id", []) or []
+        if isinstance(pretrained_list, str):
+            pretrained_list = [pretrained_list]
+        kwargs = getattr(self, "from_pretrained_kwargs", None) or {}
         for pretrained_name in pretrained_list:
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                try:
-                    tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-                    # Now load with local_files_only=True
-                    tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
+                # Now load with local_files_only=True
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True, **kwargs)
 
-                    # Check that the two tokenizers are identical
-                    self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
-                    self.assertEqual(
-                        tokenizer_cached.all_special_tokens_extended,
-                        tokenizer_local.all_special_tokens_extended,
-                    )
-                except Exception as e:
-                    # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load tokenizer model: {e}")
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(tokenizer_cached.all_special_tokens, tokenizer_local.all_special_tokens)
 
 
 @slow
@@ -524,6 +520,17 @@ Hey how are you doing"""  # noqa: W293
     EXPECTED_ADEPT_FUYU_8B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_MICROSOFT_PHI_3_MINI_4K_INSTRUCT = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n \nhi there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_MUCAI_VIP_LLAVA_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_DISHAM993_ELECTRICAL_NER_MODERNBERT_BASE = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_DEEPSEEK_AI_DEEPSEEK_R1 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_REDHATAI_DEEPSEEK_CODER_V2_LITE_INSTRUCT_FP8 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_H2OAI_H2OVL_MISSISSIPPI_2B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n \nhi there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_OPENGVLAB_INTERNVL2_4B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_INTEL_MINIMAX_M25_INT4_AUTOROUND = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_FRIENDLIAI_MOLMO_7B_O_0924 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_LUKEALONSO_QWEN35_397B_A17B_NVFP4 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_EMBODIED_COT_ECOT_OPENVLA_7B_BRIDGE = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_DEEPGLINT_AI_UNIME_PHI35_V_42B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_1024M_PHI_35_MOE_4BIT_FP4 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED = [
         ("xlangai/OpenCUA-7B", EXPECTED_XLANGAI_OPENCUA_7B),
@@ -533,6 +540,20 @@ Hey how are you doing"""  # noqa: W293
         ("adept/fuyu-8b", EXPECTED_ADEPT_FUYU_8B),
         ("microsoft/Phi-3-mini-4k-instruct", EXPECTED_MICROSOFT_PHI_3_MINI_4K_INSTRUCT),
         ("mucai/vip-llava-7b", EXPECTED_MUCAI_VIP_LLAVA_7B),
+        ("disham993/electrical-ner-ModernBERT-base", EXPECTED_DISHAM993_ELECTRICAL_NER_MODERNBERT_BASE),
+        ("deepseek-ai/DeepSeek-R1", EXPECTED_DEEPSEEK_AI_DEEPSEEK_R1),
+        (
+            "RedHatAI/DeepSeek-Coder-V2-Lite-Instruct-FP8",
+            EXPECTED_REDHATAI_DEEPSEEK_CODER_V2_LITE_INSTRUCT_FP8,
+        ),
+        ("h2oai/h2ovl-mississippi-2b", EXPECTED_H2OAI_H2OVL_MISSISSIPPI_2B),
+        ("OpenGVLab/InternVL2-4B", EXPECTED_OPENGVLAB_INTERNVL2_4B),
+        ("Intel/MiniMax-M2.5-int4-AutoRound", EXPECTED_INTEL_MINIMAX_M25_INT4_AUTOROUND),
+        ("FriendliAI/Molmo-7B-O-0924", EXPECTED_FRIENDLIAI_MOLMO_7B_O_0924),
+        ("lukealonso/Qwen3.5-397B-A17B-NVFP4", EXPECTED_LUKEALONSO_QWEN35_397B_A17B_NVFP4),
+        ("Embodied-CoT/ecot-openvla-7b-bridge", EXPECTED_EMBODIED_COT_ECOT_OPENVLA_7B_BRIDGE),
+        ("DeepGlint-AI/UniME-Phi3.5-V-4.2B", EXPECTED_DEEPGLINT_AI_UNIME_PHI35_V_42B),
+        ("1024m/Phi-3.5-MoE-4bit-fp4", EXPECTED_1024M_PHI_35_MOE_4BIT_FP4),
     ]
 
     @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)

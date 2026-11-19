@@ -19,36 +19,38 @@ import torch.nn.functional as F
 import torchaudio
 from huggingface_hub.dataclasses import strict
 
+from ...configuration_utils import SubConfigSpec
 from ...utils import auto_docstring
 from ...utils.import_utils import requires
+from ..auto import AutoConfig
 from ..xcodec.configuration_xcodec import XcodecConfig
 from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
-@strict(accept_kwargs=True)
+@strict
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
     r"""
-        target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
-            The range of different bandwidths (in kbps) the model can encode audio with.
-        kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size for the initial semantic convolution.
-        channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
-            Expansion factors for the number of output channels in each semantic block.
-        strides (`List[int]`, *optional*, defaults to `[1, 1]`):
-            Strides for each semantic encoder block.
-        block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
-            Dilation factors for the residual units in semantic blocks.
-        unit_kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size inside each ResidualUnit in semantic blocks.
-        acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
-            An instance of the configuration for the acoustic (DAC) model.
-        semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
-            An instance of the configuration object for the semantic (HuBERT) model.
-        semantic_sample_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the semantic model expects audio input, in hertz (Hz).
-        downsample_factor (`int`, *optional*, defaults to 320):
-            Downsampling factor for the semantic features.
+    target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):
+        The range of different bandwidths (in kbps) the model can encode audio with.
+    kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size for the initial semantic convolution.
+    channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
+        Expansion factors for the number of output channels in each semantic block.
+    strides (`List[int]`, *optional*, defaults to `[1, 1]`):
+        Strides for each semantic encoder block.
+    block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
+        Dilation factors for the residual units in semantic blocks.
+    unit_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size inside each ResidualUnit in semantic blocks.
+    acoustic_model_config (`Union[Dict, AutoConfig]`, *optional*):
+        An instance of the configuration for the acoustic (DAC) model.
+    semantic_model_config (`Union[Dict, AutoConfig]`, *optional*):
+        An instance of the configuration object for the semantic (HuBERT) model.
+    semantic_sample_rate (`int`, *optional*, defaults to 16000):
+        The sampling rate at which the semantic model expects audio input, in hertz (Hz).
+    downsample_factor (`int`, *optional*, defaults to 320):
+        Downsampling factor for the semantic features.
 
     Example:
 
@@ -65,8 +67,27 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
     >>> configuration = model.config
     ```"""
 
-    _default_semantic_model_config_kwargs = {
-        "mask_time_prob": 0.0,
+    sub_configs_defaults = {
+        "acoustic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dac",
+            init_kwargs={
+                "encoder_hidden_size": 64,
+                # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
+                # (not sure if intentional by HiggsAudioV2Tokenizer but we keep it)
+                "downsampling_ratios": [8, 5, 4, 2],
+                "decoder_hidden_size": 1024,
+                "upsampling_ratios": [8, 5, 4, 2],
+                "hidden_size": 256,
+            },
+        ),
+        "semantic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hubert",
+            init_kwargs={
+                "mask_time_prob": 0.0,
+            },
+        ),
     }
 
     target_bandwidths: list[int | float] | tuple[int | float, ...] = (0.5, 1, 1.5, 2, 4)
@@ -83,7 +104,7 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
 @requires(backends=("torchaudio",))
 @auto_docstring
 class HiggsAudioV2TokenizerPreTrainedModel(XcodecPreTrainedModel):
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization", "DacResidualUnit"]
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
     _keys_to_ignore_on_load_unexpected = ["semantic_model.masked_spec_embed"]
 
 
@@ -113,7 +134,7 @@ class HiggsAudioV2TokenizerVectorQuantization(nn.Module):
 @requires(backends=("torchaudio",))
 @auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(XcodecModel):
-    def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
+    def _extract_semantic_features(self, input_values: torch.Tensor) -> torch.Tensor:
         if self.config.sample_rate != self.config.semantic_sample_rate:
             input_values = torchaudio.functional.resample(
                 input_values, self.config.sample_rate, self.config.semantic_sample_rate

@@ -50,13 +50,13 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
-@strict(accept_kwargs=True)
+@strict
 class EomtConfig(ViTConfig):
     r"""
-    num_upscale_blocks (`int`, *optional*, defaults to 2):
-        Number of upsampling blocks used in the decoder or segmentation head.
     layerscale_value (`float`, *optional*, defaults to 1.0):
         Initial value for the LayerScale parameter.
+    num_upscale_blocks (`int`, *optional*, defaults to 2):
+        Number of upsampling blocks used in the decoder or segmentation head.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
         Whether to use the SwiGLU feedforward neural network.
     num_blocks (`int`, *optional*, defaults to 4):
@@ -100,14 +100,14 @@ class EomtConfig(ViTConfig):
     num_attention_heads: int = 16
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 640
     patch_size: int | list[int] | tuple[int, int] = 16
     num_channels: int = 3
     layerscale_value: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     num_upscale_blocks: int = 2
     attention_dropout: float | int = 0.0
     use_swiglu_ffn: bool = False
@@ -133,7 +133,6 @@ class EomtConfig(ViTConfig):
         raise AttributeError("Not needed for Eomt")
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`EomtForUniversalSegmentationOutput`].
@@ -144,34 +143,35 @@ class EomtConfig(ViTConfig):
     [`~EomtImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class EomtForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
         The computed loss, returned when labels are present.
-    class_queries_logits (`torch.FloatTensor`):
+    class_queries_logits (`torch.Tensor`):
         A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
         query. Note the `+ 1` is needed because we incorporate the null class.
-    masks_queries_logits (`torch.FloatTensor`):
+    masks_queries_logits (`torch.Tensor`):
         A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
         query.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last layer.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
-    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `tuple(torch.Tensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     patch_offsets (`list[torch.Tensor]`, *optional*):
         list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
-    loss: torch.FloatTensor | None = None
-    class_queries_logits: torch.FloatTensor | None = None
-    masks_queries_logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    class_queries_logits: torch.Tensor | None = None
+    masks_queries_logits: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
     patch_offsets: list[torch.Tensor] | None = None
 
 
@@ -198,15 +198,14 @@ class EomtEmbeddings(Dinov2Embeddings):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.num_prefix_tokens = 1 + config.num_register_tokens  # 1 for [CLS]
         self.position_embeddings = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self):
         raise AttributeError("Not needed for Eomt Model")
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, _, _, _ = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         register_tokens = self.register_tokens.expand(batch_size, -1, -1)
@@ -228,27 +227,7 @@ class EomtLayerScale(Dinov2LayerScale):
 
 
 class EomtLayer(Dinov2Layer):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
-        self_attention_output = self.layer_scale1(self_attention_output)
-
-        # first residual connection
-        hidden_states = self.drop_path(self_attention_output) + hidden_states
-
-        # in Eomt, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        return layer_output
+    pass
 
 
 class EomtLayerNorm2d(nn.LayerNorm):
@@ -335,8 +314,8 @@ class EomtPreTrainedModel(PreTrainedModel):
         "attentions": EomtAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
+        super()._init_weights(module)
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             init.kaiming_uniform_(module.weight, a=math.sqrt(5))
@@ -344,9 +323,6 @@ class EomtPreTrainedModel(PreTrainedModel):
                 fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, mean=0.0, std=1)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
@@ -397,7 +373,7 @@ class EomtForUniversalSegmentation(Mask2FormerForUniversalSegmentation):
 
         self.criterion = EomtLoss(config=config, weight_dict=self.weight_dict)
 
-        self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
+        self.attn_mask_probs = nn.Buffer(torch.ones(config.num_blocks))
 
         self.post_init()
 

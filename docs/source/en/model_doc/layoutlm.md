@@ -9,17 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-12-31 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-12-31 and contributed to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # LayoutLM
 
@@ -35,13 +30,15 @@ The example below demonstrates question answering with the [`AutoModel`] class.
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
 from datasets import load_dataset
+
 from transformers import AutoTokenizer, LayoutLMForQuestionAnswering
 
+
 tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
-model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", dtype=torch.float16)
+model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", device_map="auto")
 
 dataset = load_dataset("nielsr/funsd", split="train")
 example = dataset[0]
@@ -82,7 +79,7 @@ print(" ".join(words[start : end + 1]))
 
 - The original LayoutLM was not designed with a unified processing workflow. Instead, it expects preprocessed text (`words`) and bounding boxes (`boxes`) from an external OCR engine (like [Pytesseract](https://pypi.org/project/pytesseract/)) and provide them as additional inputs to the tokenizer.
 
-- The [`~LayoutLMModel.forward`] method expects the input `bbox` (bounding boxes of the input tokens). Each bounding box should be in the format `(x0, y0, x1, y1)`.  `(x0, y0)` corresponds to the upper left corner of the bounding box and `{x1, y1)` corresponds to the lower right corner. The bounding boxes need to be normalized on a 0-1000 scale as shown below.
+- The [`~LayoutLMModel.forward`] method expects the input `bbox` (bounding boxes of the input tokens). Each bounding box should be in the format `(x0, y0, x1, y1)`.  `(x0, y0)` corresponds to the upper left corner of the bounding box and `(x1, y1)` corresponds to the lower right corner. The bounding boxes need to be normalized on a 0-1000 scale as shown below.
 
 ```python
 def normalize_bbox(bbox, width, height):
@@ -98,6 +95,7 @@ def normalize_bbox(bbox, width, height):
 
 ```python
 from PIL import Image
+
 
 # Document can be a png, jpg, etc. PDFs must be converted to images.
 image = Image.open(name_of_your_document).convert("RGB")
@@ -123,11 +121,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LayoutLMTokenizer
 
 [[autodoc]] LayoutLMTokenizer
-    - __call__
-
-## LayoutLMTokenizerFast
-
-[[autodoc]] LayoutLMTokenizerFast
     - __call__
 
 ## LayoutLMModel

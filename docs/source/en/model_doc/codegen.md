@@ -9,17 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-03-25 and added to Hugging Face Transformers on 2022-06-24.*
+*This model was published in HF papers on 2022-03-25 and contributed to Hugging Face Transformers on 2022-06-24.*
 
 # CodeGen
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -48,17 +45,18 @@ The original code can be found [here](https://github.com/salesforce/codegen).
 ## Usage example
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> checkpoint = "Salesforce/codegen-350M-mono"
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
->>> text = "def hello_world():"
+checkpoint = "Salesforce/codegen-350M-mono"
+model = AutoModelForCausalLM.from_pretrained(checkpoint, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
->>> completion = model.generate(**tokenizer(text, return_tensors="pt"))
+text = "def hello_world():"
 
->>> print(tokenizer.decode(completion[0]))
+completion = model.generate(**tokenizer(text, return_tensors="pt").to(model.device))
+
+print(tokenizer.decode(completion[0]))
 def hello_world():
     print("Hello World")
 
@@ -78,10 +76,6 @@ hello_world()
 
 [[autodoc]] CodeGenTokenizer
     - save_vocabulary
-
-## CodeGenTokenizerFast
-
-[[autodoc]] CodeGenTokenizerFast
 
 ## CodeGenModel
 

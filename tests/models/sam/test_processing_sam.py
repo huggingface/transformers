@@ -29,7 +29,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from transformers.models.sam.image_processing_sam import _mask_to_rle_pytorch
+    from transformers.models.sam.image_processing_sam import _mask_to_rle
 
 
 @require_vision
@@ -48,24 +48,12 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_chat_template_save_loading(self):
         self.skipTest("SamProcessor does not have a tokenizer")
 
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
     def test_image_processor_no_masks(self):
         image_processor = self.get_component("image_processor")
 
         processor = SamProcessor(image_processor=image_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         input_feat_extract = image_processor(image_input, return_tensors="pt")
         input_processor = processor(images=image_input, return_tensors="pt")
@@ -89,7 +77,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = SamProcessor(image_processor=image_processor)
 
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         mask_input = self.prepare_mask_inputs()
 
         input_feat_extract = image_processor(images=image_input, segmentation_maps=mask_input, return_tensors="pt")
@@ -135,7 +123,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         # Test that a mask of all zeros returns a single run [height * width].
         input_mask = torch.zeros((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
-        rle = _mask_to_rle_pytorch(input_mask)
+        rle = _mask_to_rle(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
@@ -144,7 +132,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a mask of all ones returns [0, height * width].
         input_mask = torch.ones((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
-        rle = _mask_to_rle_pytorch(input_mask)
+        rle = _mask_to_rle(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
@@ -159,7 +147,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Flattened in Fortran order -> [0, 1, 1, 1].
         # The RLE for [0,1,1,1] is [1, 3].
         input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
-        rle = _mask_to_rle_pytorch(input_mask)
+        rle = _mask_to_rle(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])

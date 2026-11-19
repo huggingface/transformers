@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="swiss-ai/Apertus-8B-Instruct-2509")
-@strict(accept_kwargs=True)
+@strict
 class ApertusConfig(PreTrainedConfig):
     r"""
     ```python
@@ -43,7 +43,6 @@ class ApertusConfig(PreTrainedConfig):
     ```"""
 
     model_type = "apertus"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 12000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

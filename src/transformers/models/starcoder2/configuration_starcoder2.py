@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="bigcode/starcoder2-7b")
-@strict(accept_kwargs=True)
+@strict
 class Starcoder2Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `True`):
@@ -38,10 +38,10 @@ class Starcoder2Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "starcoder2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Starcoder2`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

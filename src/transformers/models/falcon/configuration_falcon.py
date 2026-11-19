@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tiiuae/falcon-7b")
-@strict(accept_kwargs=True)
+@strict
 class FalconConfig(PreTrainedConfig):
     r"""
     num_ln_in_parallel_attn (`int`, *optional*):
@@ -61,7 +61,6 @@ class FalconConfig(PreTrainedConfig):
     ```"""
 
     model_type = "falcon"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 65024
     hidden_size: int = 4544

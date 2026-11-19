@@ -24,9 +24,11 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/chameleon-7b")
-@strict(accept_kwargs=True)
+@strict
 class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
+    resolution (`int`, *optional*, defaults to 512):
+        Resolution of the input images.
     base_channels (`int`, *optional*, defaults to 128):
         Base channel count.
     channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
@@ -39,8 +41,6 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
         Dropout rate.
     attn_type (`str`, *optional*, defaults to `"vanilla"`):
         Attention type used in VQ-GAN encoder. Can be "vanilla" or None
-    resolution (`int`, *optional*, defaults to 512):
-        Resolution of the input images.
     """
 
     model_type = "chameleon_vqgan"
@@ -62,7 +62,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/chameleon-7b")
-@strict(accept_kwargs=True)
+@strict
 class ChameleonConfig(PreTrainedConfig):
     r"""
     model_parallel_size (`int`, *optional*, defaults to 1):
@@ -84,11 +84,13 @@ class ChameleonConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "chameleon"
-    sub_configs = {"vq_config": ChameleonVQVAEConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vq_config": ChameleonVQVAEConfig,
+    }
 
     vocab_size: int = 65536
     hidden_size: int = 4096
@@ -106,7 +108,7 @@ class ChameleonConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
-    attention_bias: int | None = False
+    attention_bias: bool | None = False
     attention_dropout: float | int | None = 0.0
     model_parallel_size: int | None = 1
     swin_norm: bool | None = False
@@ -115,14 +117,7 @@ class ChameleonConfig(PreTrainedConfig):
     mlp_bias: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.vq_config is None:
-            logger.info("vq_config is None. initializing the ChameleonVQConfig with default values.")
-            self.vq_config = ChameleonVQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = ChameleonVQVAEConfig(**self.vq_config)
-
         self.image_token_id = self.vocabulary_map.get("<image>") if self.vocabulary_map is not None else None
-
         super().__post_init__(**kwargs)
 
 

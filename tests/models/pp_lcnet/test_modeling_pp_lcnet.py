@@ -17,17 +17,17 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
 
 from transformers import (
     PPLCNetBackbone,
     PPLCNetConfig,
     PPLCNetForImageClassification,
-    PPLCNetImageProcessorFast,
+    PPLCNetImageProcessor,
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -40,13 +40,11 @@ from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class PPLCNetModelTester:
@@ -281,9 +279,11 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
-        self.image_processor = PPLCNetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        self.image_processor = PPLCNetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_image_classification_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
@@ -292,12 +292,12 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         expected_shape_logits = torch.Size((1, 4))
-        expected_logits = torch.tensor([[-0.3655, -1.0573, 2.4883, -1.0640]]).to(torch_device)
+        expected_logits = torch.tensor([[2.7272, -0.9074, -0.8011, -0.983]]).to(torch_device)
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-2, atol=2e-2)
 
-        expected_labels = torch.tensor([2]).to(torch_device)
+        expected_labels = torch.tensor([0]).to(torch_device)
         predicted_label = outputs.last_hidden_state.argmax(-1).item()
 
         self.assertEqual(predicted_label, expected_labels)

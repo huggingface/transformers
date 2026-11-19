@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="RUCAIBox/mvp")
-@strict(accept_kwargs=True)
+@strict
 class MvpConfig(PreTrainedConfig):
     r"""
     use_prompt (`bool`, *optional*, defaults to `False`):
@@ -46,7 +46,6 @@ class MvpConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mvp"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
@@ -74,8 +73,8 @@ class MvpConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
-    is_encoder_decoder: int = True
+    eos_token_id: int | list[int] | None = 2
+    is_encoder_decoder: bool = True
     decoder_start_token_id: int | None = 2
     use_prompt: bool = False
     prompt_length: int = 100

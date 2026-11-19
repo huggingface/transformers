@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/prophetnet-large-uncased")
-@strict(accept_kwargs=True)
+@strict
 class ProphetNetConfig(PreTrainedConfig):
     r"""
     ngram (`int`, *optional*, defaults to 2):
@@ -40,7 +40,6 @@ class ProphetNetConfig(PreTrainedConfig):
     """
 
     model_type = "prophetnet"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "num_encoder_attention_heads",
     }

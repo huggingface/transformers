@@ -20,14 +20,13 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
-from ..superpoint import SuperPointConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="ETH-CVG/lightglue_superpoint")
-@strict(accept_kwargs=True)
+@strict
 class LightGlueConfig(PreTrainedConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -40,8 +39,6 @@ class LightGlueConfig(PreTrainedConfig):
         The confidence threshold used to prune points
     filter_threshold (`float`, *optional*, defaults to 0.1):
         The confidence threshold used to filter matches
-    trust_remote_code (`bool`, *optional*, defaults to `False`):
-        Whether to trust remote code when using other models than SuperPoint as keypoint detector.
 
     Examples:
         ```python
@@ -59,9 +56,11 @@ class LightGlueConfig(PreTrainedConfig):
     """
 
     model_type = "lightglue"
-    sub_configs = {"keypoint_detector_config": AutoConfig}
+    sub_configs_defaults = {
+        "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
+    }
 
-    keypoint_detector_config: dict | SuperPointConfig | None = None
+    keypoint_detector_config: dict | PreTrainedConfig | None = None
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
     num_attention_heads: int = 4
@@ -73,33 +72,18 @@ class LightGlueConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
-    # LightGlue can be used with other models than SuperPoint as keypoint detector
-    # We provide the trust_remote_code argument to allow the use of other models
-    # that are not registered in the CONFIG_MAPPING dictionary (for example DISK)
-    trust_remote_code: bool = False
 
     def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         # Keypoint Detector is forced into eager attention mode because SuperPoint does not have Attention
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
-        if isinstance(self.keypoint_detector_config, dict):
-            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
-            if self.keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
-                self.keypoint_detector_config = AutoConfig.from_pretrained(
-                    self.keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
-                )
-            else:
-                self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
-                    **self.keypoint_detector_config, attn_implementation="eager"
-                )
-        elif self.keypoint_detector_config is None:
-            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
+        self.keypoint_detector_config.attn_implementation = "eager"
 
         self.intermediate_size = self.descriptor_dim * 2
         self.hidden_size = self.descriptor_dim
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

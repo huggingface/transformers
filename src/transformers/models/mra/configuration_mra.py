@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uw-madison/mra-base-512-4")
-@strict(accept_kwargs=True)
+@strict
 class MraConfig(PreTrainedConfig):
     r"""
     block_per_row (`int`, *optional*, defaults to 4):
@@ -56,8 +56,8 @@ class MraConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 1
     initializer_range: float = 0.02
@@ -68,7 +68,7 @@ class MraConfig(PreTrainedConfig):
     initial_prior_diagonal_n_blocks: int = 0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_cross_attention: bool = False
     tie_word_embeddings: bool = True
 

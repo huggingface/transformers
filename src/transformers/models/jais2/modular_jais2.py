@@ -17,6 +17,7 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...utils import auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -28,7 +29,7 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 
 
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
-@strict(accept_kwargs=True)
+@strict
 class Jais2Config(LlamaConfig):
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -78,6 +79,7 @@ class Jais2Model(LlamaModel):
 class Jais2ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(self, **super_kwargs):
         r"""
         Example:

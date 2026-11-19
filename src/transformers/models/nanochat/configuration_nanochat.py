@@ -15,14 +15,14 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="karpathy/nanochat-d32")
-@strict(accept_kwargs=True)
-class NanoChatConfig(PretrainedConfig):
+@strict
+class NanoChatConfig(PreTrainedConfig):
     r"""
     Example:
 
@@ -40,7 +40,6 @@ class NanoChatConfig(PretrainedConfig):
     ```"""
 
     model_type = "nanochat"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

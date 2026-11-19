@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="MBZUAI/swiftformer-xs")
-@strict(accept_kwargs=True)
+@strict
 class SwiftFormerConfig(PreTrainedConfig):
     r"""
     embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
@@ -39,8 +39,6 @@ class SwiftFormerConfig(PreTrainedConfig):
         Dropout rate for the ConvEncoder component of SwiftFormer.
     use_layer_scale (`bool`, *optional*, defaults to `True`):
         Whether to scale outputs from token mixers.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
 
     Example:
 
@@ -69,9 +67,9 @@ class SwiftFormerConfig(PreTrainedConfig):
     down_patch_size: int | list[int] | tuple[int, int] = 3
     down_stride: int = 2
     down_pad: int = 1
-    drop_path_rate: float = 0.0
-    drop_mlp_rate: float = 0.0
-    drop_conv_encoder_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
+    drop_mlp_rate: float | int = 0.0
+    drop_conv_encoder_rate: float | int = 0.0
     use_layer_scale: bool = True
     layer_scale_init_value: float = 1e-5
     batch_norm_eps: float = 1e-5

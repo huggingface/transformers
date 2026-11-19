@@ -22,7 +22,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTTextConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2TextConfig(PreTrainedConfig):
@@ -58,10 +58,10 @@ class Owlv2TextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 0
     bos_token_id: int | None = 49406
-    eos_token_id: int | None = 49407
+    eos_token_id: int | list[int] | None = 49407
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTVisionConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2, 32->16
 class Owlv2VisionConfig(PreTrainedConfig):
@@ -98,12 +98,15 @@ class Owlv2VisionConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="google/owlv2-base-patch16")
 # Copied from transformers.models.owlvit.configuration_owlvit.OwlViTConfig with OwlViT->Owlv2, owlvit-base-patch32->owlv2-base-patch16, owlvit->owlv2, OWL-ViT->OWLv2
 class Owlv2Config(PreTrainedConfig):
     model_type = "owlv2"
-    sub_configs = {"text_config": Owlv2TextConfig, "vision_config": Owlv2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": Owlv2TextConfig,
+        "vision_config": Owlv2VisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -111,21 +114,6 @@ class Owlv2Config(PreTrainedConfig):
     logit_scale_init_value: float = 2.6592
     return_dict: bool = True
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Owlv2TextConfig()
-            logger.info("`text_config` is `None`. initializing the `Owlv2TextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Owlv2TextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = Owlv2VisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `Owlv2VisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Owlv2VisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Owlv2Config", "Owlv2TextConfig", "Owlv2VisionConfig"]

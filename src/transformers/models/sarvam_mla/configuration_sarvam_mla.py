@@ -31,11 +31,14 @@ class SarvamMLAConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 16):
         Number of groups for routed experts.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether to interleave the rotary position embeddings.
+    num_mtp_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. The
+        released checkpoints do not include MTP weights.
 
     Example:
 
@@ -50,7 +53,6 @@ class SarvamMLAConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sarvam_mla"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -67,8 +69,15 @@ class SarvamMLAConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
     }
 
     vocab_size: int = 262144
@@ -80,6 +89,7 @@ class SarvamMLAConfig(PreTrainedConfig):
     num_key_value_heads: int | None = None
     n_shared_experts: int = 1
     n_routed_experts: int = 128
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int | None = None
@@ -105,6 +115,7 @@ class SarvamMLAConfig(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    num_mtp_layers: int = 0
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
-@strict(accept_kwargs=True)
+@strict
 class OwlViTTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -57,11 +57,11 @@ class OwlViTTextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 0
     bos_token_id: int | None = 49406
-    eos_token_id: int | None = 49407
+    eos_token_id: int | list[int] | None = 49407
 
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
-@strict(accept_kwargs=True)
+@strict
 class OwlViTVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -97,10 +97,13 @@ class OwlViTVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
-@strict(accept_kwargs=True)
+@strict
 class OwlViTConfig(PreTrainedConfig):
     model_type = "owlvit"
-    sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}
+    sub_configs_defaults = {
+        "text_config": OwlViTTextConfig,
+        "vision_config": OwlViTVisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -108,21 +111,6 @@ class OwlViTConfig(PreTrainedConfig):
     logit_scale_init_value: float = 2.6592
     return_dict: bool = True
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = OwlViTTextConfig()
-            logger.info("`text_config` is `None`. initializing the `OwlViTTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = OwlViTTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = OwlViTVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `OwlViTVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = OwlViTVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["OwlViTConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]

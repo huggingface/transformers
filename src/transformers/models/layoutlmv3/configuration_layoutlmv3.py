@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/layoutlmv3-base")
-@strict(accept_kwargs=True)
+@strict
 class LayoutLMv3Config(PreTrainedConfig):
     r"""
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
@@ -36,10 +36,10 @@ class LayoutLMv3Config(PreTrainedConfig):
         The number of relative position bins to be used in the self-attention mechanism.
     max_rel_pos (`int`, *optional*, defaults to 128):
         The maximum number of relative positions to be used in the self-attention mechanism.
-    max_rel_2d_pos (`int`, *optional*, defaults to 256):
-        The maximum number of relative 2D positions in the self-attention mechanism.
     rel_2d_pos_bins (`int`, *optional*, defaults to 64):
         The number of 2D relative position bins in the self-attention mechanism.
+    max_rel_2d_pos (`int`, *optional*, defaults to 256):
+        The maximum number of relative 2D positions in the self-attention mechanism.
     has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
         Whether or not to use a spatial attention bias in the self-attention mechanism.
     text_embed (`bool`, *optional*, defaults to `True`):
@@ -72,15 +72,15 @@ class LayoutLMv3Config(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 2
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_2d_position_embeddings: int = 1024
     coordinate_size: int = 128
     shape_size: int = 128

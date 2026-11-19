@@ -17,20 +17,18 @@ import math
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, remap_legacy_layer_types
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Zyphra/Zamba-7B-v1")
-@strict(accept_kwargs=True)
+@strict
 class ZambaConfig(PreTrainedConfig):
     r"""
     attention_hidden_size (`int`, *optional*):
         Dimension of the hidden representations of the inputs to the Attention layer.
     attention_head_dim (`int`, *optional*):
         Dimension of the attention head in the Transformer decoder.
-    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     n_mamba_heads (`int`, *optional*, defaults to 2):
         Number of mamba heads for each mamba layer.
     hidden_mamba_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -46,13 +44,19 @@ class ZambaConfig(PreTrainedConfig):
     attn_layer_offset (`int`, *optional*, defaults to 4):
         Offset of the shared attention layer
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
-        `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
-        `True` and kernels are not available
+        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
+    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
+        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+    use_associative_scan (`bool`, *optional*, defaults to `True`):
+        Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the
+        parallel scan instead of the naive sequential implementation.
+        Set to `False` to fall back to the sequential loop.
+    layers_block_type (`str`, *optional*):
+        Alias for `layer_types` which is kept for BC purposes.
     """
 
     model_type = "zamba"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"layer_types": "layers_block_type", "head_dim": "attention_head_dim"}
 
     vocab_size: int = 32000
     tie_word_embeddings: bool = True
@@ -72,7 +76,7 @@ class ZambaConfig(PreTrainedConfig):
     num_logits_to_keep: int = 1
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_position_embeddings: int = 4096
     attention_dropout: float | int = 0.0
     attn_layer_period: int = 6
@@ -82,33 +86,37 @@ class ZambaConfig(PreTrainedConfig):
     mamba_d_conv: int = 4
     mamba_expand: int = 2
     mamba_dt_rank: str | int = "auto"
+    use_associative_scan: bool = True
     time_step_min: float = 0.001
     time_step_max: float = 0.1
     time_step_floor: float = 1e-4
     mamba_conv_bias: bool = True
     mamba_proj_bias: bool = False
+    layers_block_type: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.attention_hidden_size = self.attention_hidden_size or 2 * self.hidden_size
         self.attention_head_dim = self.attention_head_dim or 2 * self.hidden_size // self.num_attention_heads
         self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if self.mamba_dt_rank == "auto" else self.mamba_dt_rank
-        self.layers_block_type = self._layers_block_type(
-            self.num_hidden_layers, self.attn_layer_period, self.attn_layer_offset
-        )
+
+        if self.layers_block_type is None:
+            self.layers_block_type = [
+                "linear_attention",
+                "linear_attention",
+                "hybrid",
+            ] + [
+                "hybrid" if i % self.attn_layer_period == self.attn_layer_offset else "linear_attention"
+                for i in range(self.num_hidden_layers - 3)
+            ]
+        else:
+            self.layers_block_type = remap_legacy_layer_types(self.layers_block_type)
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if (self.mamba_expand * self.hidden_size) % self.n_mamba_heads != 0:
             raise ValueError("`intermediate_size` should be divisible by `n_mamba_heads`.")
-
-    def _layers_block_type(self, num_hidden_layers, attn_layer_period, attn_layer_offset):
-        layers = [
-            "mamba",
-            "mamba",
-            "hybrid",
-        ] + ["hybrid" if i % attn_layer_period == attn_layer_offset else "mamba" for i in range(num_hidden_layers - 3)]
-        return layers
 
 
 __all__ = ["ZambaConfig"]

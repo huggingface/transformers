@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
-@strict(accept_kwargs=True)
+@strict
 class MllamaVisionConfig(PreTrainedConfig):
     r"""
     num_global_layers (`int`, *optional*, defaults to 8):
@@ -96,7 +96,7 @@ class MllamaVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
-@strict(accept_kwargs=True)
+@strict
 class MllamaTextConfig(PreTrainedConfig):
     r"""
     cross_attention_layers (`list[int]`, *optional*):
@@ -147,7 +147,7 @@ class MllamaTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-3.2-11B-Vision")
-@strict(accept_kwargs=True)
+@strict
 class MllamaConfig(PreTrainedConfig):
     r"""
     Example:
@@ -172,29 +172,15 @@ class MllamaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mllama"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "text_config": MllamaTextConfig,
+        "vision_config": MllamaVisionConfig,
     }
-    sub_configs = {"text_config": MllamaTextConfig, "vision_config": MllamaVisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_index: int = 128256
 
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = MllamaVisionConfig()
-            logger.info("vision_config is None, using default mllama vision config")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = MllamaVisionConfig(**self.vision_config)
 
-        if self.text_config is None:
-            self.text_config = MllamaTextConfig()
-            logger.info("text_config is None, using default mllama text config")
-        elif isinstance(self.text_config, dict):
-            self.text_config = MllamaTextConfig(**self.text_config)
-
-        super().__post_init__(**kwargs)
-
-
-__all__ = ["MllamaConfig"]
+__all__ = ["MllamaConfig", "MllamaTextConfig", "MllamaVisionConfig"]

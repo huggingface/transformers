@@ -15,20 +15,21 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="SenseTime/deformable-detr")
-@strict(accept_kwargs=True)
+@strict
 class DeformableDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`DeformableDetrModel`] can detect in a single image. In case `two_stage` is set to `True`, we use
         `two_stage_num_proposals` instead.
+    return_intermediate (`bool`, *optional*, defaults to True):
+        Whether to return the intermediate state or not
     position_embedding_type (`str`, *optional*, defaults to `"sine"`):
         Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
     dilation (`bool`, *optional*, defaults to `False`):
@@ -45,14 +46,12 @@ class DeformableDetrConfig(PreTrainedConfig):
         Deformable DETR, which are further fed into the decoder for iterative bounding box refinement.
     two_stage_num_proposals (`int`, *optional*, defaults to 300):
         The number of region proposals to be generated, in case `two_stage` is set to `True`.
-    disable_custom_kernels (`bool`, *optional*, defaults to `False`):
-        Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
-        kernels are not supported by PyTorch ONNX export.
     with_box_refine (`bool`, *optional*, defaults to `False`):
         Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
         based on the predictions from the previous layer.
-    return_intermediate (`bool`, *optional*, defaults to True):
-        Whether to return the intermediate state or not
+    disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+        Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
+        kernels are not supported by PyTorch ONNX export.
 
     Examples:
 
@@ -70,7 +69,13 @@ class DeformableDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deformable_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="resnet",
+            init_kwargs={"out_features": ["stage4"]},
+        ),
+    }
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -119,24 +124,21 @@ class DeformableDetrConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
-        timm_default_kwargs = {
-            "num_channels": 3,
-            "features_only": True,
-            "use_pretrained_backbone": False,
-            "out_indices": [2, 3, 4] if self.num_feature_levels > 1 else [4],
-        }
-        if self.dilation:
-            timm_default_kwargs["output_stride"] = 16
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_backbone="resnet50",
-            default_config_type="resnet50",
-            default_config_kwargs={"out_features": ["stage4"]},
-            timm_default_kwargs=timm_default_kwargs,
-            **kwargs,
-        )
-
+        if (
+            self.backbone_config is None
+            and kwargs.pop("use_timm_backbone", True)
+            and not kwargs.get("backbone_kwargs")
+        ):
+            self.backbone_config = {
+                "model_type": "timm_backbone",
+                "backbone": kwargs.pop("backbone", None) or "resnet50",
+                "num_channels": 3,
+                "features_only": True,
+                "use_pretrained_backbone": False,
+                "out_indices": [2, 3, 4] if self.num_feature_levels > 1 else [4],
+            }
+            if self.dilation:
+                self.backbone_config["output_stride"] = 16
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

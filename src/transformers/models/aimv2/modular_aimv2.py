@@ -35,10 +35,11 @@ from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
+from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
-@strict(accept_kwargs=True)
+@strict
 class Aimv2VisionConfig(SiglipVisionConfig):
     r"""
     use_head (`str`, *optional*, defaults to `True`):
@@ -76,10 +77,11 @@ class Aimv2VisionConfig(SiglipVisionConfig):
     is_native: bool = False
 
     layer_norm_eps = AttributeError()
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
-@strict(accept_kwargs=True)
+@strict
 class Aimv2TextConfig(SiglipTextConfig):
     vocab_size: int = 49408
     hidden_size: int = 768
@@ -102,7 +104,7 @@ class Aimv2TextConfig(SiglipTextConfig):
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
-@strict(accept_kwargs=True)
+@strict
 class Aimv2Config(SiglipConfig):
     r"""
     max_logit_scale (`float`, *optional*, defaults to `100.0`):
@@ -162,24 +164,7 @@ class Aimv2VisionEmbeddings(nn.Module):
         num_patches = (config.image_size // config.patch_size) ** 2
         if not self.config.is_native:
             self.position_embedding = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
-
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ) -> torch.Tensor:
-        grid_w = torch.arange(int(width), dtype=dtype, device=device)
-        grid_h = torch.arange(int(height), dtype=dtype, device=device)
-        grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
-
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
-        omega = 1.0 / (temperature**omega)
-
-        out_h = grid_h.flatten()[..., None] @ omega[None, :]
-        out_w = grid_w.flatten()[..., None] @ omega[None, :]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         _, _, height, width = pixel_values.size()
@@ -187,13 +172,18 @@ class Aimv2VisionEmbeddings(nn.Module):
         hidden_states = self.rms_norm(hidden_states)
 
         if self.config.is_native:
-            pos_embed = self.build_2d_sincos_position_embedding(
-                height // self.patch_size,
-                width // self.patch_size,
+            pos_embed = build_2d_sinusoidal_position_embedding(
+                height=height // self.patch_size,
+                width=width // self.patch_size,
                 embed_dim=self.config.hidden_size,
                 device=hidden_states.device,
                 dtype=hidden_states.dtype,
             )
+            # AIMv2 was trained with [sin_w|cos_w|sin_h|cos_h] layout (matching ViT-MAE's
+            # original naming-bug convention); rotate the canonical h-first embedding to match.
+            half = pos_embed.shape[-1] // 2
+            pos_embed = torch.cat([pos_embed[..., half:], pos_embed[..., :half]], dim=-1)
+            pos_embed = pos_embed.unsqueeze(0)
         else:
             pos_embed = self.position_embedding(self.position_ids)
 
@@ -298,7 +288,6 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "logit_scale"):
@@ -355,7 +344,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
@@ -397,7 +386,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
-
+    config: Aimv2TextConfig
     _can_record_outputs = {
         "hidden_states": Aimv2EncoderLayer,
         "attentions": Aimv2Attention,
@@ -440,7 +429,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
                 inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
-                past_key_values=None,
+                cache=None,
             )
 
         encoder_outputs = self.encoder(
@@ -491,7 +480,7 @@ class Aimv2Model(CLIPModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Aimv2Output:
@@ -500,7 +489,7 @@ class Aimv2Model(CLIPModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Aimv2Model
 

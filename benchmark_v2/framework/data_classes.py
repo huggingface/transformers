@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -47,7 +47,7 @@ def equalize_lengths_and_collate(stats: dict[str, dict[str, str]]) -> dict[str, 
 
 
 def pretty_print_dict(data: dict[str, str], tabs: int = 0) -> None:
-    max_key_length = max([len(key) for key in data.keys()])
+    max_key_length = max(len(key) for key in data.keys())
     for key, value in data.items():
         tabs_str = "  " * tabs
         padded_key = key.ljust(max_key_length + 1, ".")
@@ -70,7 +70,7 @@ class BenchmarkMetadata:
         self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "", success: bool = True
     ) -> None:
         self.model_id = model_id
-        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
         self.branch_name = branch_name
         self.commit_id = commit_id
         self.commit_message = commit_message
@@ -93,6 +93,7 @@ class BenchmarkResult:
     """Result from a series of benchmark runs."""
 
     def __init__(self) -> None:
+        self.execution_settings = {}
         self.e2e_latency = []
         self._timestamps = []
         self.time_to_first_token = []
@@ -103,7 +104,7 @@ class BenchmarkResult:
     def accumulate(
         self,
         e2e_latency: float,
-        timestamps: list[float],
+        timestamps: list[list[float]],
         shape_and_decoded_output: str,
         gpu_metrics: GPURawMetrics | None,
     ) -> None:
@@ -113,10 +114,15 @@ class BenchmarkResult:
         self.shape_and_decoded_outputs.append(shape_and_decoded_output)
         self.gpu_metrics.append(gpu_metrics)
 
-    def _accumulate_ttft_and_itl(self, timestamps: list[float]) -> None:
+    def _accumulate_ttft_and_itl(self, timestamps: list[list[float]]) -> None:
         timestamps = np.array(timestamps)
         tftt = np.min(timestamps[:, 0])
-        itl = np.mean(timestamps[:, -1] - timestamps[:, 0]) / (timestamps.shape[1] - 1)
+        # A single generated token has no inter-token interval.
+        itl = (
+            np.mean(timestamps[:, -1] - timestamps[:, 0]) / (timestamps.shape[1] - 1)
+            if timestamps.shape[1] > 1
+            else 0.0
+        )
         self.time_to_first_token.append(tftt)
         self.inter_token_latency.append(itl)
 
@@ -127,6 +133,7 @@ class BenchmarkResult:
         else:
             gpu_metrics = [gm.to_dict() for gm in self.gpu_metrics]
         return {
+            "execution_settings": self.execution_settings,
             "e2e_latency": self.e2e_latency,
             "time_to_first_token": self.time_to_first_token,
             "inter_token_latency": self.inter_token_latency,
@@ -149,6 +156,7 @@ class BenchmarkResult:
             timestamps = data["timestamps"]
         # Create a new instance and accumulate the data
         new_instance = cls()
+        new_instance.execution_settings = data.get("execution_settings", {})
         new_instance.e2e_latency = data["e2e_latency"]
         new_instance._timestamps = timestamps
         new_instance.time_to_first_token = data["time_to_first_token"]

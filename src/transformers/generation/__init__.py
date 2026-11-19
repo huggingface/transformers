@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_rich_available, is_torch_available
 
 
 _import_structure = {
@@ -41,6 +41,7 @@ else:
         "CandidateGenerator",
         "EarlyExitCandidateGenerator",
         "PromptLookupCandidateGenerator",
+        "DFlashTokenCandidateGenerator",
     ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
@@ -107,6 +108,13 @@ else:
         "BayesianDetectorConfig",
         "SynthIDTextWatermarkDetector",
     ]
+try:
+    if not is_rich_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["streamers"] += ["TextDiffusionStreamer"]
 
 
 if TYPE_CHECKING:
@@ -130,6 +138,7 @@ if TYPE_CHECKING:
         from .candidate_generator import (
             AssistedCandidateGenerator,
             CandidateGenerator,
+            DFlashTokenCandidateGenerator,
             EarlyExitCandidateGenerator,
             PromptLookupCandidateGenerator,
         )
@@ -198,6 +207,13 @@ if TYPE_CHECKING:
             WatermarkDetector,
             WatermarkDetectorOutput,
         )
+    try:
+        if not is_rich_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .streamers import TextDiffusionStreamer
 
 else:
     import sys
