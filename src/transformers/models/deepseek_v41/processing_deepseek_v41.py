@@ -39,7 +39,7 @@ class DeepseekV41Processor(ProcessorMixin):
         # The model merges every `downsample_ratio x downsample_ratio` square of patches into a token, and a
         # partial square at the edge still makes one
         downsample_ratio = kwargs.get("downsample_ratio") or self.image_processor.downsample_ratio
-        height, width = (int(side) for side in image_inputs["image_grid_hw"][image_idx])
+        _, height, width = (int(size) for size in image_inputs["image_grid_thw"][image_idx])
         rows, columns = math.ceil(height / downsample_ratio), math.ceil(width / downsample_ratio)
         # Every position of the image carries the image token: its start, each row with a newline after it,
         # and its end. The model tells them apart by where they are in that layout.

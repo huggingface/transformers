@@ -140,6 +140,8 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
 
     # The indexer parameters only influence which compressed entries are selected, which is not differentiable
     test_all_params_have_gradient = False
+    # The Engram token map and n-gram tables are fixed to the vocabulary, so `resize_token_embeddings` raises
+    test_resize_embeddings = False
 
     def setUp(self):
         super().setUp()
@@ -154,10 +156,10 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     def _image_features_prepare_config_and_inputs(self):
         # The common inputs are text only, so we make the image inputs here: two images with different grids
         config = self.model_tester.get_config()
-        image_grid_hw = torch.tensor([[5, 7], [3, 6]], device=torch_device)
-        num_patches = int(image_grid_hw.prod(-1).sum())
+        image_grid_thw = torch.tensor([[1, 5, 7], [1, 3, 6]], device=torch_device)
+        num_patches = int(image_grid_thw.prod(-1).sum())
         pixel_values = torch.randn(num_patches, 3 * config.vision_config.patch_size**2, device=torch_device)
-        return config, {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
+        return config, {"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
@@ -276,7 +278,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         inputs_dict["pixel_values"] = torch.randn(
             height * width, 3 * config.vision_config.patch_size**2, device=torch_device
         )
-        inputs_dict["image_grid_hw"] = torch.tensor([[height, width]], device=torch_device)
+        inputs_dict["image_grid_thw"] = torch.tensor([[1, height, width]], device=torch_device)
         with unittest.mock.patch.object(
             self.model_tester, "prepare_config_and_inputs_for_common", return_value=(config, inputs_dict)
         ):
@@ -441,6 +443,13 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
             logits = model(input_ids=input_ids).logits
         self.assertEqual(logits.shape, (1, 6, config.text_config.vocab_size))
 
+    def test_resize_token_embeddings_is_not_supported(self):
+        """A new token would have no entry in the Engram token map, so resizing raises instead."""
+        config, model = self._get_model()
+        with self.assertRaisesRegex(NotImplementedError, "placeholder tokens"):
+            model.resize_token_embeddings(config.text_config.vocab_size + 10)
+        self.assertEqual(model.get_input_embeddings().weight.shape[0], config.text_config.vocab_size)
+
     def test_select_candidate_blocks(self):
         scores = torch.tensor([[[0.1, 0.9, 0.3, 0.2, 0.8, float("-inf")]]])
         # The best block is the first one, and the block with the newest visible entry is always kept
@@ -457,14 +466,16 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         # 5 x 7 patches are merged 3 x 3 into 2 x 3 tokens, so the image takes 1 + 2 * (3 + 1) + 1 positions
         height, width, num_image_tokens = 5, 7, 10
         pixel_values = torch.randn(height * width, 3 * config.vision_config.patch_size**2, device=torch_device)
-        image_grid_hw = torch.tensor([[height, width]], device=torch_device)
+        image_grid_thw = torch.tensor([[1, height, width]], device=torch_device)
         text = torch.randint(0, self.model_tester.vocab_size, (1, 12), device=torch_device)
         image = torch.full((1, num_image_tokens), config.image_token_id, device=torch_device)
         input_ids = torch.cat([text[:, :4], image, text[:, 4:]], dim=1)
         with torch.no_grad():
-            image_features = model.model.get_image_features(pixel_values, image_grid_hw).pooler_output[0]
-            logits = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_hw=image_grid_hw).logits
-            other_image = model(input_ids=input_ids, pixel_values=pixel_values + 1, image_grid_hw=image_grid_hw).logits
+            image_features = model.model.get_image_features(pixel_values, image_grid_thw).pooler_output[0]
+            logits = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw).logits
+            other_image = model(
+                input_ids=input_ids, pixel_values=pixel_values + 1, image_grid_thw=image_grid_thw
+            ).logits
         self.assertEqual(image_features.shape, (num_image_tokens, config.text_config.hidden_size))
         torch.testing.assert_close(image_features[0], model.model.image_start)
         torch.testing.assert_close(image_features[4], model.model.image_newline)
@@ -477,20 +488,25 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         # A prompt whose image span is one token short of what the image takes up
         short_input_ids = torch.cat([input_ids[:, :5], input_ids[:, 6:]], dim=1)
         with self.assertRaisesRegex(ValueError, "image tokens"):
-            model(input_ids=short_input_ids, pixel_values=pixel_values, image_grid_hw=image_grid_hw)
+            model(input_ids=short_input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
+
+        # An image is one frame, so a grid with a temporal size other than 1 is not an image
+        video_grid_thw = torch.tensor([[2, height, width]], device=torch_device)
+        with self.assertRaisesRegex(ValueError, "temporal size"):
+            model(input_ids=input_ids, pixel_values=pixel_values.repeat(2, 1), image_grid_thw=video_grid_thw)
 
     def test_image_features_of_several_images(self):
         """Images are encoded independently, whether or not they come in together."""
         config, model = self._get_model()
         model.set_attn_implementation("eager")
-        image_grid_hw = torch.tensor([[5, 7], [3, 6]], device=torch_device)
+        image_grid_thw = torch.tensor([[1, 5, 7], [1, 3, 6]], device=torch_device)
         pixel_values = torch.randn(5 * 7 + 3 * 6, 3 * config.vision_config.patch_size**2, device=torch_device)
         with torch.no_grad():
             outputs = model.model.get_image_features(
-                pixel_values, image_grid_hw, output_hidden_states=True, output_attentions=True
+                pixel_values, image_grid_thw, output_hidden_states=True, output_attentions=True
             )
-            first = model.model.get_image_features(pixel_values[:35], image_grid_hw[:1], output_attentions=True)
-            second = model.model.get_image_features(pixel_values[35:], image_grid_hw[1:], output_attentions=True)
+            first = model.model.get_image_features(pixel_values[:35], image_grid_thw[:1], output_attentions=True)
+            second = model.model.get_image_features(pixel_values[35:], image_grid_thw[1:], output_attentions=True)
 
         # 2 x 3 and 1 x 2 tokens, each with a newline per row and the two delimiters
         self.assertEqual([features.shape[0] for features in outputs.pooler_output], [10, 5])
