@@ -356,7 +356,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     for i, t in added_tokens_decoder.items()
                 }
 
-            tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(proto=extractor.proto, vocab=vocab)
+            tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
+                proto=extractor.proto, vocab=vocab, legacy=local_kwargs.get("legacy", True)
+            )
             if tokenizer_object is not None:
                 local_kwargs["tokenizer_object"] = tokenizer_object
                 # Set bos/eos tokens from proto spec if available. This is needed when

@@ -164,6 +164,17 @@ class SentencePieceModelConversionTest(unittest.TestCase):
             # Special tokens are split from the raw text first, as the remote tokenizers do
             self.assertIn("<|im_start|>", tokenizer.tokenize("'<|im_start|>'"))
 
+    def test_legacy_controls_prefix_after_added_tokens(self):
+        # legacy (the default) prefixes every chunk between added tokens, like `sp_model.encode` per chunk
+        for legacy, expected in [(True, ["<a>", "▁x"]), (False, ["<a>", "x"])]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sp = self._train(tmp_dir, control_symbols=["<a>"])
+                added_tokens_decoder = {str(sp.piece_to_id("<a>")): {"content": "<a>", "special": True}}
+                with open(f"{tmp_dir}/tokenizer_config.json", "w", encoding="utf-8") as f:
+                    json.dump({"added_tokens_decoder": added_tokens_decoder, "legacy": legacy}, f)
+                tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+                self.assertEqual(tokenizer.tokenize("<a>x")[:2], expected, f"legacy={legacy}")
+
     def test_added_tokens_decoder_can_swap_pieces(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             sp = self._train(tmp_dir, control_symbols=["<a>", "<b>"])

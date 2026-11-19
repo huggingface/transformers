@@ -638,7 +638,7 @@ class SpmConverter(Converter):
     special_tokens = {}
 
     @staticmethod
-    def build_tokenizer_from_spm_proto(proto, vocab, merges=None):
+    def build_tokenizer_from_spm_proto(proto, vocab, merges=None, legacy=True):
         """
         Similar to convert_from_spm method, but used only when there is no `model_type` class, i.e. there is no matching
         class in `TOKENIZERS_MAPPING` and we just create a tokenizer instead of extracting stuff from the sentencepiece
@@ -707,14 +707,18 @@ class SpmConverter(Converter):
             _normalizers += [normalizers.Replace(Regex(r"\A +| +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
         if normalizer_spec.escape_whitespaces:
             _normalizers.append(normalizers.Replace(" ", "▁"))
-        if normalizer_spec.add_dummy_prefix:
+        # Same as `_get_prepend_scheme`: legacy prefixes every chunk between added tokens, otherwise only the first
+        prepend_scheme = "always" if legacy else "first"
+        if normalizer_spec.add_dummy_prefix and legacy:
             # Metaspace skips the dummy prefix when the text already starts with "▁", SentencePiece doesn't
             _normalizers.append(normalizers.Replace(Regex(r"\A▁"), "▁▁"))
         tokenizer.normalizer = normalizers.Sequence(_normalizers)
         # SentencePiece emits user-defined pieces whole and never merges them: isolate them after the dummy prefix
         _pre_tokenizers = []
         if normalizer_spec.add_dummy_prefix:
-            _pre_tokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=False))
+            _pre_tokenizers.append(
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=False)
+            )
         if user_defined:
             pattern = "|".join(re.escape(piece) for piece in sorted(user_defined, key=len, reverse=True))
             _pre_tokenizers.append(pre_tokenizers.Split(Regex(pattern), behavior="isolated"))
