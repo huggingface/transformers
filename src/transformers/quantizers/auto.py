@@ -543,7 +543,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         # Dequantized, the scales fold into the weight before the model's ops
         load, ops = operation(quantizer), transform.operations
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
-        transform.operations = [load, *ops] if dequantize else [*ops, load]
+        before = dequantize or quantizer.load_before_model_ops
+        transform.operations = [load, *ops] if before else [*ops, load]
         return transform
 
     def param_needs_quantization(self, model, param_name, **kwargs):

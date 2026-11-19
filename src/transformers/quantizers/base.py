@@ -395,6 +395,10 @@ class HfQuantizer(ABC):
     # `checkpoint_renames`. Only the model's conversions run
     load_serialized = False
 
+    # The load op runs on each of the format's tensors before the model's ops (e.g. a layout an engine repacks per
+    # expert, before the experts merge), as a dequantization does
+    load_before_model_ops = False
+
     def get_load_operation(self):
         """The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"""
         if not self.pre_quantized or self.load_serialized:
