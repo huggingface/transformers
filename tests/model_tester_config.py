@@ -35,6 +35,7 @@ _TEXT_MODEL_TESTER_DEFAULTS = {
     "batch_size": 13,
     "seq_length": 7,
     "is_training": True,
+    "scope": None,
     "use_input_mask": True,
     "use_labels": True,
     "vocab_size": 99,

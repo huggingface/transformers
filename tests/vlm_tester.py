@@ -37,7 +37,6 @@ class VLMModelTester(MultiModalModelTester):
 
     defaults = {
         **MultiModalModelTester.defaults,
-        "pad_token_id": 0,
         "use_token_type_ids": False,
         "hidden_dropout_prob": 0.1,
         "attention_probs_dropout_prob": 0.1,

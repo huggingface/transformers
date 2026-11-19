@@ -75,9 +75,7 @@ class MultiModalModelTester(ModelTesterConfigMixin):
     defaults = {
         **ModelTesterConfigMixin.defaults,
         "batch_size": 3,
-        "moe_intermediate_size": 12,
         "ignore_index": -100,
-        "scope": None,
     }
 
     def __init__(self, parent, **kwargs):

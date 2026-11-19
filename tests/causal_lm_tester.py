@@ -60,7 +60,6 @@ class CausalLMModelTester(ModelTesterConfigMixin):
         "num_labels": 3,
         "num_choices": 4,
         "is_decoder": False,
-        "scope": None,
         "mamba_n_groups": 1,
         "mamba_n_heads": 16,
         "mamba_d_state": 16,

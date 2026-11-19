@@ -120,6 +120,11 @@ class CausalLMSmallConfigDefaultsTest(unittest.TestCase):
 
 
 class MergedSmallConfigDefaultsTest(unittest.TestCase):
+    def test_text_backbones_share_moe_intermediate_size(self):
+        causal = CausalLMModelTester.get_small_config_defaults()
+        multimodal = MultiModalModelTester.get_small_config_defaults()
+        self.assertEqual(causal["moe_intermediate_size"], multimodal["moe_intermediate_size"])
+
     def test_merged_values_do_not_require_a_tester_instance(self):
         # These bases cannot be instantiated without model classes, but their
         # merged defaults are useful independently of any model or test case.
