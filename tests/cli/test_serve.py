@@ -41,6 +41,7 @@ from transformers.cli.serving.utils import (
     BaseHandler,
     GenerationState,
     Modality,
+    ReasoningText,
     ToolCall,
     build_response_parser,
     get_gen_models,
@@ -1363,6 +1364,48 @@ class TestResponseSSEFormat(unittest.TestCase):
         parsed = json.loads(result[len("data: ") :].strip())
         self.assertEqual(parsed["type"], "response.created")
         self.assertEqual(parsed["response"]["status"], "queued")
+
+
+@require_serve
+class TestStreamingResponseToolCalls(unittest.IsolatedAsyncioTestCase):
+    async def test_output_indices(self):
+        paris = ToolCall("get_weather", '{"city":"Paris"}')
+        london = ToolCall("get_weather", '{"city":"London"}')
+        cases = [
+            ([paris], ["message", "function_call"], ""),
+            (["Checking. ", paris, "Done."], ["message", "function_call"], "Checking. Done."),
+            ([ReasoningText("\n\n"), paris, london], ["reasoning", "message", "function_call", "function_call"], ""),
+        ]
+        handler = ResponseHandler(MagicMock(), GenerationState())
+        for chunks, types, text in cases:
+            with self.subTest(chunks=chunks):
+                queue = asyncio.Queue()
+                for chunk in [*chunks, None]:
+                    queue.put_nowait(chunk)
+                manager = MagicMock()
+                manager.generate_streaming.return_value = queue, MagicMock(total_tokens=len(chunks))
+                # The generation manager delivers parsed chunks to the Responses event loop.
+                with patch("transformers.cli.serving.response.build_response_parser", return_value=None):
+                    response = handler._streaming("req", None, None, "test", {}, {"input_ids": []}, None, manager)
+                body = "".join([chunk async for chunk in response.body_iterator])
+                events = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
+                self.assertEqual(events[-1]["type"], "response.completed")
+                output = events[-1]["response"]["output"]
+                self.assertEqual([item["type"] for item in output], types)
+                self.assertEqual(output[types.index("message")]["content"][0]["text"], text)
+                self.assertEqual(
+                    [item["arguments"] for item in output if item["type"] == "function_call"],
+                    [chunk.arguments for chunk in chunks if isinstance(chunk, ToolCall)],
+                )
+                ids = [item["id"] for item in output]
+                for event in events:
+                    if "output_index" in event:
+                        item_id = event.get("item_id") or event["item"]["id"]
+                        self.assertEqual(event["output_index"], ids.index(item_id))
+                self.assertEqual([e["item"]["id"] for e in events if e["type"] == "response.output_item.added"], ids)
+                self.assertCountEqual(
+                    [e["item"]["id"] for e in events if e["type"] == "response.output_item.done"], ids
+                )
 
 
 @slow
