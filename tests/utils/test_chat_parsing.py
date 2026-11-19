@@ -1508,6 +1508,20 @@ class ResponseEventStreamTest(unittest.TestCase):
             {"text": "note,warning: hot", "nested": {"n": 1}},
         )
 
+    def test_unquoted_keys_allows_whitespace_around_keys(self):
+        """A Javascript-style object literal usually has a space after each comma, and may be spread over
+        several lines. `unquoted_keys` must quote those keys too, not only keys glued to `{` or `,`."""
+        args = {"unquoted_keys": True}
+        expected = {"city": "London", "days": 3, "filter": {"tags": ["a, b: c"], "strict": True}}
+        texts = [
+            '{city: "London", days: 3, filter: {tags: ["a, b: c"], strict: true}}',
+            '{ city : "London" , days : 3 , filter : { tags : ["a, b: c"] , strict : true } }',
+            '{\n  city: "London",\n  days: 3,\n  filter: {\n    tags: ["a, b: c"],\n    strict: true\n  }\n}',
+        ]
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertEqual(parse_content(text, "json", args), expected)
+
 
 class PrefixAndTruncationTest(unittest.TestCase):
     def test_prefix_lands_inside_explicit_region(self):

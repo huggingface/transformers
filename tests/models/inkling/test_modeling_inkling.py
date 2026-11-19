@@ -54,19 +54,23 @@ class InklingTextModelTester(CausalLMModelTester):
         base_model_class = InklingTextModel
         causal_lm_class = InklingForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 2
+    small_config_overrides = {
+        "num_hidden_layers": 2,
         # we want to test sharing on both types
-        self.layer_types = ["hybrid_sliding", "hybrid"]
-        self.mlp_layer_types = ["dense", "sparse"]
-        self.swa_num_attention_heads = self.num_attention_heads
-        self.swa_num_key_value_heads = self.num_key_value_heads
-        self.swa_head_dim = self.head_dim
-
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "mlp_layer_types": ["dense", "sparse"],
         # To activate moe blocks
-        self.moe_intermediate_size = 16
-        self.n_routed_experts = 16
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["swa_num_attention_heads"] = values["num_attention_heads"]
+        values["swa_num_key_value_heads"] = values["num_key_value_heads"]
+        values["swa_head_dim"] = values["head_dim"]
+        return values
 
 
 class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
@@ -129,25 +133,25 @@ class InklingAudio2TextModelTester(ALMModelTester):
 
     audio_mask_key = "audio_input_ids_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("audio_token_id", 7)
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("seq_length", 50)
-        kwargs.setdefault("feat_seq_length", 4)
-        kwargs.setdefault("n_mel_bins", 4)
-        kwargs.setdefault("mel_vocab_size", 8)
-        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 16)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("swa_num_attention_heads", 2)
-        kwargs.setdefault("swa_num_key_value_heads", 2)
-        kwargs.setdefault("swa_head_dim", 16)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("num_channels", 3)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "audio_token_id": 7,
+        "pad_token_id": 0,
+        "seq_length": 50,
+        "feat_seq_length": 4,
+        "n_mel_bins": 4,
+        "mel_vocab_size": 8,
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 16,
+        "head_dim": 16,
+        "swa_num_attention_heads": 2,
+        "swa_num_key_value_heads": 2,
+        "swa_head_dim": 16,
+        "patch_size": 5,
+        "num_channels": 3,
+    }
 
     @property
     def _special_token_ids(self):
@@ -273,23 +277,23 @@ class InklingVision2TextModelTester(VLMModelTester):
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("audio_token_id", 8)
-        kwargs.setdefault("seq_length", 25)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 16)
-        kwargs.setdefault("swa_num_attention_heads", 2)
-        kwargs.setdefault("swa_num_key_value_heads", 2)
-        kwargs.setdefault("swa_head_dim", 16)
-        kwargs.setdefault("n_mel_bins", 4)
-        kwargs.setdefault("mel_vocab_size", 8)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "audio_token_id": 8,
+        "seq_length": 25,
+        "num_image_tokens": 1,
+        "patch_size": 5,
+        "temporal_patch_size": 2,
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 16,
+        "swa_num_attention_heads": 2,
+        "swa_num_key_value_heads": 2,
+        "swa_head_dim": 16,
+        "n_mel_bins": 4,
+        "mel_vocab_size": 8,
+    }
 
     @property
     def _special_token_ids(self):
