@@ -255,6 +255,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
         "hidden_states": GPTJBlock,
         "attentions": GPTJAttention,
     }
+    _keys_to_ignore_on_load_unexpected = [r"attn.bias", r"attn.masked_bias"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
