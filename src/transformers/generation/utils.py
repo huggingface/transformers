@@ -3976,11 +3976,6 @@ class GenerationMixin(ContinuousMixin):
         if cache is None:
             raise RuntimeError("Assisted decoding requires a cache")
         cache.activate_past_recording()
-        # Sanity check - early error if it's not the case
-        if not cache.is_croppable:
-            raise ValueError(
-                "Assisted decoding requires a cache that can be cropped to restore the states after draft verification"
-            )
 
         # Same tensor the stopping criteria are built from
         eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
@@ -4095,7 +4090,7 @@ class GenerationMixin(ContinuousMixin):
                     outputs = model_forward(**model_inputs)
 
             # Some layers (e.g. linear attention, which cannot roll back a recurrent state), only know whether they can `crop` after they
-            # have been properly initialized, so check it once more after prefill and before first `crop`
+            # have been properly initialized, so check it only now after prefill and before first `crop`
             if is_first_iteration and not cache.is_croppable:
                 raise ValueError(
                     "Assisted decoding requires a cache that can be cropped to restore the states after draft verification"
