@@ -839,13 +839,12 @@ class Step3p7MLP(DeepseekV4MLP):
 
 @no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
-    # Declare the clipping order for replacement expert implementations.
-    limit_after_act = True
-
     def __init__(self, config, swiglu_limit=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        # Declare the clipping order for replacement expert implementations.
+        self.limit_after_act = True
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)

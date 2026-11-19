@@ -142,9 +142,6 @@ class BailingHybridRotaryEmbedding(nn.Module):
 class BailingHybridExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    # Declare the clipping order for replacement expert implementations.
-    limit_after_act = True
-
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -154,6 +151,8 @@ class BailingHybridExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        # Declare the clipping order for replacement expert implementations.
+        self.limit_after_act = True
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -830,7 +829,7 @@ class BailingHybridMoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+    def __init__(self, config: BailingHybridConfig):
         super().__init__()
         self.config = config
         self.experts = BailingHybridExperts(config)
@@ -838,10 +837,6 @@ class BailingHybridMoE(nn.Module):
         self.shared_experts = BailingHybridMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-        expert_limit = config.experts_swiglu_limits[layer_idx]
-        shared_limit = config.shared_experts_swiglu_limits[layer_idx]
-        self.experts.limit = expert_limit if expert_limit > 0 else float("inf")
-        self.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
@@ -863,15 +858,19 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
             if config.layer_types[layer_idx] == "full_attention"
             else BailingHybridDeltaAttention(config, layer_idx)
         )
+
         self.mlp = (
-            BailingHybridMoE(config, layer_idx)
-            if config.mlp_layer_types[layer_idx] == "sparse"
-            else BailingHybridMLP(config)
+            BailingHybridMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BailingHybridMLP(config)
         )
 
         self.input_layernorm = BailingHybridRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = BailingHybridRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.block_type = config.layer_types[layer_idx]
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            expert_limit = config.experts_swiglu_limits[layer_idx]
+            shared_limit = config.shared_experts_swiglu_limits[layer_idx]
+            self.mlp.experts.limit = expert_limit if expert_limit > 0 else float("inf")
+            self.mlp.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

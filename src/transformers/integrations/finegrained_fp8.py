@@ -711,7 +711,6 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    limit_after_act = False
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
 
@@ -724,6 +723,7 @@ class FP8Experts(nn.Module):
         has_bias: bool = False,
         has_gate: bool = True,
         expert_dtype: str = "fp8",
+        original_module: nn.Module | None = None,
     ):
         super().__init__()
 
@@ -742,7 +742,8 @@ class FP8Experts(nn.Module):
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
-        self.limit = getattr(config, "swiglu_limit", None)
+        self.limit_after_act = getattr(original_module, "limit_after_act", False)
+        self.limit = getattr(original_module, "limit", getattr(config, "swiglu_limit", None))
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
         self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
@@ -980,11 +981,8 @@ def replace_with_fp8_linear(
                     has_bias=has_bias,
                     has_gate=has_gate,
                     expert_dtype=quantization_config.expert_dtype,
+                    original_module=module,
                 )
-                # Preserve layer-specific post-activation clipping when replacing the expert module.
-                if getattr(module, "limit_after_act", False):
-                    new_module.limit_after_act = True
-                    new_module.limit = module.limit
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.
                 new_module = FP8Linear(

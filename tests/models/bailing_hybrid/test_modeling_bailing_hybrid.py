@@ -22,9 +22,11 @@ from unittest import mock
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_cuda_capability_at_least,
     require_kernels,
     require_torch,
     require_torch_accelerator_memory,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -39,7 +41,7 @@ if is_torch_available():
 
     from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, FineGrainedFP8Config
     from transformers.generation.utils import ALL_CACHE_NAMES
-    from transformers.integrations.finegrained_fp8 import FP8Linear
+    from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
     from transformers.models.bailing_hybrid.modeling_bailing_hybrid import BailingHybridExperts, BailingHybridMLP
     from transformers.models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts, DeepseekV3MLP
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
@@ -226,25 +228,6 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
                 args = (inputs, indices, weights) if new_class is BailingHybridExperts else (inputs,)
                 torch.testing.assert_close(candidate(*args), reference(*args), rtol=0, atol=0)
 
-    def test_fp8_preserves_layer_swiglu_clipping(self):
-        config = self.model_tester.get_config()
-        config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
-        config.expert_swiglu_limit_list = [0, 1.5]
-        config.share_expert_swiglu_limit_list = [2.5, 0]
-        with torch.device("meta"):
-            model = BailingHybridForCausalLM(config)
-        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
-        quantizer._process_model_before_weight_loading(model)
-        gate_up = torch.tensor([[2.0, -2.0, 3.0, -3.0]])
-        gate, up = gate_up.chunk(2, dim=-1)
-        for layer, limit in zip(model.model.layers, [float("inf"), 1.5]):
-            self.assertTrue(layer.mlp.experts.limit_after_act)
-            self.assertEqual(layer.mlp.experts.limit, limit)
-            expected = torch.nn.functional.silu(gate).clamp(max=limit) * up.clamp(-limit, limit)
-            torch.testing.assert_close(layer.mlp.experts._apply_gate(gate_up), expected, rtol=0, atol=0)
-        self.assertEqual(model.model.layers[0].mlp.shared_experts.limit, 2.5)
-        self.assertEqual(model.model.layers[1].mlp.shared_experts.limit, float("inf"))
-
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
         for q_lora_rank in (None, 12):
@@ -417,6 +400,50 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("MLA uses different query/key and value head dimensions, so Flash SDPA cannot dispatch.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+
+@require_torch_gpu
+@require_kernels
+@require_cuda_capability_at_least(9, 0)
+class BailingHybridFp8IntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_fp8_expert_clipping(self):
+        config = BailingHybridModelTester(self).get_config()
+        config.hidden_size = config.intermediate_size = config.moe_intermediate_size = 128
+        config.first_k_dense_replace = 0
+        config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
+        config.experts_swiglu_limits = [0, 1.5]
+        model = BailingHybridForCausalLM(config).to(dtype=torch.bfloat16)
+        with torch.no_grad():
+            for layer in model.model.layers:
+                layer.mlp.experts.gate_up_proj.fill_(0.5)
+                layer.mlp.experts.down_proj.fill_(0.5)
+        excluded = ["lm_head"]
+        for i in range(config.num_hidden_layers):
+            excluded.extend(f"model.layers.{i}.{name}" for name in ("attention", "mlp.gate", "mlp.shared_experts"))
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            model = BailingHybridForCausalLM.from_pretrained(
+                directory,
+                quantization_config=FineGrainedFP8Config(modules_to_not_convert=excluded),
+                device_map=torch_device,
+                dtype=torch.bfloat16,
+                experts_implementation="batched_mm",
+                attn_implementation="eager",
+            ).eval()
+        inputs = torch.ones(2, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
+        indices = torch.tensor([[0, 1], [1, 0]], device=torch_device)
+        weights = torch.full((2, 2), 0.5, device=torch_device, dtype=torch.bfloat16)
+        for layer, expected in zip(model.model.layers, (262144.0, 144.0)):
+            experts = layer.mlp.experts
+            self.assertIsInstance(experts, FP8Experts)
+            self.assertEqual(experts.gate_up_proj.dtype, torch.float8_e4m3fn)
+            with torch.inference_mode():
+                output = experts(inputs, indices, weights)
+            # Gate/up are 64 before clipping; the down projection sums 128 values weighted by 0.5.
+            torch.testing.assert_close(output, torch.full_like(output, expected), rtol=1e-2, atol=0.5)
 
 
 @slow

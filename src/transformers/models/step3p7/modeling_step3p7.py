@@ -540,9 +540,6 @@ class Step3p7MLP(nn.Module):
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    # Declare the clipping order for replacement expert implementations.
-    limit_after_act = True
-
     def __init__(self, config, swiglu_limit=None):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -552,6 +549,8 @@ class Step3p7Experts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        # Declare the clipping order for replacement expert implementations.
+        self.limit_after_act = True
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor

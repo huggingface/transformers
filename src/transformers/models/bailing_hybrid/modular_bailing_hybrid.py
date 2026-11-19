@@ -422,22 +422,17 @@ class BailingHybridTopkRouter(DeepseekV3TopkRouter):
 
 
 class BailingHybridMoE(DeepseekV3MoE):
-    def __init__(self, config: BailingHybridConfig, layer_idx: int):
-        super().__init__(config)
-        expert_limit = config.experts_swiglu_limits[layer_idx]
-        shared_limit = config.shared_experts_swiglu_limits[layer_idx]
-        self.experts.limit = expert_limit if expert_limit > 0 else float("inf")
-        self.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
+    pass
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = (
-            BailingHybridMoE(config, layer_idx)
-            if config.mlp_layer_types[layer_idx] == "sparse"
-            else BailingHybridMLP(config)
-        )
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            expert_limit = config.experts_swiglu_limits[layer_idx]
+            shared_limit = config.shared_experts_swiglu_limits[layer_idx]
+            self.mlp.experts.limit = expert_limit if expert_limit > 0 else float("inf")
+            self.mlp.shared_experts.limit = shared_limit if shared_limit > 0 else float("inf")
 
 
 @auto_docstring
