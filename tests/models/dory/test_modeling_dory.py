@@ -17,7 +17,7 @@ import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import AutoTokenizer, DoryConfig, is_torch_available
+from transformers import AutoTokenizer, DoryConfig, DynamicCache, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -80,6 +80,30 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
     def test_at_least_one_recurrent_loop(self):
         with self.assertRaises(StrictDataclassClassValidationError):
             DoryConfig(n_recurrent_loops=0)
+
+    def test_recurrent_layers_only_change_the_cache(self):
+        # The recurrent section is made of plain attention layers: only the cache knows about the loops
+        config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
+        self.assertEqual(config.layer_types, ["sliding_attention"] * 3 + ["full_attention"])
+        self.assertEqual(
+            config.cache_layer_types,
+            ["sliding_attention", "recurrent_sliding_attention", "recurrent_sliding_attention", "full_attention"],
+        )
+        # Rope is defined per attention type, the recurrent layers reuse the rope of their type
+        self.assertEqual(set(config.rope_parameters), {"sliding_attention", "full_attention"})
+
+        cache = DynamicCache(config=config)
+        self.assertEqual(
+            [type(layer).__name__ for layer in cache.layers],
+            ["DynamicSlidingWindowLayer", "DoryRecurrentSlidingWindowLayer", "DoryRecurrentSlidingWindowLayer", "DynamicLayer"],
+        )
+        # The loop count and the cache mode are settled at init, `update` only takes the loop index
+        recurrent_layer = cache.layers[1]
+        self.assertEqual(recurrent_layer.n_recurrent_loops, 2)
+        self.assertFalse(recurrent_layer.share_across_loops)
+
+        config.recurrent_kv_cache_mode = "last_loop"
+        self.assertTrue(DynamicCache(config=config).layers[1].share_across_loops)
 
 
 @slow

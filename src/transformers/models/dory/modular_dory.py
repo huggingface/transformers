@@ -59,31 +59,25 @@ class DoryL2Norm(Llama4TextL2Norm):
 
 class DoryRecurrentLayerMixin:
     """
-    Cache of a recurrent layer, which runs once per loop. Each `update` passes the `loop_idx`:
+    Cache of a recurrent layer, which runs once per loop. The loop count and the cache mode are settled at init, so
+    `update` only needs the `loop_idx` of the loop it is called from:
 
         per_loop:  every loop keeps its own history, loop 0 in this layer and loops 1, 2, ... in `later_loops`
-        last_loop: (`share_across_loops=True`) only the last loop is cached; earlier loops `read` the cache and
-                   their own tokens without writing, like KV-shared layers, so memory does not grow with the loops
+        last_loop: (`share_across_loops`) only the last loop is cached; earlier loops `read` the cache and their own
+                   tokens without writing, like KV-shared layers, so memory does not grow with the loops
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, config: DoryConfig, **kwargs):
         super().__init__(*args, **kwargs)
-        self.init_args, self.init_kwargs = args, kwargs
+        self.init_args, self.init_kwargs = args, {**kwargs, "config": config}
+        self.n_recurrent_loops = config.n_recurrent_loops
+        self.share_across_loops = config.recurrent_kv_cache_mode == "last_loop"
         self.later_loops = []
 
-    def update(
-        self,
-        key_states,
-        value_states,
-        *args,
-        loop_idx: int = 0,
-        is_last_loop: bool = True,
-        share_across_loops: bool = False,
-        **kwargs,
-    ):
-        if share_across_loops and not is_last_loop:
+    def update(self, key_states, value_states, *args, loop_idx: int = 0, **kwargs):
+        if self.share_across_loops and loop_idx < self.n_recurrent_loops - 1:
             return self.read(key_states, value_states)
-        if share_across_loops or loop_idx == 0:
+        if self.share_across_loops or loop_idx == 0:
             return super().update(key_states, value_states, *args, **kwargs)
         while len(self.later_loops) < loop_idx:
             self.later_loops.append(type(self)(*self.init_args, **self.init_kwargs))
@@ -212,7 +206,6 @@ class DoryAttention(AfmoeAttention):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         loop_idx: int = 0,
-        is_last_loop: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -233,14 +226,9 @@ class DoryAttention(AfmoeAttention):
         query_states = query_states * query_scale.square()
 
         if past_key_values is not None:
-            # CODEPATH: released configs use `per_loop` (one cache per loop); `last_loop` (opt-in) only caches the last loop
+            # The cache knows the loop count and the cache mode, it only needs to know which loop it is called from
             key_states, value_states = past_key_values.update(
-                key_states,
-                value_states,
-                self.layer_idx,
-                loop_idx=loop_idx,
-                is_last_loop=is_last_loop,
-                share_across_loops=self.config.recurrent_kv_cache_mode == "last_loop",
+                key_states, value_states, self.layer_idx, loop_idx=loop_idx
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -287,6 +275,8 @@ class DoryDecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: DoryConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_type = config.layer_types[layer_idx]
+        # A recurrent layer is a plain attention layer: it takes the mask and the rope of its attention type
+        self.attention_type = self.layer_type.removeprefix("recurrent_")
         self.input_layernorm = DoryL2Norm()
         self.post_attention_layernorm = DoryL2Norm()
         self.pre_feedforward_layernorm = DoryL2Norm()
@@ -363,6 +353,7 @@ class DoryPreTrainedModel(LlamaPreTrainedModel):
 class DoryModel(LlamaModel):
     def __init__(self, config: DoryConfig):
         super().__init__(config)
+        self.rotary_emb = DoryRotaryEmbedding(config)
         self.norm = DoryL2Norm()
 
     @merge_with_config_defaults
@@ -405,21 +396,22 @@ class DoryModel(LlamaModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
-        # Recurrent layers only differ by their cache: same mask as their attention type
-        layer_inputs = {
-            layer_type: {
-                "attention_mask": causal_mask_mapping[layer_type.removeprefix("recurrent_")],
-                "position_embeddings": self.rotary_emb(inputs_embeds, position_ids, layer_type),
-            }
-            for layer_type in set(self.config.layer_types)
+        position_embeddings = {
+            layer_type: self.rotary_emb(inputs_embeds, position_ids, layer_type)
+            for layer_type in {"full_attention", "sliding_attention"}
         }
+
         recurrent_start = self.config.n_input_layers
         recurrent_end = recurrent_start + self.config.n_recurrent_layers
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
             hidden_states = decoder_layer(
-                hidden_states, past_key_values=past_key_values, **layer_inputs[decoder_layer.layer_type], **kwargs
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                past_key_values=past_key_values,
+                **kwargs,
             )
 
         # Each loop restarts from the input section's output
@@ -429,16 +421,21 @@ class DoryModel(LlamaModel):
             for decoder_layer in self.layers[recurrent_start:recurrent_end]:
                 hidden_states = decoder_layer(
                     hidden_states,
+                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                    position_embeddings=position_embeddings[decoder_layer.attention_type],
                     past_key_values=past_key_values,
                     loop_idx=loop_idx,
-                    is_last_loop=loop_idx == self.config.n_recurrent_loops - 1,
-                    **layer_inputs[decoder_layer.layer_type],
                     **kwargs,
                 )
 
-        for decoder_layer in self.layers[self.config.num_hidden_layers - self.config.n_output_layers :]:
+        output_start = self.config.num_hidden_layers - self.config.n_output_layers
+        for decoder_layer in self.layers[output_start:]:
             hidden_states = decoder_layer(
-                hidden_states, past_key_values=past_key_values, **layer_inputs[decoder_layer.layer_type], **kwargs
+                hidden_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                past_key_values=past_key_values,
+                **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
