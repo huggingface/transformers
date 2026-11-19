@@ -488,6 +488,7 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
     _supports_flex_attn = False
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "fn",
         "scale",
         "base",
