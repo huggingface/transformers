@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -56,12 +57,12 @@ if is_torch_available():
     )
 
 
-class DiffusionGemmaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        text_config={
+class DiffusionGemmaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "text_config": {
             # default text config test values
             "vocab_size": 99,
             "hidden_size": 32,
@@ -85,7 +86,7 @@ class DiffusionGemmaVisionText2TextModelTester:
             "top_k_experts": 2,  # key introduced by the gemma4 family
             "use_bidirectional_attention": "vision",  # Test if bidirectional image mask path works
         },
-        vision_config={
+        "vision_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -100,37 +101,33 @@ class DiffusionGemmaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,  # See: `test_generate_beyond_sliding_window` before changing this value!
-        self_conditioning_size=16,
-        canvas_length=16,
-        is_training=False,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
+        "mm_tokens_per_image": 2,
         # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.self_conditioning_size = self_conditioning_size
-        self.canvas_length = canvas_length
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "seq_length": 25,  # See: `test_generate_beyond_sliding_window` before changing this value!
+        "self_conditioning_size": 16,
+        "canvas_length": 16,
+        "is_training": False,
+    }
 
-        self.pad_token_id = text_config["pad_token_id"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["num_channels"] = values["vision_config"]["num_channels"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        return values
 
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return DiffusionGemmaConfig(
@@ -191,6 +188,8 @@ class DiffusionGemmaVisionText2TextModelTester:
 class DiffusionGemmaVisionText2TextModelTest(
     ModelTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
 ):
+    model_tester_class = DiffusionGemmaVisionText2TextModelTester
+
     all_model_classes = (DiffusionGemmaModel, DiffusionGemmaForBlockDiffusion) if is_torch_available() else ()
     all_generative_model_classes = ()  # No class inherits `GenerationMixin`
     additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
