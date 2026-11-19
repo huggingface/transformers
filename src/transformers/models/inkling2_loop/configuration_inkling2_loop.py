@@ -153,6 +153,8 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
+        if self.loop_num_passes < 1:
+            raise ValueError(f"`loop_num_passes` ({self.loop_num_passes}) must be at least 1.")
         if self.loop_layer_index_start % self.n_layers_per_attn_res_block != 0:
             raise ValueError(
                 f"`loop_layer_index_start` ({self.loop_layer_index_start}) must be a multiple of "

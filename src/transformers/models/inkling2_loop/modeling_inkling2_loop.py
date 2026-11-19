@@ -1240,6 +1240,8 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
+
+        # Pre loop layers
         for decoder_layer in self.layers[:loop_start]:
             new_hidden_states = decoder_layer(
                 hidden_states,
@@ -1256,24 +1258,36 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
 
         pre_loop_hidden_states, pre_loop_block_states = hidden_states, block_states
         num_pre_loop_blocks = pre_loop_block_states.shape[-2]
-        for loop_idx in range(self.config.loop_num_passes):
-            cache_layer_start = loop_start
-            if loop_idx > 0:
-                # +1 to skip the states appended by the first loop block
-                previous_block_states = block_states[..., num_pre_loop_blocks + 1 :, :]
-                previous_hidden_states = hidden_states
-                # Pass i > 0 uses its own copies of the loop cache layers, appended after the model's layers
-                cache_layer_start = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers
 
+        # First pass over loop layers
+        for decoder_layer in self.layers[loop_start:loop_end]:
+            new_hidden_states = decoder_layer(
+                hidden_states,
+                block_states,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                conv_mask=causal_mask_mapping["linear_attention"],
+                cache=cache,
+                position_ids=position_ids,
+                **kwargs,
+            )
+            if decoder_layer.is_block_boundary:
+                block_states = torch.cat([block_states.to(hidden_states.device), hidden_states.unsqueeze(-2)], dim=-2)
+            hidden_states = new_hidden_states
+
+        # Remaining passes restart from the pre loop states and receive messages from the previous pass
+        for loop_idx in range(1, self.config.loop_num_passes):
+            # +1 to skip the states appended by the first loop pass
+            previous_block_states = block_states[..., num_pre_loop_blocks + 1 :, :]
+            previous_hidden_states = hidden_states
             hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
+            # Each pass uses its own copies of the loop cache layers, appended after the model's layers
+            cache_layer_start = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers
             for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
-                messages = None
-                if loop_idx > 0:
-                    messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
+                messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
                 new_hidden_states = decoder_layer(
                     hidden_states,
                     block_states,
-                    messages,  # pass positionally for gradient checkpointing
+                    messages,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     conv_mask=causal_mask_mapping["linear_attention"],
                     cache=cache,
@@ -1287,6 +1301,7 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
                     )
                 hidden_states = new_hidden_states
 
+        # Post loop layers
         for decoder_layer in self.layers[loop_end:]:
             new_hidden_states = decoder_layer(
                 hidden_states,
