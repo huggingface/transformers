@@ -27,9 +27,6 @@ from ...utils import auto_docstring, logging
 
 logger = logging.get_logger(__name__)
 
-# Keys used by the original `sarvamai/sarvam-105b` config, renamed to their DeepSeek-V3 equivalents
-LEGACY_KEY_RENAMES = {"num_experts": "n_routed_experts", "num_shared_experts": "n_shared_experts"}
-
 
 @auto_docstring(checkpoint="sarvamai/sarvam-105b")
 @strict(accept_kwargs=True)
@@ -82,10 +79,12 @@ class SarvamMLAConfig(PreTrainedConfig):
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts": "ep_dispatch_experts",
     }
-
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
+        # Names used by the original `sarvamai/sarvam-105b` config
+        "num_experts": "n_routed_experts",
+        "num_shared_experts": "n_shared_experts",
     }
 
     vocab_size: int = 262144
@@ -127,11 +126,8 @@ class SarvamMLAConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # Translate the original Sarvam config format (written for the remote code) to the DeepSeek-V3 format
-        legacy_keys = [key for key in (*LEGACY_KEY_RENAMES, "q_head_dim") if key in kwargs]
-        for old_key, new_key in LEGACY_KEY_RENAMES.items():
-            if old_key in kwargs:
-                setattr(self, new_key, kwargs.pop(old_key))
-        kwargs.pop("q_head_dim", None)
+        legacy_keys = []
+        kwargs.pop("q_head_dim", None)  # same as the derived `qk_head_dim`
         # `head_dim` is derived; the original config stored `kv_lora_rank + qk_rope_head_dim` for vLLM's MLA
         head_dim = kwargs.pop("head_dim", None)
         if head_dim is not None and head_dim != self.qk_rope_head_dim:
