@@ -607,10 +607,12 @@ def _generate_crop_boxes(
     )
     crop_boxes = np.array(crop_boxes)
     crop_boxes = crop_boxes.astype(np.float32)
-    points_per_crop = np.array([point_grid_per_crop])
-    points_per_crop = np.transpose(points_per_crop, axes=(0, 2, 1, 3))
-
-    input_labels = np.ones_like(points_per_crop[:, :, :, 0], dtype=np.int64)
+    max_points = max(points.shape[0] for points in point_grid_per_crop)
+    points_per_crop = np.zeros((1, max_points, len(point_grid_per_crop), 2), dtype=point_grid_per_crop[0].dtype)
+    input_labels = np.full((1, max_points, len(point_grid_per_crop)), -10, dtype=np.int64)
+    for crop_idx, points in enumerate(point_grid_per_crop):
+        points_per_crop[0, : len(points), crop_idx] = points
+        input_labels[0, : len(points), crop_idx] = 1
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
