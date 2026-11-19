@@ -2508,8 +2508,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
     dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
-    the largest of the two M-proportional activation peaks (LM head and attention) and always accounts for the cache
-    reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
+    the largest of the M-proportional activation peaks (LM head, attention and, for MoE models, experts) and always
+    accounts for the cache reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
     """
 
     NUM_BLOCKS = 4
@@ -2517,13 +2517,14 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
     # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
     # fmt: off
-    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async)
+    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async, num_experts_per_tok)
     CONFIGS = [
-        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False),  # sdpa-like, 1 mask
-        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False),  # flash-like, no mask
-        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False),  # hybrid, 2 groups + 2 masks
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False),  # block_table + logprobs
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True),  # block_table + logprobs + async
+        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False, None),  # sdpa-like, 1 mask
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False, None),  # flash-like, no mask
+        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False, None),  # hybrid, 2 groups + 2 masks
+        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False, None),  # block_table + logprobs
+        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True, None),  # block_table + logprobs + async
+        (256, 64, 4, 8, 512, 1000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, 8),  # MoE, experts peak dominates
     ]
     # fmt: on
 
@@ -2543,6 +2544,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         logprobs: bool,
         dtype: torch.dtype,
         use_async: bool,
+        num_experts_per_tok: int | None,
     ) -> None:
         config = SimpleNamespace(  # rather than creating a full config that we would only use for the namespace
             head_dim=head_dim,
@@ -2550,6 +2552,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             num_attention_heads=num_attention_heads,
             hidden_size=hidden_size,
             vocab_size=vocab_size,
+            num_experts_per_tok=num_experts_per_tok,
             _attn_implementation=attn_impl,
         )
         cb_config = ContinuousBatchingConfig(
@@ -2633,6 +2636,11 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
                 torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
                 torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
                 torch.empty((M, elems_per_kv_read_token), dtype=dtype, device=device),
+            ],
+            # Experts: the gathered inputs, the down projection output, its weighted copy and that copy in token order
+            "experts": [
+                torch.empty((M * num_experts_per_tok, hidden_size), dtype=dtype, device=device)
+                for _ in range(4 if num_experts_per_tok else 0)
             ],
         }
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}

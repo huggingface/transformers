@@ -591,8 +591,9 @@ class PagedAttentionMemoryHandler:
     @property
     def bytes_per_batch_token(self) -> int:
         """The memory cost of one batch token: its share of the IO tensors plus the largest activation peak, which is
-        either the LM head peak (hidden states turned into fp32 logits) or the attention peak (hidden states, query
-        projection and new key / value states)."""
+        either the LM head peak (hidden states turned into fp32 logits), the attention peak (hidden states, query
+        projection and new key / value states) or, for MoE models, the experts peak (top-k copies of the hidden
+        states)."""
         i = torch.int32.itemsize
         a = self.activation_dtype.itemsize
         head_dim = find_head_dim(self.config)
@@ -608,6 +609,10 @@ class PagedAttentionMemoryHandler:
             + 2 * find_num_key_value_heads(self.config) * head_dim  # new K and V states
             + self.kv_heads_at_peak * head_dim  # their copy in the K and V read back from the cache # TODO: optimize
         )
+        # The grouped_mm experts hold four [M * top_k, hidden_size] tensors at their peak: the gathered inputs, the
+        # down projection output, its weighted copy and that copy put back in token order
+        num_experts_per_tok = getattr(self.config, "num_experts_per_tok", None)
+        experts_peak = 4 * num_experts_per_tok * self.config.hidden_size * a if num_experts_per_tok else 0
         io_bytes = self.io_multiplier * (
             7 * i  # bulk_input: [7, M] int32, packed as 7 rows
             + self.num_output_rows * i  # output_ids: [num_output_rows, M] int32
@@ -615,7 +620,7 @@ class PagedAttentionMemoryHandler:
             + self.num_groups * 8  # write_index: [num_groups, M] int64
             + self.num_groups * 8  # read_index: [num_groups, N + M] (M part, int64)
         )
-        return max(lm_head_peak, attention_peak) + io_bytes
+        return max(lm_head_peak, attention_peak, experts_peak) + io_bytes
 
     @property
     def bytes_per_cache_token(self) -> int:
