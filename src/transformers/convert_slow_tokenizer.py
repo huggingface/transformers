@@ -705,13 +705,16 @@ class SpmConverter(Converter):
         if normalizer_spec.remove_extra_whitespaces:
             # Only spaces count: SentencePiece leaves other whitespace, such as newlines, alone
             _normalizers += [normalizers.Replace(Regex(r" +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
+        elif normalizer_spec.add_dummy_prefix:
+            # The dummy prefix comes before a leading space; Metaspace only adds it when there is none
+            _normalizers.append(normalizers.Replace(Regex(r"\A "), "▁ "))
         if normalizer_spec.escape_whitespaces:
             _normalizers.append(normalizers.Replace(" ", "▁"))
         tokenizer.normalizer = normalizers.Sequence(_normalizers)
         # SentencePiece emits user-defined pieces whole and never merges them: isolate them after the dummy prefix
         _pre_tokenizers = []
         if normalizer_spec.add_dummy_prefix:
-            _pre_tokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False))
+            _pre_tokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=False))
         if user_defined:
             pattern = "|".join(re.escape(piece) for piece in sorted(user_defined, key=len, reverse=True))
             _pre_tokenizers.append(pre_tokenizers.Split(Regex(pattern), behavior="isolated"))

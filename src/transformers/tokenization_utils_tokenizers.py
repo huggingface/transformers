@@ -349,6 +349,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     token for token in local_kwargs["additional_special_tokens"] if str(token) not in user_defined
                 ]
 
+            # Match added tokens on the raw text, so each chunk between them gets its own dummy prefix
+            if extractor.proto.normalizer_spec.add_dummy_prefix and added_tokens_decoder:
+                local_kwargs["added_tokens_decoder"] = {
+                    i: AddedToken(**{**t.__getstate__(), "normalized": False}) if isinstance(t, AddedToken) else t
+                    for i, t in added_tokens_decoder.items()
+                }
+
             tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(proto=extractor.proto, vocab=vocab)
             if tokenizer_object is not None:
                 local_kwargs["tokenizer_object"] = tokenizer_object
