@@ -181,6 +181,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             [PyCTCDecode's
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
             can be passed for language model boosted decoding. See [`Wav2Vec2ProcessorWithLM`] for more information.
+            Deprecated, will be removed in Transformers v6.
         device (Union[`int`, `torch.device`], *optional*):
             Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
             model on the associated CUDA device id.
@@ -215,6 +216,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # All these transducers decode the same way (generate -> sequences); "tdt" is the transducer path.
             self.type = "tdt"
         elif decoder is not None:
+            logger.warning_once(
+                "Language model decoding with a pyctcdecode `decoder` is deprecated and will be removed in "
+                "Transformers v6. To keep it, call pyctcdecode directly: "
+                "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+            )
             self.decoder = decoder
             self.type = "ctc_with_lm"
         else:

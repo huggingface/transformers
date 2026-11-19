@@ -365,7 +365,6 @@ class RwkvPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         super()._init_weights(module)
@@ -520,11 +519,11 @@ class RwkvModel(RwkvPreTrainedModel):
     ) -> tuple | RwkvOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -698,11 +697,11 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     ) -> tuple | RwkvCausalLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -750,6 +749,18 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
             hidden_states=rwkv_outputs.hidden_states,
             attentions=rwkv_outputs.attentions,
         )
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        # Non standard cache name, so need to override here
+        if "state" in outputs:
+            model_kwargs["state"] = outputs.state
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
 
 __all__ = ["RwkvForCausalLM", "RwkvModel", "RwkvPreTrainedModel"]

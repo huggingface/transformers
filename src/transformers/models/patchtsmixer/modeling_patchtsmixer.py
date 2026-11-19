@@ -682,7 +682,6 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     input_modalities = ("time",)
     supports_gradient_checkpointing = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize weights"""
         super()._init_weights(module)

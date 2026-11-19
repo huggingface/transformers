@@ -208,7 +208,7 @@ class ZambaModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -226,7 +226,7 @@ class ZambaModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 

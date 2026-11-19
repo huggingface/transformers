@@ -22,6 +22,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -118,27 +119,30 @@ class Lfm2VlModel(LlavaModel):
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state
+        num_images, num_patches, _ = last_hidden_state.shape
+        factor = self.config.downsample_factor
 
-        img_feature_lengths = pixel_attention_mask.sum(dim=1)
-        image_features = []
+        # Each image's tokens, padded to the most an image can have: its `factor x factor` block of patch rows
+        widths = spatial_shapes[:, 1, None]
+        blocks_per_row = widths // factor
+        num_tokens = (spatial_shapes[:, 0, None] // factor) * blocks_per_row
+        token = torch.arange(num_patches // factor**2, device=last_hidden_state.device)[None]
+        block_offset = torch.arange(factor, device=last_hidden_state.device)
+        rows = (token // blocks_per_row * factor)[..., None, None] + block_offset[:, None]
+        columns = (token % blocks_per_row * factor)[..., None, None] + block_offset
+        image_offset = torch.arange(num_images, device=last_hidden_state.device)[:, None, None, None] * num_patches
+        patch_index = image_offset + rows * widths[..., None, None] + columns
 
-        for img_idx in range(last_hidden_state.size(0)):
-            feature = last_hidden_state[img_idx]
-            # unpad the image representation
-            feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
-
-            # reshape to original height and width
-            feature_org_h, feature_org_w = spatial_shapes[img_idx]
-            feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
-
-            # project the image representation
-            img_embedding = self.multi_modal_projector(feature)
-
-            # flatten here to handle variable length in naflex
-            img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
-            image_features.append(img_embedding)
-
-        image_outputs.pooler_output = image_features
+        # Every image's token slots side by side in one patch grid, which the projector unshuffles as one image. Padding
+        # slots read the first patch and are dropped after, so the projector's shape doesn't depend on the image sizes
+        is_token = token < num_tokens
+        patch_index = patch_index.masked_fill(~is_token[..., None, None], 0)
+        patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
+        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
+        image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
+        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        split_sizes = (spatial_shapes // factor).prod(-1).tolist()
+        image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
         return image_outputs
 
     def get_placeholder_mask(
@@ -167,6 +171,7 @@ class Lfm2VlModel(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -175,7 +180,7 @@ class Lfm2VlModel(LlavaModel):
         pixel_values: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -220,7 +225,7 @@ class Lfm2VlModel(LlavaModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -228,7 +233,7 @@ class Lfm2VlModel(LlavaModel):
 
         return Lfm2VlModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
@@ -260,6 +265,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -268,7 +274,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_attention_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -337,7 +343,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_attention_mask=pixel_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -360,7 +366,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         return Lfm2VlCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,

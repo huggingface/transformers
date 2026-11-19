@@ -31,6 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..apertus.modeling_apertus import ApertusAttention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
@@ -71,7 +72,6 @@ class HYV3Config(PreTrainedConfig):
 
     model_type = "hy_v3"
     default_theta = 11_158_840.0
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "num_experts",
     }
@@ -236,7 +236,6 @@ class HYV3PreTrainedModel(LlamaPreTrainedModel):
         "attentions": HYV3Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
@@ -266,12 +265,13 @@ class HYV3ForCausalLM(LlamaForCausalLM):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -288,7 +288,7 @@ class HYV3ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -306,7 +306,7 @@ class HYV3ForCausalLM(LlamaForCausalLM):
             loss=loss,
             aux_loss=None,  # Not used in this model
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
