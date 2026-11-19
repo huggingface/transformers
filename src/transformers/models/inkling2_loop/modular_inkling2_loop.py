@@ -137,11 +137,6 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
 
     # TODO: move to validate archictecture?
     def validate_loop_config(self):
-        keys = {"core_start", "core_end", "num_passes", "gate_rank"}
-        if set(self.loop_config) != keys:
-            raise ValueError(
-                f"`loop_config` must have exactly the keys {sorted(keys)}, got {sorted(self.loop_config)}."
-            )
         core_start, core_end = self.loop_config["core_start"], self.loop_config["core_end"]
         if not 0 <= core_start < core_end <= self.num_hidden_layers:
             raise ValueError(
