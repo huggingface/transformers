@@ -375,6 +375,25 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         for key in ["attention_mask", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
             self.assertNotIn(key, batch)
 
+    def test_empty_examples_are_skipped(self):
+        """Test that empty sequences do not add labels or FlashAttention boundaries."""
+        features = [
+            {"input_ids": [1, 2]},
+            {"input_ids": []},
+            {"input_ids": [3, 4]},
+        ]
+        collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_flash_attn_kwargs=True, return_seq_idx=True
+        )
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"][0].tolist(), [1, 2, 3, 4])
+        self.assertEqual(batch["labels"][0].tolist(), [-100, 2, -100, 4])
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 0, 1])
+        self.assertEqual(batch["seq_idx"][0].tolist(), [0, 0, 1, 1])
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 2, 4])
+        self.assertEqual(batch["max_length_q"], 2)
+
     def test_position_ids_start(self):
         """Test position_ids for models numbering positions from padding_idx + 1, like RoBERTa."""
         for return_tensors in ["pt", "np"]:

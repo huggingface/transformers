@@ -1324,6 +1324,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         if separator_id is None:
             separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
+        features = [sample for sample in features if len(sample["input_ids"]) > 0]
         batch = {"input_ids": [], "labels": []}
         if self.return_position_ids:
             batch.update({"position_ids": []})
