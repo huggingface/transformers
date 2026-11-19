@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Dory model."""
 
+import tempfile
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
@@ -26,7 +27,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import DoryForCausalLM, DoryModel
+    from transformers import DoryForCausalLM, DoryModel, DynamicCache, StaticCache
 
 
 class DoryModelTester(CausalLMModelTester):
@@ -83,6 +84,73 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
     def test_at_least_one_recurrent_loop(self):
         with self.assertRaises(StrictDataclassClassValidationError):
             DoryConfig(n_recurrent_loops=0)
+
+    def test_loop_count_override_is_validated_on_load(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        with tempfile.TemporaryDirectory() as directory:
+            DoryForCausalLM(config).save_pretrained(directory)
+            for cls in (DoryConfig, DoryForCausalLM):
+                for loops in (0, -1):
+                    with self.subTest(cls=cls.__name__, loops=loops):
+                        with self.assertRaises(StrictDataclassClassValidationError):
+                            cls.from_pretrained(directory, n_recurrent_loops=loops)
+            loaded = DoryForCausalLM.from_pretrained(directory, n_recurrent_loops=2)
+            self.assertEqual(loaded.config.n_recurrent_loops, 2)
+
+    @torch.no_grad()
+    def test_resize_preserves_learned_logit_scale(self):
+        for mean_resizing in (False, True):
+            with self.subTest(mean_resizing=mean_resizing):
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                input_ids = inputs_dict["input_ids"] % (config.vocab_size - 2)
+                model = DoryForCausalLM(config).to(torch_device).eval()
+                original_size = model.config.vocab_size
+                scale = torch.linspace(0.5, 1.5, original_size, device=torch_device) * config.initializer_range
+                model.lm_head.logit_scale.copy_(scale)
+                expected = model(input_ids, use_cache=False).logits
+                for size in (original_size + 8, original_size - 2):
+                    model.resize_token_embeddings(size, mean_resizing=mean_resizing)
+                    retained = min(size, original_size)
+                    torch.testing.assert_close(model.lm_head.logit_scale[:retained], scale[:retained])
+                    torch.testing.assert_close(
+                        model(input_ids, use_cache=False).logits[..., :retained], expected[..., :retained]
+                    )
+                    if size > original_size:
+                        torch.testing.assert_close(
+                            model.lm_head.logit_scale[original_size:],
+                            scale.new_full((size - original_size,), config.initializer_range),
+                        )
+                with tempfile.TemporaryDirectory() as directory:
+                    model.save_pretrained(directory)
+                    restored = DoryForCausalLM.from_pretrained(directory).to(torch_device).eval()
+                torch.testing.assert_close(restored(input_ids, use_cache=False).logits, expected[..., :retained])
+
+    @torch.no_grad()
+    def test_last_loop_static_cache_matches_dynamic(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers, config.n_input_layers, config.n_recurrent_layers, config.n_output_layers = 4, 1, 2, 1
+        config.n_recurrent_loops, config.recurrent_kv_cache_mode, config.sliding_window = 3, "last_loop", 4
+        config.layer_types = ["full_attention", "sliding_attention", "full_attention", "sliding_attention"]
+        config.rope_parameters = None
+        config.__post_init__()
+        model = DoryForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"][:1].repeat(1, 12)[:, :12]
+        dynamic = DynamicCache(config=config)
+        static = StaticCache(config=config, max_cache_len=16)
+        for start, end in ((0, 2), (2, 4), (4, 7), (7, 8), (8, 12)):
+            expected = model(input_ids[:, start:end], cache=dynamic).logits
+            actual = model(input_ids[:, start:end], cache=static).logits
+            torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+            self.assertTrue(all(layer.get_seq_length() == end for layer in static.layers))
+        static.reset()
+        torch.testing.assert_close(
+            model(input_ids[:, :2], cache=static).logits, model(input_ids[:, :2]).logits, rtol=1e-4, atol=1e-4
+        )
+        expected = model.generate(input_ids[:, :2], max_new_tokens=8, do_sample=False, cache_implementation="dynamic")
+        actual = model.generate(
+            input_ids[:, :2], max_new_tokens=8, do_sample=False, cache_implementation="static", disable_compile=True
+        )
+        self.assertTrue(torch.equal(actual, expected))
 
     def test_recurrent_cache_layout(self):
         # Plain cache layers: `per_loop` appends one copy of the recurrent layers per extra loop, `last_loop` adds none

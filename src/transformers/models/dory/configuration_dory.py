@@ -104,6 +104,13 @@ class DoryConfig(PreTrainedConfig):
             }
         super().__post_init__(**kwargs)
 
+    @classmethod
+    def from_dict(cls, config_dict, **kwargs):
+        # Validate the loop override during construction, before the base loader applies remaining kwargs.
+        if "n_recurrent_loops" in kwargs:
+            config_dict = {**config_dict, "n_recurrent_loops": kwargs.pop("n_recurrent_loops")}
+        return super().from_dict(config_dict, **kwargs)
+
     def to_dict(self):
         output = super().to_dict()
         # Serialize the layout `__post_init__` converted from, as released checkpoints (and vLLM / llama.cpp) store it:

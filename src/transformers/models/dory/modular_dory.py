@@ -15,12 +15,14 @@
 
 import copy
 from collections.abc import Callable
+from contextlib import nullcontext
 
 import torch
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, StaticLayer
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -109,7 +111,26 @@ class DoryAttention(AfmoeAttention):
 
         if shared_kv_states is not None:
             # `last_loop`: earlier loops attend over the last loop's cached past and their own tokens, without writing
-            if (past := shared_kv_states.get(self.layer_idx)) is not None:
+            if isinstance(layer := cache.layers[self.layer_idx], StaticLayer):
+                if not layer.is_initialized:
+                    layer.lazy_initialization(key_states, value_states)
+                query_length = key_states.shape[-2]
+                past_length = layer.get_seq_length()
+                kv_length, kv_offset = layer.get_mask_sizes(query_length)
+                positions = torch.arange(kv_length, device=key_states.device) + kv_offset
+                current_positions = positions - past_length
+                past_positions = (
+                    positions - max(past_length - layer.max_cache_len, 0) if layer.is_sliding else positions
+                )
+                # Match the static mask's padding and sliding offset without advancing or overwriting the cache.
+                indices = torch.where(
+                    (current_positions >= 0) & (current_positions < query_length),
+                    layer.keys.shape[-2] + current_positions,
+                    past_positions,
+                )
+                key_states = torch.cat([layer.keys, key_states], dim=-2).index_select(2, indices)
+                value_states = torch.cat([layer.values, value_states], dim=-2).index_select(2, indices)
+            elif (past := shared_kv_states.get(self.layer_idx)) is not None:
                 key_states = torch.cat([past[0], key_states], dim=-2)
                 value_states = torch.cat([past[1], value_states], dim=-2)
                 if self.sliding_window is not None:
@@ -349,6 +370,26 @@ class DoryForCausalLM(LlamaForCausalLM):
     def __init__(self, config: DoryConfig):
         super().__init__(config)
         self.lm_head = DoryLMHead(config)
+
+    def _get_resized_lm_head(self, old_lm_head, new_num_tokens=None, transposed=False, mean_resizing=True):
+        resized = super()._get_resized_lm_head(old_lm_head, new_num_tokens, transposed, mean_resizing)
+        if resized is old_lm_head:
+            return old_lm_head
+        old_scale = old_lm_head.logit_scale
+        context = nullcontext()
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            context = deepspeed.zero.GatheredParameters(old_scale, modifier_rank=None)
+        with context, torch.no_grad():
+            scale = old_scale.new_full((new_num_tokens,), self.config.initializer_range)
+            retained = min(old_scale.shape[0], new_num_tokens)
+            scale[:retained].copy_(old_scale[:retained])
+        # Keep DoryLMHead's forward and learned scales; reuse the standard projection resizing.
+        old_lm_head.weight = resized.weight
+        old_lm_head.out_features = resized.out_features
+        old_lm_head.logit_scale = nn.Parameter(scale, requires_grad=old_scale.requires_grad)
+        return old_lm_head
 
     @can_return_tuple
     @auto_docstring
