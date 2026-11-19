@@ -339,6 +339,12 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     # Consumed by cache_utils to select indexed-attention cache layers.
     "HYV4VLTextConfig": ["layer_types"],
+    "HYV4FlashTextConfig": [
+        "layer_types",  # consumed by cache_utils to select indexed-attention cache layers
+        # MLA expands the latent to one key/value per query head, so `__post_init__` pins this to
+        # `num_attention_heads` and the modeling file never groups keys.
+        "num_key_value_heads",
+    ],
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
     # Use the DeepseekV3 implementation, which the auto mappings point to
     "SarvamMLAConfig": True,
