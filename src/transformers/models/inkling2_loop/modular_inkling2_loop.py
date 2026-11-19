@@ -212,9 +212,9 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
 
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__(config)
-        # 4 * num_loop_layers queries, shape is (2 * num_loop_layers, 2 * hidden_dim) because of original checkpoint shapes.
+        # one query per message (query, key, value and mlp) for each loop layer
         self.query = nn.Parameter(
-            torch.zeros(2 * (config.loop_layer_index_end - config.loop_layer_index_start), 2 * config.hidden_size)
+            torch.zeros(config.loop_layer_index_end - config.loop_layer_index_start, 4, config.hidden_size)
         )
 
     def forward(
@@ -224,8 +224,7 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
         stacked_states = self.norm(stacked_states)
 
         hidden_size = stacked_states.shape[-1]
-        # 4 query states for query, key, mlp, and value queries
-        query_states = self.query.view(-1, 4, hidden_size)[loop_layer_idx].float()
+        query_states = self.query[loop_layer_idx].float()
         query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
         return F.scaled_dot_product_attention(query_states, stacked_states, stacked_states, scale=hidden_size**-0.5)
 
@@ -554,7 +553,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
     ) -> torch.Tensor:
         r"""
         messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop core for the query, key, MLP and value inputs, in the
+            Messages of the previous pass through the loop core for the query, key, value and MLP inputs, in the
             passes after the first.
         cache_layer_idx (`int`, *optional*):
             Cache layer holding the states of this call, `layer_idx` by default. Each pass through the loop core has
@@ -568,7 +567,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
         if messages is None:
             query_hidden_states = key_hidden_states = value_hidden_states = self.input_layernorm(hidden_states)
         else:
-            query_message, key_message, mlp_message, value_message = messages.unbind(-2)
+            query_message, key_message, value_message, mlp_message = messages.unbind(-2)
             query_hidden_states = self.input_layernorm(self.q_message_gate(hidden_states, query_message))
             key_hidden_states = self.input_layernorm(self.k_message_gate(hidden_states, key_message))
             value_hidden_states = self.input_layernorm(self.v_message_gate(hidden_states, value_message))
@@ -629,7 +628,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
     ) -> torch.Tensor:
         r"""
         messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop core for the query, key, MLP and value inputs, in the
+            Messages of the previous pass through the loop core for the query, key, value and MLP inputs, in the
             passes after the first.
         cache_layer_idx (`int`, *optional*):
             Cache layer holding the states of this call, `layer_idx` by default. Each pass through the loop core has
@@ -645,7 +644,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             )
 
         if messages is not None:
-            query_message, key_message, mlp_message, value_message = messages.unbind(-2)
+            query_message, key_message, value_message, mlp_message = messages.unbind(-2)
             query_hidden_states = self.q_message_gate(query_hidden_states, query_message)
             key_hidden_states = self.k_message_gate(key_hidden_states, key_message)
             value_hidden_states = self.v_message_gate(value_hidden_states, value_message)

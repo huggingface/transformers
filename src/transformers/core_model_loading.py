@@ -817,7 +817,39 @@ class Inkling2LoopDequantizeExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return self
+
+
+class Inkling2LoopMergeMessageQueries(ConversionOps):
+    r"""
+    Merges the message queries of the original Inkling2Loop checkpoints into one `(num_loop_layers, 4, hidden_size)`
+    tensor, or splits them back with `inverse=True`. The checkpoints store them as two
+    `(2 * num_loop_layers, hidden_size)` tensors: the query and MLP queries of each loop layer, then its key and value
+    queries. The merged tensor holds the query, key, value and MLP queries of each loop layer, in that order.
+    """
+
+    def __init__(self, inverse: bool = False):
+        self.inverse = inverse
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        if self.inverse:
+            tensor = next(iter(input_dict.values()))
+            tensor = tensor[0] if isinstance(tensor, list) else tensor
+            queries = tensor[:, [0, 3]].flatten(0, 1)
+            kv_queries = tensor[:, 1:3].flatten(0, 1)
+            return {target_patterns[0]: queries.contiguous(), target_patterns[1]: kv_queries.contiguous()}
+
+        queries, kv_queries = (input_dict[pattern] for pattern in source_patterns)
+        queries = queries[0] if isinstance(queries, list) else queries
+        kv_queries = kv_queries[0] if isinstance(kv_queries, list) else kv_queries
+        # (num_loop_layers, 2, hidden_size): [query, mlp] and [key, value] of each loop layer
+        queries = queries.unflatten(0, (-1, 2))
+        kv_queries = kv_queries.unflatten(0, (-1, 2))
+        return {target_patterns[0]: torch.cat([queries[:, :1], kv_queries, queries[:, 1:]], dim=1)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Inkling2LoopMergeMessageQueries(inverse=not self.inverse)
 
 
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:

@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
     Inkling2LoopDequantizeExperts,
+    Inkling2LoopMergeMessageQueries,
     Interleave,
     MergeModulelist,
     PermuteForRope,
@@ -2621,14 +2622,14 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(
             source_patterns=r"_message_gate\.forget_weight", target_patterns=r"_message_gate.forget_gate_proj.weight"
         ),
-        # The original checkpoint stores two (2 * num_layers, hidden_dim) queries parameters:
-        # - middle_cycle_cross_pass_queries: contains query and mlp queries
-        # - middle_cycle_cross_pass_kv_queries: contains key and value queries
-        # We merge them into a single "query" param.
+        # The original checkpoint stores two (2 * num_loop_layers, hidden_size) query parameters:
+        # - middle_cycle_cross_pass_queries: the query and mlp queries of each loop layer
+        # - middle_cycle_cross_pass_kv_queries: the key and value queries of each loop layer
+        # We merge them into a single (num_loop_layers, 4, hidden_size) query param.
         WeightConverter(
             source_patterns=[r"middle_cycle_cross_pass_queries", r"middle_cycle_cross_pass_kv_queries"],
             target_patterns=r"message_input.query",
-            operations=[Concatenate(dim=1)],
+            operations=[Inkling2LoopMergeMessageQueries()],
         ),
         *inkling2_loop_experts,
     ] + inkling2_text
