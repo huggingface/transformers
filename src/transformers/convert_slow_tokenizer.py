@@ -704,12 +704,12 @@ class SpmConverter(Converter):
             _normalizers.append(normalizers.Precompiled(precompiled_charsmap))
         if normalizer_spec.remove_extra_whitespaces:
             # Only spaces count: SentencePiece leaves other whitespace, such as newlines, alone
-            _normalizers += [normalizers.Replace(Regex(r" +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
-        elif normalizer_spec.add_dummy_prefix:
-            # The dummy prefix comes before a leading space; Metaspace only adds it when there is none
-            _normalizers.append(normalizers.Replace(Regex(r"\A "), "▁ "))
+            _normalizers += [normalizers.Replace(Regex(r"\A +| +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
         if normalizer_spec.escape_whitespaces:
             _normalizers.append(normalizers.Replace(" ", "▁"))
+        if normalizer_spec.add_dummy_prefix:
+            # Metaspace skips the dummy prefix when the text already starts with "▁", SentencePiece doesn't
+            _normalizers.append(normalizers.Replace(Regex(r"\A▁"), "▁▁"))
         tokenizer.normalizer = normalizers.Sequence(_normalizers)
         # SentencePiece emits user-defined pieces whole and never merges them: isolate them after the dummy prefix
         _pre_tokenizers = []

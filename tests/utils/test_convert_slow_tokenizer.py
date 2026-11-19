@@ -90,6 +90,7 @@ class SentencePieceModelConversionTest(unittest.TestCase):
         "hi\nthere \n x",
         "end <reserve_0>",
         "  two leading",
+        "▁ literal metaspace",
     ]
 
     def _train(self, tmp_dir, **kwargs):
@@ -132,8 +133,6 @@ class SentencePieceModelConversionTest(unittest.TestCase):
                     ids = sp.encode(text)
                     if sp.unk_id() in ids:  # unseen characters without byte fallback decode differently
                         continue
-                    if text.startswith(" ") and not kwargs.get("remove_extra_whitespaces", True):
-                        continue  # SentencePiece adds the dummy prefix before a leading space, Metaspace reuses it
                     self.assertEqual(tokenizer.encode(text, add_special_tokens=False), ids, text)
                     self.assertEqual(tokenizer.decode(ids), sp.decode(ids), text)
 
