@@ -425,13 +425,17 @@ class Inkling2LoopTextModel(Inkling2TextModel):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList()
+        layer_classes = {
+            # (is_sliding, is_loop_layer)
+            (False, False): Inkling2LoopFullDecoderLayer,
+            (True, False): Inkling2LoopSlidingDecoderLayer,
+            (False, True): Inkling2LoopFullLoopDecoderLayer,
+            (True, True): Inkling2LoopSlidingLoopDecoderLayer,
+        }
         for layer_idx in range(config.num_hidden_layers):
             is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
             is_loop_layer = config.loop_layer_index_start <= layer_idx < config.loop_layer_index_end
-            if is_loop_layer:
-                layer_class = Inkling2LoopSlidingLoopDecoderLayer if is_sliding else Inkling2LoopFullLoopDecoderLayer
-            else:
-                layer_class = Inkling2LoopSlidingDecoderLayer if is_sliding else Inkling2LoopFullDecoderLayer
+            layer_class = layer_classes[(is_sliding, is_loop_layer)]
             self.layers.append(layer_class(config, layer_idx))
         self.message_input = Inkling2LoopMessageAttentionResidual(config)
 
