@@ -283,7 +283,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         pipeline_inputs = self._args_parser(*args, **kwargs)
 
         results = super().__call__(pipeline_inputs, **kwargs)
-        if len(results) == 1:
+        if isinstance(results, list) and len(results) == 1:
             return results[0]
         return results
 
