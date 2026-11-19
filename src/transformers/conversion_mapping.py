@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
     Interleave,
+    LayerPairCollapse,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
@@ -157,6 +158,13 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # Dory checkpoints store each decoder layer as an attention block followed by an mlp block
+        "dory": [
+            LayerPairCollapse(),
+            WeightRenaming(r"\.self_attn\.g_proj\.", ".self_attn.gate_proj."),
+            WeightRenaming(r"^backbone\.", "model."),
+            WeightRenaming(r"\.embeddings\.", ".embed_tokens."),
+        ],
         "hy_v4": [
             # General HC prefix which is dropped
             WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
