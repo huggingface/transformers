@@ -25,10 +25,6 @@ from transformers import (
     Ernie4_5_VLMoeModel,
     is_torch_available,
 )
-from transformers.models.ernie4_5_vl_moe.configuration_ernie4_5_vl_moe import (
-    Ernie4_5_VLMoeTextConfig,
-    Ernie4_5_VLMoeVisionConfig,
-)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -51,31 +47,30 @@ if is_torch_available():
 class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Ernie4_5_VLMoeModel
     config_class = Ernie4_5_VLMoeConfig
-    text_config_class = Ernie4_5_VLMoeTextConfig
-    vision_config_class = Ernie4_5_VLMoeVisionConfig
+
     conditional_generation_class = Ernie4_5_VLMoeForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("video_start_token_id", 3)
-        kwargs.setdefault("video_end_token_id", 4)
-        kwargs.setdefault("image_start_token_id", 5)
-        kwargs.setdefault("image_end_token_id", 6)
-        kwargs.setdefault("image_token_id", 7)
-        kwargs.setdefault("video_token_id", 8)
-        kwargs.setdefault("image_size", 112)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("num_image_tokens", 64)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]})
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", [32, 32])
-        kwargs.setdefault("moe_norm_min", 1e-12)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("num_heads", 2)
-        kwargs.setdefault("spatial_merge_size", 1)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "video_start_token_id": 3,
+        "video_end_token_id": 4,
+        "image_start_token_id": 5,
+        "image_end_token_id": 6,
+        "image_token_id": 7,
+        "video_token_id": 8,
+        "image_size": 112,
+        "patch_size": 14,
+        "num_image_tokens": 64,
+        "hidden_act": "silu",
+        "num_key_value_heads": 1,
+        "tie_word_embeddings": True,
+        "rope_parameters": {"type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": [32, 32],
+        "moe_norm_min": 1e-12,
+        "depth": 2,
+        "num_heads": 2,
+        "spatial_merge_size": 1,
+    }
 
     @property
     def _special_token_ids(self):

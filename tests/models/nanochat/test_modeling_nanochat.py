@@ -18,7 +18,9 @@ import unittest
 from transformers import AutoTokenizer, NanoChatConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_kernels,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -31,6 +33,7 @@ if is_torch_available():
         NanoChatForCausalLM,
         NanoChatModel,
     )
+    from transformers.models.nanochat.modeling_nanochat import apply_rotary_pos_emb
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -46,6 +49,16 @@ class NanoChatModelTester(CausalLMModelTester):
 @require_torch
 class NanoChatModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = NanoChatModelTester
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_rotary_kernel_not_inherited(self):
+        model = NanoChatModel(self.model_tester.get_config())
+
+        # The standard rotary kernel rotates in the opposite direction to NanoChat.
+        self.assertFalse(hasattr(apply_rotary_pos_emb, "kernel_layer_name"))
+        for layer in model.layers:
+            self.assertNotIn("rotary_pos_emb", getattr(layer.self_attn, "_kernel_funcs", {}))
 
 
 @require_torch

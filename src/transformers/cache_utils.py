@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import UserDict
 from collections.abc import Iterable
 
 import torch
@@ -401,7 +402,7 @@ class DynamicIndexedLayer(DynamicLayer):
 
 class StaticLayer(CacheLayerMixin):
     """
-    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
+    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len, head_dim]`.
     It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
 
     Args:
@@ -410,7 +411,9 @@ class StaticLayer(CacheLayerMixin):
     """
 
     is_compileable = True
+    is_croppable = True
     is_sliding = False
+    cumulative_length: torch.Tensor
 
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
@@ -504,6 +507,19 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        if tokens_to_remove > 0:
+            raise RuntimeError(
+                "Static layers can only be cropped by passing a negative int, to specify how many tokens to remove"
+            )
+        # Note that we do not touch the actual `keys` and `values` tensors, we simply take care of updating `cumulative_length` so that
+        # the next `update` will overwrite the stale states
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.sub_(abs(tokens_to_remove))
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
@@ -525,6 +541,8 @@ class StaticSlidingWindowLayer(StaticLayer):
         super().__init__(max_cache_len=effective_max_cache_len)
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
         self.cumulative_length_int = 0
+        # This needs to be checked dynamically, as it's only True if we never go beyond the window
+        self.is_croppable = max_cache_len <= sliding_window
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -627,6 +645,15 @@ class StaticSlidingWindowLayer(StaticLayer):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length_int
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        # Note that this is only correct as long as we never went beyond the window, which `is_croppable` guarantees - otherwise the
+        # evicted states cannot be recovered
+        super().crop(tokens_to_remove)
+        self.cumulative_length_int -= abs(tokens_to_remove)
+
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
@@ -692,6 +719,14 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        super().crop(tokens_to_remove)
+        if self.is_indexer_initialized:
+            self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
+
     def reset(self) -> None:
         super().reset()
         self.indexer_position_ids = None
@@ -715,6 +750,8 @@ class BaseQuantizedLayer(DynamicLayer):
     `_quantized_keys` and `_quantized_values`. Their layout is left to the backend, so the sequence length is
     tracked separately, in `cumulative_length`.
     """
+
+    is_croppable = False
 
     def __init__(self):
         super().__init__()
@@ -1034,8 +1071,6 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compilable
-    is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
@@ -1114,6 +1149,15 @@ class LinearAttentionCacheLayerMixin(ABC):
         # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
         # have any recurrent state (they are updated in the same forward)
         return any(self.is_conv_states_initialized.values())
+
+    @property
+    def is_compileable(self) -> bool:
+        """
+        All shapes are static by essence in a LinearAttention layer, so it is compilable. The exception is when we record the past to
+        be able to `crop` later: the conv states then grow, and they are assigned instead of copied in place, so they lose their
+        static address and may alias a cudagraph output.
+        """
+        return not self.record_past
 
     def activate_past_recording(self):
         """
@@ -1372,6 +1416,47 @@ class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, 
         StaticSlidingWindowLayer.reorder_cache(self, beam_idx)
 
 
+class DummyLayer:
+    """
+    A dummy cache layer that does not store any cache. It is used either for layers that do not need any cache (e.g. layers without any
+    attention mechanism but only MoE/mlp), or for shared-cache layers that consume cache producer by other layers.
+    This is mostly syntactic sugar to keep a Cache as a container of `num_hidden_layers` CacheLayer instead of setting the dummy layers
+    to None, as we otherwise have to perform a `is not None` check everywhere.
+    """
+
+    supports_early_init = False  # added so that DummyLayer are properly skipped during `early_initialization`
+    # DunnyLayer does not hold any data, so it's both compileable and croppable
+    is_compileable = True
+    is_croppable = True
+
+    def __init__(self, **kwargs):
+        self.is_initialized = True
+        # Setting keys and values to None avoids issues with exporters and multi-GPU gather
+        self.keys = None
+        self.values = None
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Tolerate updates with None, None so that reconstruction of DynamicCache works well in DDP
+        if key_states is None and value_states is None:
+            return None, None
+        raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
+
+    # Dummy methods - just do nothing when called as the layer does not hold any data by design
+    def offload(self): ...
+    def prefetch(self): ...
+    def reset(self): ...
+    def crop(self, tokens_to_remove: int): ...
+    def reorder_cache(self, beam_idx: torch.LongTensor): ...
+    def batch_repeat_interleave(self, repeats: int): ...
+    def batch_select_indices(self, indices: torch.Tensor): ...
+
+    def get_max_length(self):
+        # DummyLayer does not have a max length, so return -1
+        return -1
+
+
 # Mappings from layer_type to layer cache class
 DYNAMIC_LAYER_TYPE_MAPPING = {
     "full_attention": DynamicLayer,
@@ -1386,12 +1471,8 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
-    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
-    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
-    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
-    # we don't need
-    "moe": LinearAttentionLayer,
-    "mlp": LinearAttentionLayer,
+    # Dummy layer type for shared KV layers, or layers with legacy name such as "moe" or "mlp" without attention
+    "dummy": DummyLayer,
 }
 # Same but for StaticCache
 STATIC_LAYER_TYPE_MAPPING = {
@@ -1406,12 +1487,8 @@ STATIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
-    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
-    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
-    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
-    # we don't need
-    "moe": LinearAttentionLayer,
-    "mlp": LinearAttentionLayer,
+    # Dummy layer type for shared KV layers, or layers with legacy name such as "moe" or "mlp" without attention
+    "dummy": DummyLayer,
 }
 
 
@@ -1437,7 +1514,7 @@ class Cache:
 
     def __init__(
         self,
-        layers: list[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
+        layers: list[CacheLayerMixin | LinearAttentionCacheLayerMixin | DummyLayer] | None = None,
         layer_class_to_replicate: type[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
@@ -1479,8 +1556,8 @@ class Cache:
         # Whether each layer is offloaded, hence worth prefetching: linear-attention layers never go through the
         # offloading `update` path, and sliding layers are skipped when `only_non_sliding` (kept resident).
         is_offloaded = [
-            not is_linear and not (only_non_sliding and is_sliding)
-            for is_linear, is_sliding in zip(self.is_linear, self.is_sliding)
+            not (is_dummy or is_linear or (is_sliding and only_non_sliding))
+            for is_linear, is_sliding, is_dummy in zip(self.is_linear, self.is_sliding, self.is_dummy)
         ]
         try:
             # Try to find the next offloaded layer, starting at `layer_idx`
@@ -1626,9 +1703,8 @@ class Cache:
         """
         if not hasattr(self.layers[layer_idx], "update_indexer"):
             raise ValueError(
-                f"Cannot call `update_indexer` on layer {layer_idx} which is a "
-                f"{type(self.layers[layer_idx]).__name__}; it has no indexer key cache "
-                f"(expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
+                f"Cannot call `update_indexer` on layer {layer_idx} which is a {type(self.layers[layer_idx]).__name__}; it has no "
+                "indexer key cache (expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
             )
         return self.layers[layer_idx].update_indexer(indexer_key_states)
 
@@ -1679,8 +1755,8 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                    "does not track sequence length."
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__} "
+                    "layer, which does not track sequence length."
                 )
             try:
                 # Use the first attention layer
@@ -1729,8 +1805,8 @@ class Cache:
                 )
         elif not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError(
-                f"You called `has_previous_state` on layer index {layer_idx}, but this layer is an Attention layer, which "
-                "does not support calling it."
+                f"You called `has_previous_state` on layer index {layer_idx}, but this layer is an {type(self.layers[layer_idx]).__name__} "
+                "layer, which does not support calling it."
             )
 
         # We may have several conv/recurrent states in the same layers. In this case, if `state_idx` is not provided, check if all
@@ -1755,8 +1831,8 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                    "does not track sequence length."
+                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__} "
+                    "layer, which does not track sequence length."
                 )
             try:
                 # Use the first attention layer
@@ -1867,6 +1943,11 @@ class Cache:
             for layer in self.layers
         ]
 
+    @property
+    def is_dummy(self) -> list[bool]:
+        """Return whether the layers of the cache are dummy layers."""
+        return [isinstance(layer, DummyLayer) for layer in self.layers]
+
 
 def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
@@ -1888,10 +1969,16 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
             else:
                 layer_types.append("full_attention")
 
-    # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
-    num_kv_shared_layers = getattr(config, "num_kv_shared_layers", None)
-    if num_kv_shared_layers is not None and num_kv_shared_layers > 0:
-        layer_types = layer_types[:-num_kv_shared_layers]
+    # Some models implement KV cache sharing between layers (e.g. Gemma4): for layers that consume other layers' KV
+    # cache, we replace their layer type with a "dummy" layer that will never store any cache
+    kv_sharing_modes = getattr(config, "kv_sharing_modes", None)
+    if kv_sharing_modes is not None:
+        layer_types = [
+            "dummy" if mode == "reuse" else layer_type for layer_type, mode in zip(layer_types, kv_sharing_modes)
+        ]
+
+    # Some models may have "moe" or "mlp" as layer_type, for layer that do not need any attention - replace them with "dummy"
+    layer_types = ["dummy" if layer_type in ("moe", "mlp") else layer_type for layer_type in layer_types]
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
@@ -1949,9 +2036,9 @@ class DynamicCache(Cache):
     >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
     >>> # Prepare a cache class and pass it to model's forward
-    >>> past_key_values = DynamicCache(config=model.config)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = DynamicCache(config=model.config)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     ```
     """
 
@@ -1988,7 +2075,8 @@ class DynamicCache(Cache):
                         layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window_tensor.item()))
                     else:
                         layers.append(DynamicLayer())
-                # Update the layer with the data if any
+                # Update the layer with the data if any. Without a config, layers without data (uninitialized layers
+                # or KV-sharing consumers) are kept as empty `DynamicLayer`
                 if key_states is not None and value_states is not None:
                     _, _ = layers[layer_idx].update(key_states, value_states)
 
@@ -2039,9 +2127,9 @@ class StaticCache(Cache):
     >>> # Prepare a cache class and pass it to model's forward
     >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
     >>> max_generated_length = inputs.input_ids.shape[1] + 10
-    >>> past_key_values = StaticCache(config=model.config, max_cache_len=max_generated_length)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = StaticCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     StaticCache()
     ```
     """
@@ -2176,9 +2264,9 @@ class EncoderDecoderCache(Cache):
     >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
     >>> self_attention_cache = DynamicCache(config=self.config)
     >>> cross_attention_cache = DynamicCache(config=self.config)
-    >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     EncoderDecoderCache()
     ```
     """
@@ -2226,7 +2314,7 @@ class EncoderDecoderCache(Cache):
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
+        Support for backwards-compatible `cache` length, e.g. `len(cache)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.self_attention_cache)
@@ -2287,6 +2375,14 @@ class EncoderDecoderCache(Cache):
         return self.self_attention_cache.is_sliding
 
     @property
+    def is_linear(self):
+        return self.self_attention_cache.is_linear
+
+    @property
+    def is_dummy(self):
+        return self.self_attention_cache.is_dummy
+
+    @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
@@ -2332,3 +2428,19 @@ class DFlashCache(DynamicCache):
         # all the kv length is shifted by the previous number of accepted tokens, that will be added to k/v inside the Attention
         kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
         return kv_length + self._previous_number_of_accepted_tokens, kv_offset
+
+
+class KVSharingDict(UserDict[str, tuple[torch.Tensor, ...]]):
+    """
+    A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
+    Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
+    which would be an issue. It also has a .to() method so that accelerate's `send_to_device` can move it from device to
+    device. Because the device map usually maps contiguous layers to the same device, the .to() method is in-place: this
+    means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
+    """
+
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KVSharingDict":
+        keys = list(self.keys())
+        for key in keys:
+            self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
+        return self

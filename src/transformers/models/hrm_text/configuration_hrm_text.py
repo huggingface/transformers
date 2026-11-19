@@ -53,7 +53,6 @@ class HrmTextConfig(PreTrainedConfig):
     """
 
     model_type = "hrm_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         **{f"{stack}.layers.*.self_attn.q_proj": "colwise" for stack in ("L_module", "H_module")},

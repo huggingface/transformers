@@ -152,7 +152,7 @@ class CodeGenModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
+        self.parent.assertEqual(len(result.cache), config.n_layer)
 
     def create_and_check_codegen_model_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CodeGenModel(config=config)
@@ -178,9 +178,7 @@ class CodeGenModelTester:
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -220,7 +218,7 @@ class CodeGenModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -254,7 +252,7 @@ class CodeGenModelTester:
             next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, cache=past
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
@@ -280,7 +278,7 @@ class CodeGenModelTester:
     ):
         model = CodeGenForCausalLM(config)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         model.to(torch_device)
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -433,9 +431,9 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
             model = self.cached_model
 
             if checkpointing:
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
             else:
-                model.gradient_checkpointing_disable()
+                model.activation_checkpointing_disable()
             model.to(torch_device)
 
             inputs = tokenizer("def hello_world():", return_tensors="pt").to(torch_device)

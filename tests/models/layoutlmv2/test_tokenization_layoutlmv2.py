@@ -1989,6 +1989,23 @@ class LayoutLMv2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
+        encoding = tokenizer_r(["Name", "그"], boxes=boxes, word_labels=word_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
+
+        # A word cut by an overflow window boundary: "##ization" continues word 5 at the start of the second window
+        long_words = ["hello"] * 5 + ["internationalization"] + ["world"] * 5
+        encoding = tokenizer_r(
+            long_words,
+            boxes=[[1, 2, 3, 4]] * len(long_words),
+            word_labels=list(range(len(long_words))),
+            max_length=10,
+            truncation=True,
+            stride=2,
+            return_overflowing_tokens=True,
+        )
+        self.assertListEqual(encoding.labels[0], [-100, 0, 1, 2, 3, 4, 5, -100, 6, -100])
+        self.assertListEqual(encoding.labels[1], [-100, -100, 6, 7, 8, 9, 10, -100])
+
         tokenizer_r = LayoutLMv2Tokenizer.from_pretrained(
             "microsoft/layoutlmv2-base-uncased", only_label_first_subword=False
         )

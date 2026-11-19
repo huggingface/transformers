@@ -17,24 +17,20 @@ Image/Text processor class for ALIGN
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class AlignProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 64,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class AlignProcessor(ProcessorMixin):
-    valid_processor_kwargs = AlignProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 64,
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"AlignProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["AlignProcessor"]

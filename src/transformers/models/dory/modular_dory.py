@@ -27,6 +27,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..afmoe.modeling_afmoe import AfmoeAttention
@@ -84,7 +85,7 @@ class DoryAttention(AfmoeAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         cache_offset: int = 0,
         shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -115,9 +116,9 @@ class DoryAttention(AfmoeAttention):
                     # The cache may hold more than the window if past recording is on
                     num_visible = self.sliding_window - 1 + query_states.shape[-2]
                     key_states, value_states = key_states[..., -num_visible:, :], value_states[..., -num_visible:, :]
-        elif past_key_values is not None:
+        elif cache is not None:
             # `per_loop` loops past the first write to their own copy of this layer's cache, see `DoryModel.forward`
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx + cache_offset)
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx + cache_offset)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -176,7 +177,7 @@ class DoryDecoderLayer(Gemma2DecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.input_layernorm(hidden_states)
@@ -184,7 +185,7 @@ class DoryDecoderLayer(Gemma2DecoderLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attn_output = self.post_attention_layernorm(attn_output)
@@ -242,6 +243,7 @@ class DoryModel(LlamaModel):
         self.rotary_emb = DoryRotaryEmbedding(config)
         self.norm = DoryL2Norm()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -250,7 +252,7 @@ class DoryModel(LlamaModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -261,11 +263,11 @@ class DoryModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -274,7 +276,7 @@ class DoryModel(LlamaModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             causal_mask_mapping = {
@@ -294,16 +296,12 @@ class DoryModel(LlamaModel):
         last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
 
         shared_kv_states = None
-        if past_key_values is not None and last_loop_only:
+        if cache is not None and last_loop_only:
             # Only the last loop writes, the earlier ones read the past
-            shared_kv_states = {
-                i: (c.keys, c.values) for i, c in enumerate(past_key_values.layers) if c.is_initialized
-            }
-        elif past_key_values is not None and len(past_key_values.layers) == self.config.num_hidden_layers:
+            shared_kv_states = {i: (c.keys, c.values) for i, c in enumerate(cache.layers) if c.is_initialized}
+        elif cache is not None and len(cache.layers) == self.config.num_hidden_layers:
             # Loops 1, 2, ... write to copies of the recurrent cache layers, appended at the end
-            past_key_values.layers += [
-                copy.deepcopy(c) for c in past_key_values.layers[recurrent_start:recurrent_end] * (n_loops - 1)
-            ]
+            cache.layers += [copy.deepcopy(c) for c in cache.layers[recurrent_start:recurrent_end] * (n_loops - 1)]
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
@@ -311,7 +309,7 @@ class DoryModel(LlamaModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -327,7 +325,7 @@ class DoryModel(LlamaModel):
                     hidden_states,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     position_embeddings=position_embeddings[decoder_layer.attention_type],
-                    past_key_values=past_key_values,
+                    cache=cache,
                     cache_offset=cache_offset,
                     shared_kv_states=shared_kv_states if loop_idx < n_loops - 1 else None,
                     **kwargs,
@@ -339,12 +337,12 @@ class DoryModel(LlamaModel):
                 hidden_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 class DoryForCausalLM(LlamaForCausalLM):

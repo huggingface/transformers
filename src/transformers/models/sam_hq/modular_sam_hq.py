@@ -87,32 +87,32 @@ class SamHQConfig(SamConfig):
 
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
     r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
-    intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
+    intermediate_embeddings (`list(torch.Tensor)`, *optional*):
         A list of intermediate embeddings collected from certain blocks within the model, typically those without
         windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
         This is specific to SAM-HQ and not present in base SAM.
     """
 
-    intermediate_embeddings: list[torch.FloatTensor] | None = None
+    intermediate_embeddings: list[torch.Tensor] | None = None
 
 
 @dataclass
 class SamHQMMaskDecoderOutputs(ModelOutput):
     r"""
-    masks (`torch.FloatTensor` of shape `(batch_size, num_prompts, num_masks, height, width)`):
+    masks (`torch.Tensor` of shape `(batch_size, num_prompts, num_masks, height, width)`):
         The predicted masks for the input image. The masks are of shape `(batch_size, num_prompts, num_masks, height, width)`.
-    iou_scores (`torch.FloatTensor` of shape `(batch_size, num_prompts, num_masks)`):
+    iou_scores (`torch.Tensor` of shape `(batch_size, num_prompts, num_masks)`):
         The predicted IoU scores for each mask. The scores are of shape `(batch_size, num_prompts, num_masks)`.
-    mask_decoder_attentions (`torch.FloatTensor`, *optional*):
+    mask_decoder_attentions (`torch.Tensor`, *optional*):
         The attention weights from the mask decoder, if `output_attentions=True` was passed during the forward pass.
         This is specific to SAM-HQ and not present in base SAM.
     """
 
-    masks: torch.FloatTensor
-    iou_scores: torch.FloatTensor | None = None
-    mask_decoder_attentions: torch.FloatTensor | None = None
+    masks: torch.Tensor
+    iou_scores: torch.Tensor | None = None
+    mask_decoder_attentions: torch.Tensor | None = None
 
 
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
@@ -140,7 +140,7 @@ class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SamHQVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -406,7 +406,7 @@ class SamHQModel(SamModel):
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Input pixel values
         """
         vision_output = self.vision_encoder(pixel_values=pixel_values)
@@ -416,21 +416,21 @@ class SamHQModel(SamModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
-        input_points: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        input_points: torch.Tensor | None = None,
         input_labels: torch.LongTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_masks: torch.LongTensor | None = None,
-        image_embeddings: torch.FloatTensor | None = None,
+        image_embeddings: torch.Tensor | None = None,
         multimask_output: bool = True,
         hq_token_only: bool = False,
-        attention_similarity: torch.FloatTensor | None = None,
-        target_embedding: torch.FloatTensor | None = None,
-        intermediate_embeddings: list[torch.FloatTensor] | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
+        intermediate_embeddings: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[dict[str, torch.Tensor]]:
         r"""
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+        input_points (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
             better results. The points can be obtained by passing a list of list of list to the processor that will
             create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
@@ -453,7 +453,7 @@ class SamHQModel(SamModel):
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
 
             The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
@@ -464,11 +464,11 @@ class SamHQModel(SamModel):
             - `y1`: the y coordinate of the top left point of the input box
             - `x2`: the x coordinate of the bottom right point of the input box
             - `y2`: the y coordinate of the bottom right point of the input box
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+        input_masks (`torch.Tensor` of shape `(batch_size, image_size, image_size)`):
             SAM_HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
             generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
             manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+        image_embeddings (`torch.Tensor` of shape `(batch_size, output_channels, window_size, window_size)`):
             Image embeddings, this is used by the mask decder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
@@ -479,13 +479,13 @@ class SamHQModel(SamModel):
         hq_token_only (`bool`, *optional*, defaults to `False`):
             Whether to use only the HQ token path for mask generation. When False, combines both standard and HQ paths.
             This is specific to SAM-HQ's architecture.
-        attention_similarity (`torch.FloatTensor`, *optional*):
+        attention_similarity (`torch.Tensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
+        target_embedding (`torch.Tensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
+        intermediate_embeddings (`List[torch.Tensor]`, *optional*):
             Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
             Required when providing pre-computed image_embeddings instead of pixel_values.
 

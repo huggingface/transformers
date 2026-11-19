@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import json
 import logging
 import os
 import tempfile
@@ -387,6 +388,28 @@ class GenerationConfigTest(unittest.TestCase):
             self.assertEqual(len(captured_warnings), 0)
             self.assertEqual(len(captured_logs.out), 0)
             self.assertEqual(len(os.listdir(tmp_dir)), 1)
+
+    def test_save_unmodified_loaded_config(self):
+        """Tests that a config with issues can be saved back unchanged after loading, but not once it is modified."""
+        with tempfile.TemporaryDirectory() as load_dir:
+            # A Hub file may set `top_p` without `do_sample=True`, which `save_pretrained` would normally refuse
+            with open(os.path.join(load_dir, "generation_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"top_p": 0.95}, f)
+
+            # Untouched -> saved
+            config = GenerationConfig.from_pretrained(load_dir)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                self.assertEqual(GenerationConfig.from_pretrained(tmp_dir).top_p, 0.95)
+
+            # Modified -> refused, even if the change itself is valid
+            config = GenerationConfig.from_pretrained(load_dir)
+            config.max_new_tokens = 10
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with self.assertRaises(ValueError) as exc:
+                    config.save_pretrained(tmp_dir)
+                self.assertTrue("`top_p` is set to `0.95`" in str(exc.exception))
+                self.assertEqual(len(os.listdir(tmp_dir)), 0)
 
     def test_generation_mode(self):
         """Tests that the `get_generation_mode` method is working as expected."""

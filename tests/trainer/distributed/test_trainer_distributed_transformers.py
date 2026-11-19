@@ -18,6 +18,8 @@ Trainer tests for models sharded at load time by transformers' `DistributedConfi
 
 import os
 
+from parameterized import parameterized
+
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
@@ -30,21 +32,20 @@ from transformers.testing_utils import (
 from .test_trainer_distributed import SCRIPTS_DIR
 
 
-PEFT_SAVE_SCRIPT = os.path.join(SCRIPTS_DIR, "peft_save_distributed_config.py")
-
-
 @require_torch_greater_or_equal("2.7")
 @require_torch_multi_accelerator
 class TestTrainerDistributedConfig(TestCasePlus):
     def get_torchrun_cmd(self, script, script_args=None):
-        cmd = ["torchrun", "--nproc_per_node=2", "--nnodes=1", f"--master_port={get_torch_dist_unique_port()}", script]
+        cmd = ["torchrun", "--nproc_per_node=2", "--nnodes=1", f"--master_port={get_torch_dist_unique_port()}"]
+        cmd.append(os.path.join(SCRIPTS_DIR, script))
         return cmd + (script_args or [])
 
     @require_peft
     def test_peft_save_fsdp(self):
         """Save and reload an adapter whose weights are sharded with FSDP."""
         cmd = self.get_torchrun_cmd(
-            PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "fsdp"]
+            "peft_save_distributed_config.py",
+            ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "fsdp"],
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
@@ -52,7 +53,7 @@ class TestTrainerDistributedConfig(TestCasePlus):
     def test_peft_save_tp(self):
         """Save and reload an adapter whose weights are tensor-parallel DTensors."""
         cmd = self.get_torchrun_cmd(
-            PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "tp"]
+            "peft_save_distributed_config.py", ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "tp"]
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
@@ -60,7 +61,7 @@ class TestTrainerDistributedConfig(TestCasePlus):
     def test_peft_save_trained_bias(self):
         """Same with sharded base-model parameters trained next to the adapter (the attention biases, `bias="lora_only"`)."""
         cmd = self.get_torchrun_cmd(
-            PEFT_SAVE_SCRIPT,
+            "peft_save_distributed_config.py",
             [
                 "--output_dir",
                 self.get_auto_remove_tmp_dir(),
@@ -73,3 +74,18 @@ class TestTrainerDistributedConfig(TestCasePlus):
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())
+
+    @parameterized.expand([("fsdp", 1), ("hsdp", 2)])
+    def test_grad_accumulation_reduces_on_last_micro_batch(self, _, dp_replicate_size):
+        """Gradients of a model sharded at load time are only reduced on the last micro-batch."""
+        script_args = ["--output_dir", self.get_auto_remove_tmp_dir(), "--dp_replicate_size", str(dp_replicate_size)]
+        execute_subprocess_async(
+            self.get_torchrun_cmd("grad_accum_distributed_config.py", script_args), env=self.get_env()
+        )
+
+    def test_train_after_evaluate(self):
+        """Training after an evaluation updates every parameter of a model sharded at load time."""
+        script_args = ["--output_dir", self.get_auto_remove_tmp_dir()]
+        execute_subprocess_async(
+            self.get_torchrun_cmd("eval_before_train_distributed_config.py", script_args), env=self.get_env()
+        )

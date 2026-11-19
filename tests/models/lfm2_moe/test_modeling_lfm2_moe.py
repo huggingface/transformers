@@ -41,17 +41,11 @@ class Lfm2MoeModelTester(CausalLMModelTester):
         base_model_class = Lfm2MoeModel
         causal_lm_class = Lfm2MoeForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        num_dense_layers=1,
-        num_hidden_layers=2,
-        layer_types=["full_attention", "conv"],
-    ):
-        super().__init__(parent)
-        self.layer_types = layer_types
-        self.num_dense_layers = num_dense_layers
-        self.num_hidden_layers = num_hidden_layers
+    small_config_overrides = {
+        "num_dense_layers": 1,
+        "num_hidden_layers": 2,
+        "layer_types": ["full_attention", "conv"],
+    }
 
 
 @require_torch
@@ -68,6 +62,7 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Lfm2MoeModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
