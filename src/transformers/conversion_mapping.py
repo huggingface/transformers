@@ -791,6 +791,23 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "minicpmv2_5": [
+            WeightRenaming(r"^llm\.model\.", "model.language_model."),
+            WeightRenaming(r"^llm\.lm_head\.", "lm_head."),
+            WeightRenaming(r"^vpm\.", "model.vision_tower."),
+            WeightRenaming(r"resampler\.attn\.out_proj\.", "resampler.o_proj."),
+            WeightRenaming(r"^resampler\.", "model.resampler."),
+            WeightConverter(
+                source_patterns="resampler.attn.in_proj_weight",
+                target_patterns=["resampler.q_proj.weight", "resampler.k_proj.weight", "resampler.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="resampler.attn.in_proj_bias",
+                target_patterns=["resampler.q_proj.bias", "resampler.k_proj.bias", "resampler.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         "minimax_m3_vl": [
             WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),

@@ -30,7 +30,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-class MiniCPMV2_5ImageProcessorPilKwargs(ImagesKwargs, total=False):
+class MiniCPMV2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_slice_nums (`int`, *optional*, defaults to 9):
         Maximum number of slices when splitting a high-resolution image.
@@ -91,10 +91,10 @@ class MiniCPMV2_5ImageProcessorPil(PilBackend):
     slice_mode = True
     downsample_mode = "16x"
     use_image_id = True
-    valid_kwargs = MiniCPMV2_5ImageProcessorPilKwargs
-    model_input_names = ["pixel_values", "target_sizes"]
+    valid_kwargs = MiniCPMV2_5ImageProcessorKwargs
+    model_input_names = ["pixel_values", "patch_attention_mask", "patch_position_ids"]
 
-    def __init__(self, **kwargs: Unpack[MiniCPMV2_5ImageProcessorPilKwargs]):
+    def __init__(self, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs):
@@ -168,12 +168,30 @@ class MiniCPMV2_5ImageProcessorPil(PilBackend):
         return patches.reshape(num_channels, patch_size, -1)
 
     @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[MiniCPMV2_5ImageProcessorPilKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]) -> BatchFeature:
+        # Same as `pad_slices`, in NumPy so this backend works without PyTorch.
+        return_tensors = kwargs.pop("return_tensors", None)
+        outputs = super().preprocess(images, **kwargs)
+        target_sizes, patch_size = outputs["target_sizes"], kwargs.get("patch_size", self.patch_size)
+        num_patches = (target_sizes[:, 0] * target_sizes[:, 1]).tolist()
+        max_patches = max(num_patches)
+        slices = np.split(outputs["pixel_values"][0], np.cumsum(num_patches)[:-1] * patch_size, axis=-1)
+        pad_widths = [((0, 0), (0, 0), (0, (max_patches - n) * patch_size)) for n in num_patches]
+        patch_index = np.arange(max_patches)[None, :]
+        patch_attention_mask = patch_index < np.array(num_patches)[:, None]
+        widths = target_sizes[:, 1:2].astype(np.int64)
+        patch_position_ids = np.stack([patch_index // widths, patch_index % widths], axis=-1)
+        data = {
+            "pixel_values": np.stack([np.pad(s, pad) for s, pad in zip(slices, pad_widths)]),
+            "patch_attention_mask": patch_attention_mask,
+            "patch_position_ids": patch_position_ids * patch_attention_mask[..., None],
+            "target_sizes": target_sizes,
+            "grids": outputs["grids"],
+            "num_patches_per_image": outputs["num_patches_per_image"],
+        }
+        return BatchFeature(
+            data=data, tensor_type=return_tensors, skip_tensor_conversion=["grids", "num_patches_per_image"]
+        )
 
     def _preprocess(
         self,

@@ -18,12 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
@@ -103,7 +101,8 @@ class MiniCPMV2_5PreTrainedModel(PreTrainedModel):
 
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False  # the resampler loops over slices with data-dependent sizes
+
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _no_split_modules = ["MiniCPMV2_5EncoderLayer", "MiniCPMV2_5Resampler"]
@@ -455,9 +454,12 @@ class MiniCPMV2_5Resampler(nn.Module):
 
     def __init__(self, config: MiniCPMV2_5Config):
         super().__init__()
+        self.config = config
         self.embed_dim = config.text_config.hidden_size
         self.num_heads = self.embed_dim // 128
         self.head_dim = self.embed_dim // self.num_heads
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
         self.query = nn.Parameter(torch.zeros(config.query_num, self.embed_dim))
         self.kv_proj = nn.Linear(config.vision_config.hidden_size, self.embed_dim, bias=False)
         self.ln_q = nn.LayerNorm(self.embed_dim, eps=1e-6)
@@ -469,37 +471,44 @@ class MiniCPMV2_5Resampler(nn.Module):
         self.o_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.proj = nn.Parameter(torch.zeros(self.embed_dim, self.embed_dim))
 
-    def get_2d_pos_embed(self, target_sizes: torch.Tensor, max_patches: int) -> torch.Tensor:
+    def get_2d_pos_embed(self, patch_position_ids: torch.Tensor) -> torch.Tensor:
         """
-        2D sin-cos position embedding of every patch of every slice, shape `(num_slices, max_patches, embed_dim)`.
-        Patches are numbered row by row; channels are laid out as [sin_w | cos_w | sin_h | cos_h] like the original.
+        2D sin-cos embedding of `(row, col)` patch positions, shape `(num_slices, max_patches, embed_dim)`. Channels
+        are laid out as [sin_w | cos_w | sin_h | cos_h] like the original.
         """
-        patch_index = torch.arange(max_patches, device=target_sizes.device)
-        widths = target_sizes[:, 1:2]
-        rows = (patch_index[None, :] // widths).float()
-        cols = (patch_index[None, :] % widths).float()
         quarter = self.embed_dim // 4
-        omega = 1.0 / 10000 ** (torch.arange(quarter, device=target_sizes.device, dtype=torch.float32) / quarter)
-        cols, rows = cols[..., None] * omega, rows[..., None] * omega
+        omega = torch.arange(quarter, device=patch_position_ids.device, dtype=torch.float32) / quarter
+        omega = 1.0 / 10000**omega
+        rows = patch_position_ids[..., 0, None].float() * omega
+        cols = patch_position_ids[..., 1, None].float() * omega
         return torch.cat([cols.sin(), cols.cos(), rows.sin(), rows.cos()], dim=-1)
 
-    def forward(self, vision_features: torch.Tensor, target_sizes: torch.Tensor) -> torch.Tensor:
-        num_slices, max_patches, _ = vision_features.shape
-        num_patches = target_sizes[:, 0] * target_sizes[:, 1]
-        is_real_patch = torch.arange(max_patches, device=vision_features.device)[None, :] < num_patches[:, None]
-        pos_embed = self.get_2d_pos_embed(target_sizes, max_patches) * is_real_patch[..., None]
-        pos_embed = pos_embed.to(vision_features.dtype)
-
+    def forward(
+        self,
+        vision_features: torch.Tensor,
+        patch_attention_mask: torch.Tensor,
+        patch_position_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        num_slices = vision_features.shape[0]
+        pos_embed = self.get_2d_pos_embed(patch_position_ids) * patch_attention_mask[..., None]
         kv = self.ln_kv(self.kv_proj(vision_features))
-
         queries = self.ln_q(self.query).unsqueeze(0).expand(num_slices, -1, -1)
+
         query_states = self.q_proj(queries).view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(kv + pos_embed).view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = self.k_proj(kv + pos_embed.to(kv.dtype))
+        key_states = key_states.view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = self.v_proj(kv).view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        attn_output = F.scaled_dot_product_attention(
-            query_states, key_states, value_states, attn_mask=is_real_patch[:, None, None, :]
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=queries, attention_mask=patch_attention_mask, encoder_hidden_states=kv
         )
-        attn_output = attn_output.transpose(1, 2).reshape(num_slices, -1, self.embed_dim)
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, _ = attention_interface(
+            self, query_states, key_states, value_states, attention_mask, scaling=self.scaling, dropout=0.0
+        )
+        attn_output = attn_output.reshape(num_slices, -1, self.embed_dim)
         return self.ln_post(self.o_proj(attn_output)) @ self.proj
 
 
@@ -521,36 +530,28 @@ class MiniCPMV2_5Model(MiniCPMV2_5PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
-        target_sizes: torch.Tensor,
+        patch_attention_mask: torch.Tensor,
+        patch_position_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(1, num_channels, patch_size, total_patches * patch_size)`):
-            All image slices of the batch, patchified and concatenated along the last dimension, as returned by
-            [`MiniCPMV2_5ImageProcessor`].
-        target_sizes (`torch.IntTensor` of shape `(num_slices, 2)`):
-            Height and width of each slice, in patches.
+        pixel_values (`torch.FloatTensor` of shape `(num_slices, num_channels, patch_size, max_patches * patch_size)`):
+            Every image slice of the batch as a single row of patches (as the checkpoint was trained), padded to the
+            longest slice, as returned by [`MiniCPMV2_5ImageProcessor`].
+        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
+            Which patches are real (`True`) rather than padding.
+        patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
+            `(row, col)` of each patch in its slice's patch grid, used by the resampler's 2D position embedding.
         """
-        patch_size = self.config.vision_config.patch_size
-        if pixel_values.dim() == 4:
-            pixel_values = torch.cat(list(pixel_values), dim=-1)
-        target_sizes = target_sizes.to(pixel_values.device).long()
-        num_patches = target_sizes[:, 0] * target_sizes[:, 1]
-        max_patches = int(num_patches.max())
-
-        # Each slice is fed as a 1 x num_patches strip of patches (as the checkpoint was trained), padded to the
-        # longest slice; padded patches are masked out.
-        slices = pixel_values.split((num_patches * patch_size).tolist(), dim=-1)
-        padded = torch.stack([F.pad(s, (0, max_patches * patch_size - s.shape[-1])) for s in slices])
-        patch_attention_mask = torch.arange(max_patches, device=pixel_values.device)[None, :] < num_patches[:, None]
-
         vision_outputs = self.vision_tower(
-            pixel_values=padded.to(self.vision_tower.dtype),
+            pixel_values=pixel_values.to(self.vision_tower.dtype),
             patch_attention_mask=patch_attention_mask[:, None, :],
             return_dict=True,
             **kwargs,
         )
-        vision_outputs.pooler_output = self.resampler(vision_outputs.last_hidden_state, target_sizes)
+        vision_outputs.pooler_output = self.resampler(
+            vision_outputs.last_hidden_state, patch_attention_mask, patch_position_ids
+        )
         return vision_outputs
 
     def get_placeholder_mask(
@@ -584,7 +585,8 @@ class MiniCPMV2_5Model(MiniCPMV2_5PreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        target_sizes: torch.Tensor | None = None,
+        patch_attention_mask: torch.Tensor | None = None,
+        patch_position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -593,8 +595,10 @@ class MiniCPMV2_5Model(MiniCPMV2_5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniCPMV2_5ModelOutputWithPast:
         r"""
-        target_sizes (`torch.IntTensor` of shape `(num_slices, 2)`, *optional*):
-            Height and width of each image slice, in patches.
+        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
+            Which patches of `pixel_values` are real (`True`) rather than padding.
+        patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`, *optional*):
+            `(row, col)` of each patch in its slice's patch grid.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -607,7 +611,10 @@ class MiniCPMV2_5Model(MiniCPMV2_5PreTrainedModel):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values=pixel_values, target_sizes=target_sizes, return_dict=True
+                pixel_values=pixel_values,
+                patch_attention_mask=patch_attention_mask,
+                patch_position_ids=patch_position_ids,
+                return_dict=True,
             )
 
         image_features = None
@@ -640,7 +647,7 @@ class MiniCPMV2_5Model(MiniCPMV2_5PreTrainedModel):
     """
 )
 class MiniCPMV2_5ForConditionalGeneration(MiniCPMV2_5PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {}
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MiniCPMV2_5Config):
@@ -654,15 +661,26 @@ class MiniCPMV2_5ForConditionalGeneration(MiniCPMV2_5PreTrainedModel, Generation
 
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.Tensor, target_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        pixel_values: torch.Tensor,
+        patch_attention_mask: torch.Tensor,
+        patch_position_ids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(1, num_channels, patch_size, total_patches * patch_size)`):
-            All image slices of the batch, patchified and concatenated along the last dimension.
-        target_sizes (`torch.IntTensor` of shape `(num_slices, 2)`):
-            Height and width of each slice, in patches.
+        pixel_values (`torch.FloatTensor` of shape `(num_slices, num_channels, patch_size, max_patches * patch_size)`):
+            Every image slice of the batch as a single row of patches, padded to the longest slice.
+        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
+            Which patches are real (`True`) rather than padding.
+        patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
+            `(row, col)` of each patch in its slice's patch grid.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, target_sizes=target_sizes, **kwargs)
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            patch_attention_mask=patch_attention_mask,
+            patch_position_ids=patch_position_ids,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -671,7 +689,8 @@ class MiniCPMV2_5ForConditionalGeneration(MiniCPMV2_5PreTrainedModel, Generation
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        target_sizes: torch.Tensor | None = None,
+        patch_attention_mask: torch.Tensor | None = None,
+        patch_position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -682,8 +701,10 @@ class MiniCPMV2_5ForConditionalGeneration(MiniCPMV2_5PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniCPMV2_5CausalLMOutputWithPast:
         r"""
-        target_sizes (`torch.IntTensor` of shape `(num_slices, 2)`, *optional*):
-            Height and width of each image slice, in patches.
+        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
+            Which patches of `pixel_values` are real (`True`) rather than padding.
+        patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`, *optional*):
+            `(row, col)` of each patch in its slice's patch grid.
 
         Example:
 
@@ -711,7 +732,8 @@ class MiniCPMV2_5ForConditionalGeneration(MiniCPMV2_5PreTrainedModel, Generation
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            target_sizes=target_sizes,
+            patch_attention_mask=patch_attention_mask,
+            patch_position_ids=patch_position_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,

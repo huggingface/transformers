@@ -30,11 +30,10 @@ The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
 ## Usage example
 
 ```python
-import torch
 from transformers import AutoProcessor, MiniCPMV2_5ForConditionalGeneration
 
 model_id = "openbmb/MiniCPM-Llama3-V-2_5"
-model = MiniCPMV2_5ForConditionalGeneration.from_pretrained(model_id, dtype=torch.float16, device_map="auto")
+model = MiniCPMV2_5ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [

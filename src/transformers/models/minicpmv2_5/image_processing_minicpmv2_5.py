@@ -21,6 +21,7 @@
 import math
 
 import torch
+import torch.nn.functional as F
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -76,6 +77,28 @@ def find_best_resize(
     return ensure_divide(height, patch_size), ensure_divide(width, patch_size)
 
 
+def pad_slices(pixel_values: torch.Tensor, target_sizes: torch.Tensor, patch_size: int) -> dict[str, torch.Tensor]:
+    """
+    Split MiniCPM-V 4.6's packed `(1, num_channels, patch_size, total_patches * patch_size)` strip into one row per
+    slice, padded to the longest slice, plus the mask of real patches and each patch's `(row, col)` in its slice grid
+    (0 for padding).
+    """
+    num_patches = (target_sizes[:, 0] * target_sizes[:, 1]).tolist()
+    max_patches = max(num_patches)
+    slices = pixel_values[0].split([n * patch_size for n in num_patches], dim=-1)
+    padded = torch.stack([F.pad(s, (0, (max_patches - n) * patch_size)) for s, n in zip(slices, num_patches)])
+    patch_index = torch.arange(max_patches)[None, :]
+    patch_attention_mask = patch_index < torch.tensor(num_patches)[:, None]
+    widths = target_sizes[:, 1:2].long()
+    patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
+    patch_position_ids = patch_position_ids * patch_attention_mask[..., None]
+    return {
+        "pixel_values": padded,
+        "patch_attention_mask": patch_attention_mask,
+        "patch_position_ids": patch_position_ids,
+    }
+
+
 @auto_docstring
 class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
@@ -92,7 +115,9 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
     downsample_mode = "16x"
     use_image_id = True
     valid_kwargs = MiniCPMV2_5ImageProcessorKwargs
-    model_input_names = ["pixel_values", "target_sizes"]
+    # Slicing is MiniCPM-V 4.6's. Differences: no visual-token merger, so sizes are rounded to the patch size only
+    # (`downsample_mode` is unused), and slices are returned padded to the same length instead of packed.
+    model_input_names = ["pixel_values", "patch_attention_mask", "patch_position_ids"]
 
     def __init__(self, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -170,12 +195,17 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
         return patches
 
     @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]) -> BatchFeature:
+        return_tensors = kwargs.pop("return_tensors", None)
+        outputs = super().preprocess(images, **kwargs)
+        target_sizes = outputs["target_sizes"]
+        data = pad_slices(outputs["pixel_values"], target_sizes, kwargs.get("patch_size", self.patch_size))
+        data.update(
+            target_sizes=target_sizes, grids=outputs["grids"], num_patches_per_image=outputs["num_patches_per_image"]
+        )
+        return BatchFeature(
+            data=data, tensor_type=return_tensors, skip_tensor_conversion=["grids", "num_patches_per_image"]
+        )
 
     def _preprocess(
         self,

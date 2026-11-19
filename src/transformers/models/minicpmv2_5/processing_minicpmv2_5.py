@@ -45,13 +45,9 @@ class MiniCPMV2_5Processor(ProcessorMixin):
             placeholder += self.slice_start_token + "\n".join(rows) + self.slice_end_token
         return placeholder
 
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
-        texts = self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-        return [text.strip() for text in texts]
-
     @property
     def unused_input_names(self) -> list[str]:
-        return ["grids", "num_patches_per_image"]
+        return ["grids", "num_patches_per_image", "target_sizes"]
 
 
 __all__ = ["MiniCPMV2_5Processor"]

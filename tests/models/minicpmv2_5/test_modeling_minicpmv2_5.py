@@ -58,36 +58,32 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):
-        # All slices concatenated along the last dim: (1, channels, patch_size, total_patches * patch_size)
+        # One slice per image, as a single row of 4 x 4 = 16 patches: (num_slices, channels, patch_size, 16 * patch_size)
         batch_size = batch_size if batch_size is not None else self.batch_size
         num_patches = (self.image_size // self.patch_size) ** 2
-        return floats_tensor([1, self.num_channels, self.patch_size, batch_size * num_patches * self.patch_size])
+        return floats_tensor([batch_size, self.num_channels, self.patch_size, num_patches * self.patch_size])
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         side = self.image_size // self.patch_size
-        target_sizes = torch.tensor([[side, side]] * batch_size, dtype=torch.int32, device=torch_device)
-        return {"target_sizes": target_sizes}
+        patch_attention_mask = torch.ones(batch_size, side * side, dtype=torch.bool, device=torch_device)
+        grid = torch.stack(torch.meshgrid(torch.arange(side), torch.arange(side), indexing="ij"), dim=-1)
+        patch_position_ids = grid.reshape(1, side * side, 2).expand(batch_size, -1, -1).to(torch_device)
+        return {"patch_attention_mask": patch_attention_mask, "patch_position_ids": patch_position_ids}
 
 
 @require_torch
 class MiniCPMV2_5ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniCPMV2_5VisionText2TextModelTester
-    # pixel_values packs every slice of the batch along the last dim, so its first dim is not the batch size
-    skip_test_image_features_output_shape = True
 
-    @unittest.skip(
-        reason="pixel_values packs all slices into one tensor and can't be sliced per sample like `target_sizes`"
-    )
-    def test_batching_equivalence(self):
-        pass
+    def test_reverse_loading_mapping(self):
+        # As in llava, the base model has no `model.` prefix to reverse the `^llm\.model\.` rename onto
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict = {
-            key: value
-            for key, value in inputs_dict.items()
-            if "pixel" in key or "image" in key or key == "target_sizes"
+            key: value for key, value in inputs_dict.items() if key.startswith("pixel") or key.startswith("patch_")
         }
         return config, inputs_dict
 
@@ -95,7 +91,7 @@ class MiniCPMV2_5ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV2_5IntegrationTest(unittest.TestCase):
-    # TODO: point to the converted checkpoint once it is on the Hub (see convert_minicpmv2_5_weights_to_hf.py)
+    # TODO: pin the `revision` of the Hub PR that adds the converted config and processor files
     model_id = "openbmb/MiniCPM-Llama3-V-2_5"
 
     def tearDown(self):

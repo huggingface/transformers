@@ -19,54 +19,109 @@ import numpy as np
 
 from transformers.image_utils import get_image_size
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-# Import the module, not the classes, so pytest doesn't collect MiniCPM-V 4.6's tests a second time from this file.
-from ..minicpmv4_6 import test_image_processing_minicpmv4_6 as minicpmv4_6_tests
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
 
 
-class MiniCPMV2_5ImageProcessingTester(minicpmv4_6_tests.MiniCPMV4_6ImageProcessingTester):
+class MiniCPMV2_5ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("min_resolution", 64)
+        kwargs.setdefault("max_resolution", 128)
+        kwargs.setdefault("scale_resolution", 448)
+        kwargs.setdefault("patch_size", 14)
+        super().__init__(**kwargs)
+
+    def num_patches(self, image):
+        """Patches of an image too small to be sliced: upscaled to ~scale_resolution**2 px, sides rounded to 14 px."""
+        height, width = (image.height, image.width) if isinstance(image, Image.Image) else get_image_size(image)
+        aspect_ratio = width / height
+        new_height = int(self.scale_resolution / math.sqrt(aspect_ratio))
+        new_width = int(new_height * aspect_ratio)
+        best_height = max(round(new_height / self.patch_size) * self.patch_size, self.patch_size)
+        best_width = max(round(new_width / self.patch_size) * self.patch_size, self.patch_size)
+        return best_height * best_width // self.patch_size**2
+
     def expected_output_image_shape(self, image_inputs):
-        """Packed shape [C, P, total_L] of pixel_values[0]. Same as MiniCPM-V 4.6, but sides are rounded to a
-        multiple of `patch_size` (2.5 has no token merger) instead of `patch_size * 4`."""
-        total_length = 0
-        for image in image_inputs:
-            height, width = (image.height, image.width) if isinstance(image, Image.Image) else get_image_size(image)
-            aspect_ratio = width / height
-            new_height = int(self.scale_resolution / math.sqrt(aspect_ratio))
-            new_width = int(new_height * aspect_ratio)
-            best_height = max(round(new_height / self.patch_size) * self.patch_size, self.patch_size)
-            best_width = max(round(new_width / self.patch_size) * self.patch_size, self.patch_size)
-            total_length += best_height * best_width // self.patch_size
-        return [self.num_channels, self.patch_size, total_length]
+        """Shape of one slice in `pixel_values`: a single row of patches, padded to the longest slice."""
+        max_patches = max(self.num_patches(image) for image in image_inputs)
+        return [self.num_channels, self.patch_size, max_patches * self.patch_size]
 
 
 @require_torch
 @require_vision
-class MiniCPMV2_5ImageProcessingTest(minicpmv4_6_tests.MiniCPMV4_6ImageProcessingTest):
+class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = MiniCPMV2_5ImageProcessingTester
 
-    @unittest.skip(reason="MiniCPM-Llama3-V 2.5 has no visual-token downsampling, so `downsample_mode` is unused")
-    def test_downsample_modes(self):
+    @unittest.skip("expected_output_image_shape cannot infer the channel dim for 4-channel images")
+    def test_call_numpy_4_channels(self):
         pass
 
+    def test_call_returns_expected_keys(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            images = self.image_processor_tester.prepare_image_inputs(torchify=True)
+            result = image_processor(images, return_tensors="pt")
+            for key in ("pixel_values", "patch_attention_mask", "patch_position_ids", "target_sizes", "grids"):
+                self.assertIn(key, result)
+
+    def test_padding_mask_and_position_ids(self):
+        """Each slice's real patches are masked in, padding is zero, and positions follow the slice's patch grid."""
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            result = image_processor(images, return_tensors="pt")
+            mask, positions, pixel_values = (
+                result["patch_attention_mask"],
+                result["patch_position_ids"],
+                result["pixel_values"],
+            )
+            patch_size = self.image_processor_tester.patch_size
+            patches = pixel_values.unflatten(-1, (-1, patch_size)).permute(0, 3, 1, 2, 4)
+            for slice_idx, (rows, cols) in enumerate(result["target_sizes"].tolist()):
+                num_patches = rows * cols
+                self.assertEqual(mask[slice_idx].sum().item(), num_patches)
+                self.assertTrue(mask[slice_idx, :num_patches].all())
+                self.assertEqual(patches[slice_idx, num_patches:].abs().sum().item(), 0)
+                expected = torch.stack(torch.meshgrid(torch.arange(rows), torch.arange(cols), indexing="ij"), -1)
+                torch.testing.assert_close(positions[slice_idx, :num_patches], expected.reshape(-1, 2))
+                self.assertEqual(positions[slice_idx, num_patches:].abs().sum().item(), 0)
+
+    def test_backends_equivalent(self):
+        """The PIL and torchvision backends return the same slices (pixels within resizing differences)."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest("needs both backends")
+        images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        results = [
+            cls(**self.image_processor_dict)(images, return_tensors="pt")
+            for cls in self.image_processing_classes.values()
+        ]
+        for key in ("patch_attention_mask", "patch_position_ids", "target_sizes"):
+            torch.testing.assert_close(results[0][key], results[1][key])
+        self.assertEqual(results[0]["pixel_values"].shape, results[1]["pixel_values"].shape)
+
     def test_crop_to_patches_aspect_ratio(self):
-        """Row/column order is correct when slicing non-square images (same as 4.6, with 14 px rounding)."""
+        """Row/column order is correct when slicing non-square images."""
         for image_processing_class in self.image_processing_classes.values():
             patch_size = 14
             image_processor = image_processing_class(slice_mode=True, max_slice_nums=7, scale_resolution=10)
-            # 6 slices of one 14 x 14 patch each, plus the overview: 1 patch, or 2 for the very elongated 1 x 6 / 6 x 1
+            # 6 slices of one 14 x 14 patch, plus the overview: 1 patch, or 2 for the very elongated 1 x 6 / 6 x 1
             # images (e.g. 14 x 84 px shrinks to ~4 x 24 px, rounded to 14 x 28 px).
-            expected_lengths = {(2, 3): 7 * 14, (3, 2): 7 * 14, (1, 6): 8 * 14, (6, 1): 8 * 14}
-            for (num_rows, num_cols), expected_length in expected_lengths.items():
+            expected_overview_patches = {(2, 3): 1, (3, 2): 1, (1, 6): 2, (6, 1): 2}
+            for (num_rows, num_cols), overview_patches in expected_overview_patches.items():
                 test_image = Image.new("RGB", (patch_size * num_cols, patch_size * num_rows))
                 result = image_processor(test_image, return_tensors="pt")
                 self.assertEqual(result.grids, [[num_rows, num_cols]])
-                self.assertEqual(tuple(result.pixel_values.shape), (1, 3, patch_size, expected_length))
+                self.assertEqual(tuple(result.pixel_values.shape), (7, 3, patch_size, overview_patches * patch_size))
+                self.assertEqual(result.patch_attention_mask.sum(-1).tolist(), [overview_patches] + [1] * 6)
 
     def test_sizes_rounded_to_patch_size(self):
         # 300 x 500 px is under 448**2, so it is upscaled to ~448**2 px and each side rounded to a multiple of 14
