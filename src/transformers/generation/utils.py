@@ -4079,10 +4079,9 @@ class GenerationMixin(ContinuousMixin):
             if candidate_generator.requires_model_outputs:
                 model_inputs |= candidate_generator.model_kwargs_overrides
 
-            # 2.2. Run a forward pass on the candidate sequence. Verification forwards are short, like the decode
-            # steps of `_sample`, so they want the same MoE experts kernel — `_optimize_model_for_decode` swaps
-            # `grouped_mm` for `batched_mm`. The prefill is exempt: it would materialize one expert weight per
-            # prompt token. This also keeps the forward capturable, as `grouped_mm` reads its offsets on the host.
+            # 2.2. Run a forward pass on the candidate sequence.
+            # Note that the 1st iteration, i.e. prefill, is exempt of both compilation and expert implementation swap, as it
+            # would be counter-productive
             if is_first_iteration:
                 outputs = self(**model_inputs)
             else:
