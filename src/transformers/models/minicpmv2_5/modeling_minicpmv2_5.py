@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_minicpmv2_5 import MiniCPMV2_5Config, MiniCPMV2_5VisionConfig
@@ -499,12 +499,22 @@ class MiniCPMV2_5Resampler(nn.Module):
         key_states = key_states.view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = self.v_proj(kv).view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config, inputs_embeds=queries, attention_mask=patch_attention_mask, encoder_hidden_states=kv
-        )
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
+        if is_flash_attention_requested(self.config):
+            # Flash attention's padding handling assumes the queries are the last positions of the keys (decoder
+            # layout), which doesn't hold for this cross-attention over right-padded slices: use SDPA for this call
+            # only, so the vision tower and language model still use flash attention.
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            attention_mask = patch_attention_mask[:, None, None, :]
+        else:
+            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=queries,
+                attention_mask=patch_attention_mask,
+                encoder_hidden_states=kv,
+            )
         attn_output, _ = attention_interface(
             self, query_states, key_states, value_states, attention_mask, scaling=self.scaling, dropout=0.0
         )

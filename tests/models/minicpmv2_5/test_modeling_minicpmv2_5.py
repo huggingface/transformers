@@ -66,10 +66,15 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         side = self.image_size // self.patch_size
-        patch_attention_mask = torch.ones(batch_size, side * side, dtype=torch.bool, device=torch_device)
+        # Every other slice is a smaller (side - 1) x side grid padded to side x side, so attention tests cover padding.
+        patch_attention_mask = torch.ones(batch_size, side * side, dtype=torch.bool)
+        patch_attention_mask[1::2, (side - 1) * side :] = False
         grid = torch.stack(torch.meshgrid(torch.arange(side), torch.arange(side), indexing="ij"), dim=-1)
-        patch_position_ids = grid.reshape(1, side * side, 2).expand(batch_size, -1, -1).to(torch_device)
-        return {"patch_attention_mask": patch_attention_mask, "patch_position_ids": patch_position_ids}
+        patch_position_ids = grid.reshape(1, side * side, 2).repeat(batch_size, 1, 1) * patch_attention_mask[..., None]
+        return {
+            "patch_attention_mask": patch_attention_mask.to(torch_device),
+            "patch_position_ids": patch_position_ids.to(torch_device),
+        }
 
 
 @require_torch
