@@ -660,9 +660,6 @@ class SpmConverter(Converter):
         else:
             id_to_token = {token_id: item[0] for token_id, item in enumerate(vocab or [])}
         user_defined = [id_to_token[i] for i, piece in enumerate(proto.pieces) if piece.type == 4 and i in id_to_token]
-        # A normalized added token's content is normalized too, so with a dummy prefix user-defined pieces would only
-        # match at the start of the text. Isolate them in the pre-tokenizer instead, after the prefix is added.
-        isolate_user_defined = bool(user_defined) and normalizer_spec.add_dummy_prefix
 
         # model
         if isinstance(vocab, dict):
@@ -688,8 +685,7 @@ class SpmConverter(Converter):
                     fuse_unk=True,
                     byte_fallback=byte_fallback,
                     dropout=None,
-                    # Isolated user-defined pieces aren't reachable through merges, so look whole words up first
-                    ignore_merges=isolate_user_defined,
+                    ignore_merges=bool(user_defined),
                 )
             )
         elif isinstance(vocab, list) and vocab and isinstance(vocab[0], tuple | list):
@@ -709,19 +705,19 @@ class SpmConverter(Converter):
             _normalizers.append(normalizers.Precompiled(precompiled_charsmap))
         if normalizer_spec.remove_extra_whitespaces:
             # Only spaces count: SentencePiece leaves other whitespace, such as newlines, alone
-            _normalizers += [normalizers.Replace(Regex(r"\A +| +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
-        if normalizer_spec.add_dummy_prefix:
-            _normalizers.append(normalizers.Prepend("▁"))
+            _normalizers += [normalizers.Replace(Regex(r" +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
         if normalizer_spec.escape_whitespaces:
             _normalizers.append(normalizers.Replace(" ", "▁"))
         tokenizer.normalizer = normalizers.Sequence(_normalizers)
-
-        # user-defined pieces
-        if isolate_user_defined:
+        # SentencePiece emits user-defined pieces whole and never merges them: isolate them after the dummy prefix
+        _pre_tokenizers = []
+        if normalizer_spec.add_dummy_prefix:
+            _pre_tokenizers.append(pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="first", split=False))
+        if user_defined:
             pattern = "|".join(re.escape(piece) for piece in sorted(user_defined, key=len, reverse=True))
-            tokenizer.pre_tokenizer = pre_tokenizers.Split(Regex(pattern), behavior="isolated")
-        elif user_defined:
-            tokenizer.add_tokens([AddedToken(piece, normalized=True, special=False) for piece in user_defined])
+            _pre_tokenizers.append(pre_tokenizers.Split(Regex(pattern), behavior="isolated"))
+        if _pre_tokenizers:
+            tokenizer.pre_tokenizer = pre_tokenizers.Sequence(_pre_tokenizers)
 
         # decoder
         _decoders = [decoders.Replace("▁", " ")]

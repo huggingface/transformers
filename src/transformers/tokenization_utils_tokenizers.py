@@ -366,54 +366,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     token for token in local_kwargs["additional_special_tokens"] if str(token) not in user_defined
                 ]
 
-            # The dummy prefix is added by the normalizer, which would also prefix a normalized added token's
-            # content so that it only matches at the start of the text. Match added tokens on the raw text instead,
-            # as SentencePiece-based tokenizers do.
-            if extractor.proto.normalizer_spec.add_dummy_prefix:
-
-                def _unnormalized(token):
-                    if not isinstance(token, AddedToken) or not token.normalized:
-                        return token
-                    return AddedToken(
-                        token.content,
-                        single_word=token.single_word,
-                        lstrip=token.lstrip,
-                        rstrip=token.rstrip,
-                        normalized=False,
-                        special=token.special,
-                    )
-
-                if added_tokens_decoder:
-                    local_kwargs["added_tokens_decoder"] = {
-                        token_id: _unnormalized(token) for token_id, token in added_tokens_decoder.items()
-                    }
-                for key in ("bos_token", "eos_token", "unk_token", "pad_token"):
-                    if key in local_kwargs:
-                        local_kwargs[key] = _unnormalized(local_kwargs[key])
-                if local_kwargs.get("additional_special_tokens"):
-                    local_kwargs["additional_special_tokens"] = [
-                        _unnormalized(token) for token in local_kwargs["additional_special_tokens"]
-                    ]
-            elif user_defined and added_tokens_decoder:
-                # Without a dummy prefix, user-defined pieces are matched on the normalized text, as SentencePiece
-                # does. A config may mark them `normalized=False` (Gemma's "▁▁", "▁▁▁", ...), which would match them
-                # against raw spaces instead of "▁", and merges can't build them because they aren't normal pieces.
-                # Special tokens stay matched on the raw text, so that they take priority over overlapping pieces
-                # (InternLM3's "'<" would otherwise split "'<|im_start|>").
-                local_kwargs["added_tokens_decoder"] = {
-                    token_id: AddedToken(
-                        token.content,
-                        single_word=token.single_word,
-                        lstrip=token.lstrip,
-                        rstrip=token.rstrip,
-                        normalized=True,
-                        special=token.special,
-                    )
-                    if isinstance(token, AddedToken) and not token.special and token.content in user_defined
-                    else token
-                    for token_id, token in added_tokens_decoder.items()
-                }
-
             tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(proto=extractor.proto, vocab=vocab)
             if tokenizer_object is not None:
                 local_kwargs["tokenizer_object"] = tokenizer_object
