@@ -399,7 +399,7 @@ def read_video_opencv(
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
     index = 0
-    frames = []
+    frames = {}
     while video.isOpened():
         success, frame = video.read()
         if not success:
@@ -407,7 +407,7 @@ def read_video_opencv(
         if index in indices:
             height, width, channel = frame.shape
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frames.append(frame[0:height, 0:width, 0:channel])
+            frames[index] = frame[0:height, 0:width, 0:channel]
         if success:
             index += 1
         if index >= total_num_frames:
@@ -415,7 +415,7 @@ def read_video_opencv(
 
     video.release()
     metadata.frames_indices = indices
-    return np.stack(frames), metadata
+    return np.stack([frames[int(i)] for i in indices if int(i) in frames]), metadata
 
 
 def read_video_decord(
@@ -512,16 +512,16 @@ def read_video_pyav(
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
-    frames = []
+    frames = {}
     container.seek(0)
-    end_index = indices[-1]
+    end_index = max(indices)
     for i, frame in enumerate(container.decode(video=0)):
         if i > end_index:
             break
         if i >= 0 and i in indices:
-            frames.append(frame)
+            frames[i] = frame.to_ndarray(format="rgb24")
 
-    video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
+    video = np.stack([frames[int(i)] for i in indices if int(i) in frames])
     metadata.frames_indices = indices
     return video, metadata
 
