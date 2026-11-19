@@ -18,10 +18,12 @@ from threading import Event, Thread
 from unittest.mock import patch
 
 import pytest
+from tokenizers import Tokenizer, decoders, models
 
 from transformers import (
     AsyncTextIteratorStreamer,
     AutoTokenizer,
+    PreTrainedTokenizerFast,
     TextIteratorStreamer,
     TextStreamer,
     is_torch_available,
@@ -85,6 +87,58 @@ class StreamerTester(unittest.TestCase):
         streamer.end()
         printed += streamer.text_queue.get_nowait()
         self.assertEqual(printed, text)
+
+    def test_text_streamer_cleanup_preserves_prefix(self):
+        texts = [
+            "I 'm here",
+            "He 's here",
+            "we 're here",
+            "we 've arrived",
+            "I do n't know",
+            "a n ' t",
+            "a  ' m",
+            "a  ' ve",
+            "Hello , world !",
+            "a . b ?",
+            "你好世界",
+            "a\nnext line",
+        ]
+        vocab = {char: index for index, char in enumerate(sorted(set("".join(texts))))}
+        backend = Tokenizer(models.WordLevel(vocab))
+        backend.decoder = decoders.Fuse()
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=backend, clean_up_tokenization_spaces=True)
+        for text in texts:
+            token_ids = tokenizer.convert_tokens_to_ids(list(text))
+            for cleanup in (None, False, True):
+                for chunk_size in (1, 2, len(token_ids)):
+                    with self.subTest(text=text, cleanup=cleanup, chunk_size=chunk_size):
+                        streamer = TextIteratorStreamer(tokenizer, clean_up_tokenization_spaces=cleanup)
+                        expected = tokenizer.decode(token_ids, clean_up_tokenization_spaces=cleanup)
+                        printed = ""
+                        for offset in range(0, len(token_ids), chunk_size):
+                            streamer.put(torch.tensor(token_ids[offset : offset + chunk_size]))
+                            printed += streamer.text_queue.get_nowait()
+                            self.assertTrue(expected.startswith(printed), (printed, expected))
+                        streamer.end()
+                        printed += streamer.text_queue.get_nowait()
+                        self.assertEqual(printed, expected)
+
+    def test_text_streamer_cleanup_with_pretrained_tokenizers(self):
+        for name in ("google-t5/t5-small", "google-bert/bert-base-uncased"):
+            tokenizer = AutoTokenizer.from_pretrained(name)
+            for text in ("I 'm here", "I do n't know"):
+                with self.subTest(tokenizer=name, text=text):
+                    token_ids = tokenizer(text, add_special_tokens=False).input_ids
+                    streamer = TextIteratorStreamer(tokenizer, clean_up_tokenization_spaces=True)
+                    expected = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
+                    printed = ""
+                    for token_id in token_ids:
+                        streamer.put(torch.tensor([token_id]))
+                        printed += streamer.text_queue.get_nowait()
+                        self.assertTrue(expected.startswith(printed), (printed, expected))
+                    streamer.end()
+                    printed += streamer.text_queue.get_nowait()
+                    self.assertEqual(printed, expected)
 
     def test_iterator_streamer_matches_non_streaming(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
