@@ -344,6 +344,28 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_is_split_into_words_generator(self):
+        token_classifier = pipeline(
+            task="token-classification",
+            model="hf-internal-testing/tiny-bert-for-token-classification",
+            aggregation_strategy="simple",
+            ignore_labels=[],
+        )
+        inputs = [["Alice", "works"], ["Bob", "runs"]]
+        expected = token_classifier(inputs, is_split_into_words=True)
+        consumed = []
+
+        def generate_inputs():
+            for words in inputs:
+                consumed.append(words)
+                yield words
+
+        outputs = token_classifier(generate_inputs(), is_split_into_words=True, num_workers=0)
+        self.assertLessEqual(len(consumed), 1)
+        self.assertEqual(nested_simplify(list(outputs)), nested_simplify(expected))
+        self.assertEqual(consumed, inputs)
+
+    @require_torch
     def test_chunking_fast(self):
         # Note: We cannot run the test on "conflicts" on the chunking.
         # The problem is that the model is random, and thus the results do heavily
