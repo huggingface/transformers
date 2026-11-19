@@ -107,6 +107,9 @@ print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
 ## Notes
 
 - The model needs `input_ids` even when you pass `inputs_embeds`, because Engram hashes token ids.
+- `resize_token_embeddings` is not supported, because the Engram token map and n-gram tables are fixed to the
+  vocabulary of the checkpoint. If you need a new token, reuse one of the placeholder tokens that the tokenizer
+  already has.
 - Batched generation with left padding does not match unpadded generation yet. The compressor pools consecutive
   tokens, so padding shifts its groups.
 - The DSpark draft layers of the checkpoint (`mtp.*`) are not loaded.

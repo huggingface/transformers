@@ -158,7 +158,7 @@ class DeepseekV41ImageProcessor(TorchvisionBackend):
     min_pixels = 295936
     max_wh_ratio = None
     valid_kwargs = DeepseekV41ImageProcessorKwargs
-    model_input_names = ["pixel_values", "image_grid_hw"]
+    model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[DeepseekV41ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -251,7 +251,7 @@ class DeepseekV41ImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        patches, image_grid_hw = [], []
+        patches, image_grid_thw = [], []
         for image in images:
             channels, height, width = image.shape
             if do_resize:
@@ -276,9 +276,10 @@ class DeepseekV41ImageProcessor(TorchvisionBackend):
             rows, columns = height // patch_size, width // patch_size
             image = image.reshape(channels, rows, patch_size, columns, patch_size).permute(1, 3, 0, 2, 4)
             patches.append(image.reshape(rows * columns, -1))
-            image_grid_hw.append([rows, columns])
+            # The grid has a temporal size as well, like in the models that take videos. An image is one frame.
+            image_grid_thw.append([1, rows, columns])
         return BatchFeature(
-            data={"pixel_values": torch.cat(patches), "image_grid_hw": torch.tensor(image_grid_hw)},
+            data={"pixel_values": torch.cat(patches), "image_grid_thw": torch.tensor(image_grid_thw)},
             tensor_type=return_tensors,
         )
 

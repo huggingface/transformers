@@ -1351,6 +1351,26 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
             )
         hasher.token_map[: token_map.shape[0]] = token_map.to(hasher.token_map.device)
 
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ):
+        """
+        Not supported: the Engram layers look token ids up in a token map and hash them into n-gram tables, and
+        both are fixed to the vocabulary that the checkpoint was trained with.
+        """
+        # A new token would need an entry in the token map, and a compressed id that the hash multipliers and
+        # the n-gram tables were never trained with. We'd rather fail here than hand back a model whose new
+        # tokens index past the end of the map.
+        raise NotImplementedError(
+            "DeepSeek-V4.1 does not support resizing the token embeddings, because its Engram layers hash "
+            "n-grams of token ids through a token map that is fixed to the vocabulary of the checkpoint. "
+            "If you need a new token, reuse one of the placeholder tokens that the tokenizer already has.\n"
+            f"new_num_tokens: {new_num_tokens}"
+        )
+
 
 @auto_docstring(
     custom_intro="""
@@ -1575,18 +1595,25 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         """
     )
     def get_image_features(
-        self, pixel_values: torch.Tensor, image_grid_hw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
             The flattened patches of all the images, one image after the other.
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
-            The height and width of each image's patch grid.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
+            The temporal size, height and width of each image's patch grid. The temporal size is always 1.
         """
-        grids = image_grid_hw.tolist()
-        patches_per_image = pixel_values.split([height * width for height, width in grids])
+        grids = image_grid_thw.tolist()
+        # An image is a single frame. The temporal size is only there so that the input has the same layout as
+        # the `image_grid_thw` of the models that take videos as well.
+        if any(num_frames != 1 for num_frames, _, _ in grids):
+            raise ValueError(
+                "DeepSeek-V4.1 only takes images, so the temporal size of every grid must be 1.\n"
+                f"`image_grid_thw`: {grids}"
+            )
+        patches_per_image = pixel_values.split([height * width for _, height, width in grids])
         vision_outputs, image_features = [], []
-        for patches, (height, width) in zip(patches_per_image, grids):
+        for patches, (_, height, width) in zip(patches_per_image, grids):
             outputs = self.vision_tower(patches, height, width, return_dict=True, **kwargs)
             tokens = self.multi_modal_projector(outputs.last_hidden_state, height, width)
             # The projector rounds a partial square up, so the token grid is the patch grid divided by the ratio
@@ -1623,7 +1650,7 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        image_grid_hw: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -1634,8 +1661,8 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`, *optional*):
             The flattened patches of all the images in the batch, one image after the other.
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            The height and width of each image's patch grid.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal size, height and width of each image's patch grid. The temporal size is always 1.
         """
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You must specify at least one of input_ids or inputs_embeds")
@@ -1647,14 +1674,14 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         if pixel_values is not None:
             if image_mask is None:
                 raise ValueError("`input_ids` are needed to find where the images go in the prompt.")
-            image_features = self.get_image_features(pixel_values, image_grid_hw, return_dict=True).pooler_output
+            image_features = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
             image_features = torch.cat(image_features).to(inputs_embeds.device, inputs_embeds.dtype)
             num_image_tokens = image_mask.sum()
             torch_compilable_check(
                 num_image_tokens == image_features.shape[0],
                 lambda: (
                     f"The prompt has {int(num_image_tokens)} image tokens, but the images take up "
-                    f"{image_features.shape[0]} tokens (`image_grid_hw`: {image_grid_hw})."
+                    f"{image_features.shape[0]} tokens (`image_grid_thw`: {image_grid_thw})."
                 ),
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask.unsqueeze(-1), image_features)
@@ -1700,7 +1727,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        image_grid_hw: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
@@ -1713,8 +1740,8 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`, *optional*):
             The flattened patches of all the images in the batch, one image after the other.
-        image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
-            The height and width of each image's patch grid.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal size, height and width of each image's patch grid. The temporal size is always 1.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1723,7 +1750,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            image_grid_hw=image_grid_hw,
+            image_grid_thw=image_grid_thw,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
@@ -1755,7 +1782,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         cache=None,
         inputs_embeds=None,
         pixel_values=None,
-        image_grid_hw=None,
+        image_grid_thw=None,
         attention_mask=None,
         is_first_iteration=False,
         **kwargs,
@@ -1771,7 +1798,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         # The images are merged into the prompt on the first step, and after that they are in the cache
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_grid_hw"] = image_grid_hw
+            model_inputs["image_grid_thw"] = image_grid_thw
         return model_inputs
 
 

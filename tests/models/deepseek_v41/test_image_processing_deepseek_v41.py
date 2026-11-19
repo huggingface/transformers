@@ -100,7 +100,7 @@ class DeepseekV41ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         pixels = np.random.randint(0, 256, (12, 18, 3), dtype=np.uint8)
         encoding = image_processor(Image.fromarray(pixels), return_tensors="pt")
 
-        self.assertEqual(encoding.image_grid_hw.tolist(), [[6, 9]])
+        self.assertEqual(encoding.image_grid_thw.tolist(), [[1, 6, 9]])
         self.assertEqual(tuple(encoding.pixel_values.shape), (54, 3 * 2 * 2))
         normalized = torch.from_numpy(pixels).permute(2, 0, 1).float() / 127.5 - 1.0
         torch.testing.assert_close(encoding.pixel_values[0], normalized[:, :2, :2].flatten())
@@ -113,7 +113,7 @@ class DeepseekV41ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         images = [Image.new("RGB", (18, 12)), Image.new("RGB", (7, 5)), Image.new("RGB", (100, 100))]
         encoding = image_processor(images, return_tensors="pt")
 
-        self.assertEqual(encoding.image_grid_hw.tolist(), [[6, 9], [3, 5], [15, 15]])
+        self.assertEqual(encoding.image_grid_thw.tolist(), [[1, 6, 9], [1, 3, 5], [1, 15, 15]])
         self.assertEqual(encoding.pixel_values.shape[0], 6 * 9 + 3 * 5 + 15 * 15)
 
     def test_padding_matches_original_preprocessing(self):
@@ -133,7 +133,7 @@ class DeepseekV41ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 expected = expected.reshape(3, rows, 2, columns, 2).permute(1, 3, 0, 2, 4).reshape(rows * columns, -1)
 
                 encoding = image_processor(image, return_tensors="pt")
-                self.assertEqual(encoding.image_grid_hw.tolist(), [[rows, columns]])
+                self.assertEqual(encoding.image_grid_thw.tolist(), [[1, rows, columns]])
                 torch.testing.assert_close(encoding.pixel_values, expected)
 
     def test_transparency_is_dropped(self):
@@ -152,7 +152,7 @@ class DeepseekV41ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         image = Image.new("RGB", (60, 10), (200, 50, 10))
         encoding = image_processor(image, return_tensors="pt")
 
-        self.assertEqual(encoding.image_grid_hw.tolist(), [[5, 10]])
+        self.assertEqual(encoding.image_grid_thw.tolist(), [[1, 5, 10]])
         expected_color = torch.tensor([200, 50, 10]).float() / 127.5 - 1.0
         expected = expected_color[:, None].expand(3, 4).flatten().expand(50, 12)
         torch.testing.assert_close(encoding.pixel_values, expected)
@@ -160,6 +160,6 @@ class DeepseekV41ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     def test_do_resize_false_needs_whole_patches(self):
         image_processor = self._get_image_processor()
         encoding = image_processor(Image.new("RGB", (18, 12)), do_resize=False, return_tensors="pt")
-        self.assertEqual(encoding.image_grid_hw.tolist(), [[6, 9]])
+        self.assertEqual(encoding.image_grid_thw.tolist(), [[1, 6, 9]])
         with self.assertRaisesRegex(ValueError, "multiples of the patch size"):
             image_processor(Image.new("RGB", (7, 5)), do_resize=False, return_tensors="pt")

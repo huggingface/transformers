@@ -14,12 +14,11 @@
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, DeepseekV41Processor, is_torch_available
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
-from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin
 from .test_modeling_deepseek_v41 import DeepseekV41ModelTester
 
 
@@ -34,8 +33,6 @@ if is_torch_available():
 @require_torchvision
 class DeepseekV41ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = DeepseekV41Processor
-    # The input with one row per image. `pixel_values` has one row per patch.
-    image_grid_input_name = "image_grid_hw"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -53,19 +50,6 @@ class DeepseekV41ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _image(height, width):
         return np.random.randint(0, 256, (height, width, 3), dtype=np.uint8)
 
-    @parameterized.expand([(1, "pt"), (2, "pt")])
-    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
-        # Same as the common test, except that it expects one entry per image in the image input. Here that is
-        # the grid sizes rather than `pixel_values`.
-        self._test_apply_chat_template(
-            "image",
-            batch_size,
-            return_tensors,
-            "image_grid_input_name",
-            "image_processor",
-            MODALITY_INPUT_DATA["images"],
-        )
-
     def test_image_placeholder_expansion(self):
         """Each placeholder is repeated once per position of its image: `rows * (columns + 1) + 2`."""
         processor = self.get_processor()
@@ -74,7 +58,7 @@ class DeepseekV41ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text = f"First {processor.image_token} then {processor.image_token}."
         inputs = processor(text=text, images=images, return_tensors="pt")
 
-        self.assertEqual(inputs["image_grid_hw"].tolist(), [[6, 9], [3, 5]])
+        self.assertEqual(inputs["image_grid_thw"].tolist(), [[1, 6, 9], [1, 3, 5]])
         self.assertEqual(inputs["pixel_values"].shape[0], 6 * 9 + 3 * 5)
         input_ids = inputs["input_ids"][0].tolist()
         self.assertEqual(input_ids.count(processor.image_token_id), (2 * (3 + 1) + 2) + (1 * (2 + 1) + 2))
@@ -103,7 +87,7 @@ class DeepseekV41ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         )
-        self.assertEqual(inputs["image_grid_hw"].tolist(), [[6, 9]])
+        self.assertEqual(inputs["image_grid_thw"].tolist(), [[1, 6, 9]])
         self.assertEqual(int((inputs["input_ids"] == processor.image_token_id).sum()), 10)
 
     def test_image_positions_match_the_model(self):
@@ -115,6 +99,6 @@ class DeepseekV41ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             with self.subTest(height=height, width=width):
                 inputs = processor(text=processor.image_token, images=self._image(height, width), return_tensors="pt")
                 with torch.no_grad():
-                    image_features = model.get_image_features(inputs["pixel_values"], inputs["image_grid_hw"])
+                    image_features = model.get_image_features(inputs["pixel_values"], inputs["image_grid_thw"])
                 num_positions = int((inputs["input_ids"] == processor.image_token_id).sum())
                 self.assertEqual(image_features.pooler_output[0].shape[0], num_positions)
