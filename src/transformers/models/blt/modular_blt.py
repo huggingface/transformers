@@ -926,11 +926,13 @@ class BltModel(BltPreTrainedModel):
 
         if use_cache:
             if cache is None:
-                cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+                cache = EncoderDecoderCache(
+                    DynamicCache(config=self.config.encoder_config), DynamicCache(config=self.config.decoder_config)
+                )
             elif not isinstance(cache, EncoderDecoderCache):
                 # BLT uses an encoder-decoder cache even though it is not en encoder-decoder model. Create a cross-cache
                 # if not yet created by the user
-                cache = EncoderDecoderCache(cache, DynamicCache(config=self.config))
+                cache = EncoderDecoderCache(cache, DynamicCache(config=self.config.decoder_config))
 
         # Extract input embeddings as early as possible
         if inputs_embeds is not None:
