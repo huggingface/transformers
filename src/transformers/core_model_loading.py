@@ -817,6 +817,7 @@ class Inkling2LoopDequantizeExperts(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
+        return self
 
 
 class Inkling2LoopMergeMessageQueries(ConversionOps):
