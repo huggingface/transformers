@@ -57,22 +57,12 @@ if is_torch_available():
     )
 
 
-# Four layers with one attention residual block each: a prelude (layer 0), a core of one sliding-window and one
-# full-attention layer (layers 1-2) that runs three times, and a coda (layer 3). Three passes, so that the last pass
-# reads the messages of the second pass, not of the first.
-LAYER_TYPES = ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"]
-LOOP_CONFIG = {"core_start": 1, "core_end": 3, "num_passes": 3, "gate_rank": 8}
-# hidden states are recorded at every layer visit: the 4 layers and 2 more passes through the 2 core layers
-NUM_LAYER_VISITS = len(LAYER_TYPES) + 2 * 2
-
-
 def check_loop_cache(test, batch_size, cache, seq_length, config, check_cache):
     """The cache has the layers of the physical decoder layers, then one per layer of every extra core pass, shaped like
     the cache layer of the same core layer."""
     text_config = config.get_text_config(decoder=True)
-    loop_config = text_config.loop_config
-    core = range(loop_config["core_start"], loop_config["core_end"])
-    pass_layers = [layer_idx for _ in range(loop_config["num_passes"] - 1) for layer_idx in core]
+    core = range(text_config.loop_layer_index_start, text_config.loop_layer_index_end)
+    pass_layers = [layer_idx for _ in range(text_config.loop_num_passes - 1) for layer_idx in core]
     test.assertEqual(len(cache), text_config.num_hidden_layers + len(pass_layers))
 
     physical_cache = copy.copy(cache)
@@ -95,11 +85,16 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.num_hidden_layers = len(LAYER_TYPES)
-        self.layer_types = LAYER_TYPES
+        self.num_hidden_layers = 4
+        self.layer_types = ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"]
         self.n_layers_per_attn_res_block = 1
-        self.loop_config = LOOP_CONFIG
-        self.expected_num_hidden_layers = NUM_LAYER_VISITS + 1
+        self.loop_layer_index_start = 1
+        self.loop_layer_index_end = 3
+        self.loop_num_passes = 3
+        self.loop_gate_rank = 8
+        # hidden states are recorded at every layer visit (4 layers + 2 more passes through the 2 loop layers) and
+        # for the embeddings
+        self.expected_num_hidden_layers = 4 + 2 * 2 + 1
         self.swa_num_attention_heads = self.num_attention_heads
         self.swa_num_key_value_heads = self.num_key_value_heads
         self.swa_head_dim = self.head_dim
@@ -150,11 +145,14 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("posemb_grid_size", 4)
         kwargs.setdefault("projection_hidden_dim", 32)
-        kwargs.setdefault("text_num_hidden_layers", len(LAYER_TYPES))
-        kwargs.setdefault("expected_num_hidden_layers", NUM_LAYER_VISITS + 1)
-        kwargs.setdefault("layer_types", LAYER_TYPES)
+        kwargs.setdefault("text_num_hidden_layers", 4)
+        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"])
         kwargs.setdefault("n_layers_per_attn_res_block", 1)
-        kwargs.setdefault("loop_config", LOOP_CONFIG)
+        kwargs.setdefault("loop_layer_index_start", 1)
+        kwargs.setdefault("loop_layer_index_end", 3)
+        kwargs.setdefault("loop_num_passes", 3)
+        kwargs.setdefault("loop_gate_rank", 8)
+        kwargs.setdefault("expected_num_hidden_layers", 4 + 2 * 2 + 1)
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("n_routed_experts", 8)
         kwargs.setdefault("swa_num_attention_heads", 2)
