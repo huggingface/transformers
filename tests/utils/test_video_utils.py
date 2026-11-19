@@ -407,6 +407,33 @@ class LoadVideoTester(unittest.TestCase):
         with self.assertRaisesRegex(ImportError, "torchcodec"):
             load_video(video_file_path, backend="torchvision")
 
+    @require_cv2
+    def test_load_video_custom_sampling_preserves_indices(self):
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        reference_indices = np.array([0, 40, 120])
+        for backend in ["pyav", "opencv"]:
+            reference, _ = load_video(
+                video_file_path, backend=backend, sample_indices_fn=lambda metadata: reference_indices
+            )
+            for indices in [
+                np.array([0, 40, 120]),
+                np.array([0, 0, 40, 40, 120, 120]),
+                np.array([120, 40]),
+                np.array([120, 0, 120, 40]),
+                np.array([0, 40, 999]),
+            ]:
+                with self.subTest(backend=backend, indices=indices):
+                    video, metadata = load_video(
+                        video_file_path, backend=backend, sample_indices_fn=lambda metadata: indices
+                    )
+                    available_indices = indices[(indices >= 0) & (indices < metadata.total_num_frames)]
+                    np.testing.assert_array_equal(
+                        video, reference[np.searchsorted(reference_indices, available_indices)]
+                    )
+                    np.testing.assert_array_equal(metadata.frames_indices, indices)
+
     def test_load_video_num_frames(self):
         video, _ = load_video(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
