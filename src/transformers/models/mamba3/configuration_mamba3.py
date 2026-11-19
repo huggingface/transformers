@@ -76,7 +76,6 @@ class Mamba3Config(PreTrainedConfig):
     chunk_size: int = 64
     tie_word_embeddings: bool = True
     intermediate_size: int = 1536
-    mlp_bias: bool = False
     rope_fraction: float = 0.5
     a_floor: float = 1e-4
     # Cached recurrent states per layer: angle, ssm, k and v

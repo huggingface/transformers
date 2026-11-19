@@ -60,9 +60,9 @@ class Mamba3MLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -102,13 +102,19 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
 def apply_rotary_pairs(tensor: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-    """Rotates interleaved pairs `(x[2i], x[2i+1])`; pairs beyond `cos.shape[-1]` are left untouched."""
-    num_rotated = cos.shape[-1]
-    pairs = tensor.unflatten(-1, (-1, 2))
-    x0, x1 = pairs[..., :num_rotated, 0], pairs[..., :num_rotated, 1]
-    rotated = torch.stack([x0 * cos - x1 * sin, x0 * sin + x1 * cos], dim=-1)
-    return torch.cat([rotated, pairs[..., num_rotated:, :]], dim=-2).flatten(-2)
+    """Interleaved partial rope: rotates pairs `(x[2i], x[2i+1])` for `i < cos.shape[-1]`, the rest passes through."""
+    cos, sin = cos.repeat_interleave(2, dim=-1), sin.repeat_interleave(2, dim=-1)
+    rotary_dim = cos.shape[-1]
+    rotated = tensor[..., :rotary_dim] * cos + rotate_half(tensor[..., :rotary_dim]) * sin
+    return torch.cat([rotated, tensor[..., rotary_dim:]], dim=-1)
 
 
 @use_kernel_func_from_hub_with_fallback("mamba3_siso_combined", "mamba_ssm")
@@ -172,21 +178,23 @@ def mamba3_siso_combined(
         decay = torch.exp(segment_sum(adt))
         weights = decay * (current[..., None, :] + deferred[..., None, :] * strictly_causal)
 
-        scores = torch.einsum("bthn,bshn->bhts", q, k) * weights
-        out = torch.einsum("bhts,bshp->bthp", scores, v)
+        scores = (q.transpose(1, 2) @ k.permute(0, 2, 3, 1)) * weights
+        out = (scores @ v.transpose(1, 2)).transpose(1, 2)
 
         # Contribution of the carried state, including the deferred term of the previous chunk's last token
         ssm_state = (
             ssm_state + v_state[..., None] * k_state[..., None, :] * ((1 - tr[..., 0]) * dt[..., 0])[..., None, None]
         )
         adt_cumsum = adt.cumsum(dim=-1)
-        out = out + torch.einsum("bhpn,bthn,bht->bthp", ssm_state, q, adt_cumsum.exp())
+        state_out = (q.transpose(1, 2) @ ssm_state.transpose(-1, -2)) * adt_cumsum.exp()[..., None]
+        out = out + state_out.transpose(1, 2)
         outputs.append(out)
 
         decay_to_end = torch.exp(adt_cumsum[..., -1:] - adt_cumsum) * (current + deferred)
-        ssm_state = ssm_state * adt_cumsum[..., -1, None, None].exp() + torch.einsum(
-            "bshn,bshp,bhs->bhpn", k, v, decay_to_end
-        )
+        weighted_values = v.transpose(1, 2) * decay_to_end[..., None]
+        ssm_state = ssm_state * adt_cumsum[..., -1, None, None].exp() + weighted_values.transpose(
+            -1, -2
+        ) @ k.transpose(1, 2)
         k_state, v_state = k[:, -1], v[:, -1]
 
     out = torch.cat(outputs, dim=1)
@@ -230,10 +238,11 @@ class Mamba3Mixer(nn.Module):
         )
         self.in_proj = nn.Linear(self.hidden_size, projection_size, bias=False)
         self.dt_bias = nn.Parameter(torch.empty(self.num_heads))
-        self.B_bias = nn.Parameter(torch.ones(self.num_heads, self.ssm_state_size))
-        self.C_bias = nn.Parameter(torch.ones(self.num_heads, self.ssm_state_size))
-        self.B_norm = Mamba3RMSNorm(self.ssm_state_size, eps=1e-5)
-        self.C_norm = Mamba3RMSNorm(self.ssm_state_size, eps=1e-5)
+        # (num_heads, mimo_rank=1, state_size), the original layout
+        self.B_bias = nn.Parameter(torch.ones(self.num_heads, 1, self.ssm_state_size))
+        self.C_bias = nn.Parameter(torch.ones(self.num_heads, 1, self.ssm_state_size))
+        self.B_norm = Mamba3RMSNorm(self.ssm_state_size, eps=config.layer_norm_epsilon)
+        self.C_norm = Mamba3RMSNorm(self.ssm_state_size, eps=config.layer_norm_epsilon)
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
@@ -283,8 +292,8 @@ class Mamba3Mixer(nn.Module):
             ADT=(A * dt).transpose(1, 2),
             DT=dt.transpose(1, 2),
             Trap=trap.transpose(1, 2),
-            Q_bias=self.C_bias,
-            K_bias=self.B_bias,
+            Q_bias=self.C_bias.squeeze(1),
+            K_bias=self.B_bias.squeeze(1),
             Angles=angles,
             D=self.D,
             Z=gate,

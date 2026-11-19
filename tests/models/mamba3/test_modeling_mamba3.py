@@ -86,6 +86,9 @@ class Mamba3IntegrationTest(unittest.TestCase):
     def test_greedy_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = Mamba3ForCausalLM.from_pretrained(self.model_id, dtype=torch.float32).to(torch_device)
-        inputs = tokenizer("The capital of France is", return_tensors="pt").to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=10, do_sample=False)
-        self.assertIsNotNone(tokenizer.decode(output[0]))
+        inputs = tokenizer("The capital of France is Paris. The capital of Germany is", return_tensors="pt").to(
+            torch_device
+        )
+        output = model.generate(**inputs, max_new_tokens=15, do_sample=False)
+        expected = "<|begin_of_text|>The capital of France is Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid"
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=False), expected)

@@ -16,7 +16,6 @@
 import argparse
 import json
 
-import torch
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoTokenizer, Mamba3Config, Mamba3ForCausalLM
@@ -51,22 +50,6 @@ def convert_config(ssm_config: dict) -> Mamba3Config:
     )
 
 
-def convert_state_dict(state_dict: dict) -> dict:
-    converted = {}
-    for key, value in state_dict.items():
-        key = key.replace("backbone.embedding.", "backbone.embeddings.").replace(".norm2.", ".mlp_norm.")
-        if key.endswith(("mixer.B_bias", "mixer.C_bias")):
-            value = value.squeeze(1)  # (num_heads, mimo_rank=1, state_size)
-        if key.endswith("mlp.fc1.weight"):
-            # `mamba_ssm.GatedMLP` computes `y * silu(gate)` with `y, gate = fc1(x).chunk(2)`
-            up, gate = value.chunk(2, dim=0)
-            converted[key.replace("fc1", "up_proj")] = up
-            converted[key.replace("fc1", "gate_proj")] = gate
-            continue
-        converted[key.replace("mlp.fc2.", "mlp.down_proj.")] = value
-    return converted
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo_id", default="state-spaces/mamba3-siso-187m")
@@ -77,13 +60,10 @@ def main():
 
     with open(hf_hub_download(args.repo_id, "config.json"), encoding="utf-8") as f:
         config = convert_config(json.load(f))
-    state_dict = torch.load(hf_hub_download(args.repo_id, "pytorch_model.bin"), map_location="cpu", weights_only=True)
-
-    model = Mamba3ForCausalLM(config)
-    missing, unexpected = model.load_state_dict(convert_state_dict(state_dict), strict=False)
-    missing = [key for key in missing if not (config.tie_word_embeddings and key == "lm_head.weight")]
-    if missing or unexpected:
-        raise ValueError(f"Missing keys: {missing}\nUnexpected keys: {unexpected}")
+    # Weight renames live in `conversion_mapping.py`, only the config needs translating
+    model, info = Mamba3ForCausalLM.from_pretrained(args.repo_id, config=config, output_loading_info=True)
+    if info["missing_keys"] or info["unexpected_keys"]:
+        raise ValueError(f"Missing keys: {info['missing_keys']}\nUnexpected keys: {info['unexpected_keys']}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_id)
     model.save_pretrained(args.output_dir)

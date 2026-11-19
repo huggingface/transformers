@@ -1311,6 +1311,15 @@ def _build_checkpoint_conversion_mapping():
                 "text_model.layers.",
             ),
         ],
+        "mamba3": [
+            WeightRenaming(r"embedding\.", r"embeddings."),
+            WeightRenaming(r"\.norm2\.", r".mlp_norm."),
+            # `mamba_ssm.GatedMLP` computes `up * silu(gate)` with `up, gate = fc1(x).chunk(2)`
+            WeightConverter(
+                source_patterns="mlp.fc1", target_patterns=["mlp.up_proj", "mlp.gate_proj"], operations=[Chunk(dim=0)]
+            ),
+            WeightRenaming(r"mlp\.fc2\.", r"mlp.down_proj."),
+        ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightConverter(

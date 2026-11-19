@@ -27,11 +27,10 @@ Only the SISO variant is supported. The original checkpoints are under the
 used when installed, otherwise a PyTorch implementation runs.
 
 ```py
-import torch
 from transformers import AutoTokenizer, Mamba3ForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/mamba3-siso-187m")
-model = Mamba3ForCausalLM.from_pretrained("hf-internal-testing/mamba3-siso-187m", dtype=torch.bfloat16, device_map="auto")
+model = Mamba3ForCausalLM.from_pretrained("hf-internal-testing/mamba3-siso-187m")
 inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=20)[0]))
 ```
