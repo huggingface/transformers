@@ -273,7 +273,8 @@ class MiniCPMV2_5Resampler(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.text_config.hidden_size
-        self.num_heads = self.embed_dim // 128
+        # 128-dim heads like the original (32 heads at 4096); configs narrower than 128 get a single head
+        self.num_heads = max(self.embed_dim // 128, 1)
         self.head_dim = self.embed_dim // self.num_heads
         self.scaling = self.head_dim**-0.5
         self.is_causal = False

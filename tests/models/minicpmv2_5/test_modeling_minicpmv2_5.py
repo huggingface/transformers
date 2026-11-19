@@ -85,6 +85,17 @@ class MiniCPMV2_5ModelTest(VLMModelTest, unittest.TestCase):
         # As in llava, the base model has no `model.` prefix to reverse the `^llm\.model\.` rename onto
         super().test_reverse_loading_mapping(skip_base_model=True)
 
+    def test_resampler_narrow_hidden_size(self):
+        # The resampler uses 128-dim heads; a text model narrower than 128 (e.g. tiny test fixtures) gets one head.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.hidden_size = 64
+        resampler = MiniCPMV2_5Model(config).resampler.to(torch_device)
+        self.assertEqual((resampler.num_heads, resampler.head_dim), (1, 64))
+        vision_features = torch.randn(2, 16, config.vision_config.hidden_size, device=torch_device)
+        mask = inputs_dict["patch_attention_mask"]
+        output = resampler(vision_features, mask, inputs_dict["patch_position_ids"])
+        self.assertEqual(tuple(output.shape), (2, config.query_num, 64))
+
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict = {
