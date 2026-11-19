@@ -254,78 +254,50 @@ class Gemma3nTextModelTester(CausalLMModelTester):
         base_model_class = Gemma3nTextModel
         causal_lm_class = Gemma3nForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        vocab_size_per_layer_input=99,
-        hidden_size=16,
-        hidden_size_per_layer_input=16,
-        num_hidden_layers=4,  # override to correctly test sharing cache pattern
-        num_kv_shared_layers=2,  # important to override
-        layer_types=[
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "vocab_size_per_layer_input": 99,
+        "hidden_size": 16,
+        "hidden_size_per_layer_input": 16,
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": [
             "full_attention",
             "sliding_attention",
             "full_attention",
             "sliding_attention",
-        ],  # similarly we want to test sharing on both types
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        altup_num_inputs=2,
-        intermediate_size=22,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        is_decoder=False,
-    ):
-        self._verify_and_infer_model_attributes()
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.vocab_size_per_layer_input = vocab_size_per_layer_input
-        self.hidden_size = hidden_size
-        self.hidden_size_per_layer_input = hidden_size_per_layer_input
-        self.num_hidden_layers = num_hidden_layers
-        self.num_kv_shared_layers = num_kv_shared_layers
-        self.layer_types = layer_types
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.altup_num_inputs = altup_num_inputs
-        self.intermediate_size = intermediate_size
-        self.hidden_activation = hidden_activation
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.is_decoder = is_decoder
+        ],
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "altup_num_inputs": 2,
+        "intermediate_size": 22,
+        "hidden_activation": "gelu_pytorch_tanh",
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "is_decoder": False,
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
+        "attention_probs_dropout_prob": 0.0,
+    }
 
 
 @require_torch
@@ -466,7 +438,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
+                "return_dict_in_generate": True,  # Required to return `cache`
             }
 
             text_config = model.config.get_text_config()
@@ -487,9 +459,9 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             # -1 because the last generated token isn't yet in the cache.
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
-            self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
-            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+            self.assertIsInstance(outputs.cache, StaticCache)
+            self.assertEqual(len(outputs.cache), num_hidden_layers)
+            self.assertListEqual(list(outputs.cache.layers[0].keys.shape), cache_shape)
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -526,7 +498,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
-                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "return_dict_in_generate": True,  # Required to return `cache`
                     "output_scores": True,
                     "use_cache": True,
                 }
@@ -549,9 +521,9 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 )
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
-                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
-                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+                self.assertTrue(isinstance(static_cache_generation.cache, StaticCache))
+                self.assertTrue(len(static_cache_generation.cache) == num_hidden_layers)
+                self.assertTrue(static_cache_generation.cache.layers[0].keys.shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)

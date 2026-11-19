@@ -25,6 +25,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_liquid_codec import *
+    from .feature_extraction_liquid_codec import *
     from .modeling_liquid_codec import *
 else:
     import sys

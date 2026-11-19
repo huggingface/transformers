@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,20 +27,99 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring, can_return_tuple
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_tracing
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..auto import AutoModel
-from .configuration_liquid_codec import LiquidCodecConfig
+from .configuration_liquid_codec import LiquidCodecConfig, LiquidCodecDecoderConfig, LiquidCodecEncoderConfig
 
 
 class LiquidCodecOverlapAddCache:
-    """Overlap-add numerator and window-envelope denominator of the last `win_length - hop_length` samples."""
+    """
+    Overlap-add cache of [`LiquidCodecISTFTHead`] for streaming decode: holds back the last `n_fft - hop_length`
+    samples of a chunk until the next one completes them. [`~LiquidCodecOverlapAddCache.flush`] ends the stream.
+    """
 
-    def __init__(self):
+    def __init__(self, n_fft: int, hop_length: int):
+        self.overlap = n_fft - hop_length
+        self.padding = self.overlap // 2
+        self.reset()
+
+    def reset(self):
         self.audio: torch.Tensor | None = None
         self.envelope: torch.Tensor | None = None
+        self.mask: torch.Tensor | None = None
+        self.has_mask = False
+        self.num_samples_to_trim = self.padding
+
+    @staticmethod
+    def normalize(audio: torch.Tensor, window_envelope: torch.Tensor, samples_mask: torch.Tensor) -> torch.Tensor:
+        # Clamp as expected by original: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_decoder_vocos.py#L82
+        return audio / window_envelope.clamp(min=1e-11) * samples_mask
+
+    def update(
+        self, audio: torch.Tensor, window_envelope: torch.Tensor, samples_mask: torch.Tensor, has_mask: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Adds the cached tail, caches the new one; returns the final samples with their envelope and mask."""
+        if self.audio is not None:
+            audio = torch.cat([audio[:, : self.overlap] + self.audio, audio[:, self.overlap :]], dim=1)
+            window_envelope = torch.cat(
+                [window_envelope[:, : self.overlap] + self.envelope, window_envelope[:, self.overlap :]], dim=1
+            )
+            samples_mask = torch.cat(
+                [samples_mask[:, : self.overlap] | self.mask, samples_mask[:, self.overlap :]], dim=1
+            )
+
+        self.audio, self.envelope = audio[:, -self.overlap :], window_envelope[:, -self.overlap :]
+        self.mask = samples_mask[:, -self.overlap :]
+        self.has_mask = self.has_mask or has_mask
+        audio, window_envelope = audio[:, : -self.overlap], window_envelope[:, : -self.overlap]
+        samples_mask = samples_mask[:, : -self.overlap]
+
+        # "same" padding: the first `padding` samples of the stream are dropped
+        num_trimmed = min(self.num_samples_to_trim, audio.shape[1])
+        self.num_samples_to_trim -= num_trimmed
+        return audio[:, num_trimmed:], window_envelope[:, num_trimmed:], samples_mask[:, num_trimmed:]
+
+    def flush(self) -> "LiquidCodecDecoderOutput":
+        """Ends the stream: last samples (with their mask if the stream had one), then resets the cache."""
+        if self.audio is None:
+            raise ValueError("Nothing to flush: no chunk was decoded since the cache was created or last flushed.")
+
+        audio = self.audio[:, self.num_samples_to_trim : -self.padding]
+        window_envelope = self.envelope[:, self.num_samples_to_trim : -self.padding]
+        samples_mask = self.mask[:, self.num_samples_to_trim : -self.padding]
+        has_mask = self.has_mask
+
+        self.reset()
+        return LiquidCodecDecoderOutput(
+            audio_values=self.normalize(audio, window_envelope, samples_mask),
+            audio_values_mask=samples_mask if has_mask else None,
+        )
+
+
+@auto_docstring
+@dataclass
+class LiquidCodecEncoderModelOutput(ModelOutput):
+    r"""
+    latents (`torch.FloatTensor` of shape `(batch_size, quantization_dim, num_frames)`):
+        Latents given to the quantizer, one per codec frame.
+    latents_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
+    `input_features_mask`):
+        Valid frames of each clip.
+    """
+
+    latents: torch.FloatTensor | None = None
+    latents_mask: torch.BoolTensor | None = None
 
 
 @auto_docstring
@@ -46,10 +127,14 @@ class LiquidCodecOverlapAddCache:
 class LiquidCodecEncoderOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, num_frames)`):
-        The code of every codebook of every frame.
+        Codes, per codebook and frame.
+    audio_codes_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
+    `input_features_mask`):
+        Valid frames of each clip.
     """
 
-    audio_codes: torch.LongTensor = None
+    audio_codes: torch.LongTensor | None = None
+    audio_codes_mask: torch.BoolTensor | None = None
 
 
 @auto_docstring
@@ -57,16 +142,20 @@ class LiquidCodecEncoderOutput(ModelOutput):
 class LiquidCodecDecoderOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
-        The decoded 24 kHz audio in float32.
-    decoder_past_key_values (`Cache`, *optional*, returned when streaming):
-        The decoder LFM3 cache to pass to the next chunk of the stream.
-    overlap_cache ([`LiquidCodecOverlapAddCache`], *optional*, returned when streaming):
-        The unfinished overlap-add tail to pass to the next chunk of the stream.
+        Decoded audio, float32, at the codec's `sampling_rate`.
+    audio_values_mask (`torch.BoolTensor` of shape `(batch_size, num_samples)`, *optional*, returned with an
+    `audio_codes_mask`):
+        Samples decoded from the valid frames of each clip.
+    decoder_cache (`Cache`, *optional*, returned when streaming):
+        Decoder cache, to pass with the next chunk.
+    overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*, returned when streaming):
+        Overlap-add cache, to pass with the next chunk; `flush()` ends the stream.
     """
 
-    audio_values: torch.FloatTensor = None
-    decoder_past_key_values: Cache | None = None
-    overlap_cache: LiquidCodecOverlapAddCache | None = None
+    audio_values: torch.FloatTensor | None = None
+    audio_values_mask: torch.BoolTensor | None = None
+    decoder_cache: Cache | None = None
+    overlap_add_cache: LiquidCodecOverlapAddCache | None = None
 
 
 @auto_docstring
@@ -74,63 +163,49 @@ class LiquidCodecDecoderOutput(ModelOutput):
 class LiquidCodecOutput(ModelOutput):
     r"""
     audio_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
-        The reconstructed audio, cut to the input length.
+        Reconstructed audio.
+    audio_values_mask (`torch.BoolTensor` of shape `(batch_size, num_samples)`, *optional*, returned with an
+    `input_features_mask`):
+        Samples decoded from the valid frames of each clip.
     audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, num_frames)`):
-        The code of every codebook of every frame.
+        Codes, per codebook and frame.
+    audio_codes_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
+    `input_features_mask`):
+        Valid frames of each clip.
     """
 
-    audio_values: torch.FloatTensor = None
-    audio_codes: torch.LongTensor = None
+    audio_values: torch.FloatTensor | None = None
+    audio_values_mask: torch.BoolTensor | None = None
+    audio_codes: torch.LongTensor | None = None
+    audio_codes_mask: torch.BoolTensor | None = None
 
 
-class LiquidCodecSTFT(nn.Module):
-    def __init__(self, config: LiquidCodecConfig):
+class LiquidCodecEncoderEmbedder(nn.Module):
+    def __init__(self, config: LiquidCodecEncoderConfig):
         super().__init__()
-        self.n_fft = config.stft_n_fft
-        self.hop_length = config.stft_hop_length
-        self.win_length = config.stft_win_length
-        self.window = nn.Buffer(torch.hann_window(self.win_length, dtype=torch.float32), persistent=False)
-        self.num_features = 3 * (self.n_fft // 2 + 1)
-
-    def forward(self, audio: torch.Tensor) -> torch.Tensor:
-        total_pad = self.win_length - self.hop_length
-        audio = F.pad(audio.float(), (total_pad // 2, total_pad - total_pad // 2), mode="reflect")
-        spec = torch.stft(
-            audio,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            window=self.window.float(),
-            center=False,
-            return_complex=True,
+        # 3 features per frequency bin: log-magnitude, cos(phase), sin(phase)
+        self.in_proj = nn.Conv1d(3 * (config.n_fft // 2 + 1), config.embedder_hidden_size, kernel_size=1)
+        # causal: left-pad 2, right padding cut
+        self.conv = nn.Conv1d(config.embedder_hidden_size, config.embedder_hidden_size, kernel_size=3, padding=2)
+        self.out_proj = nn.Conv1d(
+            config.embedder_hidden_size, config.hidden_size, kernel_size=config.frame_stack, stride=config.frame_stack
         )
-        magnitude = spec.abs()
-        phase_denominator = magnitude.clamp_min(1e-5)
-        return torch.cat((torch.log1p(magnitude), spec.real / phase_denominator, spec.imag / phase_denominator), dim=1)
+        self.act = ACT2FN[config.embedder_hidden_act]
 
-
-class LiquidCodecFrontEnd(nn.Module):
-    def __init__(self, config: LiquidCodecConfig, num_features: int):
-        super().__init__()
-        self.frame_stack = config.stft_frame_stack
-        self.in_proj = nn.Conv1d(num_features, config.encoder_conv_dim, kernel_size=1)
-        self.conv = nn.Conv1d(config.encoder_conv_dim, config.encoder_conv_dim, kernel_size=3, padding=2)
-        self.out = nn.Conv1d(
-            config.encoder_conv_dim,
-            config.encoder_config.hidden_size,
-            kernel_size=self.frame_stack,
-            stride=self.frame_stack,
-        )
-        self.act = nn.SiLU()
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.act(self.in_proj(features.to(self.in_proj.weight.dtype)))
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.act(self.in_proj(input_features))
         hidden_states = self.act(self.conv(hidden_states)[:, :, : hidden_states.shape[-1]])
-        return self.out(hidden_states)
+        return self.out_proj(hidden_states).transpose(1, 2)
 
 
 class LiquidCodecFiniteScalarQuantization(nn.Module):
-    """Xcodec2's finite scalar quantization over `n_q` codebooks, with the latent projected to their width and back."""
+    """
+    Finite Scalar Quantization (FSQ) module that quantizes continuous latent representations into discrete codes.
+    Original code: https://github.com/lucidrains/vector-quantize-pytorch/blob/353d46027888dfb140c3c65a67a7356f1492d71d/vector_quantize_pytorch/finite_scalar_quantization.py#L64
+
+    Original modeling uses `ResidualFSQ` with a single quantizer: https://huggingface.co/HKUSTAudio/liquid_codec/blob/main/vq/codec_decoder_vocos.py#L389
+    But we can directly use FSQ since a main feature of LiquidCodec is that it uses a single codebook.
+    """
 
     def __init__(self, config: LiquidCodecConfig):
         super().__init__()
@@ -139,10 +214,6 @@ class LiquidCodecFiniteScalarQuantization(nn.Module):
         self.levels = nn.Buffer(levels, persistent=False)
         self.basis = nn.Buffer(basis, persistent=False)
         self.codebook = nn.Buffer(codebook, persistent=False)
-        self.num_codebooks = config.n_q
-        self.codebook_dim = len(self.quantization_levels)
-        self.project_in = nn.Linear(config.quantizer_dim, self.num_codebooks * self.codebook_dim)
-        self.project_out = nn.Linear(self.num_codebooks * self.codebook_dim, config.quantizer_dim)
 
     def _compute_buffers(self, device=None):
         """Compute the levels, basis, and codebook buffers for the FSQ quantizer."""
@@ -205,188 +276,910 @@ class LiquidCodecFiniteScalarQuantization(nn.Module):
             indices = (code_scaled * self.basis).sum(dim=-1).to(torch.int32)
         return codes.to(original_dtype), indices
 
+
+class LiquidCodecQuantizer(nn.Module):
+    def __init__(self, config: LiquidCodecConfig):
+        super().__init__()
+        self.num_codebooks = config.num_quantizers
+        self.codebook_dim = len(config.quantization_levels)
+
+        self.quantizer = LiquidCodecFiniteScalarQuantization(config)
+        self.project_in = nn.Linear(config.quantization_dim, self.num_codebooks * self.codebook_dim)
+        self.project_out = nn.Linear(self.num_codebooks * self.codebook_dim, config.quantization_dim)
+
+    def _to_weight_device(self, tensor: torch.Tensor) -> torch.Tensor:
+        # not `forward`: no `device_map` hook moves the inputs; an offloaded weight is on `meta` until its hook runs
+        weight = self.project_in.weight
+        device = weight.device if weight.device.type != "meta" else tensor.device
+        return tensor.to(device, weight.dtype) if tensor.is_floating_point() else tensor.to(device)
+
     def encode(self, latents: torch.Tensor) -> torch.Tensor:
-        latents = self.project_in(latents.movedim(1, -1).contiguous())
-        _, indices = self(latents.reshape(*latents.shape[:-1], self.num_codebooks, self.codebook_dim))
+        latents = self.project_in(self._to_weight_device(latents.movedim(1, -1)).contiguous())
+
+        _, indices = self.quantizer(latents.reshape(*latents.shape[:-1], self.num_codebooks, self.codebook_dim))
         return indices.long().transpose(1, 2)
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
-        latents = self.codebook[codes.transpose(1, 2)]
+        # from integer levels: half precision rounds the `codebook` buffer
+        codes = self._to_weight_device(codes)
+        latents = self.quantizer._indices_to_codes(codes.transpose(1, 2)).to(self.project_out.weight.dtype)
         latents = latents.reshape(*latents.shape[:-2], self.num_codebooks * self.codebook_dim)
+
         return self.project_out(latents).movedim(-1, 1)
 
 
-class LiquidCodecISTFT(nn.Module):
-    def __init__(self, config: LiquidCodecConfig):
+class LiquidCodecISTFTHead(nn.Module):
+    """
+    Head for converting decoder outputs to waveform via STFT projection and ISTFT.
+
+    Uses custom "same" padding ISTFT from Vocos:
+    https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/spectral_ops.py#L47
+    """
+
+    def __init__(self, config: LiquidCodecDecoderConfig):
         super().__init__()
-        self.n_fft = config.stft_n_fft
-        self.hop_length = config.stft_hop_length
-        self.win_length = config.stft_win_length
-        self.window = nn.Buffer(torch.hann_window(self.win_length, dtype=torch.float32))
-        # samples a frame shares with its neighbours: trimmed at both ends of a clip, held back between chunks
-        self.overlap = self.win_length - self.hop_length
-
-    def forward(
-        self, spec: torch.Tensor, overlap_cache: LiquidCodecOverlapAddCache | None = None, finalize: bool = True
-    ) -> torch.Tensor:
-        batch_size, num_frames = spec.shape[0], spec.shape[-1]
-        trim = self.overlap // 2
-        if num_frames:
-            frames = torch.fft.irfft(spec, self.n_fft, dim=1, norm="backward") * self.window[None, :, None]
-            output_size = (num_frames - 1) * self.hop_length + self.win_length
-            fold = {
-                "output_size": (1, output_size),
-                "kernel_size": (1, self.win_length),
-                "stride": (1, self.hop_length),
-            }
-            audio = F.fold(frames, **fold)[:, 0, 0]
-            envelope = F.fold(self.window.square().expand(1, num_frames, -1).transpose(1, 2), **fold)[0, 0, 0]
-        elif overlap_cache is None or overlap_cache.audio is None or not finalize:
-            return self.window.new_zeros((batch_size, 0))
-        else:
-            # the final flush of a stream: only the held-back tail is left to release
-            audio, envelope = self.window.new_zeros((batch_size, self.overlap)), self.window.new_zeros(self.overlap)
-        if overlap_cache is None:
-            audio, envelope = audio[:, trim:-trim], envelope[trim:-trim]
-        else:
-            if overlap_cache.audio is None:
-                audio, envelope = audio[:, trim:], envelope[trim:]
-            else:
-                audio = torch.cat([audio[:, : self.overlap] + overlap_cache.audio, audio[:, self.overlap :]], dim=1)
-                envelope = torch.cat([envelope[: self.overlap] + overlap_cache.envelope, envelope[self.overlap :]])
-            if finalize:
-                audio, envelope = audio[:, :-trim], envelope[:-trim]
-                overlap_cache.audio, overlap_cache.envelope = None, None
-            else:
-                overlap_cache.audio, overlap_cache.envelope = audio[:, -self.overlap :], envelope[-self.overlap :]
-                audio, envelope = audio[:, : -self.overlap], envelope[: -self.overlap]
-        return audio / envelope
-
-
-class LiquidCodecDecoder(nn.Module):
-    def __init__(self, config: LiquidCodecConfig):
-        super().__init__()
-        self.frame_stack = config.stft_frame_stack
-        self.lfm = AutoModel.from_config(config.decoder_config)
-        self.lin = nn.Linear(config.decoder_config.hidden_size, 2 * (config.stft_n_fft // 2 + 1))
-        self.istft = LiquidCodecISTFT(config)
+        self.linear = nn.Linear(config.hidden_size, config.n_fft + 2)
+        self.n_fft = config.n_fft
+        self.hop_length = config.hop_length
+        self.padding = (self.n_fft - self.hop_length) // 2
+        window = torch.hann_window(config.n_fft, dtype=torch.float32)
+        self.window = nn.Buffer(window)
 
     def forward(
         self,
-        embeddings: torch.Tensor,
-        past_key_values: Cache | None = None,
-        overlap_cache: LiquidCodecOverlapAddCache | None = None,
-        finalize: bool = True,
-    ) -> torch.Tensor:
-        if embeddings.shape[1]:
-            hidden_states = self.lfm(
-                inputs_embeds=F.interpolate(
-                    embeddings.mT, embeddings.shape[1] * self.frame_stack, mode="nearest-exact"
-                ).mT,
-                past_key_values=past_key_values,
-                use_cache=past_key_values is not None,
-            ).last_hidden_state
-            log_magnitude, angle = torch.chunk(self.lin(hidden_states).mT.contiguous(), 2, 1)
-            spec = torch.polar(log_magnitude.float().exp(), angle.float())
+        hidden_states: torch.Tensor,
+        frames_mask: torch.Tensor | None = None,
+        overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        stft_pred = self.linear(hidden_states)
+        # Keep the frequency axis last for `torch.polar` compatibility with torch.compile
+        magnitude, phase = stft_pred.chunk(2, dim=-1)
+        # Cast to float32: complex exponential and irfft are not supported for fp16 (ComplexHalf)
+        magnitude = magnitude.float()
+        phase = phase.float()
+        # no clamp, unlike Xcodec2
+        magnitude = torch.exp(magnitude)
+        spectrogram_complex = torch.polar(magnitude, phase)
+
+        # Back to audio (ISTFT with manual "same" padding: torch.istft lacks a native same-padding mode,
+        # so we use irfft + fold with explicit pre-computed padding to replicate it)
+        time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=-1, norm="backward").transpose(1, 2)
+        time_frames = time_frames * self.window[None, :, None]
+        num_frames = spectrogram_complex.shape[1]
+
+        # per clip: own frames, own window envelope, as alone
+        has_mask = frames_mask is not None
+        if frames_mask is None:
+            frames_mask = self.window.new_ones((time_frames.shape[0], num_frames))
+        frames_mask = frames_mask.to(time_frames)
+        # a frame owns the `hop_length` samples at the center of its window
+        samples_mask = F.pad(frames_mask.bool().repeat_interleave(self.hop_length, dim=-1), (self.padding,) * 2)
+        frames_mask = frames_mask[:, None, :]
+        output_size = (num_frames - 1) * self.hop_length + self.n_fft
+        audio = F.fold(
+            time_frames * frames_mask,
+            output_size=(1, output_size),
+            kernel_size=(1, self.n_fft),
+            stride=(1, self.hop_length),
+        )[:, 0, 0]
+
+        # Normalize
+        window_envelope = F.fold(
+            self.window.square()[None, :, None] * frames_mask,
+            output_size=(1, output_size),
+            kernel_size=(1, self.n_fft),
+            stride=(1, self.hop_length),
+        )[:, 0, 0]
+
+        if overlap_add_cache is None:
+            audio = audio[:, self.padding : -self.padding]
+            window_envelope = window_envelope[:, self.padding : -self.padding]
+            samples_mask = samples_mask[:, self.padding : -self.padding]
         else:
-            spec = embeddings.new_zeros((embeddings.shape[0], self.lin.out_features // 2, 0), dtype=torch.complex64)
-        return self.istft(spec, overlap_cache, finalize)
+            audio, window_envelope, samples_mask = overlap_add_cache.update(
+                audio, window_envelope, samples_mask, has_mask=has_mask
+            )
+
+        return LiquidCodecOverlapAddCache.normalize(audio, window_envelope, samples_mask), samples_mask
 
 
-@auto_docstring(
-    custom_intro="The Liquid Codec neural audio codec: 24 kHz audio to 12 codebooks at 12.5 frames per second and back."
-)
-class LiquidCodecModel(PreTrainedAudioTokenizerBase):
+class LiquidCodecRotaryEmbedding(nn.Module):
+    def __init__(self, config: LiquidCodecConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        # diff -> only the attention layer types have a RoPE entry, `conv` layers have none
+        self.layer_types = [layer_type for layer_type in config._rope_type_labels if layer_type in config.layer_types]
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            self.rope_type[layer_type] = config.rope_parameters[layer_type]["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: LiquidCodecConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            layer_type (`str`):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
+
+    @dynamic_rope_update
+    def forward(self, x, position_ids, layer_type):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
+
+        # diff -> as the original: cos / sin rounded to the model dtype, rotation in float32
+        return cos.to(x.dtype).float(), sin.to(x.dtype).float()
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class LiquidCodecRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        LiquidCodecRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class LiquidCodecMLP(nn.Module):
+    def __init__(self, config: LiquidCodecConfig, intermediate_size: int | None = None):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+    def forward(self, x):
+        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    q_type, k_type = q.dtype, k.dtype
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed.to(q_type), k_embed.to(k_type)
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class LiquidCodecAttention(nn.Module):
+    """Qwen3 attention with RoPE in float32 and a sigmoid output gate per head."""
+
+    def __init__(self, config: LiquidCodecConfig, layer_idx: int):
+        super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = LiquidCodecRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = LiquidCodecRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.g_proj = (
+            nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
+            if config.use_attention_gate
+            else None
+        )
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+        if self.g_proj is not None:
+            attn_output = attn_output * torch.sigmoid(self.g_proj(hidden_states)).unsqueeze(-1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+class LiquidCodecShortConv(nn.Module):
+    def __init__(
+        self,
+        config: LiquidCodecConfig,
+        layer_idx: int,
+    ):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.conv_kernel_size = config.conv_L_cache
+        self.bias = config.conv_bias
+
+        self.conv = nn.Conv1d(
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
+            kernel_size=self.conv_kernel_size,
+            groups=config.hidden_size,
+            bias=self.bias,
+            padding=self.conv_kernel_size - 1,
+        )
+        self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
+
+        self.layer_type = config.layer_types[layer_idx]
+
+    @force_accelerate_hooks("conv")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        seq_len = hidden_states.shape[1]
+
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        BCx = self.in_proj(hidden_states).transpose(-1, -2)
+        B, C, x = BCx.chunk(3, dim=-2)
+        hidden_states = B * x
+
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
+
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
+            )
+        else:
+            if cache is not None:
+                hidden_states = cache.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
+
+            # Drop the additional previous states
+            if cache is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        y = C * hidden_states
+        y = y.transpose(-1, -2).contiguous()
+        y = self.out_proj(y)
+        return y
+
+
+class LiquidCodecDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: LiquidCodecConfig, layer_idx: int):
+        super().__init__()
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
+
+        if self.is_attention_layer:
+            self.self_attn = LiquidCodecAttention(config, layer_idx)
+        else:
+            self.conv = LiquidCodecShortConv(config, layer_idx)
+        self.feed_forward = LiquidCodecMLP(config)
+        self.operator_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.ffn_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.post_operator_norm = (
+            LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+        self.post_ffn_norm = (
+            LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        residual = hidden_states
+        if self.is_attention_layer:
+            hidden_states, _ = self.self_attn(
+                hidden_states=self.operator_norm(hidden_states),
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache=cache,
+                **kwargs,
+            )
+        else:
+            hidden_states = self.conv(
+                hidden_states=self.operator_norm(hidden_states),
+                cache=cache,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        hidden_states = self.post_operator_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.ffn_norm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_ffn_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+@auto_docstring
+class LiquidCodecPreTrainedModel(PreTrainedModel):
     config: LiquidCodecConfig
     base_model_prefix = "codec"
-    main_input_name = "input_values"
-    # the analysis window is a non-persistent buffer cast in the forward; only the synthesis window is a weight
-    _keep_in_fp32_modules_strict = ["istft"]
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LiquidCodecDecoderLayer"]
     _supports_flash_attn = False
     _supports_sdpa = True
+    _supports_flex_attn = True
 
-    def __init__(self, config: LiquidCodecConfig):
-        super().__init__(config)
-        self.stft = LiquidCodecSTFT(config)
-        self.frontend = LiquidCodecFrontEnd(config, self.stft.num_features)
-        self.encoder = AutoModel.from_config(config.encoder_config)
-        self.to_quantizer = nn.Linear(config.encoder_config.hidden_size, config.quantizer_dim)
-        self.quantizer = LiquidCodecFiniteScalarQuantization(config)
-        self.decoder = LiquidCodecDecoder(config)
-        self.from_quantizer = nn.Linear(config.quantizer_dim, config.decoder_config.hidden_size)
-        # the backbones only ever see `inputs_embeds`: their token embedding is not a codec weight
-        del self.encoder.embed_tokens, self.decoder.lfm.embed_tokens
-        self.post_init()
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": LiquidCodecDecoderLayer,
+        "attentions": LiquidCodecAttention,
+    }
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    # the synthesis window loses precision in half precision
+    _keep_in_fp32_modules_strict = ["head.window"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, (LiquidCodecSTFT, LiquidCodecISTFT)):
-            init.copy_(module.window, torch.hann_window(module.win_length, dtype=torch.float32))
+        if isinstance(module, LiquidCodecRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+
+        if isinstance(module, LiquidCodecISTFTHead):
+            init.copy_(module.window, torch.hann_window(module.n_fft, dtype=torch.float32))
         elif isinstance(module, LiquidCodecFiniteScalarQuantization):
             levels, basis, codebook = module._compute_buffers(device=module.levels.device)
             init.copy_(module.levels, levels)
             init.copy_(module.basis, basis)
             init.copy_(module.codebook, codebook)
 
-    @auto_docstring
-    @can_return_tuple
-    def encode(self, input_values: torch.FloatTensor) -> LiquidCodecEncoderOutput:
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
-            24 kHz audio. The tail is zero-padded to a whole codec frame of 1920 samples.
-        """
-        frame_size = self.config.frame_size
-        num_samples = -(input_values.shape[-1] // -frame_size) * frame_size
-        input_values = F.pad(input_values, (0, num_samples - input_values.shape[-1]))
-        hidden_states = self.frontend(self.stft(input_values)).mT
-        latents = self.to_quantizer(self.encoder(inputs_embeds=hidden_states).last_hidden_state).mT
-        return LiquidCodecEncoderOutput(audio_codes=self.quantizer.encode(latents))
+    @staticmethod
+    def _validate_right_padded_mask(mask: torch.Tensor, previous_mask: torch.Tensor | None = None):
+        # causal halves: only right padding leaves a clip as alone
+        if is_tracing(mask):
+            return
+        mask = mask.bool()
+        if previous_mask is not None:
+            mask = torch.cat([previous_mask.bool().to(mask.device), mask], dim=1)
+        if (mask[:, 1:] & ~mask[:, :-1]).any():
+            raise ValueError(
+                "The mask must be right-padded: the valid frames of each clip come first, and a clip that ended "
+                "does not resume in a later chunk of a stream."
+            )
 
-    @auto_docstring
+
+@auto_docstring(
+    custom_intro="""
+    The Liquid Codec encoder.
+    """
+)
+class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
+    """LFM2 model with a sliding-attention layer type; the mask and rotary embedding are built per layer type."""
+
+    config: LiquidCodecEncoderConfig
+    base_model_prefix = "encoder"
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^quantizer\."]
+
+    def __init__(self, config: LiquidCodecEncoderConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [LiquidCodecDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = LiquidCodecRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.embedding_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.embedder = LiquidCodecEncoderEmbedder(config)
+        self.output_proj = nn.Linear(config.hidden_size, config.quantization_dim)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> LiquidCodecEncoderModelOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, num_frames)`):
+            Spectrogram from [`LiquidCodecFeatureExtractor`], whole codec frames per clip.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Valid spectrogram frames of each clip (right-padded); returns `latents_mask`.
+        """
+        hidden_states = self.embedder(input_features)
+
+        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None]
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": hidden_states,
+            "attention_mask": None,
+            "cache": None,
+            "position_ids": position_ids,
+        }
+        mask_creation_functions = {
+            "full_attention": lambda: create_causal_mask(**mask_kwargs),
+            "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            "conv": lambda: create_recurrent_attention_mask(**mask_kwargs),
+        }
+        causal_mask_mapping = {
+            layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
+        }
+
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=layer_type)
+            for layer_type in self.rotary_emb.layer_types
+        }
+
+        for i, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i]
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[layer_type],
+                position_embeddings=position_embeddings.get(layer_type),
+                position_ids=position_ids,
+                **kwargs,
+            )
+
+        hidden_states = self.embedding_norm(hidden_states)
+        latents = self.output_proj(hidden_states).transpose(1, 2)
+
+        latents_mask = None
+        if input_features_mask is not None:
+            self._validate_right_padded_mask(input_features_mask)
+            num_frames = input_features_mask.sum(-1, keepdim=True) // self.config.frame_stack
+            latents_mask = torch.arange(latents.shape[-1], device=latents.device) < num_frames.to(latents.device)
+
+        return LiquidCodecEncoderModelOutput(latents=latents, latents_mask=latents_mask)
+
+    def get_input_embeddings(self):
+        return None
+
+
+@auto_docstring(
+    custom_intro="""
+    The Liquid Codec decoder.
+    """
+)
+class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
+    """LFM2 model with a sliding-attention layer type; the mask and rotary embedding are built per layer type."""
+
+    config: LiquidCodecDecoderConfig
+    base_model_prefix = "decoder"
+    main_input_name = "latents"
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^quantizer\."]
+
+    def __init__(self, config: LiquidCodecDecoderConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [LiquidCodecDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = LiquidCodecRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.embedding_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.input_proj = nn.Linear(config.quantization_dim, config.hidden_size)
+        self.head = LiquidCodecISTFTHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        latents: torch.FloatTensor,
+        latents_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> LiquidCodecDecoderOutput:
+        r"""
+        latents (`torch.FloatTensor` of shape `(batch_size, quantization_dim, num_frames)`):
+            Quantizer latents, one per codec frame.
+        latents_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`.
+        overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
+            Overlap-add cache from the previous chunk.
+        """
+        frame_stack = self.config.frame_stack
+        embeddings = self.input_proj(latents.transpose(1, 2).to(self.input_proj.weight.dtype))
+        embeddings = F.interpolate(embeddings.transpose(1, 2), scale_factor=frame_stack, mode="nearest-exact")
+        hidden_states = embeddings.transpose(1, 2)
+
+        past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None] + past_seen_tokens
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": hidden_states,
+            "attention_mask": None,
+            "cache": cache,
+            "position_ids": position_ids,
+        }
+        mask_creation_functions = {
+            "full_attention": lambda: create_causal_mask(**mask_kwargs),
+            "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            "conv": lambda: create_recurrent_attention_mask(**mask_kwargs),
+        }
+        causal_mask_mapping = {
+            layer_type: mask_creation_functions[layer_type]() for layer_type in set(self.config.layer_types)
+        }
+
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=layer_type)
+            for layer_type in self.rotary_emb.layer_types
+        }
+
+        # causal: a clip never sees its right padding
+        for i, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i]
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[layer_type],
+                position_embeddings=position_embeddings.get(layer_type),
+                position_ids=position_ids,
+                cache=cache,
+                **kwargs,
+            )
+
+        hidden_states = self.embedding_norm(hidden_states)
+
+        # a clip ended in a previous chunk can't resume, mask or not
+        previous_mask = overlap_add_cache.mask if overlap_add_cache is not None else None
+        if latents_mask is not None or previous_mask is not None:
+            mask = latents_mask if latents_mask is not None else latents.new_ones(latents.shape[0], latents.shape[-1])
+            # the cached mask starts with the last frame of the previous chunk
+            self._validate_right_padded_mask(mask, previous_mask[:, :1] if previous_mask is not None else None)
+
+        frames_mask = None
+        if latents_mask is not None:
+            frames_mask = latents_mask.repeat_interleave(frame_stack, dim=-1)
+        audio_values, audio_values_mask = self.head(
+            hidden_states, frames_mask=frames_mask, overlap_add_cache=overlap_add_cache
+        )
+
+        return LiquidCodecDecoderOutput(
+            audio_values=audio_values,
+            audio_values_mask=audio_values_mask if latents_mask is not None else None,
+            decoder_cache=cache,
+            overlap_add_cache=overlap_add_cache,
+        )
+
+    def get_input_embeddings(self):
+        return None
+
+
+@auto_docstring(custom_intro="The Liquid Codec audio tokenizer.")
+class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase):
+    # full checkpoint loads with a half dropped (`encoder_config=None` / `decoder_config=None`)
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^decoder\."]
+
+    def __init__(self, config: LiquidCodecConfig):
+        super().__init__(config)
+        self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
+        self.quantizer = LiquidCodecQuantizer(config)
+        self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
+
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def encode(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> LiquidCodecEncoderOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, num_frames)`):
+            Spectrogram from [`LiquidCodecFeatureExtractor`].
+        input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Valid spectrogram frames of each clip (right-padded); returns `audio_codes_mask`.
+        """
+        if self.encoder is None:
+            raise ValueError("Audio encoding was requested, but the codec was loaded without its encoder.")
+
+        encoder_outputs = self.encoder(input_features, input_features_mask=input_features_mask, **kwargs)
+        audio_codes = self.quantizer.encode(encoder_outputs.latents)
+
+        audio_codes_mask = encoder_outputs.latents_mask
+        if audio_codes_mask is not None:
+            audio_codes_mask = audio_codes_mask.to(audio_codes.device)
+
+        return LiquidCodecEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
+
+    @can_return_tuple
+    @auto_docstring
     def decode(
         self,
         audio_codes: torch.LongTensor,
-        decoder_past_key_values: Cache | None = None,
-        overlap_cache: LiquidCodecOverlapAddCache | None = None,
+        audio_codes_mask: torch.Tensor | None = None,
+        decoder_cache: Cache | None = None,
+        overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
         use_streaming: bool = False,
-        finalize: bool = True,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> LiquidCodecDecoderOutput:
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, num_frames)`):
-            The codes to decode; every frame becomes 1920 samples.
-        decoder_past_key_values (`Cache`, *optional*):
-            The decoder LFM3 cache returned by the previous chunk of the stream.
-        overlap_cache ([`LiquidCodecOverlapAddCache`], *optional*):
-            The overlap-add tail returned by the previous chunk of the stream.
+            Codes to decode; `hop_length * frame_stack` samples per frame.
+        audio_codes_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`.
+            When streaming: the chunk's frames.
+        decoder_cache (`Cache`, *optional*):
+            Decoder cache from the previous chunk.
+        overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
+            Overlap-add cache from the previous chunk.
         use_streaming (`bool`, *optional*, defaults to `False`):
-            Whether to decode chunk by chunk: the caches are created on the first chunk and returned with every
-            chunk, which decode to the same audio as the concatenated codes.
-        finalize (`bool`, *optional*, defaults to `True`):
-            Whether this is the last chunk of the stream. Until then the trailing samples that later frames still
-            contribute to are held back in `overlap_cache`.
+            Decode chunk by chunk: caches created on the first chunk, returned with each. Trailing samples stay
+            in `overlap_add_cache` until `overlap_add_cache.flush()`.
         """
-        if use_streaming and decoder_past_key_values is None:
-            decoder_past_key_values = DynamicCache(config=self.config.decoder_config)
-        if use_streaming and overlap_cache is None:
-            overlap_cache = LiquidCodecOverlapAddCache()
-        embeddings = self.from_quantizer(self.quantizer.decode(audio_codes).mT)
-        audio = self.decoder(embeddings, decoder_past_key_values, overlap_cache, finalize)
-        return LiquidCodecDecoderOutput(
-            audio_values=audio, decoder_past_key_values=decoder_past_key_values, overlap_cache=overlap_cache
+        if self.decoder is None:
+            raise ValueError("Audio decoding was requested, but the codec was loaded without its decoder.")
+
+        if use_streaming and decoder_cache is None:
+            decoder_cache = DynamicCache(config=self.config.decoder_config)
+        if use_streaming and overlap_add_cache is None:
+            decoder_config = self.config.decoder_config
+            overlap_add_cache = LiquidCodecOverlapAddCache(decoder_config.n_fft, decoder_config.hop_length)
+
+        latents = self.quantizer.decode(audio_codes)
+
+        return self.decoder(
+            latents,
+            latents_mask=audio_codes_mask,
+            cache=decoder_cache,
+            overlap_add_cache=overlap_add_cache,
+            **kwargs,
         )
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, input_values: torch.FloatTensor) -> LiquidCodecOutput:
+    def forward(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> LiquidCodecOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
-            24 kHz audio.
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, num_frames)`):
+            Spectrogram from [`LiquidCodecFeatureExtractor`].
+        input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Valid spectrogram frames of each clip (right-padded): each clip decoded as alone.
         """
-        audio_codes = self.encode(input_values, return_dict=True).audio_codes
-        audio = self.decode(audio_codes, return_dict=True).audio_values
-        return LiquidCodecOutput(audio_values=audio[..., : input_values.shape[-1]], audio_codes=audio_codes)
+        encoded = self.encode(input_features, input_features_mask, **kwargs)
+        decoded = self.decode(encoded.audio_codes, encoded.audio_codes_mask, **kwargs)
+
+        return LiquidCodecOutput(
+            audio_values=decoded.audio_values,
+            audio_values_mask=decoded.audio_values_mask,
+            audio_codes=encoded.audio_codes,
+            audio_codes_mask=encoded.audio_codes_mask,
+        )
 
 
-__all__ = ["LiquidCodecModel", "LiquidCodecOverlapAddCache"]
+__all__ = [
+    "LiquidCodecDecoderModel",
+    "LiquidCodecEncoderModel",
+    "LiquidCodecModel",
+    "LiquidCodecOverlapAddCache",
+    "LiquidCodecPreTrainedModel",
+]

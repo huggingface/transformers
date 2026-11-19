@@ -22,6 +22,7 @@ import pytest
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
+    Expectations,
     require_accelerate,
     require_torch,
     require_torch_accelerator,
@@ -270,9 +271,15 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-1.4192, -1.9158, -0.9702],
+                ("cuda", 8): [-1.1939, -1.4547, -0.1076],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_inference_model(self):

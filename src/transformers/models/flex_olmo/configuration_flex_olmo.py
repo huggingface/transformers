@@ -46,7 +46,6 @@ class FlexOlmoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "flex_olmo"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 500000.0
     base_model_tp_plan = {

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the LFM3-Audio feature extractor."""
 
 import unittest
 
@@ -49,7 +48,7 @@ class Lfm3AudioFeatureExtractionTester:
         }
 
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
-        # the padding tests pad feature sequences of shape (num_frames, feature_size), as the Whisper tester does
+        # padding tests pad (num_frames, feature_size) sequences, as Whisper's tester
         rng = np.random.default_rng(0)
         if equal_length:
             lengths = [self.max_seq_length] * self.batch_size
@@ -68,10 +67,12 @@ class Lfm3AudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         self.extractor = Lfm3AudioFeatureExtractor()
 
     def test_frame_counts_follow_the_streaming_transform(self):
-        # one frame per 160 samples once the first 400-sample window is filled, clips padded so nothing is dropped
-        for num_samples, frames in ((100, 1), (400, 1), (401, 2), (559, 2), (560, 2), (561, 3), (44550, 277)):
-            self.assertEqual(self.extractor.num_frames(num_samples), frames, num_samples)
-        self.assertEqual(self.extractor.num_encoder_tokens(277), 35)
+        # 1 frame per 160 samples after the first 400-sample window; clips padded, nothing dropped
+        lengths, frames = (100, 400, 401, 559, 560, 561, 44550), [1, 1, 2, 2, 2, 3, 277]
+        clips = [np.zeros(length, dtype=np.float32) for length in lengths]
+        features = self.extractor(clips, sampling_rate=16000, return_tensors="pt")
+        self.assertEqual(features["input_features_mask"].sum(-1).tolist(), frames)
+        self.assertEqual(features["input_features"].shape, (len(lengths), max(frames), 128))
 
     def test_features_shape_and_normalization(self):
         rng = np.random.default_rng(0)
@@ -80,11 +81,13 @@ class Lfm3AudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
             rng.standard_normal(8000).astype(np.float32) * 0.1,
         ]
         features = self.extractor(clips, sampling_rate=16000, return_tensors="pt")
-        self.assertEqual(features["input_features"].shape, (2, 128, self.extractor.num_frames(16000)))
-        self.assertEqual(
-            features["feature_attention_mask"].sum(-1).tolist(),
-            [self.extractor.num_frames(16000), self.extractor.num_frames(8000)],
-        )
+        self.assertEqual(features["input_features"].shape, (2, 99, 128))
+        self.assertEqual(features["input_features_mask"].sum(-1).tolist(), [99, 49])
+        # the padding frames hold `padding_value`
+        self.assertTrue((features["input_features"][1, 49:] == 0.0).all())
+        # the batch gives each clip's own features
+        single = self.extractor(clips[1], sampling_rate=16000, return_tensors="pt")["input_features"]
+        torch.testing.assert_close(features["input_features"][1:, :49], single)
         # silence sits at the log floor, scaled by the affine normalization
         silence = self.extractor(np.zeros(1600, dtype=np.float32), sampling_rate=16000, return_tensors="pt")[
             "input_features"
@@ -95,19 +98,17 @@ class Lfm3AudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         with self.assertRaises(ValueError):
             self.extractor(np.zeros(1000, dtype=np.float32), sampling_rate=24000)
 
-    def test_streaming_matches_offline_for_arbitrary_chunks_and_final_flush(self):
-        for length in (0, 1, 399, 400, 401, 560, 16000, 16321):
+    def test_live_chunks_match_offline(self):
+        # live transcription loop: chunked windows give the whole clip's frames
+        window = (96 - 1) * self.extractor.hop_length + self.extractor.n_fft
+        hop = 96 * self.extractor.hop_length
+        for length in (window, window + 1, window + 240, window + 241, 3 * hop + 5000, 3 * hop + 241):
             wave = torch.randn(length)
             expected = self.extractor(wave, sampling_rate=16000, return_tensors="pt")["input_features"]
-            for chunk_size in (157, 1280):
-                state, pieces = None, []
-                for start in range(0, length, chunk_size):
-                    features, state = self.extractor.stream(
-                        wave[start : start + chunk_size], state, sampling_rate=16000
-                    )
-                    pieces.append(features["input_features"])
-                    self.assertLess(state.samples.numel(), self.extractor.n_fft)
-                features, state = self.extractor.stream(wave[:0], state, is_final=True, sampling_rate=16000)
-                pieces.append(features["input_features"])
-                torch.testing.assert_close(torch.cat(pieces, dim=-1), expected, atol=2e-6, rtol=2e-6)
-                self.assertIsNone(state.samples)
+            pieces = [
+                self.extractor(wave[start : start + window], sampling_rate=16000, return_tensors="pt")[
+                    "input_features"
+                ]
+                for start in range(0, length - (window - hop), hop)
+            ]
+            torch.testing.assert_close(torch.cat(pieces, dim=1), expected, atol=2e-6, rtol=2e-6)

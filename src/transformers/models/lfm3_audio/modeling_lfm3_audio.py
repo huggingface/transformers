@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -25,130 +27,1001 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationConfig
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
+from ...integrations.accelerate import force_accelerate_hooks
+from ...masking_utils import (
+    create_bidirectional_mask,
+    create_causal_mask,
+    create_recurrent_attention_mask,
+    create_sliding_window_causal_mask,
+)
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    MaskedLMOutput,
+)
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.import_utils import is_tracing
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    torch_compilable_check,
+)
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_lfm3_audio import Lfm3AudioConfig, Lfm3AudioEncoderConfig
+from .configuration_lfm3_audio import Lfm3AudioAudioConfig, Lfm3AudioConfig, Lfm3AudioDepthDecoderConfig
 from .generation_lfm3_audio import Lfm3AudioGenerationMixin
 
 
-class Lfm3AudioDownsampler(nn.Module):
-    """Three stride-2 convolutions over the (mel, time) plane: 128 mel bins and 8 frames become one vector."""
-
-    def __init__(self, config: Lfm3AudioEncoderConfig):
+class Lfm3AudioRotaryEmbedding(nn.Module):
+    def __init__(self, config: Lfm3AudioConfig, device=None):
         super().__init__()
-        channels = config.conv_channels
-        conv = {"kernel_size": 3, "stride": 2, "padding": 1}
-        self.conv_in = nn.Conv2d(1, channels, **conv)
-        self.conv_mid = nn.Conv2d(channels, channels, groups=channels, **conv)
-        self.lin_mid = nn.Conv2d(channels, channels, kernel_size=1)
-        self.conv_end = nn.Conv2d(channels, channels, groups=channels, **conv)
-        self.lin_end = nn.Conv2d(channels, channels, kernel_size=1)
-        self.lin_out = nn.Conv1d(config.num_mel_bins * channels // 8, config.text_config.hidden_size, kernel_size=1)
-        self.act = nn.SiLU()
-
-    def forward(self, input_features: torch.Tensor, feature_lengths: torch.Tensor | None = None) -> torch.Tensor:
-        def mask_padding(hidden_states, lengths):
-            if lengths is None:
-                return hidden_states
-            valid = torch.arange(hidden_states.shape[-1], device=hidden_states.device)[None] < lengths[:, None]
-            return hidden_states * valid[:, None, None].to(hidden_states.dtype)
-
-        hidden_states = mask_padding(input_features.unsqueeze(1), feature_lengths)
-        hidden_states = self.act(self.conv_in(hidden_states))
-        lengths = None if feature_lengths is None else (feature_lengths + 1) // 2
-        hidden_states = mask_padding(hidden_states, lengths)
-        hidden_states = self.act(self.lin_mid(self.conv_mid(hidden_states)))
-        lengths = None if lengths is None else (lengths + 1) // 2
-        hidden_states = mask_padding(hidden_states, lengths)
-        hidden_states = self.act(self.lin_end(self.conv_end(hidden_states)))
-        return self.lin_out(hidden_states.flatten(1, 2))
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.config = config
+        # diff -> only the attention layer types have a RoPE entry, `conv` layers have none
+        self.layer_types = [layer_type for layer_type in config._rope_type_labels if layer_type in config.layer_types]
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            self.rope_type[layer_type] = config.rope_parameters[layer_type]["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    def output_lengths(lengths: torch.Tensor) -> torch.Tensor:
-        return -(lengths // -8)
+    def compute_default_rope_parameters(
+        config: Lfm3AudioConfig, device=None, layer_type: str | None = None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            layer_type (`str`):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq.to(device), attention_factor
+
+    @dynamic_rope_update
+    def forward(self, x, position_ids, layer_type):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
+
+        # diff -> as the original: cos / sin rounded to the model dtype, rotation in float32
+        return cos.to(x.dtype).float(), sin.to(x.dtype).float()
 
 
-class Lfm3AudioEncoderStreamingCache:
-    """Bounded downsampler context and causal encoder state for synchronized audio chunks."""
+@use_kernel_forward_from_hub("RMSNorm")
+class Lfm3AudioRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Lfm3AudioRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-    def __init__(self, config: Lfm3AudioEncoderConfig):
-        self.past_key_values = DynamicCache(config=config.text_config)
-        self.features: torch.Tensor | None = None
-        self.offset = 0
-        self.num_frames = 0
-        self.num_tokens = 0
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Lfm3AudioEncoder(nn.Module):
-    def __init__(self, config: Lfm3AudioEncoderConfig):
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    q_type, k_type = q.dtype, k.dtype
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed.to(q_type), k_embed.to(k_type)
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Lfm3AudioAttention(nn.Module):
+    """Qwen3 attention with RoPE in float32 and a sigmoid output gate per head."""
+
+    def __init__(self, config: Lfm3AudioConfig, layer_idx: int):
+        super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = Lfm3AudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Lfm3AudioRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.g_proj = (
+            nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
+            if config.use_attention_gate
+            else None
+        )
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+        if self.g_proj is not None:
+            attn_output = attn_output * torch.sigmoid(self.g_proj(hidden_states)).unsqueeze(-1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Lfm3AudioMLP(nn.Module):
+    def __init__(self, config: Lfm3AudioConfig, intermediate_size: int | None = None):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+    def forward(self, x):
+        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+
+
+def apply_mask_to_padding_states(hidden_states, attention_mask):
+    """
+    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
+    """
+    # NOTE: attention mask is a 2D boolean tensor
+    if attention_mask is not None:
+        dtype = hidden_states.dtype
+        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
+    return hidden_states
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_update", "causal_conv1d")
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
+class Lfm3AudioShortConv(nn.Module):
+    def __init__(
+        self,
+        config: Lfm3AudioConfig,
+        layer_idx: int,
+    ):
         super().__init__()
         self.config = config
-        self.downsample = Lfm3AudioDownsampler(config)
-        self.lfm = AutoModel.from_config(config.text_config)
-        # the encoder only sees `inputs_embeds`
-        self.lfm.register_module("embed_tokens", None)
+        self.layer_idx = layer_idx
+        self.conv_kernel_size = config.conv_L_cache
+        self.bias = config.conv_bias
+
+        self.conv = nn.Conv1d(
+            in_channels=config.hidden_size,
+            out_channels=config.hidden_size,
+            kernel_size=self.conv_kernel_size,
+            groups=config.hidden_size,
+            bias=self.bias,
+            padding=self.conv_kernel_size - 1,
+        )
+        self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=self.bias)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=self.bias)
+
+        self.layer_type = config.layer_types[layer_idx]
+
+    @force_accelerate_hooks("conv")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        seq_len = hidden_states.shape[1]
+
+        hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        BCx = self.in_proj(hidden_states).transpose(-1, -2)
+        B, C, x = BCx.chunk(3, dim=-2)
+        hidden_states = B * x
+
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
+
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
+            )
+        else:
+            if cache is not None:
+                hidden_states = cache.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
+
+            # Drop the additional previous states
+            if cache is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        y = C * hidden_states
+        y = y.transpose(-1, -2).contiguous()
+        y = self.out_proj(y)
+        return y
+
+
+class Lfm3AudioDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Lfm3AudioConfig, layer_idx: int):
+        super().__init__()
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
+
+        if self.is_attention_layer:
+            self.self_attn = Lfm3AudioAttention(config, layer_idx)
+        else:
+            self.conv = Lfm3AudioShortConv(config, layer_idx)
+        self.feed_forward = Lfm3AudioMLP(config)
+        self.operator_norm = Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.ffn_norm = Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.post_operator_norm = (
+            Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+        self.post_ffn_norm = (
+            Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        residual = hidden_states
+        if self.is_attention_layer:
+            hidden_states, _ = self.self_attn(
+                hidden_states=self.operator_norm(hidden_states),
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache=cache,
+                **kwargs,
+            )
+        else:
+            hidden_states = self.conv(
+                hidden_states=self.operator_norm(hidden_states),
+                cache=cache,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        hidden_states = self.post_operator_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.ffn_norm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_ffn_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class Lfm3AudioEncoderAttention(nn.Module):
+    """RoPE in the model dtype: the speech encoder is an LFM2 model in the original."""
+
+    def __init__(self, config: Lfm3AudioConfig, layer_idx: int):
+        super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.q_norm = Lfm3AudioRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Lfm3AudioRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.g_proj = (
+            nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
+            if config.use_attention_gate
+            else None
+        )
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        query_states, key_states = self.rotate(query_states, key_states, *position_embeddings)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+        if self.g_proj is not None:
+            attn_output = attn_output * torch.sigmoid(self.g_proj(hidden_states)).unsqueeze(-1)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+    def rotate(self, query_states, key_states, cos, sin):
+        cos, sin = cos.unsqueeze(1).to(query_states.dtype), sin.unsqueeze(1).to(query_states.dtype)
+        query_states = (query_states * cos) + (rotate_half(query_states) * sin)
+        key_states = (key_states * cos) + (rotate_half(key_states) * sin)
+        return query_states, key_states
+
+
+class Lfm3AudioEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Lfm3AudioAudioConfig, layer_idx: int):
+        super().__init__()
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
+
+        if self.is_attention_layer:
+            self.self_attn = Lfm3AudioAttention(config, layer_idx)
+        else:
+            self.conv = Lfm3AudioShortConv(config, layer_idx)
+        self.feed_forward = Lfm3AudioMLP(config)
+        self.operator_norm = Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.ffn_norm = Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.post_operator_norm = (
+            Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+        self.post_ffn_norm = (
+            Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+        if self.is_attention_layer:
+            self.self_attn = Lfm3AudioEncoderAttention(config, layer_idx)
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        residual = hidden_states
+        if self.is_attention_layer:
+            hidden_states, _ = self.self_attn(
+                hidden_states=self.operator_norm(hidden_states),
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache=cache,
+                **kwargs,
+            )
+        else:
+            hidden_states = self.conv(
+                hidden_states=self.operator_norm(hidden_states),
+                cache=cache,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        hidden_states = self.post_operator_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.ffn_norm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_ffn_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+@auto_docstring
+class Lfm3AudioPreTrainedModel(PreTrainedModel):
+    config: Lfm3AudioConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = [
+        "Lfm3AudioDecoderLayer",
+        "Lfm3AudioEncoderLayer",
+        "Lfm3AudioEncoderSubsamplingConv2D",
+        "Lfm3AudioDepthDecoderModel",
+    ]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Lfm3AudioDecoderLayer,
+        "attentions": Lfm3AudioAttention,
+    }
+    input_modalities = ("audio", "text")
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Lfm3AudioRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        if isinstance(module, Lfm3AudioEmbeddings):
+            init.copy_(
+                module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.codebook_size
+            )
+
+        if isinstance(module, Lfm3AudioDepthDecoderEmbeddings):
+            init.normal_(module.weight, std=self.config.initializer_range)
+            init.normal_(module.mask_embedding, std=self.config.initializer_range)
+            init.copy_(module.codebook_offsets, torch.arange(module.num_codebooks) * module.codebook_size)
+
+        if isinstance(module, Lfm3AudioDepthDecoderHead):
+            init.normal_(module.weight, std=self.config.initializer_range)
+
+
+class Lfm3AudioEncoderCausalConv2dCacheLayer:
+    def __init__(self):
+        self.cache: torch.Tensor | None = None
+        self.is_initialized: bool = False
+
+    def lazy_initialization(self, hidden_states, conv_module):
+        self.left_pad = conv_module.left_pad
+        self.init_pad = conv_module.left_pad_init - conv_module.left_pad
+        cache_shape = list(hidden_states.shape)
+        cache_shape[2] = self.left_pad
+        self.cache = torch.zeros(cache_shape, device=hidden_states.device, dtype=hidden_states.dtype)
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+
+        self.is_first_chunk = True
+        self.is_initialized = True
+
+    def update(self, hidden_states, conv_module=None):
+        if not self.is_initialized and conv_module is not None:
+            self.lazy_initialization(hidden_states, conv_module)
+        elif not self.is_initialized:
+            raise ValueError(
+                "Lfm3AudioEncoderCausalConv2dCacheLayer is not initialized. Make sure to provide conv_module to the update method."
+            )
+
+        # new cache: the last `left_pad` time frames (dim 2), keeping the old cache tail on shortfall
+        shortfall = max(0, self.left_pad - hidden_states.shape[2])
+        if shortfall > 0:
+            new_cache = torch.cat([self.cache[:, :, -shortfall:], hidden_states], dim=2)
+        else:
+            new_cache = hidden_states[:, :, -self.left_pad :]
+
+        # left context to prepend: the old cache, plus `init_pad` leading zeros on the first chunk
+        current_cache = self.cache.clone()
+        if self.is_first_chunk and self.init_pad > 0:
+            init_shape = list(current_cache.shape)
+            init_shape[2] = self.init_pad
+            current_cache = torch.cat([current_cache.new_zeros(init_shape), current_cache], dim=2)
+        self.is_first_chunk = False
+
+        self.cache.copy_(new_cache)
+        return current_cache
+
+
+class Lfm3AudioEncoderCausalConvPaddingCache:
+    def __init__(self):
+        self.layers: dict[str, Lfm3AudioEncoderCausalConv2dCacheLayer] = {}
+
+    def update(self, hidden_states, cache_key, conv_module):
+        if cache_key not in self.layers:
+            self.layers[cache_key] = Lfm3AudioEncoderCausalConv2dCacheLayer()
+
+        padding_states = self.layers[cache_key].update(hidden_states, conv_module)
+        return torch.cat([padding_states, hidden_states], dim=2)
+
+
+class Lfm3AudioEncoderCausalConv2D(nn.Conv2d):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        cache_key: str,
+        stride: int = 1,
+        padding: int = 0,
+        dilation: int = 1,
+        groups: int = 1,
+    ):
+        super().__init__(
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups
+        )
+        self.cache_key = cache_key
+
+    @property
+    def left_pad(self):
+        return self.kernel_size[0] - self.stride[0]
+
+    @property
+    def left_pad_init(self):
+        return self.left_pad
+
+    @property
+    def time_pad(self):
+        return (self.left_pad, 0)
+
+    @property
+    def freq_pad(self):
+        return ((self.kernel_size[1] - 1) // 2, (self.kernel_size[1] - 1) // 2)
+
+    def output_length(self, input_lengths: torch.Tensor | None, streaming: bool = False) -> torch.Tensor | None:
+        if input_lengths is None:
+            return None
+
+        return -(input_lengths // -self.stride[0])
 
     def forward(
-        self, input_features: torch.Tensor, feature_lengths: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[BaseModelOutputWithPast, torch.Tensor]:
-        hidden_states = self.downsample(input_features, feature_lengths).transpose(1, 2)
-        # the encoder config is the one a caller sets the output controls on
-        for key in ("output_attentions", "output_hidden_states"):
-            if getattr(self.config, key):
-                kwargs.setdefault(key, True)
-        outputs = self.lfm(inputs_embeds=hidden_states, use_cache=False, return_dict=True, **kwargs)
-        return outputs, self.downsample.output_lengths(feature_lengths)
+        self, x: torch.Tensor, padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None
+    ) -> torch.Tensor:
+        # last chunk of a stream: right-pad to a multiple of the stride, as offline
+        x = nn.functional.pad(x, (0, 0, 0, -x.shape[2] % self.stride[0]))
+        x = nn.functional.pad(x, (self.freq_pad[0], self.freq_pad[1]))
+        if padding_cache is not None:
+            x = padding_cache.update(x, self.cache_key, self)
+        else:
+            x = nn.functional.pad(x, (0, 0, self.time_pad[0], self.time_pad[1]))
 
-    @torch.no_grad()
-    def stream(
+        return super().forward(x)
+
+
+def _mask_subsampled_frames(hidden_states: torch.Tensor, lengths: torch.Tensor | None) -> torch.Tensor:
+    """Zero out time frames beyond each sequence's valid length so they don't leak into the next conv."""
+    if lengths is None:
+        return hidden_states
+    time = torch.arange(hidden_states.shape[2], device=hidden_states.device)
+    return hidden_states * (time < lengths[:, None])[:, None, :, None]
+
+
+class Lfm3AudioEncoderSubsamplingLayer(nn.Module):
+    """Depthwise-separable subsampling stage: depthwise strided causal Conv2d + 1x1 pointwise Conv2d."""
+
+    def __init__(self, config: Lfm3AudioAudioConfig, layer_idx: int):
+        super().__init__()
+        channels = config.subsampling_conv_channels
+        self.depthwise_conv = Lfm3AudioEncoderCausalConv2D(
+            channels,
+            channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+            groups=channels,
+            cache_key=f"subsampling.{layer_idx}",
+        )
+        self.pointwise_conv = nn.Conv2d(channels, channels, kernel_size=1)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        lengths: torch.Tensor | None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        hidden_states = self.depthwise_conv(hidden_states, padding_cache=padding_cache)
+        lengths = self.depthwise_conv.output_length(lengths, streaming=padding_cache is not None)
+        hidden_states = self.pointwise_conv(hidden_states)
+        return _mask_subsampled_frames(hidden_states, lengths), lengths
+
+
+class Lfm3AudioEncoderSubsamplingConv2D(nn.Module):
+    def __init__(self, config: Lfm3AudioAudioConfig):
+        super().__init__()
+        channels = config.subsampling_conv_channels
+        num_layers = int(math.log2(config.subsampling_factor))
+
+        # stem: strided causal conv over the single-channel mel spectrogram
+        self.conv_in = Lfm3AudioEncoderCausalConv2D(
+            1,
+            channels,
+            kernel_size=config.subsampling_conv_kernel_size,
+            stride=config.subsampling_conv_stride,
+            cache_key="subsampling.0",
+        )
+        # depthwise-separable layers
+        self.layers = nn.ModuleList(
+            Lfm3AudioEncoderSubsamplingLayer(config, layer_idx=i) for i in range(1, num_layers)
+        )
+        self.act_fn = nn.SiLU()
+        # a pointwise convolution in place of Nemotron's linear
+        self.conv_out = nn.Conv1d(config.subsampling_out_hidden_size, config.hidden_size, kernel_size=1)
+
+    def forward(
         self,
         input_features: torch.Tensor,
-        cache: Lfm3AudioEncoderStreamingCache | None = None,
-        is_final: bool = False,
-    ) -> tuple[torch.Tensor, Lfm3AudioEncoderStreamingCache]:
-        """Encode complete stride-8 windows, with seven frames of lookahead and bounded left context."""
-        if cache is None:
-            cache = Lfm3AudioEncoderStreamingCache(self.config)
-        features = input_features
-        if cache.features is not None:
-            features = torch.cat((cache.features, features), dim=-1)
-        num_frames = cache.num_frames + input_features.shape[-1]
-        num_tokens = (num_frames + (7 if is_final else 0)) // 8
-        count = num_tokens - cache.num_tokens
-        if count:
-            start = cache.num_tokens - cache.offset // 8
-            hidden_states = self.downsample(features).transpose(1, 2)[:, start : start + count]
-            positions = torch.arange(cache.num_tokens, num_tokens, device=features.device)[None]
-            encoded = self.lfm(
-                inputs_embeds=hidden_states,
-                past_key_values=cache.past_key_values,
-                position_ids=positions,
-                use_cache=True,
-            ).last_hidden_state
-        else:
-            encoded = features.new_empty((features.shape[0], 0, self.config.text_config.hidden_size))
-        offset = max(0, (num_tokens - 1) * 8)
-        cache.features = features[..., offset - cache.offset :].clone() if not is_final else None
-        cache.num_frames, cache.offset, cache.num_tokens = num_frames, offset, num_tokens
-        return encoded, cache
+        attention_mask: torch.Tensor = None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+    ):
+        hidden_states = input_features.unsqueeze(1)
+        lengths = attention_mask.sum(-1) if attention_mask is not None else None
+
+        # stem stage
+        hidden_states = self.conv_in(hidden_states, padding_cache=padding_cache)
+        lengths = self.conv_in.output_length(lengths, streaming=padding_cache is not None)
+        hidden_states = self.act_fn(_mask_subsampled_frames(hidden_states, lengths))
+
+        # depthwise-separable stages
+        for layer in self.layers:
+            hidden_states, lengths = layer(hidden_states, lengths, padding_cache=padding_cache)
+            hidden_states = self.act_fn(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2).flatten(2)
+        hidden_states = self.conv_out(hidden_states.transpose(1, 2)).transpose(1, 2)
+
+        return hidden_states
 
 
-class Lfm3AudioProjector(nn.Module):
+@auto_docstring(
+    custom_intro="""
+    Base class for the LFM3-Audio speech encoder outputs, with the streaming states.
+    """
+)
+@dataclass
+class Lfm3AudioAudioModelOutput(BaseModelOutputWithPooling):
+    r"""
+    pooler_output (`torch.FloatTensor`, *optional*):
+        Set by [`Lfm3AudioModel.get_audio_features`]: the projected valid tokens of all clips, flattened.
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask of the valid tokens, after subsampling.
+    cache (`Cache`, *optional*):
+        Encoder cache, for the next chunk.
+    padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+        Subsampling state, for the next chunk.
+    """
+
+    attention_mask: torch.Tensor | None = None
+    cache: Cache | None = None
+    padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    The LFM3-Audio speech encoder.
+    """
+)
+class Lfm3AudioAudioModel(Lfm3AudioPreTrainedModel):
+    """LFM2 model with a sliding-attention layer type; the mask and rotary embedding are built per layer type."""
+
+    config: Lfm3AudioAudioConfig
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    _can_record_outputs = {
+        "hidden_states": Lfm3AudioEncoderLayer,
+        "attentions": Lfm3AudioEncoderAttention,
+    }
+
+    def __init__(self, config: Lfm3AudioAudioConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Lfm3AudioEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Lfm3AudioRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.embedding_norm = Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.subsampling = Lfm3AudioEncoderSubsamplingConv2D(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Lfm3AudioAudioModelOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_frames, num_mel_bins)`):
+            Log-mel spectrograms, right-padded. When streaming: one chunk of a multiple of
+            `config.subsampling_factor` frames, except the last.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask of the valid spectrogram frames.
+        padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+            Subsampling streaming state: an empty one with the first chunk, then the returned one.
+        """
+        if use_cache:
+            if cache is None:
+                cache = DynamicCache(config=self.config)
+
+            if padding_cache is None:
+                padding_cache = Lfm3AudioEncoderCausalConvPaddingCache()
+
+        inputs_embeds = self.subsampling(input_features, input_features_mask, padding_cache=padding_cache)
+
+        past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+        if position_ids is None:
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        output_mask = attention_mask = None
+        if input_features_mask is not None:
+            output_mask = input_features_mask[:, :: self.config.subsampling_factor]
+            # cached tokens are all valid
+            attention_mask = nn.functional.pad(output_mask, (past_seen_tokens, 0), value=1)
+
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "cache": cache,
+            "position_ids": position_ids,
+        }
+        mask_creation_functions = {
+            "full_attention": lambda: create_causal_mask(**mask_kwargs),
+            "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            "conv": lambda: create_recurrent_attention_mask(**mask_kwargs),
+        }
+        causal_mask_mapping = {}
+        for layer_type in set(self.config.layer_types):
+            causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+
+        hidden_states = inputs_embeds
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=layer_type)
+            for layer_type in self.rotary_emb.layer_types
+        }
+
+        for i, encoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i]
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[layer_type],
+                position_embeddings=position_embeddings.get(layer_type),
+                position_ids=position_ids,
+                cache=cache,
+                **kwargs,
+            )
+
+        hidden_states = self.embedding_norm(hidden_states)
+
+        return Lfm3AudioAudioModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask,
+            cache=cache,
+            padding_cache=padding_cache,
+        )
+
+
+class Lfm3AudioMultiModalProjector(nn.Module):
     def __init__(self, config: Lfm3AudioConfig):
         super().__init__()
-        encoder_config = config.audio_encoder_config
-        in_features = encoder_config.text_config.hidden_size
-        out_features = config.text_config.hidden_size
-        self.layer_norm = nn.LayerNorm(in_features)
-        self.linear_1 = nn.Linear(in_features, out_features)
-        self.act = nn.GELU()
-        self.linear_2 = nn.Linear(out_features, out_features)
+        self.layer_norm = nn.LayerNorm(config.audio_config.hidden_size)
+        self.linear_1 = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
 
     def forward(self, image_features):
         hidden_states = self.layer_norm(image_features)
@@ -158,102 +1031,184 @@ class Lfm3AudioProjector(nn.Module):
         return hidden_states
 
 
-class Lfm3AudioCodebookNorm(nn.Module):
-    """One RMSNorm per codebook over the depth decoder's output slots, applied in float32 like `Olmo2RMSNorm`."""
-
-    def __init__(self, config: Lfm3AudioConfig):
+@use_kernel_forward_from_hub("RMSNorm")
+class Lfm3AudioCodebookRMSNorm(nn.Module):
+    def __init__(self, num_codebooks: int, hidden_size: int, eps: float = 1e-6) -> None:
+        """
+        Lfm3AudioCodebookRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(config.num_codebooks, config.depth_config.hidden_size))
-        self.variance_epsilon = config.depth_config.norm_eps
+        self.weight = nn.Parameter(torch.ones(num_codebooks, hidden_size))
+        self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (hidden_states * self.weight).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Lfm3AudioDepthDecoder(nn.Module):
-    """
-    Predicts the codebooks of one speech frame: a bidirectional LFM3 over one slot per codebook, each holding its
-    code embedding or a mask embedding, scored against the tied codebook embeddings.
-    """
+class Lfm3AudioDepthDecoderEmbeddings(nn.Module):
+    """One table per codebook, stored stacked; code `codebook_size` = masked."""
 
-    def __init__(self, config: Lfm3AudioConfig):
+    def __init__(self, config: Lfm3AudioDepthDecoderConfig):
         super().__init__()
-        self.config = config
-        depth_config = config.depth_config
+        self.weight = nn.Parameter(torch.empty(config.num_codebooks, config.codebook_size, config.hidden_size))
         self.num_codebooks = config.num_codebooks
         self.codebook_size = config.codebook_size
-        self.hidden_size = depth_config.hidden_size
-        self.depth_linear = nn.Linear(config.text_config.hidden_size, self.num_codebooks * self.hidden_size)
-        self.mask_embedding = nn.Parameter(torch.empty(self.hidden_size))
-        self.model = AutoModel.from_config(depth_config)
-        self.model.register_module("embed_tokens", None)
-        self.codebook_embedding = nn.Parameter(torch.empty(self.num_codebooks, self.codebook_size, self.hidden_size))
-        self.codebook_norm = Lfm3AudioCodebookNorm(config)
-        # `repetition_window` is the number of past frames the repetition penalty covers
-        self.generation_config = GenerationConfig(do_sample=True, repetition_window=64)
+        self.codebook_offsets = nn.Buffer(torch.arange(config.num_codebooks) * config.codebook_size, persistent=False)
+        self.mask_embedding = nn.Parameter(torch.empty(config.hidden_size))
 
-    def embed_codes(self, codes: torch.Tensor) -> torch.Tensor:
-        offsets = torch.arange(self.num_codebooks, device=codes.device) * self.codebook_size
-        return F.embedding(codes + offsets, self.codebook_embedding.flatten(0, 1))
+    def forward(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+        masked = input_ids == self.codebook_size
+        input_ids = input_ids.masked_fill(masked, 0) + self.codebook_offsets.to(input_ids.device)
+        embeds = nn.functional.embedding(input_ids, self.weight.flatten(0, 1))
+        return torch.where(masked[..., None], self.mask_embedding, embeds)
 
-    def forward(self, hidden_states: torch.Tensor, codes: torch.Tensor, masked: torch.Tensor) -> torch.Tensor:
+
+@auto_docstring(
+    custom_intro="""
+    The LFM3-Audio depth decoder, a bidirectional transformer over the codebooks of a speech frame, conditioned on the
+    language model's hidden state preceding the frame.
+    """
+)
+class Lfm3AudioDepthDecoderModel(Lfm3AudioPreTrainedModel):
+    """LFM2 model with a sliding-attention layer type; the mask and rotary embedding are built per layer type."""
+
+    config: Lfm3AudioDepthDecoderConfig
+
+    def __init__(self, config: Lfm3AudioDepthDecoderConfig):
+        super().__init__(config)
+        self.embed_tokens = Lfm3AudioDepthDecoderEmbeddings(config)
+        self.layers = nn.ModuleList(
+            [Lfm3AudioDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Lfm3AudioRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.embedding_norm = Lfm3AudioRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.num_codebooks = config.num_codebooks
+        self.backbone_projector = nn.Linear(config.backbone_hidden_size, config.num_codebooks * config.hidden_size)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        backbone_last_hidden_state: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         r"""
-        hidden_states (`torch.FloatTensor` of shape `(num_frames, hidden_size)`):
+        input_ids (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
+            Codes of each frame; `codebook_size` marks a masked codebook.
+        backbone_last_hidden_state (`torch.FloatTensor` of shape `(num_frames, backbone_hidden_size)`):
             The language model's hidden state at the position preceding each frame.
-        codes (`torch.LongTensor` of shape `(num_frames, num_codebooks)`):
-            The codes of each frame.
-        masked (`torch.BoolTensor` of shape `(num_frames, num_codebooks)`):
-            The codebooks hidden from the decoder, which it is asked to predict.
-
-        Returns:
-            `torch.FloatTensor` of shape `(num_frames, num_codebooks, codebook_size)`: the logits of every codebook.
         """
-        depth_in = self.depth_linear(hidden_states).unflatten(-1, (self.num_codebooks, self.hidden_size))
-        code_embeds = self.embed_codes(codes)
-        depth_in = depth_in + torch.where(masked[..., None], self.mask_embedding, code_embeds)
-        depth_out = self.codebook_norm(self.trunk(depth_in))
-        logits = torch.matmul(depth_out.transpose(0, 1), self.codebook_embedding.transpose(1, 2))
-        return logits.transpose(0, 1)
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-    def trunk(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # the codebooks of a frame are predicted jointly: bidirectional attention
-        return self.model(
-            inputs_embeds=hidden_states,
-            attention_mask={"full_attention": None},
-            is_causal=False,
-            use_cache=False,
-        ).last_hidden_state
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        backbone_embeds = self.backbone_projector(backbone_last_hidden_state).unflatten(-1, (self.num_codebooks, -1))
+        hidden_states = inputs_embeds + backbone_embeds
+        position_ids = torch.arange(self.num_codebooks, device=hidden_states.device)[None]
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=hidden_states, attention_mask=None
+        )
+        position_embeddings = {
+            layer_type: self.rotary_emb(hidden_states, position_ids=position_ids, layer_type=layer_type)
+            for layer_type in self.rotary_emb.layer_types
+        }
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[i]
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings.get(layer_type),
+                position_ids=position_ids,
+                is_causal=False,
+                **kwargs,
+            )
+
+        hidden_states = self.embedding_norm(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-@auto_docstring
-class Lfm3AudioPreTrainedModel(PreTrainedModel):
-    config: Lfm3AudioConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Lfm3AudioDepthDecoder"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
+class Lfm3AudioDepthDecoderHead(nn.Module):
+    """Per-codebook RMSNorm + linear head, stored as one `(num_codebooks, codebook_size, hidden_size)` weight."""
 
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    input_modalities = ("audio", "text")
-    # the released checkpoints store the tied depth logit heads next to their embeddings
-    _keys_to_ignore_on_load_unexpected = [r"depth_embeddings\.\d+\.to_logits\."]
+    def __init__(self, config: Lfm3AudioDepthDecoderConfig):
+        super().__init__()
+        self.num_codebooks = config.num_codebooks
+        self.codebook_size = config.codebook_size
+        self.norm = Lfm3AudioCodebookRMSNorm(config.num_codebooks, config.hidden_size, eps=config.norm_eps)
+        self.weight = nn.Parameter(torch.empty(config.num_codebooks, config.codebook_size, config.hidden_size))
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Lfm3AudioDepthDecoder):
-            init.normal_(module.mask_embedding, std=0.02)
-            init.normal_(module.codebook_embedding, std=self.config.initializer_range)
-        elif isinstance(module, Lfm3AudioCodebookNorm):
-            init.ones_(module.weight)
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        hidden_states = self.norm(hidden_states)
+        return torch.bmm(hidden_states.transpose(0, 1), self.weight.transpose(1, 2)).transpose(0, 1).contiguous()
+
+
+@auto_docstring(
+    custom_intro="""
+    The LFM3-Audio depth decoder with its per-codebook heads, predicting the masked codebooks of a speech frame from
+    the revealed ones, as in [MaskGIT](https://huggingface.co/papers/2202.04200).
+    """
+)
+class Lfm3AudioDepthDecoderForMaskedLM(Lfm3AudioPreTrainedModel):
+    config: Lfm3AudioDepthDecoderConfig
+    _tied_weights_keys = {"head.weight": "model.embed_tokens.weight"}
+
+    def __init__(self, config: Lfm3AudioDepthDecoderConfig):
+        super().__init__(config)
+        self.model = Lfm3AudioDepthDecoderModel(config)
+        self.head = Lfm3AudioDepthDecoderHead(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        backbone_last_hidden_state: torch.FloatTensor,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MaskedLMOutput:
+        r"""
+        input_ids (`torch.LongTensor` of shape `(num_frames, num_codebooks)`):
+            Codes of each frame; `codebook_size` marks a masked codebook.
+        backbone_last_hidden_state (`torch.FloatTensor` of shape `(num_frames, backbone_hidden_size)`):
+            The language model's hidden state at the position preceding each frame.
+        labels (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
+            Codes of the masked codebooks, `-100` elsewhere.
+        """
+        outputs = self.model(input_ids=input_ids, backbone_last_hidden_state=backbone_last_hidden_state, **kwargs)
+        logits = self.head(outputs.last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.codebook_size,
+                num_items_in_batch=(labels != -100).sum().clamp(min=1),
+            )
+
+        return MaskedLMOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
 
 
 @auto_docstring(
@@ -264,11 +1219,17 @@ class Lfm3AudioPreTrainedModel(PreTrainedModel):
 @dataclass
 class Lfm3AudioModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        Projected audio hidden states.
+    audio_hidden_states (`torch.FloatTensor` of shape `(num_audio_tokens, hidden_size)`, *optional*):
+        The projected speech encoder outputs scattered into the `audio_token_id` placeholders.
+    padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+        Subsampling state of the speech encoder, for the next chunk.
+    encoder_cache (`Cache`, *optional*):
+        Cache of the speech encoder, for the next chunk.
     """
 
-    audio_hidden_states: torch.Tensor | None = None
+    audio_hidden_states: torch.FloatTensor | None = None
+    padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None
+    encoder_cache: Cache | None = None
 
 
 @auto_docstring(
@@ -279,34 +1240,60 @@ class Lfm3AudioModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Lfm3AudioCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_audio_tokens, hidden_size)`.
-        audio_hidden_states of the model produced by the speech encoder and after projecting the last hidden state.
+    audio_hidden_states (`torch.FloatTensor` of shape `(num_audio_tokens, hidden_size)`, *optional*):
+        The projected speech encoder outputs scattered into the `audio_token_id` placeholders.
     text_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         The language modeling loss of the text tokens.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, kept_length, hidden_size)`):
-        The language model's hidden states behind `logits`, which the depth decoder reads to sample speech frames.
     audio_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `audio_labels` is provided):
         The depth decoder loss of the speech frames.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, kept_length, hidden_size)`):
+        The language model's hidden states behind `logits`, sliced like them.
+    padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+        Subsampling state of the speech encoder, for the next chunk.
+    encoder_cache (`Cache`, *optional*):
+        Cache of the speech encoder, for the next chunk.
     """
 
     audio_hidden_states: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
     text_loss: torch.FloatTensor | None = None
     audio_loss: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None
+    encoder_cache: Cache | None = None
+
+
+class Lfm3AudioEmbeddings(nn.Module):
+    def __init__(self, config: Lfm3AudioConfig):
+        super().__init__()
+        self.embed_audio_tokens = nn.Embedding(
+            config.num_codebooks * config.codebook_size, config.text_config.hidden_size
+        )
+        self.audio_tokens_offsets = nn.Buffer(
+            torch.arange(config.num_codebooks) * config.codebook_size, persistent=False
+        )
+
+    def forward(self, input_ids):
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=-2)
+        return inputs_embeds
 
 
 @auto_docstring
 class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [
+        r"depth_embeddings\.\d+\.to_logits\.",
+        r"\baudio_model\.",
+        r"\bmulti_modal_projector\.",
+        r"\bembed_audio_tokens\.",
+        r"\bdepth_decoder\.",
+    ]
+
     def __init__(self, config: Lfm3AudioConfig):
         super().__init__(config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.audio_encoder = Lfm3AudioEncoder(config.audio_encoder_config)
-        self.audio_projector = Lfm3AudioProjector(config)
-        self.codebook_embedding = nn.Embedding(
-            config.num_codebooks * config.codebook_size, config.text_config.hidden_size
-        )
-        self.depth_decoder = Lfm3AudioDepthDecoder(config)
+        self.audio_model = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
+        self.multi_modal_projector = Lfm3AudioMultiModalProjector(config) if config.audio_config is not None else None
+        self.embed_audio_tokens = Lfm3AudioEmbeddings(config) if config.depth_decoder_config is not None else None
         self.post_init()
 
     @can_return_tuple
@@ -314,57 +1301,55 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
-        feature_attention_mask: torch.Tensor,
+        input_features_mask: torch.Tensor | None = None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+        encoder_cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | Lfm3AudioAudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, num_mel_bins, num_frames)`):
-            The log-mel spectrograms of the input clips, right-padded to the longest clip.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`):
-            The mask of the valid spectrogram frames of each clip.
+        input_features (`torch.FloatTensor` of shape `(num_clips, num_frames, num_mel_bins)`):
+            Log-mel features from [`Lfm3AudioFeatureExtractor`], clips of all samples stacked and right-padded.
+        input_features_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
+            Mask of the valid frames: 1 valid, 0 padding.
+        padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+            Subsampling state of the speech encoder, when streaming: the one returned for the previous chunk.
+        encoder_cache (`Cache`, *optional*):
+            Cache of the speech encoder, when streaming: the one returned for the previous chunk.
+
+        Returns:
+            [`Lfm3AudioAudioModelOutput`], `pooler_output`: projected valid tokens of all clips, flattened.
         """
-        feature_lengths = feature_attention_mask.sum(-1)
-        encoder_outputs, encoded_lengths = self.audio_encoder(input_features, feature_lengths, **kwargs)
+        encoder_outputs = self.audio_model(
+            input_features,
+            input_features_mask=input_features_mask,
+            padding_cache=padding_cache,
+            cache=encoder_cache,
+            use_cache=encoder_cache is not None,
+            return_dict=True,
+            **kwargs,
+        )
         encoded = encoder_outputs.last_hidden_state
-        valid = torch.arange(encoded.shape[1], device=encoded.device)[None, :] < encoded_lengths[:, None].to(
-            encoded.device
-        )
-        # `pooler_output`: the projected valid tokens of all clips, flattened in order
-        return BaseModelOutputWithPooling(
-            last_hidden_state=encoded,
-            pooler_output=self.audio_projector(encoded[valid]),
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        if encoder_outputs.attention_mask is not None:
+            encoded = encoded[encoder_outputs.attention_mask.bool().to(encoded.device)]
 
-    @torch.no_grad()
-    def get_audio_features_stream(
-        self,
-        input_features: torch.FloatTensor,
-        cache: Lfm3AudioEncoderStreamingCache | None = None,
-        is_final: bool = False,
-    ) -> tuple[torch.Tensor, Lfm3AudioEncoderStreamingCache]:
-        """Project newly completed audio tokens, returning `(batch, tokens, hidden)` and the updated cache."""
-        encoded, cache = self.audio_encoder.stream(input_features, cache, is_final)
-        return self.audio_projector(encoded), cache
+        encoder_outputs.pooler_output = self.multi_modal_projector(encoded.reshape(-1, encoded.shape[-1]))
+        return encoder_outputs
 
-    def get_audio_out_embeds(self, audio_out_codes: torch.LongTensor) -> torch.FloatTensor:
+    def get_audio_input_embeds(self, audio_input_ids: torch.LongTensor) -> torch.FloatTensor:
         r"""
-        audio_out_codes (`torch.LongTensor` of shape `(num_frames, num_codebooks)`):
+        audio_input_ids (`torch.LongTensor` of shape `(num_frames, num_codebooks)`):
             The codes of the speech frames in the prompt.
 
         Returns:
             `torch.FloatTensor` of shape `(num_frames, hidden_size)`: the sum of the codebook embeddings of each frame.
         """
-        num_codebooks, codebook_size = self.config.num_codebooks, self.config.codebook_size
-        # data-dependent, so a traced or captured forward skips it; an out-of-range code would read another codebook
-        if not is_tracing(audio_out_codes):
-            torch_compilable_check(
-                (audio_out_codes >= 0) & (audio_out_codes < codebook_size),
-                f"audio_out_codes must be in [0, {codebook_size})",
-            )
-        offsets = torch.arange(num_codebooks, device=audio_out_codes.device) * codebook_size
-        return self.codebook_embedding(audio_out_codes + offsets).sum(-2)
+        codebook_size = self.config.codebook_size
+        # an out-of-range code would read another codebook
+        torch_compilable_check(
+            (audio_input_ids >= 0) & (audio_input_ids < codebook_size),
+            f"audio_input_ids must be in [0, {codebook_size})",
+        )
+        return self.embed_audio_tokens(audio_input_ids)
 
     def get_placeholder_mask(self, input_ids, inputs_embeds, token_id: int, num_features: int) -> torch.Tensor:
         if input_ids is not None:
@@ -374,58 +1359,72 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
                 torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             mask = (inputs_embeds == token_embed).all(-1)
-        if not is_tracing(mask):
-            torch_compilable_check(
-                mask.sum() == num_features,
-                lambda: f"Placeholder tokens and features do not match: {int(mask.sum())} tokens {token_id}, "
-                f"{num_features} features",
-            )
+
+        torch_compilable_check(
+            mask.sum() == num_features,
+            lambda: f"Placeholder tokens and features do not match: {int(mask.sum())} tokens {token_id}, "
+            f"{num_features} features",
+        )
         return mask.unsqueeze(-1).to(inputs_embeds.device)
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         input_features: torch.FloatTensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
-        audio_out_codes: torch.LongTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        audio_input_ids: torch.LongTensor | None = None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+        encoder_cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm3AudioModelOutputWithPast:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, num_mel_bins, num_frames)`, *optional*):
-            The log-mel spectrograms of the input clips, right-padded to the longest clip.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
-            The mask of the valid spectrogram frames of each clip.
-        audio_out_codes (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
+        input_features (`torch.FloatTensor` of shape `(num_clips, num_frames, num_mel_bins)`, *optional*):
+            Log-mel features from [`Lfm3AudioFeatureExtractor`], clips of all samples stacked and right-padded.
+        input_features_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
+            Mask of the valid frames: 1 valid, 0 padding.
+        audio_input_ids (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
             The codes of the speech frames in the prompt, one row per `audio_out_token_id` placeholder.
+        padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+            Subsampling state of the speech encoder, when streaming: the one returned for the previous chunk.
+        encoder_cache (`Cache`, *optional*):
+            Cache of the speech encoder, when streaming: the one returned for the previous chunk.
         """
-        # both may come: `inputs_embeds` with features merged, `input_ids` for the placeholders
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You must specify input_ids or inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        audio_features = None
+        audio_embeds = None
         if input_features is not None:
-            if feature_attention_mask is None:
-                feature_attention_mask = torch.ones(
-                    input_features.shape[0], input_features.shape[-1], dtype=torch.bool, device=input_features.device
-                )
-            audio_features = self.get_audio_features(
-                input_features, feature_attention_mask, return_dict=True
+            if self.audio_model is None:
+                raise ValueError("`input_features` need the speech encoder, which `audio_config=None` dropped")
+
+            audio_embeds = self.get_audio_features(
+                input_features, input_features_mask, padding_cache, encoder_cache, return_dict=True
             ).pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds, self.config.audio_token_id, audio_features.shape[0]
+                input_ids, inputs_embeds, self.config.audio_token_id, audio_embeds.shape[0]
             )
-            inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
-        if audio_out_codes is not None:
-            audio_out_embeds = self.get_audio_out_embeds(audio_out_codes).to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeds)
+
+        if audio_input_ids is not None:
+            if self.embed_audio_tokens is None:
+                raise ValueError(
+                    "`audio_input_ids` need the speech frame embeddings, which `depth_decoder_config=None` dropped"
+                )
+
+            audio_out_embeds = self.get_audio_input_embeds(audio_input_ids).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             audio_out_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, self.config.audio_out_token_id, audio_out_embeds.shape[0]
             )
@@ -434,140 +1433,124 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
+
         return Lfm3AudioModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            audio_hidden_states=audio_features,
+            audio_hidden_states=audio_embeds,
+            padding_cache=padding_cache,
+            encoder_cache=encoder_cache,
         )
 
 
 @auto_docstring(
     custom_intro="""
-    The LFM3-Audio model: an LFM3 language model that reads speech through the Liquid speech encoder and writes
-    speech as codebook frames through a depth decoder, alongside text.
+    The LFM3-Audio model, generating text and speech.
     """
 )
 class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGenerationMixin):
-    # Trainer counts text labels only; the joint loss also supervises speech frames.
+    # Trainer counts text labels only; the joint loss also learns speech frames.
     accepts_loss_kwargs = False
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Lfm3AudioConfig):
         super().__init__(config)
         self.model = Lfm3AudioModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.depth_decoder = None
+        if config.depth_decoder_config is not None:
+            self.depth_decoder = Lfm3AudioDepthDecoderForMaskedLM._from_config(config.depth_decoder_config)
+            self._tied_weights_keys = {
+                **self._tied_weights_keys,
+                "depth_decoder.head.weight": "depth_decoder.model.embed_tokens.weight",
+            }
+
         self.post_init()
 
     @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
-        feature_attention_mask: torch.Tensor,
+        input_features_mask: torch.Tensor | None = None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+        encoder_cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | Lfm3AudioAudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, num_mel_bins, num_frames)`):
-            The log-mel spectrograms of the input clips, right-padded to the longest clip.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`):
-            The mask of the valid spectrogram frames of each clip.
+        input_features (`torch.FloatTensor` of shape `(num_clips, num_frames, num_mel_bins)`):
+            Log-mel features from [`Lfm3AudioFeatureExtractor`], clips of all samples stacked and right-padded.
+        input_features_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
+            Mask of the valid frames: 1 valid, 0 padding.
+        padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+            Subsampling state of the speech encoder, when streaming: the one returned for the previous chunk.
+        encoder_cache (`Cache`, *optional*):
+            Cache of the speech encoder, when streaming: the one returned for the previous chunk.
         """
-        return self.model.get_audio_features(input_features, feature_attention_mask, **kwargs)
-
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def _placeholder_token_ids(self) -> list[int]:
-        # never sampled as text: one in `sequences` would break the one-placeholder-per-frame contract
-        return [self.config.audio_token_id, self.config.audio_out_token_id]
-
-    @property
-    def depth_decoder(self):
-        return self.model.depth_decoder
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        loaded = super().from_pretrained(*args, **kwargs)
-        model = loaded[0] if kwargs.get("output_loading_info", False) else loaded
-        # the depth decoder's generation config is serialized under the `depth_decoder_` prefix of the model's
-        prefix = "depth_decoder_"
-        depth_decoder_attrs = {
-            attr[len(prefix) :]: value
-            for attr, value in vars(model.generation_config).items()
-            if attr.startswith(prefix)
-        }
-        vars(model.depth_decoder.generation_config).update({"_from_model_config": False, **depth_decoder_attrs})
-        for attr in depth_decoder_attrs:
-            delattr(model.generation_config, prefix + attr)
-        return loaded
-
-    def save_pretrained(self, *args, **kwargs):
-        prefix = "depth_decoder_"
-        # rebuilt from the live depth settings, so a setting reset to its default disappears
-        for attr in list(vars(self.generation_config)):
-            if attr.startswith(prefix):
-                delattr(self.generation_config, attr)
-        depth_decoder_attrs = self.depth_decoder.generation_config.to_diff_dict()
-        for key in ("transformers_version", "_from_model_config"):
-            depth_decoder_attrs.pop(key, None)
-        for attr, value in depth_decoder_attrs.items():
-            setattr(self.generation_config, prefix + attr, value)
-        # a generation config flagged as derived from the model config drops custom attributes when it is read back
-        self.generation_config._from_model_config = False
-        try:
-            super().save_pretrained(*args, **kwargs)
-        finally:
-            for attr in list(vars(self.generation_config)):
-                if attr.startswith(prefix):
-                    delattr(self.generation_config, attr)
+        return self.model.get_audio_features(
+            input_features, input_features_mask, padding_cache, encoder_cache, **kwargs
+        )
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         input_features: torch.FloatTensor | None = None,
-        feature_attention_mask: torch.Tensor | None = None,
-        audio_out_codes: torch.LongTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        audio_input_ids: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         audio_labels: torch.LongTensor | None = None,
+        audio_labels_mask: torch.BoolTensor | None = None,
+        padding_cache: Lfm3AudioEncoderCausalConvPaddingCache | None = None,
+        encoder_cache: Cache | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Lfm3AudioCausalLMOutputWithPast:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, num_mel_bins, num_frames)`, *optional*):
-            The log-mel spectrograms of the input clips, right-padded to the longest clip.
-        feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
-            The mask of the valid spectrogram frames of each clip.
-        audio_out_codes (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
+        input_features (`torch.FloatTensor` of shape `(num_clips, num_frames, num_mel_bins)`, *optional*):
+            Log-mel features from [`Lfm3AudioFeatureExtractor`], clips of all samples stacked and right-padded.
+        input_features_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
+            Mask of the valid frames: 1 valid, 0 padding.
+        audio_input_ids (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
             The codes of the speech frames in the sequence, one row per `audio_out_token_id` placeholder.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            The text targets, `-100` for the positions not to learn, including the speech frames.
         audio_labels (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
-            The codes of the speech frames to learn, one row per `audio_out_token_id` placeholder; rows of `-100` are
-            ignored. The depth decoder predicts a random subset of each frame's codebooks from the others and the
-            hidden state preceding the frame.
+            Speech targets, one row per frame of `audio_input_ids`, `-100` for frames not to learn.
+        audio_labels_mask (`torch.BoolTensor` of shape `(num_frames, num_codebooks)`, *optional*):
+            Codebooks of each frame the depth decoder predicts, the others being given. Default: random MaskGIT mask
+            (a random share per frame, at least one codebook, all of an end-of-audio frame).
+        padding_cache (`Lfm3AudioEncoderCausalConvPaddingCache`, *optional*):
+            Subsampling state of the speech encoder, when streaming: the one returned for the previous chunk.
+        encoder_cache (`Cache`, *optional*):
+            Cache of the speech encoder, when streaming: the one returned for the previous chunk.
         """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             input_features=input_features,
-            feature_attention_mask=feature_attention_mask,
-            audio_out_codes=audio_out_codes,
+            input_features_mask=input_features_mask,
+            audio_input_ids=audio_input_ids,
+            padding_cache=padding_cache,
+            encoder_cache=encoder_cache,
             use_cache=use_cache,
             **kwargs,
         )
@@ -576,77 +1559,93 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         logits = self.lm_head(kept_hidden_states)
 
         loss = text_loss = audio_loss = None
-        audio_count = 0
         if labels is not None:
-            text_loss = (
-                self.loss_function(
-                    logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-                )
-                if (labels[..., 1:] != -100).any()
-                else logits.sum() * 0.0
+            # mean over learned tokens, zero without any
+            text_count = (labels[..., 1:] != -100).sum()
+            text_loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                num_items_in_batch=text_count.clamp(min=1),
             )
+
         if audio_labels is not None:
-            if input_ids is None:
-                raise ValueError("`audio_labels` requires `input_ids` to locate the speech frames")
-            audio_loss, audio_count = self.audio_loss(input_ids, hidden_states, audio_labels)
-        if text_loss is not None or audio_loss is not None:
-            loss = self.combined_loss(labels, audio_count, text_loss, audio_loss)
+            if self.depth_decoder is None:
+                raise ValueError("`audio_labels` need the depth decoder, which `depth_decoder_config` disables")
+            if input_ids is None or audio_input_ids is None:
+                raise ValueError("`audio_labels` need `input_ids` and `audio_input_ids` to locate the speech frames")
+
+            audio_loss, audio_count = self.audio_loss(
+                input_ids, hidden_states, audio_input_ids, audio_labels, audio_labels_mask
+            )
+
+        if text_loss is not None and audio_loss is not None:
+            # mean over learned text tokens and speech frames, weighted per modality
+            device = text_loss.device
+            text_weight = self.config.text_loss_weight * text_count.to(device)
+            audio_weight = self.config.audio_loss_weight * audio_count.to(device)
+            loss = (text_weight * text_loss + audio_weight * audio_loss.to(device)) / (
+                text_weight + audio_weight + 1e-6
+            )
 
         return Lfm3AudioCausalLMOutputWithPast(
-            loss=loss,
+            loss=loss if loss is not None else text_loss if text_loss is not None else audio_loss,
             text_loss=text_loss,
             audio_loss=audio_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
             last_hidden_state=kept_hidden_states,
+            padding_cache=outputs.padding_cache,
+            encoder_cache=outputs.encoder_cache,
         )
 
     def audio_loss(
-        self, input_ids: torch.LongTensor, hidden_states: torch.FloatTensor, audio_labels: torch.LongTensor
+        self,
+        input_ids: torch.LongTensor,
+        hidden_states: torch.FloatTensor,
+        audio_input_ids: torch.LongTensor,
+        audio_labels: torch.LongTensor,
+        audio_labels_mask: torch.BoolTensor | None = None,
     ) -> tuple[torch.FloatTensor, torch.LongTensor]:
-        """The depth decoder loss and the number of speech frames it supervises."""
-        config = self.config
-        # under `device_map` the hidden states sit on the last layer's device
-        input_ids, audio_labels = input_ids.to(hidden_states.device), audio_labels.to(hidden_states.device)
-        placeholders = input_ids == config.audio_out_token_id
-        # a frame is predicted from the position before it: the first position of a row has none
-        preceding = placeholders.clone()
-        preceding[:, 0] = False
-        supervised = (audio_labels != -100).all(-1)[preceding[placeholders]]
-        latents = hidden_states[preceding.roll(-1, dims=1)][supervised]
-        codes = audio_labels[preceding[placeholders]][supervised]
-        if codes.shape[0] == 0:
-            return hidden_states.sum() * 0.0, supervised.sum()
+        """Depth decoder loss (mean over masked codes) and number of learned speech frames."""
+        device = hidden_states.device
+        audio_input_ids, audio_labels = audio_input_ids.to(device), audio_labels.to(device)
+        is_learned = (audio_labels != -100).any(-1)
+
+        # frame predicted from the hidden state before it
+        batch_idx, frame_idx = (input_ids.to(device) == self.config.audio_out_token_id).nonzero(as_tuple=True)
+        backbone_last_hidden_state = hidden_states[batch_idx[is_learned], frame_idx[is_learned] - 1]
+        audio_input_ids, audio_labels = audio_input_ids[is_learned], audio_labels[is_learned]
+
+        if audio_labels_mask is None:
+            masked = self._maskgit_mask(audio_input_ids)
+        else:
+            masked = audio_labels_mask.to(device)[is_learned]
+
+        loss = self.depth_decoder(
+            input_ids=audio_input_ids.masked_fill(masked, self.config.codebook_size),
+            backbone_last_hidden_state=backbone_last_hidden_state,
+            labels=audio_labels.masked_fill(~masked, -100),
+        ).loss
+
+        return loss, is_learned.sum()
+
+    def _maskgit_mask(self, codes: torch.LongTensor) -> torch.BoolTensor:
+        """MaskGIT mask: random share of each frame's codebooks, at least one; all of an end-of-audio frame."""
         ratio = torch.rand(codes.shape[0], 1, device=codes.device)
         masked = torch.rand(codes.shape, device=codes.device) < ratio
         masked |= ~masked.any(-1, keepdim=True)
-        masked |= (codes == config.audio_eos_code).all(-1, keepdim=True)
-        logits = self.model.depth_decoder(latents, codes, masked)
-        # under `device_map` the depth decoder answers on its own device
-        codes, masked = codes.to(logits.device), masked.to(logits.device)
-        losses = F.cross_entropy(logits.transpose(1, 2).float(), codes, reduction="none")
-        return (losses * masked).sum() / masked.sum().clamp_min(1), supervised.sum()
-
-    def combined_loss(self, labels, audio_count, text_loss, audio_loss) -> torch.Tensor:
-        """Mean over the supervised text tokens and speech frames, each modality weighted by count and config."""
-        # under `device_map` the labels and the two losses can sit on three devices
-        device = (text_loss if text_loss is not None else audio_loss).device
-        text_count = 0 if labels is None else (labels[..., 1:] != -100).sum().to(device)
-        if audio_loss is not None:
-            audio_count = audio_count.to(device)
-        text_weight = self.config.text_loss_weight * text_count
-        audio_weight = self.config.audio_loss_weight * audio_count
-        return (
-            text_weight * (text_loss if text_loss is not None else 0.0)
-            + audio_weight * (audio_loss.to(device) if audio_loss is not None else 0.0)
-        ) / (text_weight + audio_weight + 1e-6)
+        masked |= (codes == self.config.audio_eos_code).all(-1, keepdim=True)
+        return masked
 
 
 __all__ = [
-    "Lfm3AudioEncoderStreamingCache",
+    "Lfm3AudioAudioModel",
+    "Lfm3AudioDepthDecoderModel",
+    "Lfm3AudioDepthDecoderForMaskedLM",
     "Lfm3AudioPreTrainedModel",
     "Lfm3AudioModel",
     "Lfm3AudioForConditionalGeneration",

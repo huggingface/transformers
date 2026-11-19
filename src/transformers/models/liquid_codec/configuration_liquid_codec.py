@@ -19,130 +19,216 @@
 # limitations under the License.
 
 import math
+from dataclasses import field
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="LiquidAI/LFM3-Audio-2B")
+@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@strict
+class LiquidCodecEncoderConfig(PreTrainedConfig):
+    r"""
+    conv_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the conv layers.
+    conv_L_cache (`int`, *optional*, defaults to 7):
+        L_cache dim in the conv layers.
+    use_sandwich_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply an RMSNorm to the operator and feed-forward outputs before they enter the residual stream.
+    use_attention_gate (`bool`, *optional*, defaults to `True`):
+        Whether the attention layers scale each head's output by a sigmoid gate computed from the layer input.
+    n_fft (`int`, *optional*, defaults to 1280):
+        FFT size; the input spectrogram has `3 * (n_fft // 2 + 1)` channels.
+    frame_stack (`int`, *optional*, defaults to 6):
+        Spectrogram frames per codec frame.
+    embedder_hidden_size (`int`, *optional*, defaults to 256):
+        Embedder channels.
+    embedder_hidden_act (`str`, *optional*, defaults to `"silu"`):
+        Embedder activation.
+    quantization_dim (`int`, *optional*, defaults to 256):
+        Width of the latent given to the quantizer.
+    """
+
+    model_type = "liquid_codec_encoder"
+    default_theta = 1000000.0
+
+    hidden_size: int = 512
+    intermediate_size: int = 2304
+    num_hidden_layers: int = 8
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 2
+    max_position_embeddings: int = 131_072
+    initializer_range: float = 0.02
+    norm_eps: float = 0.00001
+    use_cache: bool = False
+    rope_parameters: dict | None = None
+    conv_bias: bool = False
+    conv_L_cache: int = 7
+    layer_types: list[str] | None = None
+    attribute_map = {"rms_norm_eps": "norm_eps"}
+    _rope_type_labels = ("full_attention", "sliding_attention")
+    head_dim: int = 64
+    sliding_window: int | None = None
+    use_sandwich_norm: bool = True
+    use_attention_gate: bool = True
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
+    base_config_key = "encoder_config"
+    n_fft: int = 1280
+    frame_stack: int = 6
+    embedder_hidden_size: int = 256
+    embedder_hidden_act: str = "silu"
+    quantization_dim: int = 256
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "full_attention": {"rope_type": "default", "rope_theta": 1_000_000.0, "partial_rotary_factor": 1.0}
+            }
+        if self.layer_types is None:
+            self.layer_types = ["conv"] + ["conv", "full_attention"] * ((self.num_hidden_layers - 2) // 2) + ["conv"]
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+                "full_attention": {
+                    "rope_type": "proportional",
+                    "rope_theta": 1_000_000.0,
+                    "partial_rotary_factor": 0.5,
+                },
+            }
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if i % 4 == 2 else "sliding_attention" if i % 4 == 0 and i > 0 else "conv"
+                for i in range(self.num_hidden_layers)
+            ]
+
+        super().__post_init__(**kwargs)
+
+
+@auto_docstring(checkpoint="eustlb/Liquid-Codec")
+@strict
+class LiquidCodecDecoderConfig(PreTrainedConfig):
+    r"""
+    conv_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the conv layers.
+    conv_L_cache (`int`, *optional*, defaults to 7):
+        L_cache dim in the conv layers.
+    use_sandwich_norm (`bool`, *optional*, defaults to `True`):
+        Whether to apply an RMSNorm to the operator and feed-forward outputs before they enter the residual stream.
+    use_attention_gate (`bool`, *optional*, defaults to `True`):
+        Whether the attention layers scale each head's output by a sigmoid gate computed from the layer input.
+    n_fft (`int`, *optional*, defaults to 1280):
+        Synthesis FFT size.
+    hop_length (`int`, *optional*, defaults to 320):
+        Synthesis hop length.
+    frame_stack (`int`, *optional*, defaults to 6):
+        STFT frames per codec frame.
+    quantization_dim (`int`, *optional*, defaults to 256):
+        Width of the latent from the quantizer.
+    """
+
+    model_type = "liquid_codec_decoder"
+    default_theta = 1000000.0
+
+    hidden_size: int = 512
+    intermediate_size: int = 2304
+    num_hidden_layers: int = 8
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 2
+    max_position_embeddings: int = 131_072
+    initializer_range: float = 0.02
+    norm_eps: float = 0.00001
+    use_cache: bool = False
+    rope_parameters: dict | None = None
+    conv_bias: bool = False
+    conv_L_cache: int = 7
+    layer_types: list[str] | None = None
+    attribute_map = {"rms_norm_eps": "norm_eps"}
+    _rope_type_labels = ("full_attention", "sliding_attention")
+    head_dim: int = 64
+    sliding_window: int | None = 30
+    use_sandwich_norm: bool = True
+    use_attention_gate: bool = True
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
+    base_config_key = "decoder_config"
+    n_fft: int = 1280
+    hop_length: int = 320
+    frame_stack: int = 6
+    quantization_dim: int = 256
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 1_000_000.0, "partial_rotary_factor": 1.0}
+            }
+        if self.layer_types is None:
+            self.layer_types = (
+                ["conv"] + ["conv", "sliding_attention"] * ((self.num_hidden_layers - 2) // 2) + ["conv"]
+            )
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+                "full_attention": {
+                    "rope_type": "proportional",
+                    "rope_theta": 1_000_000.0,
+                    "partial_rotary_factor": 0.5,
+                },
+            }
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if i % 4 == 2 else "sliding_attention" if i % 4 == 0 and i > 0 else "conv"
+                for i in range(self.num_hidden_layers)
+            ]
+
+        super().__post_init__(**kwargs)
+
+
+@auto_docstring(checkpoint="eustlb/Liquid-Codec")
 @strict
 class LiquidCodecConfig(PreTrainedConfig):
     r"""
-    Configuration of the [`LiquidCodecModel`] bundled with LFM3-Audio-2B and LFM3-Omni-2B in their
-    `audio_tokenizer/` directory.
-
-    encoder_config (`dict` or [`Lfm3Config`], *optional*):
-        The causal LFM3 model over the stacked STFT frames; its `hidden_size` is the width of the codec.
-    decoder_config (`dict` or [`Lfm3Config`], *optional*):
-        The causal LFM3 model that synthesizes the STFT frames from the codes; its `sliding_window` is the decoder
-        context in 75 Hz frames.
-    encoder_conv_dim (`int`, *optional*, defaults to 256):
-        The number of channels of the STFT front end.
-    stft_n_fft (`int`, *optional*, defaults to 1280):
-        The FFT size of the analysis and synthesis transforms.
-    stft_hop_length (`int`, *optional*, defaults to 320):
-        The hop of the analysis and synthesis transforms.
-    stft_win_length (`int`, *optional*, defaults to 1280):
-        The window length of the analysis and synthesis transforms.
-    stft_frame_stack (`int`, *optional*, defaults to 6):
-        The number of STFT frames per codec frame.
-    quantizer_dim (`int`, *optional*, defaults to 256):
-        The width of the latent handed to the quantizer.
-    fsq_levels (`list[int]`, *optional*, defaults to `[8, 7, 6, 6]`):
-        The number of levels of each finite-scalar-quantization dimension; their product is the codebook size.
-    n_q (`int`, *optional*, defaults to 12):
-        The number of codebooks.
+    encoder_config (`dict` or [`LiquidCodecEncoderConfig`], *optional*):
+        Encoder config. `None`: no encoder (`from_pretrained(..., encoder_config=None)` loads the decoder only).
+    decoder_config (`dict` or [`LiquidCodecDecoderConfig`], *optional*):
+        Decoder config. `None`: no decoder (`from_pretrained(..., decoder_config=None)` loads the encoder only).
+    quantization_dim (`int`, *optional*, defaults to 256):
+        Width of the quantizer's latent.
+    quantization_levels (`list[int]`, *optional*, defaults to `[8, 7, 6, 6]`):
+        Levels per FSQ dimension; their product is the codebook size.
+    num_quantizers (`int`, *optional*, defaults to 12):
+        Number of codebooks.
     """
 
     model_type = "liquid_codec"
-    attribute_map = {"quantization_levels": "fsq_levels"}
-    _backbone_kwargs = {
-        "vocab_size": 1,
-        "pad_token_id": None,
-        "bos_token_id": None,
-        "eos_token_id": None,
-        "hidden_size": 512,
-        "intermediate_size": 2304,
-        "num_hidden_layers": 8,
-        "num_attention_heads": 8,
-        "num_key_value_heads": 2,
-        "head_dim": 64,
-        "max_position_embeddings": 131_072,
-        "use_cache": False,
-        "tie_word_embeddings": False,
-    }
+    # released config keys (LiquidAI/Liquid-Codec)
+    attribute_map = {"fsq_levels": "quantization_levels", "quantizer_dim": "quantization_dim", "n_q": "num_quantizers"}
     sub_configs_defaults = {
-        "encoder_config": SubConfigSpec(
-            config_class=AutoConfig,
-            model_type="lfm3",
-            init_kwargs={
-                **_backbone_kwargs,
-                "layer_types": [
-                    "conv",
-                    "conv",
-                    "full_attention",
-                    "conv",
-                    "full_attention",
-                    "conv",
-                    "full_attention",
-                    "conv",
-                ],
-                "sliding_window": None,
-                "rope_parameters": {
-                    "full_attention": {"rope_type": "default", "rope_theta": 1_000_000.0, "partial_rotary_factor": 1.0}
-                },
-            },
-        ),
-        "decoder_config": SubConfigSpec(
-            config_class=AutoConfig,
-            model_type="lfm3",
-            init_kwargs={
-                **_backbone_kwargs,
-                "layer_types": [
-                    "conv",
-                    "conv",
-                    "sliding_attention",
-                    "conv",
-                    "sliding_attention",
-                    "conv",
-                    "sliding_attention",
-                    "conv",
-                ],
-                "sliding_window": 30,
-                "rope_parameters": {
-                    "sliding_attention": {
-                        "rope_type": "default",
-                        "rope_theta": 1_000_000.0,
-                        "partial_rotary_factor": 1.0,
-                    }
-                },
-            },
-        ),
+        "encoder_config": SubConfigSpec(config_class=LiquidCodecEncoderConfig, optional=True),
+        "decoder_config": SubConfigSpec(config_class=LiquidCodecDecoderConfig, optional=True),
     }
 
-    encoder_config: dict | PreTrainedConfig | None = None
-    decoder_config: dict | PreTrainedConfig | None = None
-    encoder_conv_dim: int = 256
-    stft_n_fft: int = 1280
-    stft_hop_length: int = 320
-    stft_win_length: int = 1280
-    stft_frame_stack: int = 6
-    quantizer_dim: int = 256
-    fsq_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
-    n_q: int = 12
+    encoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
+    decoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
+    quantization_dim: int = 256
+    quantization_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
+    num_quantizers: int = 12
     sampling_rate: int = 24_000
     initializer_range: float = 0.02
 
+    def validate_architecture(self):
+        for half in (self.encoder_config, self.decoder_config):
+            if isinstance(half, PreTrainedConfig) and half.quantization_dim != self.quantization_dim:
+                raise ValueError(
+                    f"The halves must read and write the quantizer's `quantization_dim={self.quantization_dim}` "
+                    f"latent, got {half.quantization_dim} for {type(half).__name__}."
+                )
+
     @property
     def codebook_size(self) -> int:
-        return math.prod(self.fsq_levels)
-
-    @property
-    def frame_size(self) -> int:
-        return self.stft_hop_length * self.stft_frame_stack
+        return math.prod(self.quantization_levels)
 
 
-__all__ = ["LiquidCodecConfig"]
+__all__ = ["LiquidCodecConfig", "LiquidCodecDecoderConfig", "LiquidCodecEncoderConfig"]

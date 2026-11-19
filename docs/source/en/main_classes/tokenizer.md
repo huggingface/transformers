@@ -39,6 +39,10 @@ methods for using all the tokenizers:
 - Managing special tokens (like mask, beginning-of-sentence, etc.): adding them, assigning them to attributes in the
   tokenizer for easy access and making sure they are not split during tokenization.
 
+[`~tokenization_utils_base.PreTrainedTokenizerBase.decode`] accepts a single sequence of ids or a batch of sequences.
+[`~tokenization_utils_base.PreTrainedTokenizerBase.batch_decode`] is kept for backward compatibility and expects a
+batch: an empty batch returns an empty list, and passing it a single sequence is deprecated, use `decode` instead.
+
 [`BatchEncoding`] holds the output of the
 [`~tokenization_utils_base.PreTrainedTokenizerBase`]'s encoding methods (`__call__`,
 `encode_plus` and `batch_encode_plus`) and is derived from a Python dictionary. When the tokenizer is a pure python

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-03.*
+*This model was contributed to Hugging Face Transformers on 2026-11-19.*
 
 
 # LFM3-Audio
@@ -35,216 +35,318 @@ decoder, alongside text. Speech frames are turned into audio by the [Liquid code
   frame's codebooks is hidden and predicted from the others.
 - **Codec**: the [Liquid codec](./liquid_codec.md), 12 codebooks of 2016 codes at 12.5 frames per second, 24 kHz.
 
-Generation is text by default. `<|audio_start|>` switches to speech until an end-of-audio frame. `<|mixed_start|>`
-alternates blocks of 6 text tokens and 12 speech frames; `<|text_end|>` closes the text side and the speech goes on
-until an end-of-audio frame. The processor expands one `<|audio|>` placeholder per input clip into the clip's encoder
-tokens and, given the codec, one `<|audio_out|>` placeholder per output clip into its speech frames.
-
-## Usage
+## Transcription
 
 ```python
-from transformers import AutoProcessor, Lfm3AudioForConditionalGeneration
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "LiquidAI/LFM3-Audio-2B"
-model = Lfm3AudioForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-processor = AutoProcessor.from_pretrained(model_id)
-codec = processor.audio_tokenizer.to(model.device)
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
+
+audio_url = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+)
+conversation = [
+    {"role": "system", "content": "Perform ASR in English."},
+    {"role": "user", "content": [{"type": "audio", "url": audio_url}]},
+]
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device, dtype=model.dtype)
+
+outputs = model.generate(**inputs, max_new_tokens=128)
+transcription = processor.decode(outputs.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+print(transcription)
+```
+
+## Text to speech
+
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
 
 conversation = [
-    {"role": "system", "content": "Respond with interleaved text and audio."},
-    {"role": "user", "content": [{"type": "audio", "audio": "question.wav"}]},
-    {"role": "assistant", "content": "<|mixed_start|>"},
-]
-inputs = processor.apply_chat_template(conversation, continue_final_message=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, model.dtype)
-outputs = model.generate(**inputs, max_new_tokens=256)
-
-text = processor.decode(outputs.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-codes = outputs.audio_codes[0, :, : outputs.audio_lengths[0]]
-codes = codes[:, ~(codes == model.config.audio_eos_code).all(0)]  # drop the end-of-audio frames
-waveform = codec.decode(codes[None]).audio_values[0]  # 24 kHz
-```
-
-`generate` is the [`~generation.GenerationMixin`] loop with a text/speech mode per row: the text sampling settings
-come from the model's generation config as usual, the speech frames from the depth decoder's own generation config
-(`do_sample`, `temperature`, `top_k`, `repetition_penalty` and `repetition_window`, the number of past frames the
-penalty covers). The checkpoint's `generation_config.json` carries both, the depth decoder's under the
-`depth_decoder_` prefix, and sets `return_dict_in_generate` so the bare call returns the [`Lfm3AudioGenerateOutput`]
-holding `audio_codes` next to `sequences`, as well as `maskgit_schedule` (the codebooks each depth pass reveals) and
-`interleaved_n_text` / `interleaved_n_audio` (the block sizes of the interleaved mode). Override per call with
-`depth_decoder_*` kwargs (`model.generate(**inputs, depth_decoder_temperature=0.8)`). The mode is read per row from
-the prompt's last token: prefill the assistant turn with `<|audio_start|>` or `<|mixed_start|>` through the chat
-template as above, or leave it open and let the model choose; pass
-`suppress_tokens=[model.config.audio_start_token_id, model.config.mixed_start_token_id]` to keep a reply in text.
-Every speech frame occupies one `<|audio_out|>` slot of `sequences`, end-of-audio frames included, so the output can
-be fed back as a prompt.
-Inputs are not validated: every `<|audio|>` and `<|audio_out|>` placeholder needs its features or codes, as the
-processor returns them.
-
-The frames of a finished turn are decoded with the processor's codec as above. `generate` returns the frames once the
-loop completes (the streamer only carries token ids); the codec can then decode them a frame at a time through
-`decode(..., use_streaming=True)` (see [`LiquidCodecModel`]) instead of waiting for the whole waveform.
-
-For training, `labels` scores the text tokens and `audio_labels` the speech frames (one row per `<|audio_out|>`
-placeholder, `-100` rows ignored); the depth decoder is trained to fill a random subset of each frame's codebooks.
-
-```python
-tts = [
     {"role": "system", "content": "Perform TTS in American English using a female voice."},
-    {"role": "user", "content": "The quick brown fox jumps over the lazy dog"},
+    {"role": "user", "content": "The quick brown fox jumps over the lazy dog."},
 ]
-prompt = processor.apply_chat_template(tts, tokenize=False, add_generation_prompt=True)
-inputs = processor(text=prompt + "<|audio_start|><|audio_out|><|im_end|>\n", audio_out=[target_speech], return_tensors="pt").to(model.device)
-labels = inputs["input_ids"].clone()
-labels[:, : len(processor(text=prompt)["input_ids"][0])] = -100  # the checkpoint is trained on assistant turns only
-labels[labels >= processor.audio_token_id] = -100
-loss = model(**inputs, labels=labels, audio_labels=inputs["audio_out_codes"]).loss
-```
+# the answer opens with <|audio_start|>: speech until an end-of-audio frame
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    generation_mode="audio",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device, dtype=model.dtype)
 
-## Batching and saving
-
-Use left padding and pass the processor's attention mask. Each row independently switches between text, speech and
-interleaved modes and stops at its own text EOS; rows that finish early are padded. The backbone runs the batch
-together and MaskGIT batches the rows currently speaking; it still samples reveal orders, so batching changes
-random-number consumption even with greedy code selection.
-
-```python
-processor.tokenizer.padding_side = "left"
-inputs = processor(text=prompts, padding=True, return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=256)
-for row, length in enumerate(outputs.audio_lengths.tolist()):
-    codes = outputs.audio_codes[row, :, :length]
-    codes = codes[:, ~(codes == model.config.audio_eos_code).all(0)]
-    if codes.shape[-1]:
-        waveform = codec.decode(codes[None]).audio_values
+audio = processor.decode(outputs.audio_sequences, outputs.audio_sequences_mask)
+processor.save_audio(audio, "out/tts.wav")
 ```
 
-`audio_lengths` excludes the `-1` padding of `audio_codes`, so slice each row before decoding it. Beam search and
-multiple returned sequences per input are not supported.
+## Speech conversation
 
-`processor.save_pretrained(directory)` saves the feature settings, tokenizer, special tokens, chat template and a
-reference to the codec checkpoint (`LiquidAI/Liquid-Codec` for the released models), which
-`AutoProcessor.from_pretrained(directory)` loads again as `processor.audio_tokenizer`. Save the language/audio model
-to the same directory with `model.save_pretrained(directory)` to produce a complete package.
-
-## Incremental audio input
-
-The speech encoder follows a live stream: `model.model.get_audio_features_stream(chunk, cache)` returns the audio
-tokens each chunk completes and the encoder state (`Lfm3AudioEncoderStreamingCache`, holding the bounded
-spectrogram context and the encoder's key/value cache); pass `is_final=True` to flush the trailing token. Feed the
-projected tokens to the language model as `inputs_embeds`, with the cache and attention mask of the prompt already
-prefilled, then let `generate` continue from that cache once the clip ends.
+The answer interleaves text and speech; the text is the transcript of the speech.
 
 ```python
-features = processor.feature_extractor(audio, sampling_rate=16000, return_tensors="pt")["input_features"].to(model.device, model.dtype)
-cache, embeds = None, []
-for start in range(0, features.shape[-1], 96):
-    chunk, cache = model.model.get_audio_features_stream(features[..., start : start + 96], cache, is_final=start + 96 >= features.shape[-1])
-    embeds.append(chunk)
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
+
+audio_url = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+)
+conversation = [
+    {"role": "system", "content": "Respond with interleaved text and audio."},
+    {"role": "user", "content": [{"type": "audio", "url": audio_url}]},
+]
+# the answer opens with <|mixed_start|>: blocks of text, then of speech
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    generation_mode="interleaved",
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device, dtype=model.dtype)
+
+outputs = model.generate(**inputs, max_new_tokens=1024)
+text = processor.decode(outputs.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+print(text)
+audio = processor.decode(outputs.audio_sequences, outputs.audio_sequences_mask)
+processor.save_audio(audio, "out/answer.wav")
+```
+
+## Batching
+
+A batch can mix outputs: pass one `generation_mode` per conversation. Pad prompts on the left. With `"text"`, the
+model may still switch to speech; to forbid it, pass
+`suppress_tokens=[model.config.audio_start_token_id, model.config.mixed_start_token_id]` to `generate`.
+
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
+
+audio_url = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+)
+transcribe = [
+    {"role": "system", "content": "Perform ASR in English."},
+    {"role": "user", "content": [{"type": "audio", "url": audio_url}]},
+]
+speak = [
+    {"role": "system", "content": "Perform TTS in American English using a female voice."},
+    {"role": "user", "content": "Hello there!"},
+]
+inputs = processor.apply_chat_template(
+    [transcribe, speak],
+    add_generation_prompt=True,
+    generation_mode=["text", "audio"],
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device, dtype=model.dtype)
+
+outputs = model.generate(**inputs, max_new_tokens=128)
+transcription = processor.decode(outputs.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+print(transcription)
+# one waveform per speech segment: only the second row speaks
+audio = processor.decode(outputs.audio_sequences, outputs.audio_sequences_mask)
+processor.save_audio(audio, ["out/batched_speech.wav"])
 ```
 
 ## Live transcription
 
-Checkpoints trained for live ASR take the audio inside the assistant turn in chunks of
-`generation_config.interleaved_n_audio` encoder tokens (0.96 s) and write the text of each chunk as soon as it arrives:
-
-```
-<prompt> [A x 12] text<|text_end|> [A x 12] text<|text_end|> ... [A x r] <|mixed_end|> text<|text_end|><|im_end|>
-```
-
-`transcribe_live` runs one chunk: the streaming encoder completes the chunk's audio tokens, the language model reads
-the pending text (the prompt, or the `<|text_end|>` closing the previous block) together with them, and the block is
-decoded greedily. The returned state carries the
-encoder stream and the language-model context separately: pass `input_ids` again to start the context over, the way
-training samples of at most 30 seconds are chained, while the encoder keeps following the stream.
+Pass `input_features` as an iterator to transcribe a stream: each item is the processor's output on a 0.96 s chunk,
+and the text of each chunk goes to the streamer as it is written. Mark the final chunk with `is_last_audio_chunk=True`.
+One context holds at most 30 s: pass the returned caches to the next `generate` call to continue. Streams are not
+batched.
 
 ```python
-import torch
+import itertools
 
-tokenizer = processor.tokenizer
-chunk_frames = 8 * model.generation_config.interleaved_n_audio
-prompt = tokenizer("<|startoftext|><|im_start|>system\nPerform live ASR.<|im_end|>\n", add_special_tokens=False)
-prompt = prompt.input_ids + tokenizer("<|im_start|>assistant\n", add_special_tokens=False).input_ids
-prompt = torch.tensor([prompt], device=model.device)
-suppress = tokenizer.convert_tokens_to_ids(["<|mixed_end|>", "<|endoftext|>"])
-stop = tokenizer.convert_tokens_to_ids(["<|endoftext|>", "<|im_start|>"])
-state, feature_cache, text = None, None, []
-mel = torch.empty((1, processor.feature_extractor.feature_size, 0), device=model.device, dtype=model.dtype)
+from transformers import AutoModelForMultimodalLM, AutoProcessor, TextStreamer
+from transformers.audio_utils import load_audio
+
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+
+audio = load_audio(
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dude_where_is_my_car.wav",
+    sampling_rate=16000,
+)
+window, hop = processor.num_samples_per_audio_chunk, processor.audio_chunk_hop_length
 
 
-def transcribe(frames, is_final=False):
-    global state
-    output = model.transcribe_live(
-        frames,
-        state,
-        input_ids=prompt if state is None else None,
-        is_final=is_final,
-        max_new_tokens=96 if is_final else 48,
-        suppress_token_ids=suppress,
-        stop_token_ids=stop,
+def input_features_generator():
+    # a microphone would yield its samples as they come; consecutive windows overlap by `window - hop` samples
+    starts = range(0, len(audio) - (window - hop), hop)
+    for start in starts:
+        yield processor(
+            audio=audio[start : start + window],
+            sampling_rate=16000,
+            is_last_audio_chunk=start == starts[-1],
+            return_tensors="pt",
+        ).to(model.device, dtype=model.dtype)
+
+
+prompt = processor.apply_chat_template(
+    [{"role": "system", "content": "Perform live ASR."}],
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
+streamer = TextStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+# one context holds at most 30 s of audio, as in training: past it, a new context continues the stream
+chunks = input_features_generator()
+caches = {}
+while segment := list(itertools.islice(chunks, processor.max_audio_chunks_per_context)):
+    outputs = model.generate(
+        **prompt, input_features=iter(segment), streamer=streamer, return_dict_in_generate=True, **caches
     )
-    state = output.state
-    text.extend(token for token in output.sequences[0].tolist() if token != suppress[0])
-
-
-for chunk in waveform_chunks:  # mono float samples at 16 kHz, any size
-    features, feature_cache = processor.feature_extractor.stream(chunk, feature_cache, sampling_rate=16000)
-    mel = torch.cat((mel, features.input_features.to(model.device, model.dtype)), dim=-1)
-    while mel.shape[-1] >= chunk_frames:
-        transcribe(mel[..., :chunk_frames])
-        mel = mel[..., chunk_frames:]
-features, feature_cache = processor.feature_extractor.stream([], feature_cache, is_final=True, sampling_rate=16000)
-mel = torch.cat((mel, features.input_features.to(model.device, model.dtype)), dim=-1)
-while mel.shape[-1] > chunk_frames:
-    transcribe(mel[..., :chunk_frames])
-    mel = mel[..., chunk_frames:]
-transcribe(mel, is_final=True)  # the final chunk holds 0 to 12 tokens and ends the turn
-print(tokenizer.decode(text, skip_special_tokens=True))
+    caches = {"padding_cache": outputs.padding_cache, "encoder_cache": outputs.encoder_cache}
 ```
 
-Before the final chunk `<|mixed_end|>`, `<|audio_start|>`, `<|mixed_start|>`, the end-of-turn token and the extra
-`suppress_token_ids` are never sampled; a block that exhausts `max_new_tokens` is still closed with `<|text_end|>`.
-The final block starts with `<|mixed_end|>` and ends at `<|text_end|>` or a stop token. One stream is transcribed at a
-time; the state's caches are mutated in place and a finalized state cannot be reused.
+## Training
+
+The model trains on text and speech answers at once. Put the target in the assistant turn, speech as an `audio_out`
+block holding the 24 kHz speech (or its codes), and pass `output_labels=True`: the codec encodes the speech, and the
+processor returns the text targets as `labels` and the speech frames as `audio_labels`.
+
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, revision=revision, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
+model.train()
+
+audio_url = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
+)
+transcript = "Mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+transcription = [
+    {"role": "system", "content": "Perform ASR in English."},
+    {"role": "user", "content": [{"type": "audio", "url": audio_url}]},
+    {"role": "assistant", "content": transcript},
+]
+text_to_speech = [
+    {"role": "system", "content": "Perform TTS in American English using a female voice."},
+    {"role": "user", "content": transcript},
+    {"role": "assistant", "content": [{"type": "audio_out", "url": audio_url}]},
+]
+
+inputs = processor.apply_chat_template(
+    [transcription, text_to_speech],
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
+
+outputs = model(**inputs)
+outputs.loss.backward()
+print(f"loss {outputs.loss.item():.3f}")
+print(f"text {outputs.text_loss.item():.3f}, speech {outputs.audio_loss.item():.3f}")
+```
+
+## Loading parts of the model
+
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+model_id, revision = "eustlb/LFM3-Audio-2B", "refs/pr/1"
+
+# full model: speech encoder, LM and depth decoder
+model = AutoModelForMultimodalLM.from_pretrained(
+    model_id, revision=revision, device_map="auto"
+)
+print(f"{model.num_parameters() / 1e9:.2f}B")  # 1.98B
+# transcription only: no depth decoder
+asr_model = AutoModelForMultimodalLM.from_pretrained(
+    model_id, revision=revision, depth_decoder_config=None, device_map="auto"
+)
+print(f"{asr_model.num_parameters() / 1e9:.2f}B")  # 1.84B
+# speech output only: no speech encoder
+tts_model = AutoModelForMultimodalLM.from_pretrained(
+    model_id, revision=revision, audio_config=None, device_map="auto"
+)
+print(f"{tts_model.num_parameters() / 1e9:.2f}B")  # 1.86B
+
+# full codec: encoder and decoder
+processor = AutoProcessor.from_pretrained(model_id, revision=revision, device_map="auto")
+print(f"{processor.audio_tokenizer.num_parameters() / 1e6:.1f}M")  # 73.6M
+# speech output only: codec decoder
+tts_processor = AutoProcessor.from_pretrained(
+    model_id, revision=revision, device_map="auto", audio_tokenizer_kwargs={"encoder_config": None}
+)
+print(f"{tts_processor.audio_tokenizer.num_parameters() / 1e6:.1f}M")  # 36.4M
+```
 
 ## Lfm3AudioConfig
 
 [[autodoc]] Lfm3AudioConfig
 
-## Lfm3AudioEncoderConfig
+## Lfm3AudioAudioConfig
 
-[[autodoc]] Lfm3AudioEncoderConfig
+[[autodoc]] Lfm3AudioAudioConfig
+
+## Lfm3AudioDepthDecoderConfig
+
+[[autodoc]] Lfm3AudioDepthDecoderConfig
 
 ## Lfm3AudioFeatureExtractor
 
 [[autodoc]] Lfm3AudioFeatureExtractor
     - __call__
-    - stream
 
-## Lfm3AudioFeatureStreamingCache
+## Lfm3AudioAudioModel
 
-[[autodoc]] Lfm3AudioFeatureStreamingCache
+[[autodoc]] Lfm3AudioAudioModel
+    - forward
 
-## Lfm3AudioEncoderStreamingCache
+## Lfm3AudioDepthDecoderModel
 
-[[autodoc]] Lfm3AudioEncoderStreamingCache
+[[autodoc]] Lfm3AudioDepthDecoderModel
+    - forward
 
-## Lfm3AudioLiveTranscriptionState
+## Lfm3AudioDepthDecoderForMaskedLM
 
-[[autodoc]] models.lfm3_audio.generation_lfm3_audio.Lfm3AudioLiveTranscriptionState
-
-## Lfm3AudioLiveTranscriptionOutput
-
-[[autodoc]] models.lfm3_audio.generation_lfm3_audio.Lfm3AudioLiveTranscriptionOutput
+[[autodoc]] Lfm3AudioDepthDecoderForMaskedLM
+    - forward
 
 ## Lfm3AudioProcessor
 
 [[autodoc]] Lfm3AudioProcessor
+    - __call__
+    - apply_chat_template
+    - decode
+    - save_audio
 
 ## Lfm3AudioModel
 
 [[autodoc]] Lfm3AudioModel
     - forward
-    - get_audio_features_stream
+    - get_audio_features
 
 ## Lfm3AudioGenerateOutput
 
@@ -254,4 +356,4 @@ time; the state's caches are mutated in place and a finalized state cannot be re
 
 [[autodoc]] Lfm3AudioForConditionalGeneration
     - forward
-    - transcribe_live
+    - generate

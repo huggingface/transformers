@@ -17,6 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import math
+from dataclasses import field
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -26,57 +30,187 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="LiquidAI/LFM3-Audio-2B")
 @strict
-class Lfm3AudioEncoderConfig(PreTrainedConfig):
+class Lfm3AudioAudioConfig(PreTrainedConfig):
     r"""
-    text_config (`Lfm3Config` or `dict`, *optional*):
-        The configuration of the LFM3 model run over the downsampled spectrogram: sliding-window attention over
-        `sliding_window` frames, no attention gate, no sandwich norm. Defaults to the 17-layer, 768-wide model of
-        LFM3-Audio.
-    conv_channels (`int`, *optional*, defaults to 256):
-        The number of channels of the downsampling convolutions.
+    conv_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the conv layers.
+    conv_L_cache (`int`, *optional*, defaults to 3):
+        L_cache dim in the conv layers.
+    use_sandwich_norm (`bool`, *optional*, defaults to `False`):
+        Whether to apply an RMSNorm to the operator and feed-forward outputs before they enter the residual stream.
+    use_attention_gate (`bool`, *optional*, defaults to `False`):
+        Whether the attention layers scale each head's output by a sigmoid gate computed from the layer input.
+    num_mel_bins (`int`, *optional*, defaults to 128):
+        The number of mel bins of the input spectrogram.
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        The number of spectrogram frames per encoder token, a power of 2: one strided convolution per factor of 2.
+    subsampling_conv_channels (`int`, *optional*, defaults to 256):
+        The number of channels of the subsampling convolutions.
+    subsampling_conv_kernel_size (`int`, *optional*, defaults to 3):
+        The kernel size of the subsampling convolutions.
+    subsampling_conv_stride (`int`, *optional*, defaults to 2):
+        The stride of the subsampling convolutions.
     """
 
-    model_type = "lfm3_audio_encoder"
-    sub_configs_defaults = {
-        "text_config": SubConfigSpec(
-            config_class=AutoConfig,
-            model_type="lfm3",
-            init_kwargs={
-                "vocab_size": 2,
-                "hidden_size": 768,
-                "intermediate_size": 1792,
-                "num_hidden_layers": 17,
-                "num_attention_heads": 8,
-                "num_key_value_heads": 4,
-                "head_dim": 96,
-                "layer_types": ["conv", "conv", "sliding_attention"] * 5 + ["sliding_attention"] * 2,
-                "sliding_window": 32,
-                "conv_L_cache": 3,
-                "rope_parameters": {"sliding_attention": {"rope_type": "default", "rope_theta": 1_000_000.0}},
-                "use_sandwich_norm": False,
-                "use_attention_gate": False,
-                "pad_token_id": 0,
-                "bos_token_id": 1,
-                "eos_token_id": None,
-            },
-        ),
-    }
+    model_type = "lfm3_audio_audio"
+    default_theta = 1000000.0
 
-    text_config: dict | PreTrainedConfig | None = None
-    num_mel_bins: int = 128
-    conv_channels: int = 256
+    hidden_size: int = 768
+    intermediate_size: int = 1792
+    num_hidden_layers: int = 17
+    num_attention_heads: int = 8
+    num_key_value_heads: int = 4
+    max_position_embeddings: int = 128_000
     initializer_range: float = 0.02
+    norm_eps: float = 0.00001
+    use_cache: bool = True
+    rope_parameters: dict | None = None
+    conv_bias: bool = False
+    conv_L_cache: int = 3
+    layer_types: list[str] | None = None
+    attribute_map = {"rms_norm_eps": "norm_eps"}
+    _rope_type_labels = ("full_attention", "sliding_attention")
+    head_dim: int = 96
+    sliding_window: int | None = 32
+    use_sandwich_norm: bool = False
+    use_attention_gate: bool = False
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
+    base_config_key = "audio_config"
+    num_mel_bins: int = 128
+    subsampling_factor: int = 8
+    subsampling_conv_channels: int = 256
+    subsampling_conv_kernel_size: int = 3
+    subsampling_conv_stride: int = 2
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"sliding_attention": {"rope_type": "default", "rope_theta": 1_000_000.0}}
+
+        if self.layer_types is None:
+            self.layer_types = ["conv", "conv", "sliding_attention"] * (self.num_hidden_layers // 3) + [
+                "sliding_attention"
+            ] * (self.num_hidden_layers % 3)
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+                "full_attention": {
+                    "rope_type": "proportional",
+                    "rope_theta": 1_000_000.0,
+                    "partial_rotary_factor": 0.5,
+                },
+            }
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if i % 4 == 2 else "sliding_attention" if i % 4 == 0 and i > 0 else "conv"
+                for i in range(self.num_hidden_layers)
+            ]
+
+        super().__post_init__(**kwargs)
+
+    @property
+    def subsampling_out_hidden_size(self) -> int:
+        # the mel axis is padded by `(kernel_size - 1) // 2` on both sides
+        padding = 2 * ((self.subsampling_conv_kernel_size - 1) // 2)
+        num_bins = self.num_mel_bins
+        for _ in range(int(math.log2(self.subsampling_factor))):
+            num_bins = (num_bins + padding - self.subsampling_conv_kernel_size) // self.subsampling_conv_stride + 1
+
+        return self.subsampling_conv_channels * num_bins
+
+    def validate_architecture(self):
+        if self.subsampling_factor < 2 or self.subsampling_factor & (self.subsampling_factor - 1):
+            raise ValueError(f"`subsampling_factor` must be a power of 2, got {self.subsampling_factor}")
+
+
+@auto_docstring(checkpoint="LiquidAI/LFM3-Audio-2B")
+@strict
+class Lfm3AudioDepthDecoderConfig(PreTrainedConfig):
+    r"""
+    conv_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the conv layers.
+    conv_L_cache (`int`, *optional*, defaults to 7):
+        L_cache dim in the conv layers.
+    use_sandwich_norm (`bool`, *optional*, defaults to `False`):
+        Whether to apply an RMSNorm to the operator and feed-forward outputs before they enter the residual stream.
+    use_attention_gate (`bool`, *optional*, defaults to `True`):
+        Whether the attention layers scale each head's output by a sigmoid gate computed from the layer input.
+    num_codebooks (`int`, *optional*, defaults to 12):
+        The number of codebooks of a speech frame, one input slot each.
+    codebook_size (`int`, *optional*, defaults to 2017):
+        The size of each codebook. The embedding tables of all codebooks are stored as one
+        `(num_codebooks, codebook_size, hidden_size)` weight.
+    backbone_hidden_size (`int`, *optional*, defaults to 2048):
+        The hidden size of the language model, whose hidden state the decoder projects into its input slots.
+    """
+
+    model_type = "lfm3_audio_depth_decoder"
+    default_theta = 1000000.0
+
+    hidden_size: int = 1024
+    intermediate_size: int = 2816
+    num_hidden_layers: int = 3
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    max_position_embeddings: int = 12
+    initializer_range: float = 0.02
+    norm_eps: float = 0.00001
+    use_cache: bool = False
+    tie_word_embeddings: bool = True
+    rope_parameters: dict | None = None
+    conv_bias: bool = False
+    conv_L_cache: int = 7
+    layer_types: list[str] | None = None
+    attribute_map = {"rms_norm_eps": "norm_eps"}
+    _rope_type_labels = ("full_attention", "sliding_attention")
+    head_dim: int = 32
+    sliding_window: int | None = None
+    use_sandwich_norm: bool = False
+    use_attention_gate: bool = True
+    attention_bias: bool = False
+    attention_dropout: float = 0.0
+    base_config_key = "depth_decoder_config"
+    num_codebooks: int = 12
+    codebook_size: int = 2017
+    backbone_hidden_size: int = 2048
+
+    def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "full_attention": {"rope_type": "default", "rope_theta": 1_000_000.0, "partial_rotary_factor": 1.0}
+            }
+
+        if self.layer_types is None:
+            self.layer_types = ["full_attention"] * self.num_hidden_layers
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+                "full_attention": {
+                    "rope_type": "proportional",
+                    "rope_theta": 1_000_000.0,
+                    "partial_rotary_factor": 0.5,
+                },
+            }
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if i % 4 == 2 else "sliding_attention" if i % 4 == 0 and i > 0 else "conv"
+                for i in range(self.num_hidden_layers)
+            ]
+
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM3-Audio-2B")
 @strict
 class Lfm3AudioConfig(PreTrainedConfig):
     r"""
-    audio_encoder_config (`Lfm3AudioEncoderConfig` or `dict`, *optional*):
-        The configuration of the speech encoder.
-    depth_config (`Lfm3Config` or `dict`, *optional*):
-        The configuration of the depth decoder, a bidirectional LFM3 model over the codebook axis of one speech
-        frame. Defaults to the 3-layer, 1024-wide model of LFM3-Audio.
+    audio_config (`Lfm3AudioAudioConfig` or `dict`, *optional*):
+        Speech encoder config. `None`: no speech encoder nor projector, no speech input.
+    depth_decoder_config (`Lfm3AudioDepthDecoderConfig` or `dict`, *optional*):
+        Depth decoder config (bidirectional LFM3 model over the codebooks of a speech frame). `None`: no depth
+        decoder nor speech frame embeddings, no speech frames in or out.
+    num_codebooks (`int`, *optional*, defaults to 12):
+        The number of codebooks of a speech frame.
     codebook_size (`int`, *optional*, defaults to 2017):
         The size of each codebook, the codec's codes plus the end-of-audio code.
     audio_eos_code (`int`, *optional*, defaults to 2016):
@@ -89,6 +223,16 @@ class Lfm3AudioConfig(PreTrainedConfig):
         The id of `<|text_end|>`, which ends the text of an interleaved answer.
     mixed_start_token_id (`int`, *optional*, defaults to 125015):
         The id of `<|mixed_start|>`, which switches generation to interleaved text and speech.
+    mixed_end_token_id (`int`, *optional*, defaults to 125016):
+        The id of `<|mixed_end|>`, which opens the closing text of a live transcription after its last audio.
+    interleaved_n_text (`int`, *optional*, defaults to 6):
+        The number of text tokens of a block of an interleaved answer.
+    interleaved_n_audio (`int`, *optional*, defaults to 12):
+        Speech frames per block of an interleaved answer; also encoder tokens per block of a live transcription.
+    maskgit_schedule (`list[int]`, *optional*):
+        Codebooks revealed per depth decoder pass, summing to `num_codebooks`. Defaults to three equal passes.
+    projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The activation of the projector from the speech encoder to the language model.
     text_loss_weight (`float`, *optional*, defaults to 1.0):
         The weight of the text loss in the training loss.
     audio_loss_weight (`float`, *optional*, defaults to 1.0):
@@ -96,39 +240,15 @@ class Lfm3AudioConfig(PreTrainedConfig):
     """
 
     model_type = "lfm3_audio"
-    attribute_map = {"audio_config": "audio_encoder_config"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="lfm3"),
-        "audio_encoder_config": SubConfigSpec(config_class=Lfm3AudioEncoderConfig),
-        "depth_config": SubConfigSpec(
-            config_class=AutoConfig,
-            model_type="lfm3",
-            init_kwargs={
-                "vocab_size": 1,
-                "pad_token_id": None,
-                "bos_token_id": None,
-                "eos_token_id": None,
-                "hidden_size": 1024,
-                "intermediate_size": 2816,
-                "num_hidden_layers": 3,
-                "num_attention_heads": 32,
-                "num_key_value_heads": 8,
-                "head_dim": 32,
-                "max_position_embeddings": 12,
-                "layer_types": ["full_attention"] * 3,
-                "rope_parameters": {
-                    "full_attention": {"rope_type": "default", "rope_theta": 1_000_000.0, "partial_rotary_factor": 1.0}
-                },
-                "sliding_window": None,
-                "use_sandwich_norm": False,
-                "use_cache": False,
-            },
-        ),
+        "audio_config": SubConfigSpec(config_class=Lfm3AudioAudioConfig, optional=True),
+        "depth_decoder_config": SubConfigSpec(config_class=Lfm3AudioDepthDecoderConfig, optional=True),
     }
 
     text_config: dict | PreTrainedConfig | None = None
-    audio_encoder_config: dict | PreTrainedConfig | None = None
-    depth_config: dict | PreTrainedConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = field(default_factory=dict)
+    depth_decoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
     num_codebooks: int = 12
     codebook_size: int = 2017
     audio_eos_code: int = 2016
@@ -137,16 +257,39 @@ class Lfm3AudioConfig(PreTrainedConfig):
     audio_start_token_id: int = 125_012
     text_end_token_id: int = 125_014
     mixed_start_token_id: int = 125_015
+    mixed_end_token_id: int = 125_016
+    interleaved_n_text: int = 6
+    interleaved_n_audio: int = 12
+    maskgit_schedule: list[int] | None = None
     tie_word_embeddings: bool = True
+    projector_hidden_act: str = "gelu"
     text_loss_weight: float = 1.0
     audio_loss_weight: float = 1.0
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.depth_config, dict):
-            # the depth decoder consumes embeddings only; its token ids are placeholders
-            self.depth_config = {"pad_token_id": None, "bos_token_id": None, "eos_token_id": None, **self.depth_config}
+        if self.maskgit_schedule is None:
+            third = self.num_codebooks // 3
+            self.maskgit_schedule = [third, third, self.num_codebooks - 2 * third]
+
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        if sum(self.maskgit_schedule) != self.num_codebooks:
+            raise ValueError(
+                f"`maskgit_schedule` must reveal all {self.num_codebooks} codebooks, got {self.maskgit_schedule}."
+            )
 
-__all__ = ["Lfm3AudioConfig", "Lfm3AudioEncoderConfig"]
+        depth = self.depth_decoder_config
+        if depth is not None and (depth.num_codebooks, depth.codebook_size, depth.backbone_hidden_size) != (
+            self.num_codebooks,
+            self.codebook_size,
+            self.text_config.hidden_size,
+        ):
+            raise ValueError(
+                "`depth_decoder_config` must match `num_codebooks`, `codebook_size` and the language model's "
+                f"`hidden_size`, got {depth.num_codebooks}, {depth.codebook_size} and {depth.backbone_hidden_size}."
+            )
+
+
+__all__ = ["Lfm3AudioConfig", "Lfm3AudioAudioConfig", "Lfm3AudioDepthDecoderConfig"]
