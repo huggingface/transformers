@@ -46,17 +46,22 @@ class VoxtralModelTester(ALMModelTester):
     base_model_class = VoxtralModel
     conditional_generation_class = VoxtralForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # seq_length 35 = BOS + 30 audio + 4 text (keeps column -2 text-only for resize test).
-        kwargs.setdefault("seq_length", 35)
+        "seq_length": 35,
         # feat_seq_length 60 → conv2(s=2) → 30 audio embeds (Voxtral's encoder does not apply avg_pool
         # in the forward; projector reshapes to B*30 embeddings).
-        kwargs.setdefault("feat_seq_length", 60)
-        # Encoder asserts input_features.shape[-1] == max_source_positions * 2.
-        kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
+        "feat_seq_length": 60,
         # Llama needs head_dim
-        kwargs.setdefault("head_dim", 8)
-        super().__init__(parent, **kwargs)
+        "head_dim": 8,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # Encoder asserts input_features.shape[-1] == max_source_positions * 2.
+        values.setdefault("max_source_positions", values["feat_seq_length"] // 2)
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # Voxtral encoder only applies conv2 (stride 2); no avg_pool in forward.
