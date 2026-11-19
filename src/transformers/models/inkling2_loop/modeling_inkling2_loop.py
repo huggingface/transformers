@@ -146,12 +146,21 @@ class Inkling2LoopRelativeLogits(nn.Module):
     def forward(
         self,
         relative_states: torch.Tensor,
-        query_positions: torch.Tensor,
-        key_positions: torch.Tensor,
+        cache: Cache | None = None,
+        layer_idx: int = 0,
     ) -> torch.Tensor:
+        q_length = relative_states.shape[1]
+        if cache is None:
+            kv_length, kv_offset, q_offset = q_length, 0, 0
+        else:
+            kv_length, kv_offset = cache.get_mask_sizes(q_length, layer_idx)
+            q_offset = cache.get_query_offset(layer_idx)
+        q_positions = torch.arange(q_length, device=relative_states.device) + q_offset
+        kv_positions = torch.arange(kv_length, device=relative_states.device) + kv_offset
+
         # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
         rel_logits = (relative_states @ self.proj).transpose(1, 2)
-        distance = (query_positions[:, None] - key_positions[None, :])[None, None, :, :]
+        distance = (q_positions[:, None] - kv_positions[None, :])[None, None, :, :]
         gather_index = distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
         position_bias = rel_logits.gather(-1, gather_index)
         return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
@@ -396,27 +405,16 @@ class Inkling2LoopSlidingAttention(nn.Module):
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
 
-        q_length = query_states.shape[1]
-        if cache is not None:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, cache_layer_idx)
-            q_offset = cache.get_query_offset(cache_layer_idx)
-        else:
-            kv_length = q_length
-            q_offset, kv_offset = 0, 0
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
-        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
-
         query_states = self.q_l2_clip(query_states.view(hidden_shape)).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = value_states.view(hidden_shape)
         value_states = self.v_norm(value_states.float()).to(value_states.dtype)
         value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
+        position_bias = self.rel_logits_proj(relative_states, cache=cache, layer_idx=cache_layer_idx)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
-
-        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -588,16 +586,6 @@ class Inkling2LoopFullAttention(nn.Module):
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
 
-        q_length = query_states.shape[1]
-        if cache is not None:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, cache_layer_idx)
-            q_offset = cache.get_query_offset(cache_layer_idx)
-        else:
-            kv_length = q_length
-            q_offset, kv_offset = 0, 0
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
-        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
-
         # log scaling of the queries and relative states, in fp32 as in the original
         tau = 1.0 + self.config.log_scaling_alpha * torch.log(
             ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
@@ -612,11 +600,10 @@ class Inkling2LoopFullAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
         relative_states = (relative_states.float() * tau).to(relative_states.dtype)
+        position_bias = self.rel_logits_proj(relative_states, cache=cache, layer_idx=cache_layer_idx)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
-
-        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
