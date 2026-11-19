@@ -35,7 +35,7 @@ codec as `processor.audio_tokenizer`.
 from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio
 
-model_id, revision = "eustlb/Liquid-Codec", "refs/pr/1"
+model_id, revision = "LiquidAI/Liquid-Codec", "refs/pr/1"
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
 
@@ -69,7 +69,7 @@ encoder and the decoder are causal, so each clip is coded exactly as it would be
 from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio
 
-model_id, revision = "eustlb/Liquid-Codec", "refs/pr/1"
+model_id, revision = "LiquidAI/Liquid-Codec", "refs/pr/1"
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
 
@@ -110,7 +110,7 @@ import torch
 from transformers import AutoFeatureExtractor, AutoModel
 from transformers.audio_utils import load_audio
 
-model_id, revision = "eustlb/Liquid-Codec", "refs/pr/1"
+model_id, revision = "LiquidAI/Liquid-Codec", "refs/pr/1"
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id, revision=revision)
 
