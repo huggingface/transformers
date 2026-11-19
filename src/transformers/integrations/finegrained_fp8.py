@@ -744,7 +744,7 @@ class FP8Experts(nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit_after_act = limit_after_act
-        self.limit = self.swiglu_limit if limit is None else limit
+        self.limit = limit
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
         self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
@@ -811,9 +811,9 @@ class FP8Experts(nn.Module):
                 gate = gate.clamp(max=self.limit)
                 up = up.clamp(min=-self.limit, max=self.limit)
             return gate * up
-        elif self.limit is not None:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        elif self.swiglu_limit is not None:
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(
