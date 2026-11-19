@@ -134,6 +134,37 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
                 compare_pipeline_output_to_hub_spec(element, ZeroShotImageClassificationOutputElement)
 
     @require_torch
+    def test_tokenizer_kwargs(self):
+        tokenizer_kwargs = {"truncation": True, "max_length": 16, "padding": "max_length"}
+        image_classifier = pipeline(
+            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
+            tokenizer_kwargs=tokenizer_kwargs,
+        )
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        candidate_labels = ["cat " * 200, "dog"]
+        sequence_lengths = []
+        hook = image_classifier.model.register_forward_pre_hook(
+            lambda model, args, kwargs: sequence_lengths.append(kwargs["input_ids"].shape[-1]), with_kwargs=True
+        )
+        call_kwargs = {"truncation": True, "max_length": 8, "padding": "max_length"}
+        try:
+            output = image_classifier(image, candidate_labels=candidate_labels)
+            batched_output = image_classifier(
+                [image] * 3, candidate_labels=candidate_labels, batch_size=2, tokenizer_kwargs=call_kwargs
+            )
+            repeated_output = image_classifier(image, candidate_labels=candidate_labels)
+        finally:
+            hook.remove()
+
+        self.assertEqual(sequence_lengths, [16, 8, 8, 16])
+        self.assertEqual(output, repeated_output)
+        self.assertEqual(len(batched_output), 3)
+        for result in [output, *batched_output]:
+            self.assertEqual({item["label"] for item in result}, set(candidate_labels))
+        self.assertEqual(tokenizer_kwargs, {"truncation": True, "max_length": 16, "padding": "max_length"})
+        self.assertEqual(call_kwargs, {"truncation": True, "max_length": 8, "padding": "max_length"})
+
+    @require_torch
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(dtype="float16")
 
