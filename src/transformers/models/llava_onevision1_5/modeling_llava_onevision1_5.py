@@ -310,6 +310,8 @@ class LlavaOnevision15VisionBlock(GradientCheckpointingLayer):
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         """
+        # Keep this input positional to preserve gradients to class_pos_emb under reentrant checkpointing.
+        # The GLM block expects position_embeddings in kwargs.
         kwargs["position_embeddings"] = position_embeddings
         residual = hidden_states
 

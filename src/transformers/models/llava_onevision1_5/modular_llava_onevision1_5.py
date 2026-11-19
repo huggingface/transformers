@@ -145,6 +145,8 @@ class LlavaOnevision15VisionAttention(Qwen2_5_VLVisionAttention):
 
 class LlavaOnevision15VisionBlock(GlmImageVisionBlock):
     def forward(self, hidden_states, cu_seqlens, position_embeddings, **kwargs):
+        # Keep this input positional to preserve gradients to class_pos_emb under reentrant checkpointing.
+        # The GLM block expects position_embeddings in kwargs.
         kwargs["position_embeddings"] = position_embeddings
         return super().forward(hidden_states, cu_seqlens, **kwargs)
 
