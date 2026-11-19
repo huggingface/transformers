@@ -573,7 +573,7 @@ class PagedAttentionMemoryHandler:
         self.num_groups = len(attn_types)
 
         # Under tensor parallelism each rank holds 1 / tp_size of the heads, in the cache and in the activations.
-        # TODO: add a separate q_tp_size for finer granularity. For rn because if KV heads are TP'ed, so are Q heads.
+        # TODO: Add `q_tp_size` for Q heads only. Current code is ok because if KV heads use TP, so do Q heads.
         self.num_attention_heads = self.config.num_attention_heads // kv_tp_size
         self.num_key_value_heads = find_num_key_value_heads(self.config) // kv_tp_size
         # Flash reads GQA heads natively, but eager/sdpa repeat KV heads to num_attention_heads while V is in VRAM

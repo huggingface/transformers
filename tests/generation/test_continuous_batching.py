@@ -2503,7 +2503,8 @@ class ContinuousBatchingMemoryTests(unittest.TestCase):
 
 
 class TestMemoryHandlerPrediction(unittest.TestCase):
-    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
+    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches theoretical concerns or even real
+    accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
     dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
