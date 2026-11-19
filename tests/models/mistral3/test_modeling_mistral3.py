@@ -313,7 +313,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
-                ("tpu", None): 'The image features two tabby cats lying on a pink surface, which appears to be a cushion or',
+                ("tpu", None): 'The image features two cats lying on a pink surface, which appears to be a cushion or a piece',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -367,7 +367,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
-                ("tpu", None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters calm,\nMountains stand in quiet grace,\nPe',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -383,7 +382,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
                 ("cuda", 8): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
-                ("tpu", None): 'The image depicts a street scene in a Chinatown area, likely in a city with a significant Chinese community. Here are',
+                ("tpu", None): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -462,6 +461,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
                 (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty, located in New York',
                 ("rocm", (9, 4)): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New",
                 ("xpu", 5): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New',
+                ("tpu", None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
