@@ -102,7 +102,7 @@ class PocketTTSTimestepEmbedding(nn.Module):
 
     def __init__(self, config: PocketTTSFlowHeadConfig):
         super().__init__()
-        self.freqs = nn.Buffer(self.compute_default_freqs(config, dtype=torch.float32))
+        self.freqs = nn.Buffer(self.compute_default_freqs(config))
         self.fc1 = nn.Linear(config.frequency_embedding_size, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.hidden_size)
         self.act_fn = ACT2FN[config.hidden_act]
