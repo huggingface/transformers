@@ -84,13 +84,10 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
     def test_recurrent_layers_only_change_the_cache(self):
         # The recurrent section is made of plain attention layers: only the cache knows about the loops
         config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
-        self.assertEqual(config.layer_types, ["sliding_attention"] * 3 + ["full_attention"])
         self.assertEqual(
-            config.cache_layer_types,
+            config.layer_types,
             ["sliding_attention", "recurrent_sliding_attention", "recurrent_sliding_attention", "full_attention"],
         )
-        # Rope is defined per attention type, the recurrent layers reuse the rope of their type
-        self.assertEqual(set(config.rope_parameters), {"sliding_attention", "full_attention"})
 
         cache = DynamicCache(config=config)
         self.assertEqual(
@@ -104,6 +101,17 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
 
         config.recurrent_kv_cache_mode = "last_loop"
         self.assertTrue(DynamicCache(config=config).layers[1].share_across_loops)
+
+    def test_recurrent_layers_use_the_mask_and_rope_of_their_attention_type(self):
+        # The `recurrent_` prefix only selects the cache layer, the decoder layer strips it for mask and rope lookups
+        config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
+        model = DoryModel(config)
+        self.assertEqual(
+            [layer.attention_type for layer in model.layers],
+            ["sliding_attention", "sliding_attention", "sliding_attention", "full_attention"],
+        )
+        self.assertTrue(model.layers[1].self_attn.is_local_attention)
+        self.assertEqual(model.layers[1].self_attn.sliding_window, config.sliding_window)
 
 
 @slow

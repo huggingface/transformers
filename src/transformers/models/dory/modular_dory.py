@@ -396,9 +396,10 @@ class DoryModel(LlamaModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
+        # One rope per attention type: the recurrent layers reuse the rope of the type they strip down to
         position_embeddings = {
-            layer_type: self.rotary_emb(inputs_embeds, position_ids, layer_type)
-            for layer_type in {"full_attention", "sliding_attention"}
+            attention_type: self.rotary_emb(inputs_embeds, position_ids, attention_type)
+            for attention_type in {layer.attention_type for layer in self.layers}
         }
 
         recurrent_start = self.config.n_input_layers

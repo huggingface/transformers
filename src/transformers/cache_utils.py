@@ -1907,7 +1907,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
         elif layer_type == "chunked_attention":
             layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
         # In this case, we need to pass the config as well to properly __init__ the layer classes
-        elif layer_type in (
+        if layer_type in (
             "heavily_compressed_attention",
             "compressed_sparse_attention",
             "recurrent_full_attention",
