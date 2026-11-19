@@ -102,6 +102,20 @@ class Inkling2LoopMessageAttentionResidual(nn.Module):
         return F.scaled_dot_product_attention(query_states, stacked_states, stacked_states, scale=hidden_size**-0.5)
 
 
+class Inkling2LoopL2Clip(nn.Module):
+    """Scales each head vector down to `threshold` when its L2 norm is larger; shorter vectors are unchanged."""
+
+    def __init__(self, threshold: float):
+        super().__init__()
+        self.threshold = threshold
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
+        norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
+        return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
+
+
 class Inkling2LoopScaledL2Clip(nn.Module):
     """`Inkling2LoopL2Clip` applied after a learned scale."""
 
@@ -141,20 +155,6 @@ class Inkling2LoopRelativeLogits(nn.Module):
         gather_index = distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
         position_bias = rel_logits.gather(-1, gather_index)
         return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
-
-
-class Inkling2LoopL2Clip(nn.Module):
-    """Scales each head vector down to `threshold` when its L2 norm is larger; shorter vectors are unchanged."""
-
-    def __init__(self, threshold: float):
-        super().__init__()
-        self.threshold = threshold
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-        norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
-        return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -642,6 +642,27 @@ class Inkling2LoopFullAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Inkling2LoopRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Inkling2LoopRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight * hidden_states).to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class Inkling2LoopSoftcap(nn.Module):
     def __init__(self, softcap: float):
         super().__init__()
@@ -705,6 +726,20 @@ class Inkling2LoopExperts(nn.Module):
         return self.act_fn(gate, up)
 
 
+class Inkling2LoopSparseMoeBlock(nn.Module):
+    def __init__(self, config: Inkling2LoopConfig):
+        super().__init__()
+        self.experts = Inkling2LoopExperts(config)
+        self.gate = Inkling2LoopTopKRouter(config)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+
+
 class Inkling2LoopBlockAttentionResidual(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig, num_queries: int = 1):
         super().__init__()
@@ -724,41 +759,6 @@ class Inkling2LoopBlockAttentionResidual(nn.Module):
             query_states, stacked_states, stacked_states, scale=hidden_size**-0.5
         )
         return attn_output.unbind(-2)
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class Inkling2LoopRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Inkling2LoopRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class Inkling2LoopSparseMoeBlock(nn.Module):
-    def __init__(self, config: Inkling2LoopConfig):
-        super().__init__()
-        self.experts = Inkling2LoopExperts(config)
-        self.gate = Inkling2LoopTopKRouter(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 class Inkling2LoopSlidingDecoderLayer(GradientCheckpointingLayer):

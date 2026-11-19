@@ -31,15 +31,12 @@ from ..auto import AutoConfig, AutoModel
 from ..inkling2.configuration_inkling2 import Inkling2Config, Inkling2TextConfig
 from ..inkling2.modeling_inkling2 import (
     Inkling2BlockAttentionResidual,
-    Inkling2Experts,
     Inkling2ForCausalLM,
     Inkling2ForConditionalGeneration,
     Inkling2FullAttention,
     Inkling2FullDecoderLayer,
     Inkling2Model,
     Inkling2PreTrainedModel,
-    Inkling2RelativeLogits,
-    Inkling2ScaledL2Clip,
     Inkling2SlidingAttention,
     Inkling2SlidingDecoderLayer,
     Inkling2TextModel,
@@ -221,27 +218,11 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
         return F.scaled_dot_product_attention(query_states, stacked_states, stacked_states, scale=hidden_size**-0.5)
 
 
-class Inkling2LoopScaledL2Clip(Inkling2ScaledL2Clip):
-    pass
-
-
-class Inkling2LoopRelativeLogits(Inkling2RelativeLogits):
-    pass
-
-
 class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):
     pass
 
 
 class Inkling2LoopFullAttention(Inkling2FullAttention):
-    pass
-
-
-class Inkling2LoopExperts(Inkling2Experts):
-    pass
-
-
-class Inkling2LoopBlockAttentionResidual(Inkling2BlockAttentionResidual):
     pass
 
 
