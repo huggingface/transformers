@@ -35,6 +35,26 @@ class TQAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
 
     @require_torch
+    def test_max_length(self):
+        table_querier = pipeline("table-question-answering", model="lysandre/tiny-tapas-random-wtq", max_length=32)
+        query = "what value belongs to alpha?"
+        sequence_lengths = []
+
+        def record_length(module, args, kwargs):
+            sequence_lengths.append(kwargs["input_ids"].shape[-1])
+
+        handle = table_querier.model.register_forward_pre_hook(record_length, with_kwargs=True)
+        try:
+            for repeats in (1, 20):
+                table = {"name": ["alpha", "beta", "gamma"] * repeats, "value": ["one", "two", "three"] * repeats}
+                with self.subTest(repeats=repeats):
+                    table_querier(table=table, query=query, padding="max_length", truncation=True)
+                    table_querier(table=table, query=query, padding="max_length", truncation=True, max_length=64)
+        finally:
+            handle.remove()
+        self.assertEqual(sequence_lengths, [32, 64, 32, 64])
+
+    @require_torch
     def test_small_model_pt(self, dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-wtq"
         model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, dtype=dtype)
