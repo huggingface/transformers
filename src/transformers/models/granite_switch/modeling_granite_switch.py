@@ -36,308 +36,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_granite_switch import GraniteSwitchConfig
-from .switch_codes import KerdockDGCodeGenerator, recover_count_from_signal
-
-
-class GraniteSwitchCountingAttention(nn.Module):
-    """Attribute carrier for the counting head's `sdpa_attention_forward` call.
-
-    Holds no parameters and defines no `forward`. The attention interface reads its geometry off
-    the module it is handed (`num_key_value_groups`, `is_causal`, `layer_idx`), so the head needs
-    an object with those attributes; `MultiSwitch` builds the Q/K/V tensors itself.
-
-    One query head over one KV head, at `counting_head_dim`, which is independent of the
-    backbone's `head_dim`. Only component 0 of each vector carries signal; the rest is zero
-    padding to reach the minimum width the attention kernels accept.
-
-    `layer_idx` is `0` and unused: the head is handed its full Q/K/V on every call and never writes
-    to the model's cache, so it holds no cache slot to be addressed by.
-    """
-
-    def __init__(self, head_dim: int):
-        super().__init__()
-        self.num_heads = 1
-        self.num_key_value_heads = 1
-        self.num_key_value_groups = 1
-        self.head_dim = head_dim
-        self.scaling = 1.0
-        self.attention_dropout = 0.0
-        self.is_causal = True
-        self.layer_idx = 0
-
-
-class GraniteSwitchMemoryAttention(nn.Module):
-    """Attribute carrier for the memory head's `sdpa_attention_forward` call.
-
-    Same role as `GraniteSwitchCountingAttention`, at `memory_head_dim`, which must be wide enough
-    to hold a whole codeword.
-    """
-
-    def __init__(self, head_dim: int):
-        super().__init__()
-        self.num_heads = 1
-        self.num_key_value_heads = 1
-        self.num_key_value_groups = 1
-        self.head_dim = head_dim
-        self.scaling = 1.0
-        self.attention_dropout = 0.0
-        self.is_causal = True
-        self.layer_idx = 0
-
-
-# Narrowest head the attention kernels accept. Both switch heads carry their signal in a handful
-# of components and pad the rest, so this floor -- not the signal -- is what sets the counting
-# head's width, and the memory head's when a codeword is narrower than it.
-_MIN_ATTENTION_HEAD_DIM = 32
-
-
-def build_control_to_substitute_lut(config: GraniteSwitchConfig) -> torch.Tensor | None:
-    """Derive the control-token to substitute-token lookup table from `config`.
-
-    Shape `[max(vocab_size, max_control_id + 1)]`, holding `-1` at every non-control id and the
-    substitute id at each control slot. Indexing it with `input_ids` therefore yields `-1` wherever
-    a token is ordinary, which is what lets `apply_token_exchange` rewrite the sequence without a
-    data-dependent branch.
-
-    The `max` is what sizes the table when a checkpoint's control ids sit past `vocab_size`. That
-    happens while a checkpoint is being built: the control tokens are appended to the tokenizer
-    before the embedding matrix is resized, so for a window the largest control id exceeds the
-    recorded vocabulary and sizing at `vocab_size` alone would make the assignment below raise
-    `IndexError`. A finished checkpoint has been resized, so the table comes out at exactly
-    `vocab_size` and the `max` no longer fires.
-
-    Returns `None` when the config carries no mapping, in which case the switch leaves `input_ids`
-    untouched. An empty id list counts as no mapping, which is why this tests falsiness rather than
-    `is None` — `max(())` raises.
-    """
-    control_ids = config.adapter_token_ids
-    substitute_ids = config.adapter_substitute_token_ids
-    if not control_ids or not substitute_ids:
-        return None
-
-    lut_size = max(config.vocab_size, max(control_ids) + 1)
-    lut = torch.full((lut_size,), -1, dtype=torch.long)
-    for control_id, substitute_id in zip(control_ids, substitute_ids):
-        lut[control_id] = substitute_id
-    return lut
-
-
-def apply_token_exchange(lut: torch.Tensor | None, input_ids: torch.Tensor) -> torch.Tensor:
-    """Rewrite each control token's id to its substitute id through `lut`.
-
-    The switch has already read the original ids to decide the active adapter by the time this
-    runs, so rewriting here is what keeps control tokens invisible to the decoder: it embeds the
-    substitute instead, and never sees an id it was not trained on.
-
-    `torch.where` runs unconditionally rather than short-circuiting on "are there any control
-    tokens", because a `.any()` test is a data-dependent branch that would graph-break under
-    `torch.compile`. When `lut` is `None` the input is returned unchanged.
-
-    Ids at or past the end of the table are treated as ordinary tokens instead of indexing out of
-    bounds. The table is sized at construction, so `resize_token_embeddings` can grow the vocabulary
-    past it; every id it adds is by definition not a control token, since the control ids come from
-    the config. Hence the gather is clamped and the out-of-range positions are masked out again,
-    which keeps the whole thing branch-free.
-    """
-    if lut is None:
-        return input_ids
-    is_in_table = input_ids < lut.shape[0]
-    substitute_per_position = lut[torch.where(is_in_table, input_ids, 0)]
-    is_control = is_in_table & (substitute_per_position >= 0)
-    return torch.where(is_control, substitute_per_position, input_ids)
-
-
-class MultiSwitch(nn.Module):
-    """Picks one adapter per token from the control tokens seen so far, latest wins.
-
-    Two single-head attention passes do the work. A counting head turns "how many control tokens
-    precede this position" into a write address, and a coded-memory head reads back the adapter id
-    written at that address. Addresses are Kerdock/Delsarte-Goethals codewords, whose bounded
-    coherence is what makes retrieval land on an exact integer rather than a blend of the adapters
-    in scope. A request may therefore switch adapters any number of times.
-
-    Index 0 always means base/no adapter, so valid indices are `0..num_adapters`.
-    """
-
-    def __init__(self, config: GraniteSwitchConfig):
-        super().__init__()
-        self.config = config
-        self.num_adapters = config.num_adapters
-        self.control_token_gain = config.control_token_gain
-
-        # `precompute_codebook` returns `[capacity, N]` unit-norm codewords; N is both the code
-        # and the memory dimension. For the m=6 Kerdock default that is 2048 addresses of width 64.
-        self.code_gen = KerdockDGCodeGenerator(m=config.ms_code_m, code_type=config.ms_code_type)
-        self.capacity = self.code_gen.capacity
-        self.memory_dim = self.code_gen.N
-        self.memory_gain = config.ms_memory_gain
-
-        # Must be persistent. `from_pretrained` fills only the tensors the checkpoint carries, so a
-        # non-persistent buffer comes back all zeros and whatever `__init__` computed is discarded.
-        # A zeroed codebook zeroes every memory key and query, collapsing retrieval to a uniform
-        # softmax: each position averages the adapter ids in scope instead of taking the most
-        # recent, and routes to a blend silently. It also costs only ~512 KB.
-        self.codebook = nn.Buffer(self.code_gen.precompute_codebook(dtype=torch.float32), persistent=True)
-
-        # Counting carries its one-hot signal in component 0 and pads the rest, so its width is
-        # set by what the attention kernels accept rather than by the signal.
-        self.counting_head_dim = max(config.ms_counting_head_dim, _MIN_ATTENTION_HEAD_DIM)
-
-        # Memory must hold a whole codeword. Prefer the backbone's `head_dim` when it is wide
-        # enough, so every attention layer in the model shares one head width; otherwise take the
-        # code dimension directly. Surplus components are zero-padded.
-        if config.head_dim >= self.memory_dim:
-            self.memory_head_dim = config.head_dim
-        else:
-            self.memory_head_dim = max(self.memory_dim, _MIN_ATTENTION_HEAD_DIM)
-
-        self.counting_attn_module = GraniteSwitchCountingAttention(head_dim=self.counting_head_dim)
-        self.memory_attn_module = GraniteSwitchMemoryAttention(head_dim=self.memory_head_dim)
-
-        # Persistent for the same reason as `codebook`, and the consequence is worse here: this
-        # table uses -1 for "not a control token", so an all-zero table would rewrite every token
-        # id in the sequence to 0.
-        lut = build_control_to_substitute_lut(config)
-        self.control_to_substitute_lut = None if lut is None else nn.Buffer(lut, persistent=True)
-
-    def _apply(self, *args, **kwargs):
-        """Hold `codebook` at fp32 across `.to()` / `.half()` / `.bfloat16()`.
-
-        `nn.Module._apply` casts every float buffer, so casting the model would take the codebook
-        with it and make save/load non-idempotent: `__init__` rebuilds this buffer as fp32 on every
-        load, so a cast model serializes bf16 while a reload of that same model serializes fp32 --
-        the same model writing two different byte counts, differing by exactly the codebook.
-
-        Serialization is the only reason, and the forward path must not be cited as another. The
-        entries are +/-1/sqrt(N), exact in bf16, and the memory key they feed is assigned into an
-        fp32 destination which upcasts whatever arrives.
-        """
-        out = super()._apply(*args, **kwargs)
-        if self.codebook.dtype != torch.float32:
-            self.codebook = self.codebook.to(torch.float32)
-        return out
-
-    def _causal_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
-        """Build the heads' own fp32 causal mask.
-
-        Deliberately not the model's `attention_mask`. That one is created in the model dtype,
-        and handing a bf16 mask to these fp32 attention calls makes the whole op run in bf16,
-        whose resolution corrupts the counting head's `1/(1+n)` recovery: the recovered index
-        comes out off by one and routing lags a position. Which keys actually count is already
-        encoded in the fp32 key masking, so this only has to be causal and fp32.
-        """
-        return torch.triu(
-            torch.full((seq_len, seq_len), torch.finfo(torch.float32).min, device=device, dtype=torch.float32),
-            diagonal=1,
-        ).view(1, 1, seq_len, seq_len)
-
-    def forward(self, input_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Select an adapter per token, then rewrite the control tokens.
-
-        Selection reads the original `input_ids`; the rewrite happens last, so the returned ids
-        are what the decoder embeds and the control tokens never reach it.
-
-        `input_ids` must be the sequence from position 0, not a decode step's single new token:
-        routing is latest-wins over the control tokens seen so far, so the whole prefix has to be
-        in scope. The switch is stateless and keeps no cache of its own, which is affordable
-        because every tensor below is a pure function of the ids -- recomputing the prefix costs
-        two single-head attentions and nothing else. `GraniteSwitchModel` is what supplies the
-        full sequence during generation.
-
-        Returns `(adapter_indices, modified_input_ids)`, both `[batch, seq_len]`, where index 0
-        means base.
-        """
-        bsz, q_len = input_ids.shape
-        device = input_ids.device
-
-        # Position 0 anchors the counting signal, taking the place of a dedicated init token.
-        is_counting_anchor = (torch.arange(q_len, device=device) == 0).unsqueeze(0).expand(bsz, -1)
-
-        control_token_ids = torch.tensor(self.config.adapter_token_ids, device=device)
-        matches = input_ids.unsqueeze(2) == control_token_ids.unsqueeze(0).unsqueeze(0)
-        is_control_token = matches.any(dim=2)
-        expert_ids = torch.where(
-            is_control_token,
-            matches.long().argmax(dim=2) + 1,
-            torch.zeros_like(input_ids, dtype=torch.long),
-        )
-
-        # Counting head: recover the write address from a 1/(1+n) attention average.
-        # Masked-out keys use the fp32 floor rather than a magic sentinel.
-        key_states_count = torch.full(
-            (bsz, 1, q_len, self.counting_head_dim),
-            torch.finfo(torch.float32).min,
-            device=device,
-            dtype=torch.float32,
-        )
-        anchor_or_control = is_counting_anchor | is_control_token
-        key_states_count[:, 0, :, 0] = torch.where(
-            anchor_or_control,
-            torch.zeros_like(key_states_count[:, 0, :, 0]),
-            key_states_count[:, 0, :, 0],
-        )
-
-        value_states_count = torch.zeros((bsz, 1, q_len, self.counting_head_dim), device=device, dtype=torch.float32)
-        value_states_count[:, 0, :, 0] = is_counting_anchor.to(torch.float32)
-
-        query_states_count = torch.zeros((bsz, 1, q_len, self.counting_head_dim), device=device, dtype=torch.float32)
-        query_states_count[:, 0, :, 0] = 1.0
-
-        # Both heads force SDPA rather than the model's configured backend, because both build
-        # fp32 Q/K/V and both need that precision. The memory read is a softmax over coded keys
-        # whose low mutual coherence only survives in fp32, and dispatching fp32 tensors through
-        # a backend that requires fp16/bf16 silently corrupts the read and routes every token to
-        # base -- isolated switch tests still pass while the full model returns all zeros.
-        attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
-
-        # Autocast off for the same reason. Under an enclosing bf16 autocast, SDPA would cast the
-        # fp32 Q/K/V and the fp32 mask down to bf16; for the memory head that is fatal, since its
-        # keys are `code(n) * memory_gain` and the mask is the fp32 floor, which together overflow
-        # the bf16 softmax to NaN and clamp to base.
-        with maybe_autocast(device_type=device.type, enabled=False):
-            count_output, _ = attention_interface(
-                self.counting_attn_module,
-                query_states_count,
-                key_states_count,
-                value_states_count,
-                self._causal_mask(q_len, device),
-                dropout=0.0,
-                scaling=self.counting_attn_module.scaling,
-            )
-        counting_signal = count_output[:, :, 0, 0]
-        write_addresses = recover_count_from_signal(counting_signal, capacity=self.capacity)
-
-        # Memory head: write the adapter id at each control token's coded address, then have
-        # every position query its own address to read back the most recent one.
-        code_vectors = self.codebook[write_addresses.reshape(-1)].reshape(bsz, q_len, self.memory_dim)
-        write_mask = is_control_token.unsqueeze(2).to(torch.float32)
-
-        key_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
-        key_states_memory[:, 0, :, : self.memory_dim] = code_vectors * self.memory_gain * write_mask
-
-        value_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
-        value_states_memory[:, 0, :, 0] = expert_ids.to(torch.float32) * is_control_token.to(torch.float32)
-
-        query_states_memory = torch.zeros((bsz, 1, q_len, self.memory_head_dim), device=device, dtype=torch.float32)
-        query_states_memory[:, 0, :, : self.memory_dim] = code_vectors
-
-        with maybe_autocast(device_type=device.type, enabled=False):
-            memory_output, _ = attention_interface(
-                self.memory_attn_module,
-                query_states_memory,
-                key_states_memory,
-                value_states_memory,
-                self._causal_mask(q_len, device),
-                dropout=0.0,
-                scaling=self.memory_attn_module.scaling,
-            )
-
-        adapter_indices = torch.clamp(torch.round(memory_output[:, :, 0, 0]).long(), 0, self.num_adapters)
-        modified_input_ids = apply_token_exchange(self.control_to_substitute_lut, input_ids)
-        return adapter_indices, modified_input_ids
 
 
 def _add_switched_lora(
@@ -371,7 +72,7 @@ class GraniteSwitchLoRALinear(nn.Module):
     A linear layer that carries every embedded LoRA adapter and picks one per token.
 
     The adapter weights are stacked into two parameters indexed by adapter, so a single module
-    serves the whole adapter population and the switch's per-token `adapter_indices` chooses which
+    serves the whole adapter population and the per-token `adapter_indices` chooses which
     slice each token is routed through. Index `0` means "base model, no LoRA"; adapter `i` reads
     stacked slice `i - 1`. Adapters whose rank is below `max_lora_rank` are zero-padded on disk, so
     the padded columns contribute nothing.
@@ -758,7 +459,7 @@ class GraniteSwitchAttention(nn.Module):
     ) -> tuple[torch.Tensor, ...]:
         r"""
         adapter_indices (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token adapter selection from the switch. `0` routes a token through the base model.
+            Per-token adapter selection from `route_control_tokens`. `0` routes a token through the base model.
         return_kv (`bool`, *optional*, defaults to `False`):
             Whether to also return the post-cache `(key_states, value_states)`, so a Shadow
             Residual adapter stream can attend against the base stream's keys and values.
@@ -965,7 +666,7 @@ class GraniteSwitchDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         r"""
         adapter_indices (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token adapter selection from the switch. `0` routes a token through the base model.
+            Per-token adapter selection from `route_control_tokens`. `0` routes a token through the base model.
         """
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -1039,7 +740,7 @@ class GraniteSwitchShadowResidualDecoderLayer(GradientCheckpointingLayer):
             The frozen base stream. Positional, like `hidden_states`, so that gradients reach it
             under gradient checkpointing.
         adapter_indices (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token adapter selection from the switch. `0` routes a token through the base model.
+            Per-token adapter selection from `route_control_tokens`. `0` routes a token through the base model.
         """
         residual, base_residual = hidden_states, base_hidden_states
         normed = self.input_layernorm(hidden_states)
@@ -1108,6 +809,9 @@ class GraniteSwitchPreTrainedModel(PreTrainedModel):
         "hidden_states": [GraniteSwitchDecoderLayer, GraniteSwitchShadowResidualDecoderLayer],
         "attentions": GraniteSwitchAttention,
     }
+    # The published checkpoints carry the constructed tables of the reference implementation's router,
+    # which routing here derives from the config instead.
+    _keys_to_ignore_on_load_unexpected = [r"switch\.(codebook|control_to_substitute_lut)"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1120,21 +824,36 @@ class GraniteSwitchPreTrainedModel(PreTrainedModel):
                 init.kaiming_uniform_(lora_A, a=5**0.5)
             for lora_B in module.lora_B_slices.parameters():
                 init.zeros_(lora_B)
-        elif isinstance(module, MultiSwitch):
-            # Both are constructed, not trained, so "initializing" them means re-deriving them from
-            # the config -- the same thing `__init__` did. It has to be repeated here because a
-            # model built on the meta device has no values yet, and because they are the only
-            # tensors in the model that a checkpoint is allowed to omit without the result being
-            # wrong (both are a pure function of the config).
-            init.copy_(module.codebook, module.code_gen.precompute_codebook(dtype=torch.float32))
-            if module.control_to_substitute_lut is not None:
-                init.copy_(module.control_to_substitute_lut, build_control_to_substitute_lut(self.config))
+        elif isinstance(module, GraniteSwitchModel) and module.control_token_ids is not None:
+            init.copy_(module.control_token_ids, torch.tensor(self.config.adapter_token_ids))
+            init.copy_(module.substitute_token_ids, torch.tensor(self.config.adapter_substitute_token_ids))
         elif isinstance(module, GraniteSwitchShadowResidualDecoderLayer):
             # Children are initialized before their parent, so this overwrites the plain
             # `nn.Linear` init that the `cross_stream` base weight just received -- which is the
             # point, since a non-zero base weight would give the site a non-LoRA contribution. On a
             # checkpoint load the restored tensor is already flagged initialized and this no-ops.
             init.zeros_(module.cross_stream.base_layer.weight)
+
+
+def route_control_tokens(
+    input_ids: torch.Tensor, control_token_ids: torch.Tensor, substitute_token_ids: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Latest control token wins: every position gets the adapter of the last control token at or before it,
+    and `0` (base model) before the first one. Control tokens are then swapped for their substitute ids,
+    so the decoder never embeds them.
+
+        input_ids:        Tell me <|answerability|> x  y  <|uncertainty|> z
+        adapter_indices:   0   0          1         1  1        2         2
+    """
+    is_control = input_ids[..., None] == control_token_ids
+    has_control = is_control.any(-1)
+    control_index = is_control.long().argmax(-1)
+    positions = torch.arange(input_ids.shape[-1], device=input_ids.device)
+    last_control = torch.where(has_control, positions, -1).cummax(-1).values
+    adapter_indices = torch.where(last_control >= 0, control_index.gather(-1, last_control.clamp(min=0)) + 1, 0)
+    input_ids = torch.where(has_control, substitute_token_ids[control_index], input_ids)
+    return adapter_indices, input_ids
 
 
 @auto_docstring
@@ -1146,11 +865,13 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embedding_multiplier = config.embedding_multiplier
 
-        # CODEPATH: with `num_adapters == 0` there is no switch, and the model is plain Granite.
+        # CODEPATH: with `num_adapters == 0` there is nothing to route, and the model is plain Granite.
         if config.num_adapters > 0:
-            self.switch = MultiSwitch(config)
+            self.control_token_ids = nn.Buffer(torch.tensor(config.adapter_token_ids), persistent=False)
+            self.substitute_token_ids = nn.Buffer(torch.tensor(config.adapter_substitute_token_ids), persistent=False)
         else:
-            self.switch = None
+            self.control_token_ids = None
+            self.substitute_token_ids = None
 
         # One kind of layer for the whole checkpoint: Shadow Residual adapters and plain LoRA or
         # aLoRA adapters are never composed together.
@@ -1209,7 +930,7 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
             position_ids = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=device).unsqueeze(0)
 
         # Mask creation reads the embedding tensor only for batch size, query length and dtype, and
-        # nothing is embedded yet -- the switch may rewrite `input_ids` -- so a stub stands in.
+        # nothing is embedded yet -- routing may rewrite `input_ids` -- so a stub stands in.
         mask_shape_proxy = (
             inputs_embeds
             if inputs_embeds is not None
@@ -1230,12 +951,14 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
         if routing_input_ids is not None and routing_input_ids.shape[1] < seq_length:
             routing_input_ids = None
 
-        # The switch also returns `input_ids` with every control token rewritten to its substitute
-        # id, so the decoder embeds once and needs no token-exchange awareness of its own.
+        # Routing also returns `input_ids` with every control token rewritten to its substitute id,
+        # so the decoder embeds once and needs no token-exchange awareness of its own.
         # CODEPATH: `None` means base for every token, which is what an unroutable call gets.
         adapter_indices = None
-        if self.switch is not None and routing_input_ids is not None:
-            adapter_indices, exchanged_input_ids = self.switch(routing_input_ids)
+        if self.control_token_ids is not None and routing_input_ids is not None:
+            adapter_indices, exchanged_input_ids = route_control_tokens(
+                routing_input_ids, self.control_token_ids, self.substitute_token_ids
+            )
             adapter_indices = adapter_indices[:, -seq_length:]
             if input_ids is not None:
                 input_ids = exchanged_input_ids[:, -seq_length:]
@@ -1364,7 +1087,7 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        """Hand the switch the whole sequence while the decoder gets only the new tokens.
+        """Route on the whole sequence while the decoder gets only the new tokens.
 
         The base implementation slices `input_ids` down to what the cache has not seen, which is
         exactly right for the decoder and useless for routing: a decode step's single token says
@@ -1375,7 +1098,7 @@ class GraniteSwitchForCausalLM(GraniteSwitchPreTrainedModel, GenerationMixin):
         cropped sequence arrives already corrected.
         """
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
-        if self.model.switch is not None:
+        if self.config.num_adapters > 0:
             model_inputs["switch_input_ids"] = input_ids
         return model_inputs
 

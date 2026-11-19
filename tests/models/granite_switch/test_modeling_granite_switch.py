@@ -34,6 +34,7 @@ if is_torch_available():
 
     from transformers import AutoTokenizer, GraniteSwitchConfig, GraniteSwitchForCausalLM, GraniteSwitchModel
     from transformers.models.granite_switch.configuration_granite_switch import SWITCH_LAYER_SLOTS
+    from transformers.models.granite_switch.modeling_granite_switch import route_control_tokens
 
 
 # Two adapters, whose control tokens sit at the top of the tester's small vocabulary. Picked so the
@@ -81,22 +82,17 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
     # then puts a zero on every `lora_A` gradient, so an untrained model legitimately has LoRA
     # parameters with no gradient.
     test_all_params_have_gradient = False
-    # The switch's codebook is a fixed 512 KB buffer (`ms_code_m` is 6 or 8), about 73% of this tiny
-    # model, so the offload tests need a GPU budget that holds the embedding and the switch.
-    model_split_percents = [0.5, 0.9, 0.95]
 
-    @unittest.skip("Needs a GPU budget under half the tiny model, which cannot hold the switch's codebook")
-    def test_disk_offload_bin(self):
-        pass
+    def _route(self, input_ids):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteSwitchModel(config).to(torch_device)
+        return route_control_tokens(input_ids, model.control_token_ids, model.substitute_token_ids)
 
     def test_control_token_routes_latest_wins(self):
         """Every token takes the adapter of the most recent control token, and 0 before the first."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        switch = GraniteSwitchModel(config).to(torch_device).eval().switch
         first, second = ADAPTER_TOKEN_IDS
         input_ids = torch.tensor([[5, first, 7, 8, second, 9, 9]], device=torch_device)
-        with torch.no_grad():
-            adapter_indices, _ = switch(input_ids)
+        adapter_indices, _ = self._route(input_ids)
         expected = torch.tensor([[0, 1, 1, 1, 2, 2, 2]], device=torch_device)
         torch.testing.assert_close(adapter_indices, expected)
 
@@ -133,10 +129,8 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
         """SingleSwitch and unfused Shadow Residual checkpoints raise instead of loading wrong."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         on_disk = config.to_dict()
-        legacy_single = {k: v for k, v in on_disk.items() if k != "ms_code_m"}
-        for config_dict in (legacy_single, {**on_disk, "switch_type": "single"}):
-            with self.assertRaisesRegex(ValueError, "SingleSwitch"):
-                GraniteSwitchConfig.from_dict(config_dict)
+        with self.assertRaisesRegex(ValueError, "SingleSwitch"):
+            GraniteSwitchConfig.from_dict({**on_disk, "switch_type": "single"})
         # A stale `switch_type: "multi"` is accepted and dropped.
         self.assertFalse(hasattr(GraniteSwitchConfig.from_dict({**on_disk, "switch_type": "multi"}), "switch_type"))
         with self.assertRaisesRegex(ValueError, "unfused_qkv"):
@@ -144,26 +138,20 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_token_exchange_hides_the_control_token(self):
         """The decoder embeds a substitute id, so a control token is never itself embedded."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        switch = GraniteSwitchModel(config).to(torch_device).eval().switch
         first, second = ADAPTER_TOKEN_IDS
         input_ids = torch.tensor([[5, first, 7, 8, second, 9, 9]], device=torch_device)
-        with torch.no_grad():
-            _, modified_input_ids = switch(input_ids)
+        _, modified_input_ids = self._route(input_ids)
         first_substitute, second_substitute = ADAPTER_SUBSTITUTE_TOKEN_IDS
         expected = torch.tensor([[5, first_substitute, 7, 8, second_substitute, 9, 9]], device=torch_device)
         torch.testing.assert_close(modified_input_ids, expected)
         self.assertFalse(any(token in modified_input_ids for token in ADAPTER_TOKEN_IDS))
 
     def test_routing_a_prefix_agrees_with_routing_the_whole_sequence(self):
-        """The switch is stateless, so a decode step can be routed by replaying the prefix."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        switch = GraniteSwitchModel(config).to(torch_device).eval().switch
+        """Routing is stateless, so a decode step can be routed by replaying the prefix."""
         first, second = ADAPTER_TOKEN_IDS
         input_ids = torch.tensor([[5, first, 7, 8, second, 9, 9]], device=torch_device)
-        with torch.no_grad():
-            whole_sequence, _ = switch(input_ids)
-            prefix, _ = switch(input_ids[:, :-1])
+        whole_sequence, _ = self._route(input_ids)
+        prefix, _ = self._route(input_ids[:, :-1])
         torch.testing.assert_close(whole_sequence[:, :-1], prefix)
 
     def test_generation_hands_the_switch_the_whole_sequence(self):
@@ -214,11 +202,11 @@ class GraniteSwitchModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertTrue(torch.any(parameter != 0.0), f"{name} should not be zero-initialized")
 
     def test_no_adapters_builds_a_plain_granite_model(self):
-        """`num_adapters=0` skips the switch entirely and leaves every projection a plain Linear."""
+        """`num_adapters=0` skips routing entirely and leaves every projection a plain Linear."""
         tester = GraniteSwitchModelTester(self, num_adapters=0)
         config, inputs = tester.prepare_config_and_inputs_for_common()
         model = GraniteSwitchModel(config).to(torch_device).eval()
-        self.assertIsNone(model.switch)
+        self.assertIsNone(model.control_token_ids)
         self.assertEqual(len(model.layers), config.num_hidden_layers)
         self.assertFalse(any("lora_" in name for name, _ in model.named_parameters()))
         with torch.no_grad():

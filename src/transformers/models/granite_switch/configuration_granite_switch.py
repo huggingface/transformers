@@ -32,8 +32,8 @@ from ...utils import auto_docstring
 ATTENTION_LAYER_TYPE = "full_attention"
 
 # Layer slots that a checkpoint with adapters counts in its on-disk `num_hidden_layers` and
-# `layer_types` on top of the decoder layers. They are the two switch heads (counting and memory),
-# which the cached vLLM switch gives KV-cache layers of their own. This switch is stateless, so the
+# `layer_types` on top of the decoder layers. vLLM routes with two attention heads that it gives
+# KV-cache layers of their own; routing here reads the ids directly and has no layers, so the
 # config drops the slots on load and writes them back on save, and the file stays loadable by vLLM.
 SWITCH_LAYER_SLOTS = 2
 
@@ -65,16 +65,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
     lora_target_modules (`list[str]`, *optional*):
         Projections that carry LoRA weights, from `qkv_proj`, `o_proj`, `shared_input_linear` and
         `shared_output_linear`. Defaults to all four.
-    control_token_gain (`float`, *optional*, defaults to 15.0):
-        Attention gain that separates control tokens from ordinary tokens in the switch heads.
-    ms_code_m (`int`, *optional*, defaults to 6):
-        Codebook parameter. A Kerdock codebook holds `2 ** (2 * m - 1)` codewords of dimension `2 ** m`.
-    ms_code_type (`str`, *optional*, defaults to `"kerdock"`):
-        Codebook family, `"kerdock"` or `"dg1"`.
-    ms_memory_gain (`float`, *optional*, defaults to 28.0):
-        Attention gain of the memory head.
-    ms_counting_head_dim (`int`, *optional*, defaults to 32):
-        Head dimension of the counting head.
     dual_stream (`bool`, *optional*, defaults to `False`):
         Whether the adapters are Shadow Residual adapters, which run a frozen base stream next to the
         adapter stream.
@@ -143,13 +133,6 @@ class GraniteSwitchConfig(PreTrainedConfig):
     max_lora_rank: int = 8
     adapter_ranks: list[int] | None = None
     lora_target_modules: list[str] | None = None
-
-    control_token_gain: float = 15.0
-
-    ms_code_m: int = 6
-    ms_code_type: str = "kerdock"
-    ms_memory_gain: float = 28.0
-    ms_counting_head_dim: int = 32
 
     dual_stream: bool = False
     cross_stream_rank: int | None = None
@@ -253,36 +236,19 @@ class GraniteSwitchConfig(PreTrainedConfig):
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):
-        """Reject SingleSwitch checkpoints; MultiSwitch is the only engine.
+        """Reject SingleSwitch checkpoints, which were sized for a different decoder-layer count.
 
-        A checkpoint built for the earlier SingleSwitch engine cannot run as MultiSwitch: it
-        carries a one-transition switch whose weights have no counterpart here, and its
-        `num_hidden_layers` counts one switch layer slot where MultiSwitch counts
-        `SWITCH_LAYER_SLOTS`, so it would load one decoder layer short. There is no
-        auto-migration; it must be rebuilt.
-
-        This is the one seam that still sees the raw on-disk config, so the rejection lives here.
-        Two shapes identify such a checkpoint, with adapters present:
-
-        - an explicit `switch_type` that is not `"multi"`; or
-        - no `switch_type` key and no `ms_code_m` key, which marks a checkpoint predating the coded
-          engine. `ms_code_m` is serialized by every MultiSwitch checkpoint, so its absence is the
-          reliable marker.
-
-        A stale `switch_type` key on a real MultiSwitch checkpoint is stripped before delegating, so
-        the removed parameter never reaches the parent.
+        A SingleSwitch checkpoint counts one switch layer slot in `num_hidden_layers` where this model
+        drops `SWITCH_LAYER_SLOTS`, so it would load one decoder layer short. This is the one seam
+        that still sees the raw on-disk config, so the rejection lives here. A stale
+        `switch_type: "multi"` is stripped before delegating, so the removed parameter never reaches
+        the parent.
         """
-        if config_dict.get("num_adapters", 0) > 0:
-            switch_type = config_dict.get("switch_type")
-            legacy_single = switch_type is None and "ms_code_m" not in config_dict
-            if (switch_type is not None and switch_type != "multi") or legacy_single:
-                raise ValueError(
-                    "This checkpoint was built for the SingleSwitch engine, which has been removed. "
-                    "MultiSwitch is now the only engine, and a SingleSwitch checkpoint cannot be loaded as "
-                    "MultiSwitch because it was sized for a different decoder-layer count. A loadable "
-                    "checkpoint must set switch_type to 'multi' or omit it entirely, and must carry "
-                    "ms_code_m; rebuild it from its source adapters."
-                )
+        if config_dict.get("num_adapters", 0) > 0 and config_dict.get("switch_type", "multi") != "multi":
+            raise ValueError(
+                "This checkpoint was built for the SingleSwitch engine, which has been removed. It was "
+                "sized for a different decoder-layer count; rebuild it from its source adapters."
+            )
         if "switch_type" in config_dict:
             config_dict = {k: v for k, v in config_dict.items() if k != "switch_type"}
         config = super().from_dict(config_dict, **kwargs)

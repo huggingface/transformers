@@ -35,8 +35,7 @@ Checkpoints are available under the [IBM Granite](https://huggingface.co/ibm-gra
 They are built with the [granite-switch](https://github.com/generative-computing/granite-switch) tools.
 
 **Routing.** Every adapter has a control token, and the most recent control token decides the adapter for the
-tokens after it. Two small attention heads, built from the config with no trained weights, compute this index from
-`input_ids`. Each control token is then replaced with a substitute id before the embedding lookup, so the decoder
+tokens after it. This index is a running maximum over `input_ids`, with no weights involved. Each control token is then replaced with a substitute id before the embedding lookup, so the decoder
 never sees it.
 
 **Shadow Residual.** With `dual_stream=True`, each layer runs a frozen base stream and an adapter stream that share
@@ -75,8 +74,8 @@ print(tokenizer.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_t
 - Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 - With `inputs_embeds`, pass the token ids as `switch_input_ids` to keep routing. Without them every token uses the
   base model.
-- With adapters, `num_hidden_layers` in `config.json` includes two layer slots used by the router (42 for a 40-layer
-  model). They are removed on load and added back on save.
+- With adapters, `num_hidden_layers` in `config.json` includes two layer slots that vLLM's router uses (42 for a
+  40-layer model). They are removed on load and added back on save.
 - `torch.compile` with `fullgraph=True` is not supported.
 
 ## GraniteSwitchConfig
