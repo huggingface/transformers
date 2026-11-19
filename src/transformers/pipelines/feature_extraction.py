@@ -43,8 +43,7 @@ class FeatureExtractionPipeline(Pipeline):
     _load_tokenizer = True
 
     def _sanitize_parameters(self, truncation=None, tokenize_kwargs=None, return_tensors=None, **kwargs):
-        if tokenize_kwargs is None:
-            tokenize_kwargs = {}
+        tokenize_kwargs = {} if tokenize_kwargs is None else tokenize_kwargs.copy()
 
         if truncation is not None:
             if "truncation" in tokenize_kwargs:
