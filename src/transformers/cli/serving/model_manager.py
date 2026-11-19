@@ -130,20 +130,21 @@ class EngineClient:
             self.managed_process = process
             self._start_reading_results()
 
-    async def generate_non_streaming(self, inputs: dict, gen_config: "GenerationConfig") -> tuple[str, int, list[int]]:
+    async def generate_non_streaming(self, inputs: dict, generation_kwargs: dict) -> tuple[str, int, list[int]]:
         """Generates for `inputs`. Returns the text, the prompt's length, and the generated tokens."""
         results = [
-            result async for result in self._send_request("generate", stream=False, args=(dict(inputs), gen_config))
+            result
+            async for result in self._send_request("generate", stream=False, args=(dict(inputs), generation_kwargs))
         ]
         generated_ids = results[-1].data
         text = self.processor.decode(generated_ids, skip_special_tokens=True)
         return text, prompt_length(inputs), generated_ids
 
     def generate_streaming(
-        self, inputs: dict, gen_config: "GenerationConfig", response_parser: "ResponseParser | None" = None
+        self, inputs: dict, generation_kwargs: dict, response_parser: "ResponseParser | None" = None
     ) -> tuple[asyncio.Queue, Detokenizer]:
         """Generates for `inputs`, streaming the answer. Returns its output queue and its streamer."""
-        results = self._send_request("generate", stream=True, args=(dict(inputs), gen_config))
+        results = self._send_request("generate", stream=True, args=(dict(inputs), generation_kwargs))
         return self._stream_results(results, response_parser)
 
     async def submit(self, function: Callable, *args) -> Any:

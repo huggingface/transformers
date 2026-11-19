@@ -98,15 +98,15 @@ class CompletionHandler(BaseHandler):
         logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
         tokenizer = getattr(engine.processor, "tokenizer", engine.processor)
         inputs = tokenizer(prompt, return_tensors=None if use_cb else "pt")
-        gen_config = self._build_generation_config(body, engine.generation_config, use_cb=use_cb)
+        generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         suffix = body.get("suffix")
         streaming = body.get("stream")
 
         if streaming:
-            return self._streaming(request_id, engine, inputs, gen_config, suffix)
+            return self._streaming(request_id, engine, inputs, generation_kwargs, suffix)
         else:
-            return await self._non_streaming(request_id, engine, inputs, gen_config, suffix)
+            return await self._non_streaming(request_id, engine, inputs, generation_kwargs, suffix)
 
     # ----- streaming -----
 
@@ -115,12 +115,12 @@ class CompletionHandler(BaseHandler):
         request_id: str,
         engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
+        generation_kwargs: dict,
         suffix: str | None = None,
     ) -> "StreamingResponse":
         """Stream tokens as SSE."""
         model_id = engine.model_id
-        queue, streamer = engine.generate_streaming(inputs, gen_config)
+        queue, streamer = engine.generate_streaming(inputs, generation_kwargs)
         input_ids = inputs["input_ids"]
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
         text_template = self.sse_template(self._build_chunk_sse(request_id, model_id, text="<text>"), text="<text>")
@@ -152,7 +152,8 @@ class CompletionHandler(BaseHandler):
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+                max_new_tokens = generation_kwargs.get("max_new_tokens")
+                hit_max = max_new_tokens is not None and streamer.total_tokens >= max_new_tokens
                 finish_reason = "length" if hit_max else "stop"
 
                 if suffix is not None:
@@ -176,18 +177,19 @@ class CompletionHandler(BaseHandler):
         request_id: str,
         engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
+        generation_kwargs: dict,
         suffix: str | None = None,
     ) -> "JSONResponse":
         """Run generation and return a JSONResponse."""
         model_id = engine.model_id
-        text, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
+        text, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
         if suffix is not None:
             text = text + suffix
 
         completion_tokens = len(generated_ids)
-        hit_max = gen_config.max_new_tokens is not None and completion_tokens >= gen_config.max_new_tokens
+        max_new_tokens = generation_kwargs.get("max_new_tokens")
+        hit_max = max_new_tokens is not None and completion_tokens >= max_new_tokens
         finish_reason = "length" if hit_max else "stop"
 
         usage = CompletionUsage(
@@ -249,15 +251,15 @@ class CompletionHandler(BaseHandler):
 
     # ----- generation config -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply legacy completion params (``max_tokens``, ``frequency_penalty``, ``stop``) on top of base config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+        """Adds the legacy completion params (``max_tokens``, ``frequency_penalty``, ``stop``) to the shared ones."""
+        generation_kwargs = super()._build_generation_kwargs(body, default)
 
         if body.get("max_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_kwargs["repetition_penalty"] = 1.0 + float(body["frequency_penalty"])
         if body.get("stop") is not None:
-            generation_config.stop_strings = body["stop"]
+            generation_kwargs["stop_strings"] = body["stop"]
 
-        return generation_config
+        return generation_kwargs

@@ -726,9 +726,12 @@ class GenerateRunner:
         self.cancelled_request_ids: set[str] = set()
         threading.Thread(target=self._process_requests, name="generate", daemon=True).start()
 
-    def generate(self, request_id: str, inputs: dict, gen_config: "GenerationConfig", stream: bool) -> None:
+    def generate(self, request_id: str, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
+        """Generates with the model's generation config and the request's `generation_kwargs` on top (see
+        `BaseHandler._build_generation_kwargs`)."""
+
         def generate_tokens(model: "PreTrainedModel", processor: Any, streamer: Any = None) -> list[int]:
-            seed = gen_config.__dict__.pop("seed", None)  # the request's (see `BaseHandler._build_generation_config`)
+            seed = generation_kwargs.pop("seed", None)
             if seed is not None:
                 set_torch_seed(seed)
             model_inputs = {
@@ -736,7 +739,7 @@ class GenerateRunner:
             }
             kwargs = {
                 **model_inputs,
-                "generation_config": gen_config,
+                **generation_kwargs,
                 "tokenizer": processor,
                 "streamer": streamer,
             }
@@ -796,16 +799,16 @@ class CBGenerateRunner(GenerateRunner):
         self.lock = threading.Lock()
         self.manager = self._start_continuous_batching(model, cb_config)
 
-    def generate(self, request_id: str, inputs: dict, gen_config: "GenerationConfig", stream: bool) -> None:
-        seed = gen_config.__dict__.pop("seed", None)  # the request's: continuous batching shares the random numbers
+    def generate(self, request_id: str, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
+        seed = generation_kwargs.pop("seed", None)  # the request's: continuous batching shares the random numbers
         if seed is not None:
             set_torch_seed(seed)
         if self._fail_if_worker_died(request_id):
             return
         with self.lock:
             self.active_requests[request_id] = [stream, 0]
-        settings = self._generation_settings(gen_config)
-        self.manager.add_request(inputs["input_ids"], request_id=request_id, streaming=stream, **settings)
+        batching_kwargs = self._build_continuous_batching_kwargs(generation_kwargs)
+        self.manager.add_request(inputs["input_ids"], request_id=request_id, streaming=stream, **batching_kwargs)
 
     def cancel(self, request_id: str) -> None:
         with self.lock:
@@ -815,10 +818,10 @@ class CBGenerateRunner(GenerateRunner):
         else:
             super().cancel(request_id)
 
-    def _generation_settings(self, gen_config: "GenerationConfig") -> dict:
-        """What the batching manager takes from a request's generation config."""
-        if gen_config.do_sample and gen_config.temperature != 0:
-            sampling = {"temperature": gen_config.temperature, "top_k": gen_config.top_k, "top_p": gen_config.top_p}
+    def _build_continuous_batching_kwargs(self, generation_kwargs: dict) -> dict:
+        """What the batching manager takes from a request's `generation_kwargs`."""
+        if generation_kwargs["do_sample"] and generation_kwargs["temperature"] != 0:
+            sampling = {name: generation_kwargs[name] for name in ("temperature", "top_k", "top_p")}
         else:
             sampling = {"top_k": 1}
         # Only the sampling settings the manager can set per request (those of the model's config), with its types
@@ -827,9 +830,13 @@ class CBGenerateRunner(GenerateRunner):
         sampling = {
             name: supported[name](value) for name, value in sampling.items() if name in supported and value is not None
         }
-        settings = {"max_new_tokens": gen_config.max_new_tokens, "eos_token_id": gen_config.eos_token_id, **sampling}
-        logger.info(f"Continuous batching settings of the request: {settings}, ignored: {ignored}")
-        return settings
+        batching_kwargs = {
+            "max_new_tokens": generation_kwargs["max_new_tokens"],
+            "eos_token_id": generation_kwargs["eos_token_id"],
+            **sampling,
+        }
+        logger.info(f"Continuous batching settings of the request: {batching_kwargs}, ignored: {ignored}")
+        return batching_kwargs
 
     def _fail_if_worker_died(self, request_id: str) -> bool:
         """Fails the request if the batching manager's worker died, as it can't take requests anymore."""
@@ -1069,55 +1076,36 @@ class BaseHandler:
         """The chat template's arguments: the server's defaults, overridden by the request's."""
         return {**self.chat_template_kwargs, **(body.get("chat_template_kwargs") or {})}
 
-    def _build_generation_config(
-        self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False
-    ) -> "GenerationConfig":
-        """Build a GenerationConfig from shared params (temperature, top_p, seed, generation_config JSON).
-
-        Subclasses should call ``super()._build_generation_config(...)`` then apply
-        endpoint-specific params (``max_tokens``, ``max_output_tokens``, etc.).
-
-        Args:
-            body (`dict`):
-                The raw request body.
-            model_generation_config (`GenerationConfig`):
-                The model's default generation config (will be deep-copied).
-            use_cb (`bool`, *optional*, defaults to `False`):
-                Whether continuous batching is active. If ``True``, disables the model's
-                internal KV cache (CB manages its own paged cache).
-
-        Returns:
-            `GenerationConfig`: A new config with request-specific overrides applied.
+    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
         """
-        from transformers import GenerationConfig
+        What the request generates with, on top of `default`, the model's generation config (see
+        `GenerateRunner.generate`). It always has ``max_new_tokens``, ``eos_token_id``, ``do_sample``,
+        ``temperature``, ``top_k`` and ``top_p``, the model's unless the request sets them. Here, the params the
+        endpoints share (temperature, top_p, seed, and `generation_config`, a JSON of generation settings).
 
+        Subclasses call ``super()._build_generation_kwargs(...)`` then add theirs (``max_tokens``, ``stop``, etc.).
+        """
+        required = ("max_new_tokens", "eos_token_id", "do_sample", "temperature", "top_k", "top_p")
+        generation_kwargs = {name: getattr(default, name) for name in required}
+        if default.max_new_tokens is None or default.max_new_tokens < 1024:
+            generation_kwargs["max_new_tokens"] = 1024
         if body.get("generation_config") is not None:
-            generation_config = GenerationConfig(**json.loads(body["generation_config"]))
-        else:
-            generation_config = copy.deepcopy(model_generation_config)
-            if generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024:
-                generation_config.max_new_tokens = 1024
+            generation_kwargs.update(json.loads(body["generation_config"]))
 
         if body.get("temperature") is not None:
-            generation_config.temperature = float(body["temperature"])
-            if float(body["temperature"]) == 0.0:
-                generation_config.do_sample = False
+            generation_kwargs["temperature"] = float(body["temperature"])
+            if generation_kwargs["temperature"] == 0.0:
+                generation_kwargs["do_sample"] = False
         if body.get("top_p") is not None:
-            generation_config.top_p = float(body["top_p"])
+            generation_kwargs["top_p"] = float(body["top_p"])
         if body.get("seed") is not None:
-            generation_config.seed = int(body["seed"])  # set in the model's process, which generates
+            generation_kwargs["seed"] = int(body["seed"])  # set in the model's process, which generates
 
         # --compile flag: use static cache + torch.compile for faster decode
-        if self.generation_state._compile and generation_config.cache_implementation is None:
-            generation_config.cache_implementation = "static"
+        if self.generation_state._compile and default.cache_implementation is None:
+            generation_kwargs["cache_implementation"] = "static"
 
-        # CB manages its own paged KV cache
-        if use_cb:
-            generation_config.use_cache = False
-
-        # TODO: add prefix caching for the non-CB path (reuse KV cache across multi-turn conversations)
-
-        return generation_config
+        return generation_kwargs
 
     def render_messages(self, engine: "EngineClient", messages: list[dict], body: dict) -> dict:
         """OpenAI messages → the model's inputs: the processor's messages, with the request's tools, through the chat

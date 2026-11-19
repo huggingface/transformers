@@ -121,23 +121,23 @@ class ChatCompletionHandler(BaseHandler):
         use_cb = engine.use_cb
         logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
         inputs = self.render_messages(engine, body["messages"], body)
-        gen_config = self._build_generation_config(body, engine.generation_config, use_cb=use_cb)
+        generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         streaming = body.get("stream")
         if streaming:
-            return self._streaming(request_id, engine, inputs, gen_config, tools=body.get("tools"))
+            return self._streaming(request_id, engine, inputs, generation_kwargs, tools=body.get("tools"))
         else:
-            return await self._non_streaming(request_id, engine, inputs, gen_config, tools=body.get("tools"))
+            return await self._non_streaming(request_id, engine, inputs, generation_kwargs, tools=body.get("tools"))
 
     # ----- streaming -----
 
     def _streaming(
-        self, request_id: str, engine: "EngineClient", inputs: dict, gen_config: "GenerationConfig", tools=None
+        self, request_id: str, engine: "EngineClient", inputs: dict, generation_kwargs: dict, tools=None
     ) -> StreamingResponse:
         """Stream tokens as SSE, decoded by a `Detokenizer`."""
         processor, model_id = engine.processor, engine.model_id
         response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
-        queue, streamer = engine.generate_streaming(inputs, gen_config, response_parser=response_parser)
+        queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
@@ -203,7 +203,8 @@ class ChatCompletionHandler(BaseHandler):
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+                max_new_tokens = generation_kwargs.get("max_new_tokens")
+                hit_max = max_new_tokens is not None and streamer.total_tokens >= max_new_tokens
                 if has_tool_calls:
                     finish_reason = "tool_calls"
                 elif hit_max:
@@ -237,14 +238,15 @@ class ChatCompletionHandler(BaseHandler):
         request_id: str,
         engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
+        generation_kwargs: dict,
         tools=None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         processor, model_id = engine.processor, engine.model_id
-        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
+        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
-        hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
+        max_new_tokens = generation_kwargs.get("max_new_tokens")
+        hit_max = max_new_tokens is not None and len(generated_ids) >= max_new_tokens
         completion_tokens = len(generated_ids)
         usage = CompletionUsage(
             prompt_tokens=input_len,
@@ -293,23 +295,23 @@ class ChatCompletionHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply Chat Completions params (``max_completion_tokens``, ``max_tokens``, ``frequency_penalty``,
-        ``logit_bias``, ``stop``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+        """Adds the Chat Completions params (``max_completion_tokens``, ``max_tokens``, ``frequency_penalty``,
+        ``logit_bias``, ``stop``) to the shared ones."""
+        generation_kwargs = super()._build_generation_kwargs(body, default)
 
         if body.get("max_completion_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_completion_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_completion_tokens"])
         elif body.get("max_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_kwargs["repetition_penalty"] = 1.0 + float(body["frequency_penalty"])
         if body.get("logit_bias") is not None:
-            generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
+            generation_kwargs["sequence_bias"] = {(int(k),): v for k, v in body["logit_bias"].items()}
         if body.get("stop") is not None:
-            generation_config.stop_strings = body["stop"]
+            generation_kwargs["stop_strings"] = body["stop"]
 
-        return generation_config
+        return generation_kwargs
 
     # ----- response builders -----
 

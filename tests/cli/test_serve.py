@@ -469,80 +469,80 @@ class TestBuildGenerationConfig(unittest.TestCase):
     def test_max_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_tokens": 7}, GenerationConfig())
-        self.assertEqual(result.max_new_tokens, 7)
+        result = self._make_handler()._build_generation_kwargs({"max_tokens": 7}, GenerationConfig())
+        self.assertEqual(result["max_new_tokens"], 7)
 
     def test_max_completion_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_completion_tokens": 7}, GenerationConfig())
-        self.assertEqual(result.max_new_tokens, 7)
+        result = self._make_handler()._build_generation_kwargs({"max_completion_tokens": 7}, GenerationConfig())
+        self.assertEqual(result["max_new_tokens"], 7)
 
     def test_max_completion_tokens_overrides_max_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config(
+        result = self._make_handler()._build_generation_kwargs(
             {"max_completion_tokens": 7, "max_tokens": 50}, GenerationConfig()
         )
-        self.assertEqual(result.max_new_tokens, 7)
+        self.assertEqual(result["max_new_tokens"], 7)
 
     def test_temperature_zero_disables_sampling(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"temperature": 0.0}, GenerationConfig(do_sample=True))
-        self.assertFalse(result.do_sample)
+        result = self._make_handler()._build_generation_kwargs({"temperature": 0.0}, GenerationConfig(do_sample=True))
+        self.assertFalse(result["do_sample"])
 
     def test_frequency_penalty(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"frequency_penalty": 0.5}, GenerationConfig())
-        self.assertAlmostEqual(result.repetition_penalty, 1.5)
+        result = self._make_handler()._build_generation_kwargs({"frequency_penalty": 0.5}, GenerationConfig())
+        self.assertAlmostEqual(result["repetition_penalty"], 1.5)
 
     def test_logit_bias_tuple_keys(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"logit_bias": {"42": 1.0}}, GenerationConfig())
-        self.assertEqual(result.sequence_bias, {(42,): 1.0})
+        result = self._make_handler()._build_generation_kwargs({"logit_bias": {"42": 1.0}}, GenerationConfig())
+        self.assertEqual(result["sequence_bias"], {(42,): 1.0})
 
     def test_stop_strings(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"stop": ["<END>"]}, GenerationConfig())
-        self.assertEqual(result.stop_strings, ["<END>"])
+        result = self._make_handler()._build_generation_kwargs({"stop": ["<END>"]}, GenerationConfig())
+        self.assertEqual(result["stop_strings"], ["<END>"])
 
     def test_generation_config_json_overrides(self):
         from transformers import GenerationConfig
 
         custom = GenerationConfig(max_new_tokens=5, do_sample=False)
-        result = self._make_handler()._build_generation_config(
+        result = self._make_handler()._build_generation_kwargs(
             {"generation_config": custom.to_json_string()}, GenerationConfig(max_new_tokens=100)
         )
-        self.assertEqual(result.max_new_tokens, 5)
-        self.assertFalse(result.do_sample)
+        self.assertEqual(result["max_new_tokens"], 5)
+        self.assertFalse(result["do_sample"])
 
     def test_generation_config_json_no_defaults_applied(self):
         """When generation_config JSON is passed, serving defaults should NOT be applied."""
         from transformers import GenerationConfig
 
         custom = GenerationConfig(max_new_tokens=10)
-        result = self._make_handler()._build_generation_config(
+        result = self._make_handler()._build_generation_kwargs(
             {"generation_config": custom.to_json_string()}, GenerationConfig()
         )
         # Should keep 10, not bump to 1024
-        self.assertEqual(result.max_new_tokens, 10)
+        self.assertEqual(result["max_new_tokens"], 10)
 
     def test_default_bumps_short_max_new_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({}, GenerationConfig(max_new_tokens=20))
-        self.assertEqual(result.max_new_tokens, 1024)
+        result = self._make_handler()._build_generation_kwargs({}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result["max_new_tokens"], 1024)
 
     def test_user_max_tokens_overrides_default(self):
         """User's max_tokens should win over the serving default."""
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
-        self.assertEqual(result.max_new_tokens, 50)
+        result = self._make_handler()._build_generation_kwargs({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result["max_new_tokens"], 50)
 
 
 @require_serve
@@ -1373,14 +1373,14 @@ class TestResponseGenerationConfig(unittest.TestCase):
     def test_max_output_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_output_tokens": 42}, GenerationConfig())
-        self.assertEqual(result.max_new_tokens, 42)
+        result = self._make_handler()._build_generation_kwargs({"max_output_tokens": 42}, GenerationConfig())
+        self.assertEqual(result["max_new_tokens"], 42)
 
     def test_default_bumps_short_max_new_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({}, GenerationConfig(max_new_tokens=20))
-        self.assertEqual(result.max_new_tokens, 1024)
+        result = self._make_handler()._build_generation_kwargs({}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result["max_new_tokens"], 1024)
 
 
 @require_serve

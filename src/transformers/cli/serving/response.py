@@ -394,12 +394,12 @@ class ResponseHandler(BaseHandler):
         logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
         # The Responses API's input (a string, items, instructions) as chat messages, then rendered like a chat's
         inputs = self.render_messages(engine, self._normalize_input(body), body)
-        gen_config = self._build_generation_config(body, engine.generation_config, use_cb=use_cb)
+        generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
         streaming = body.get("stream", True)
         if streaming:
-            return self._streaming(request_id, engine, body, inputs, gen_config)
+            return self._streaming(request_id, engine, body, inputs, generation_kwargs)
         else:
-            return await self._non_streaming(request_id, engine, body, inputs, gen_config)
+            return await self._non_streaming(request_id, engine, body, inputs, generation_kwargs)
 
     # ----- input conversion -----
 
@@ -507,13 +507,13 @@ class ResponseHandler(BaseHandler):
         engine: "EngineClient",
         body: dict,
         inputs: dict,
-        gen_config: "GenerationConfig",
+        generation_kwargs: dict,
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE), decoded by a `Detokenizer`."""
         processor, model_id = engine.processor, engine.model_id
         tools = self._normalize_tools(body.get("tools"))
         response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
-        queue, streamer = engine.generate_streaming(inputs, gen_config, response_parser=response_parser)
+        queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
@@ -605,11 +605,11 @@ class ResponseHandler(BaseHandler):
         engine: "EngineClient",
         body: dict,
         inputs: dict,
-        gen_config: "GenerationConfig",
+        generation_kwargs: dict,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
         processor, model_id = engine.processor, engine.model_id
-        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, gen_config)
+        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
             processor,
@@ -675,14 +675,14 @@ class ResponseHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply Responses API params (``max_output_tokens``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+        """Adds the Responses API params (``max_output_tokens``) to the shared ones."""
+        generation_kwargs = super()._build_generation_kwargs(body, default)
 
         if body.get("max_output_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_output_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_output_tokens"])
 
-        return generation_config
+        return generation_kwargs
 
 
 def compute_usage(input_tokens: int, output_tokens: int) -> ResponseUsage:
