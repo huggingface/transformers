@@ -20,11 +20,13 @@ from ...audio_utils import AudioInput
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch",))
 class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Liquid Codec feature extractor.
