@@ -20,7 +20,7 @@ limitations under the License.
 
 # Looped Inkling 2
 
-Looped Inkling 2 is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is [Inkling 2](./inkling2) with one change to how the decoder runs: a contiguous middle section of layers, the core, runs several times for every token with the same weights. The released checkpoint has 24 decoder layers of which layers 6 to 17 run three times, so every token goes through 48 layers with the weights of 24. Every pass after the first starts again from the output of the layers before the core, and reads the residual blocks of the previous pass through small learned messages that are mixed into the attention and mixture-of-experts inputs of each core layer. The decoder has a hidden size of 2304 and routes each token to 8 of 128 experts. The image encoder, tokenizer and processor are the ones of Inkling 2.
+Looped Inkling 2 is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is [Inkling 2](./inkling2) with one change to how the decoder runs: a contiguous middle section of layers, the loop layers, run several times for every token with the same weights. The released checkpoint has 24 decoder layers of which layers 6 to 17 run three times, so every token goes through 48 layers with the weights of 24. Every pass after the first starts again from the output of the pre loop layers, and reads the residual blocks of the previous pass through small learned messages that are mixed into the attention and mixture-of-experts inputs of each loop layer. The decoder has a hidden size of 2304 and routes each token to 8 of 128 experts. The image encoder, tokenizer and processor are the ones of Inkling 2.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -66,7 +66,7 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 ## Notes
 
 - Attention runs in eager mode only, because every layer adds a relative position bias and a sink.
-- Every pass through the core keeps its own keys, values and convolution states, so the cache has one layer per layer visit (48 for the released checkpoint). The cache layers of the passes after the first follow those of the 24 decoder layers.
+- Every pass through the loop layers keeps its own keys, values and convolution states, so the cache has one layer per layer visit (48 for the released checkpoint). The cache layers of the passes after the first follow those of the 24 decoder layers.
 - `output_hidden_states` and `output_attentions` return one entry per layer visit.
 
 ## Inkling2LoopConfig
