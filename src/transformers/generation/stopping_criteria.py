@@ -264,11 +264,14 @@ class StopStringCriteria(StoppingCriteria):
 
     def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
+        decoder = getattr(getattr(tokenizer, "backend_tokenizer", None), "decoder", None)
+        decoder_state = getattr(decoder, "__getstate__", lambda: None)()
         cache_key = (
             token_list,
             token_indices,
             self._stop_strings_for_matching,
             self._stop_string_matching_mode,
+            decoder_state,
         )
         if cache_key in STOP_STRING_EMBEDDING_CACHE:
             embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[cache_key]
