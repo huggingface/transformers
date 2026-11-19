@@ -287,12 +287,15 @@ class TableQuestionAnsweringPipeline(Pipeline):
             return results[0]
         return results
 
-    def _sanitize_parameters(self, sequential=None, padding=None, truncation=None, **kwargs):
+    def _sanitize_parameters(self, sequential=None, padding=None, truncation=None, max_length=None, **kwargs):
         preprocess_params = {}
         if padding is not None:
             preprocess_params["padding"] = padding
         if truncation is not None:
             preprocess_params["truncation"] = truncation
+
+        if max_length is not None:
+            preprocess_params["max_length"] = max_length
 
         forward_params = {}
         if sequential is not None:
@@ -306,7 +309,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def preprocess(self, pipeline_input, padding=True, truncation=None):
+    def preprocess(self, pipeline_input, padding=True, truncation=None, max_length=None):
         if truncation is None:
             if self.type == "tapas":
                 truncation = "drop_rows_to_fit"
@@ -318,7 +321,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
             raise ValueError("table is empty")
         if query is None or query == "":
             raise ValueError("query is empty")
-        inputs = self.tokenizer(table, query, return_tensors="pt", truncation=truncation, padding=padding)
+        inputs = self.tokenizer(
+            table, query, return_tensors="pt", truncation=truncation, padding=padding, max_length=max_length
+        )
         inputs["table"] = table
         return inputs
 
