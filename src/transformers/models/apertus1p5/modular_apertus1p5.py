@@ -29,8 +29,9 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     IMAGENET_STANDARD_MEAN,
@@ -683,10 +684,10 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        image_features = self.get_input_embeddings()(torch.cat(image_tokens))
+        split_sizes = torch.tensor([len(tokens) for tokens in image_tokens], device=image_features.device)
         return Apertus1p5VisionTokenizerModelOutput(
-            image_tokens=image_tokens,
-            pooler_output=self.get_input_embeddings()(torch.cat(image_tokens)),
-            split_sizes=torch.tensor([len(tokens) for tokens in image_tokens], device=image_tokens[0].device),
+            image_tokens=image_tokens, pooler_output=image_features, split_sizes=split_sizes
         )
 
     def get_audio_tokens(self, input_values: torch.Tensor, padding_mask: torch.Tensor) -> list[torch.LongTensor]:
@@ -780,6 +781,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -816,8 +818,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
         image_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_features, torch.Tensor):
-                image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
         audio_features = None
         if input_values is not None:
