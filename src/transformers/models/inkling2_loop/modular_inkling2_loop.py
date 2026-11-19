@@ -192,7 +192,7 @@ class Inkling2LoopMessageGate(nn.Module):
 
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
-        self.norm = Inkling2LoopUnweightedRMSNorm()
+        self.norm = Inkling2LoopUnweightedRMSNorm(eps=config.rms_norm_eps)
         self.down_proj = nn.Linear(2 * config.hidden_size, config.loop_gate_rank, bias=False)
         self.forget_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False)
         self.message_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False)
