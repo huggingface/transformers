@@ -93,7 +93,7 @@ Open a [New model addition](https://github.com/huggingface/transformers/issues/n
 
 Now is a good time to get familiar with BrandNewLlama. It is helpful to read a models research paper to understand its technical design and implementation. You don't necessarily have to worry too much about the theoretical details. Instead, focus on the practical ones. Use the questions below to guide your reading.
 
-- What type of model is BrandNewLlama? Is it a encoder, decoder, or encoder-decoder model?
+- What type of model is BrandNewLlama? Is it an encoder, decoder, or encoder-decoder model?
 - What tasks can BrandNewLlama be used for?
 - What makes BrandNewLlama different from other models?
 - What models in Transformers are most similar to BrandNewLlama?
@@ -380,7 +380,7 @@ class SimpleModel(nn.Module):
         self.layer_norm = nn.LayerNorm(10)
 ```
 
-PyTorch layer names are defined by the class attribute name of the layer (`dense`, `intermediate`, `layer_norm`). Create a instance of `SimpleModel` to fill all the layers with random weights.
+PyTorch layer names are defined by the class attribute name of the layer (`dense`, `intermediate`, `layer_norm`). Create an instance of `SimpleModel` to fill all the layers with random weights.
 
 ```py
 model = SimpleModel()
