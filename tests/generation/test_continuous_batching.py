@@ -2554,7 +2554,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
                 tokens_per_sector=bytes_per_sector // bytes_per_block * 32,
                 bytes_per_block=bytes_per_block,
                 attn_types=["full_attention"],
-                tp_size=tp,
+                kv_tp_size=tp,
             )
 
         sharded = make_handler(num_kv_heads, num_attention_heads, tp_size)

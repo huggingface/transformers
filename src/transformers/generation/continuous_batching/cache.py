@@ -193,7 +193,7 @@ class PagedAttentionCache:
             bytes_per_block=bytes_per_block,
             attn_types=list(self.cache_allocators.keys()),
             model_supports_logits_to_keep=model_supports_logits_to_keep,
-            tp_size=kv_tp_size,
+            kv_tp_size=kv_tp_size,
         ).infer_max_batch_tokens_and_num_sectors()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -555,7 +555,7 @@ class PagedAttentionMemoryHandler:
         bytes_per_block: int,
         attn_types: list[str],
         model_supports_logits_to_keep: bool = False,
-        tp_size: int = 1,
+        kv_tp_size: int = 1,
     ) -> None:
         """Initialize the memory handler with the model configuration, the continuous batching configuration, the data
         type of the activation and the cache, the sector geometry computed by the PagedAttentionCache, and the tensor
@@ -573,9 +573,10 @@ class PagedAttentionMemoryHandler:
         self.num_groups = len(attn_types)
 
         # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
-        # Under tensor parallelism each rank holds 1 / tp_size of the heads, in the cache and in the activations
-        self.num_attention_heads = self.config.num_attention_heads // tp_size
-        self.num_key_value_heads = find_num_key_value_heads(self.config) // tp_size
+        # Under tensor parallelism each rank holds 1 / tp_size of the heads, in the cache and in the activations.
+        # TODO: add a separate q_tp_size for finer granularity. For rn because if KV heads are TP'ed, so are Q heads.
+        self.num_attention_heads = self.config.num_attention_heads // kv_tp_size
+        self.num_key_value_heads = find_num_key_value_heads(self.config) // kv_tp_size
         # Flash reads GQA heads natively, but eager/sdpa repeat KV heads to num_attention_heads while V is in VRAM
         if is_flash_attention_requested(self.config):
             self.num_attention_masks = 0
