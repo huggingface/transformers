@@ -23,6 +23,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-3.0-7.8B-Instruct")
@@ -67,7 +68,7 @@ class ExaoneConfig(PreTrainedConfig):
     num_key_value_heads: int | None = 8
     hidden_act: str = "silu"
     max_position_embeddings: int = 4096
-    initializer_range: float = 0.02
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = 0
@@ -76,7 +77,7 @@ class ExaoneConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
-    attention_dropout: float | int = 0.0
+    attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
     attribute_map = {

@@ -14,7 +14,6 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..llama.configuration_llama import LlamaConfig
 
@@ -45,23 +44,12 @@ class ExaoneConfig(LlamaConfig):
     default_theta = 500_000.0
 
     vocab_size: int = 102400
-    hidden_size: int = 4096
     intermediate_size: int = 14336
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 32
     num_key_value_heads: int | None = 8
-    hidden_act: str = "silu"
     max_position_embeddings: int = 4096
-    initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
-    use_cache: bool = True
     pad_token_id: int | None = 0
-    bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 361
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    attention_dropout: float | int = 0.0
-    head_dim: int | None = None
 
     pretraining_tp = AttributeError()
 
