@@ -1073,8 +1073,11 @@ class GraniteSwitchModel(GraniteSwitchPreTrainedModel):
         # CODEPATH: `None` means base for every token, which is what an unroutable call gets.
         adapter_indices = None
         if self.control_token_ids is not None and routing_input_ids is not None:
+            # Under `device_map` offloading the model's own buffers stay where the root module was
+            # placed, which need not be where the ids arrive.
+            device = routing_input_ids.device
             adapter_indices, exchanged_input_ids = route_control_tokens(
-                routing_input_ids, self.control_token_ids, self.substitute_token_ids
+                routing_input_ids, self.control_token_ids.to(device), self.substitute_token_ids.to(device)
             )
             adapter_indices = adapter_indices[:, -seq_length:]
             if input_ids is not None:
