@@ -96,16 +96,17 @@ class MiniCPMV2_5ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV2_5IntegrationTest(unittest.TestCase):
-    # TODO: pin the `revision` of the Hub PR that adds the converted config and processor files
     model_id = "openbmb/MiniCPM-Llama3-V-2_5"
+    # Hub PR with the converted config and processor files (the weights are the original ones)
+    revision = "refs/pr/80"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     def test_small_model_vision_generation(self):
-        processor = AutoProcessor.from_pretrained(self.model_id)
+        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
         model = MiniCPMV2_5ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.float16, device_map=torch_device
+            self.model_id, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
         messages = [
             {
