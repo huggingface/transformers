@@ -234,6 +234,7 @@ if TYPE_CHECKING:
     from .hunyuan_vl import *
     from .hy_v3 import *
     from .hy_v4 import *
+    from .hy_v4_flash import *
     from .hy_v4_vl import *
     from .hyperclovax import *
     from .hyperclovax_vision_v2 import *
