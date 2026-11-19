@@ -210,6 +210,13 @@ def _parse_type_hint(hint: str) -> dict:
     raise TypeHintParsingException("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
 
 
+def _get_var_keyword_name(signature: inspect.Signature) -> str | None:
+    return next(
+        (name for name, param in signature.parameters.items() if param.kind is inspect.Parameter.VAR_KEYWORD),
+        None,
+    )
+
+
 def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
@@ -224,18 +231,27 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
         implicit_arg_name = first_param_name
     else:
         implicit_arg_name = None
+    var_keyword_name = _get_var_keyword_name(signature)
     required = []
     for param_name, param in signature.parameters.items():
         if param_name == implicit_arg_name:
             continue
+        if param.kind is inspect.Parameter.VAR_POSITIONAL:
+            raise TypeHintParsingException(
+                f"Argument {param_name} in function {func_name} collects variable positional arguments, which a "
+                "JSON schema cannot describe: a tool call names each argument, so the model could only ever pass "
+                f"one value as {param_name!r}. Use a list[] argument for variable-length inputs instead."
+            )
         if param.annotation == inspect.Parameter.empty:
             raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func_name}")
+        if param_name == var_keyword_name:
+            continue
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
     properties = {}
     for param_name, param_type in type_hints.items():
-        if param_name == implicit_arg_name:
+        if param_name in (implicit_arg_name, var_keyword_name):
             continue
         if param_name == "return":
             # The model never generates the return value, so a return hint we can't convert shouldn't stop the
@@ -248,6 +264,8 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
             properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
+    if var_keyword_name is not None:
+        schema["additionalProperties"] = _parse_type_hint(type_hints[var_keyword_name])
     if required:
         schema["required"] = required
 
@@ -404,6 +422,10 @@ def get_json_schema(func: Callable) -> dict:
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
     json_schema = _convert_type_hints_to_json_schema(func)
+    if (extra_properties := json_schema.get("additionalProperties")) is not None:
+        var_keyword_name = _get_var_keyword_name(inspect.signature(func))
+        if (var_keyword_doc := param_descriptions.get(var_keyword_name)) is not None:
+            extra_properties["description"] = var_keyword_doc
     if (return_dict := json_schema["properties"].pop("return", None)) is not None:
         if return_doc is not None:  # We allow a missing return docstring since most templates ignore it
             return_dict["description"] = return_doc
