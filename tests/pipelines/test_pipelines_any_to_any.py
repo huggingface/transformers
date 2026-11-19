@@ -80,6 +80,54 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 self.assertIsNone(result[0]["input_text"])
                 self.assertIsInstance(result[0]["generated_text"], str)
 
+    def test_generation_model_output(self):
+        import copy
+
+        import torch
+        from PIL import Image
+
+        model_id = "hf-internal-testing/tiny-random-BlipForConditionalGeneration"
+        pipe = pipeline("any-to-any", model=model_id, dtype=torch.float32, device=-1)
+        image = Image.new("RGB", (64, 64), "white")
+        generate_kwargs = {"do_sample": False, "num_beams": 2, "num_return_sequences": 2}
+        for text in (None, ["A picture of", "An image of"]):
+            images = image if text is None else [image, image]
+            for output_kwargs in ({"return_full_text": False}, {"return_full_text": True}, {"return_tensors": True}):
+                with self.subTest(text=text, output_kwargs=output_kwargs):
+                    expected = pipe(
+                        text=text, images=images, max_new_tokens=2, generate_kwargs=generate_kwargs, **output_kwargs
+                    )
+                    for from_config in (False, True):
+                        config = copy.deepcopy(pipe.model.generation_config)
+                        config.return_dict_in_generate = True
+                        kwargs = (
+                            {**generate_kwargs, "generation_config": config}
+                            if from_config
+                            else {**generate_kwargs, "return_dict_in_generate": True}
+                        )
+                        actual = pipe(
+                            text=text, images=images, max_new_tokens=2, generate_kwargs=kwargs, **output_kwargs
+                        )
+                        self.assertEqual(len(actual), len(expected))
+                        for result, reference in zip(actual, expected):
+                            self.assertEqual(result["input_text"], reference["input_text"])
+                            if "generated_token_ids" in reference:
+                                torch.testing.assert_close(
+                                    result["generated_token_ids"], reference["generated_token_ids"]
+                                )
+                            else:
+                                self.assertEqual(result["generated_text"], reference["generated_text"])
+                        self.assertTrue(config.return_dict_in_generate)
+        self.assertNotIn("return_dict_in_generate", generate_kwargs)
+        self.assertFalse(pipe.model.generation_config.return_dict_in_generate)
+
+    def test_omni_generation_model_output(self):
+        pipe = pipeline("any-to-any", model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration")
+        kwargs = {"generation_mode": "text", "thinker_do_sample": False, "thinker_max_new_tokens": 2}
+        expected = pipe(text="Hello", generate_kwargs=kwargs)
+        actual = pipe(text="Hello", generate_kwargs={**kwargs, "thinker_return_dict_in_generate": True})
+        self.assertEqual(actual, expected)
+
     def test_return_tensors_with_chat_input(self):
         pipe = pipeline(
             "any-to-any",
