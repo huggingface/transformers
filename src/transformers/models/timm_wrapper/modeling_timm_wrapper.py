@@ -112,7 +112,6 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         state_dict = {f"timm_model.{k}" if "timm_model." not in k else k: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.

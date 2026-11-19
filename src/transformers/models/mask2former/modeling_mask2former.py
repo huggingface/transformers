@@ -2142,7 +2142,6 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std

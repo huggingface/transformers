@@ -66,22 +66,22 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
         causal_lm_class = Qwen3_5ForCausalLM
         sequence_classification_class = Qwen3_5TextForSequenceClassification
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.hidden_act = "silu"
-        self.layer_types = ["full_attention", "linear_attention"]
-        self.rope_parameters = {
+    small_config_overrides = {
+        "hidden_act": "silu",
+        "layer_types": ["full_attention", "linear_attention"],
+        "rope_parameters": {
             "rope_type": "default",
-            "rope_theta": 10_000,
+            "rope_theta": 10000,
             "mrope_section": [2, 1, 1],
             "mrope_interleaved": True,
-        }
-        self.head_dim = 32
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
+        },
+        "head_dim": 32,
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+    }
 
 
 @require_torch

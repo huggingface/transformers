@@ -139,7 +139,6 @@ class T5Gemma2RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -641,7 +640,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
         "T5Gemma2EncoderLayer",
         "T5Gemma2DecoderLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
 
     # Mask creation is incompatible
     # FA due to non-default creation / SWA
@@ -656,7 +654,6 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = None
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, T5Gemma2MultiModalProjector):

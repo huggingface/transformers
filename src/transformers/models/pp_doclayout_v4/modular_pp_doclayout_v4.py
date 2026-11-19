@@ -308,7 +308,6 @@ class PPDocLayoutV4RelativeOrderHead(nn.Module):
 
 @auto_docstring
 class PPDocLayoutV4PreTrainedModel(PPDocLayoutV3PreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

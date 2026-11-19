@@ -15,7 +15,6 @@ env:
   # gpu_memory_utilization default in vLLM's source with sed, which silently stopped matching when vLLM
   # changed that code (vllm-project/vllm#56492), so vLLM fell back to reserving 92% of the NUMA node.
   VLLM_CPU_KVCACHE_SPACE: 32
-  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
 
@@ -33,6 +32,8 @@ jobs:
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
     steps:
       - name: Checkout Transformers
@@ -179,6 +180,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -313,6 +315,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -413,16 +416,15 @@ jobs:
           print(f"[HF memory patch] psutil total: {before:.1f} GiB -> {after:.1f} GiB", flush=True)
           EOF
 
-      # TODO: deselect test_mtp_draft_loads_mtp_weights (e.g. `--deselect` or `-k "not test_mtp_draft_loads_mtp_weights"`):
-      # it needs a GPU but has no CPU skip, so it fails here with "Cannot access accelerator device when none is
-      # available" (added in vllm-project/vllm#61270).
       - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         env:
           PYTHONPATH: /tmp
         run: |
+          # test_mtp_draft_loads_mtp_weights needs a GPU (vLLM runs test_backend.py on GPU only)
           pytest -p hf_ci_memory -v -s tests/models/transformers/ \
-            --num-shards=4 --shard-id=$SHARD_ID
+            --num-shards=4 --shard-id=$SHARD_ID \
+            --deselect tests/models/transformers/test_backend.py::test_mtp_draft_loads_mtp_weights
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
@@ -517,6 +519,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -578,10 +581,8 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          # TODO: install `kaldi-native-fbank` (listed in vLLM's requirements/test/cpu.txt, "required for fireredasr2
-          # test"). Without it, test_processing_correctness[...-vllm-project/FireRedASR2-LLM-vllm] fails with
-          # `ModuleNotFoundError: No module named 'kaldi_native_fbank'` (3 failures in run 42207123286).
-          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
+          # kaldi-native-fbank: required by the FireRedASR2 processor tests (listed in vLLM's requirements/test/cpu.txt)
+          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6 kaldi-native-fbank
 
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
@@ -600,7 +601,8 @@ jobs:
       group: aws-m8i-8xl-cache
     container:
       image: huggingface/transformers-torch-light
-    if: always()
+    # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
+    if: ${{ !cancelled() }}
     needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
@@ -619,14 +621,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 transformers/utils/analyze_vllm_ci.py \
+          python3 transformers/utils/analyze_ci_report.py \
             --run-id "$GITHUB_RUN_ID" \
+            --workflow vllm-ci-caller.yml \
             --repo "$GITHUB_REPOSITORY" \
             --output-dir ./vllm-ci-reports \
             --plugin vllm
 
       - name: Show new failing tests
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           python3 - <<'EOF'
           import glob, json, os, sys
@@ -659,9 +662,20 @@ jobs:
           EOF
 
       - name: Upload failure reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vllm-ci-failure-reports
           path: vllm-ci-reports/
           if-no-files-found: warn
+
+      - name: Upload reports to the Hub and post to Slack
+        if: ${{ !cancelled() }}
+        env:
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+        run: |
+          python3 transformers/utils/ci_report_notify.py \
+            --reports-dir ./vllm-ci-reports \
+            --hub-repo hf-internal-testing/transformers_vllm_ci \
+            --slack-channel "#transformers-ci-vllm"

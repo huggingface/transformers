@@ -90,7 +90,7 @@ class MistralLarge4TextRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        self.alpha = nn.Buffer(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
+        self.alpha = nn.Parameter(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
 
     @staticmethod
     def compute_default_rope_parameters(config: MistralLarge4TextConfig, **kwargs) -> tuple[torch.Tensor, float]:
@@ -111,7 +111,6 @@ class MistralLarge4TextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         scaled_inv_freq = (
@@ -671,7 +670,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -689,7 +687,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MistralLarge4TextTopkRouter):

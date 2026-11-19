@@ -1305,7 +1305,6 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer", "SeamlessM4TConformerEncoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)

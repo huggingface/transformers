@@ -91,7 +91,6 @@ class GlmOcrTextConfig(PreTrainedConfig):
 
     model_type = "glm_ocr_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `GlmOcr`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -161,7 +160,6 @@ class GlmOcrConfig(PreTrainedConfig):
         "vision_config": GlmOcrVisionConfig,
         "text_config": GlmOcrTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
