@@ -661,6 +661,25 @@ def _model_output_unflatten(
     return output_type(**dict(zip(context, values)))
 
 
+class MultimodalModelOutput(ModelOutput):
+    """
+    Base class for multimodal model outputs. This dataclass has to be subclassed to add model output fields including
+    `image/video/audio outputs` fields. The modality-related fields cannot be added by default due to dataclass field
+    ordering in subclasses.
+
+    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
+    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
+    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
+    """
+
+    def to_tuple(self) -> tuple:
+        # `keys()` skips None fields, like `ModelOutput.to_tuple`
+        return tuple(
+            self[k] if k not in ("image_outputs", "video_outputs", "audio_outputs") else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
+
+
 class ExplicitEnum(str, Enum):
     """
     Enum with more explicit error message for missing values.

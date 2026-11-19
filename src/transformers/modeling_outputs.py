@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import torch
 
 from .cache_utils import Cache, EncoderDecoderCache
-from .utils import ModelOutput
+from .utils import ModelOutput, MultimodalModelOutput
 
 
 @dataclass
@@ -510,33 +510,9 @@ class Seq2SeqModelOutput(ModelOutput):
 
 
 @dataclass
-class MultimodalModelOutput(ModelOutput):
-    """
-    Base class for multimodal model outputs. This dataclass has to be subclassed to add model output fields including
-    `image/video/audio outputs` fields. The modality-related fields cannot be added by default due to dataclass field
-    ordering in subclasses.
-
-    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
-    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
-    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
-    """
-
-    def to_tuple(self) -> tuple:
-        # `keys()` skips None fields, like `ModelOutput.to_tuple`
-        return tuple(
-            self[k] if k not in ("image_outputs", "video_outputs", "audio_outputs") else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
-
-
-@dataclass
 class MultimodalBaseModelOutputWithPast(MultimodalModelOutput):
     """
     Base class for multimodal model's outputs that may also contain a past key/values (to speed up sequential decoding).
-
-    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
-    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
-    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -582,10 +558,6 @@ class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
     Base class for multimodal causal language model (or autoregressive) outputs. Contains the outputs of the
     language model backbone and, optionally, the outputs of each modality encoder that was used.
 
-    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
-    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
-    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
-
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss (for next-token prediction).
@@ -629,10 +601,6 @@ class MultimodalCausalLMOutputWithPast(MultimodalModelOutput):
 class MultimodalMoeBaseModelOutputWithPast(MultimodalModelOutput):
     """
     Base class for multimodal MoE model's outputs that may also contain a past key/values (to speed up sequential decoding).
-
-    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
-    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
-    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -682,10 +650,6 @@ class MultimodalMoeCausalLMOutputWithPast(MultimodalModelOutput):
     """
     Base class for multimodal causal language model (or autoregressive) with mixture of experts outputs.
     Contains the outputs of the language model backbone and, optionally, the outputs of each modality encoder that was used.
-
-    It is strongly recommended to get the modality output via nested access, e.g. `output.image_outputs.hidden_states` to
-    get all hidden states from encoding an image. For backwards compatibility in some models, flat access such as
-    `output.image_hidden_states` or `output.audio_hidden_states` might be supported but will be removed in future releases!
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

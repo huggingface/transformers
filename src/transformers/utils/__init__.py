@@ -45,6 +45,7 @@ from .generic import (
     ContextManagers,
     ExplicitEnum,
     ModelOutput,
+    MultimodalModelOutput,
     PaddingStrategy,
     TensorType,
     TransformersKwargs,

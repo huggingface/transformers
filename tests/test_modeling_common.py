@@ -2275,10 +2275,14 @@ class ModelTesterMixin(ExportTesterMixin):
         Tests that we can return multimodal encoded outputs from a VLM. Currently only
         images and video are supported while 'audio' is not consistent, so we don't test
         audio models.
+
+        FIXME raushan/eustlib - add video and audio to this test when they are supported!
         """
 
         def check_multimodal_output(inputs_dict, config, model_class):
+            # force eager attention to support output attentions
             model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
             model.to(torch_device)
             model.eval()
 
@@ -2300,8 +2304,13 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
-            # force eager attention to support output attentions
-            config._attn_implementation = "eager"
+
+            # DO NOT modify this list and fix your model or override if needed!
+            if any(
+                config.model_type == old_model
+                for old_model in ["blip-2", "instructblip", "instructblipvideo", "imagegpt", "phi4_multimodal", "git"]
+            ):
+                continue
 
             # Skip if model has no vision-config, i.e. Audio/TextModelTester
             if getattr(config, "vision_config", None) is None:
