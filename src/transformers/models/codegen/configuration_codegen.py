@@ -24,8 +24,7 @@ from ...utils import auto_docstring
 class CodeGenConfig(PreTrainedConfig):
     r"""
     n_ctx (`int`, *optional*, defaults to 2048):
-        This attribute is used in `CodeGenModel.__init__` without any real effect.
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        Unused. Kept for backward compatibility with existing checkpoints.
     rotary_dim (`int`, *optional*, defaults to 64):
         Number of dimensions in the embedding that Rotary Position Embedding is applied to.
     n_inner (`int`, *optional*):
