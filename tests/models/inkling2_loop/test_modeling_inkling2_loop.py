@@ -58,11 +58,11 @@ if is_torch_available():
 
 
 def check_loop_cache(test, batch_size, cache, seq_length, config, check_cache):
-    """The cache has the layers of the physical decoder layers, then one per layer of every extra core pass, shaped like
-    the cache layer of the same core layer."""
+    """The cache has the layers of the physical decoder layers, then one per layer of every extra pass through the loop
+    layers, shaped like the cache layer of the same loop layer."""
     text_config = config.get_text_config(decoder=True)
-    core = range(text_config.loop_layer_index_start, text_config.loop_layer_index_end)
-    pass_layers = [layer_idx for _ in range(text_config.loop_num_passes - 1) for layer_idx in core]
+    loop_layers = range(text_config.loop_layer_index_start, text_config.loop_layer_index_end)
+    pass_layers = [layer_idx for _ in range(text_config.loop_num_passes - 1) for layer_idx in loop_layers]
     test.assertEqual(len(cache), text_config.num_hidden_layers + len(pass_layers))
 
     physical_cache = copy.copy(cache)
@@ -105,7 +105,7 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
 class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2LoopTextModelTester
 
-    @unittest.skip("Attentions are returned per layer visit: the loop core runs several times per forward")
+    @unittest.skip("Attentions are returned per layer visit: the loop layers run several times per forward")
     def test_attention_outputs(self):
         pass
 
@@ -175,7 +175,7 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
 class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2LoopVisionText2TextModelTester
 
-    @unittest.skip("Attentions are returned per layer visit: the loop core runs several times per forward")
+    @unittest.skip("Attentions are returned per layer visit: the loop layers run several times per forward")
     def test_attention_outputs(self):
         pass
 

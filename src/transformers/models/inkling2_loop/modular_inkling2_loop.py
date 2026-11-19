@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
-from collections.abc import Callable
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,11 +20,8 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...integrations import use_kernelized_func
-from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
@@ -37,7 +31,6 @@ from ..auto import AutoConfig, AutoModel
 from ..inkling2.configuration_inkling2 import Inkling2Config, Inkling2TextConfig
 from ..inkling2.modeling_inkling2 import (
     Inkling2BlockAttentionResidual,
-    Inkling2DynamicShortConvolution,
     Inkling2Experts,
     Inkling2ForCausalLM,
     Inkling2ForConditionalGeneration,
@@ -47,15 +40,12 @@ from ..inkling2.modeling_inkling2 import (
     Inkling2PreTrainedModel,
     Inkling2RelativeLogits,
     Inkling2ScaledL2Clip,
-    Inkling2ShortConvolution,
     Inkling2SlidingAttention,
     Inkling2SlidingDecoderLayer,
     Inkling2TextModel,
     Inkling2TopKRouter,
     Inkling2UnweightedRMSNorm,
-    eager_attention_forward,
 )
-from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 
 
 # TODO: update before release
@@ -231,99 +221,6 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
         return F.scaled_dot_product_attention(query_states, stacked_states, stacked_states, scale=hidden_size**-0.5)
 
 
-@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
-class Inkling2LoopShortConvolution(Inkling2ShortConvolution):
-    @force_accelerate_hooks("conv1d")
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cache: Cache | None = None,
-        conv_mask: torch.Tensor | None = None,
-        cache_layer_idx: int | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        cache_layer_idx (`int`, *optional*):
-            Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
-            its own.
-        """
-        # Difference from Inkling2
-        cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
-
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
-
-        residual = hidden_states
-        hidden_states = apply_mask_to_padding_states(hidden_states, conv_mask)
-        seq_len = hidden_states.shape[1]
-        hidden_states = hidden_states.transpose(1, 2)
-
-        conv_state = None if cache is None else cache.get_conv_state(cache_layer_idx, state_idx=self.conv_idx)
-
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(cache_layer_idx):
-            hidden_states = causal_conv1d_update(
-                hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
-            )
-        else:
-            if cache is not None:
-                hidden_states = cache.update_conv_state(
-                    hidden_states, cache_layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-                )
-
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv1d.weight.squeeze(1), self.conv1d.bias, seq_idx=kwargs.get("seq_idx")
-            )
-
-            if cache is not None:
-                hidden_states = hidden_states[:, :, -seq_len:]
-
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = (hidden_states + residual) / math.sqrt(self.conv_kernel_size + 1)
-        return hidden_states.to(dtype=input_dtype)
-
-
-class Inkling2LoopDynamicShortConvolution(Inkling2DynamicShortConvolution):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        dynamic_input: torch.Tensor,
-        cache: Cache | None = None,
-        conv_mask: torch.Tensor | None = None,
-        cache_layer_idx: int | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        cache_layer_idx (`int`, *optional*):
-            Cache layer holding the state of this call, `layer_idx` by default. Each pass through the loop core has
-            its own.
-        """
-        # Difference from Inkling2
-        cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
-
-        input_dtype = hidden_states.dtype
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        dynamic_weights = self.weight_proj(dynamic_input).float()
-        dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
-        weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
-
-        hidden_states = hidden_states.float()
-        residual = hidden_states
-        context = apply_mask_to_padding_states(hidden_states, conv_mask).transpose(1, 2)
-        if cache is not None:
-            context = cache.update_conv_state(
-                context, cache_layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
-            )
-        context = F.pad(context, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
-        # windows[..., lag] is the token `lag` steps back
-        windows = context.unfold(-1, self.conv_kernel_size, 1).flip(-1).transpose(1, 2)
-        windows = windows.reshape(batch_size, seq_len, self.num_heads, -1, self.conv_kernel_size)
-        hidden_states = (windows * weights).sum(-1).reshape(batch_size, seq_len, hidden_size)
-        hidden_states = (hidden_states + residual) / math.sqrt(2 * self.conv_kernel_size + 1)
-        return hidden_states.to(input_dtype)
-
-
 class Inkling2LoopScaledL2Clip(Inkling2ScaledL2Clip):
     pass
 
@@ -333,192 +230,11 @@ class Inkling2LoopRelativeLogits(Inkling2RelativeLogits):
 
 
 class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        conv_mask: torch.Tensor | None = None,
-        cache: Cache | None = None,
-        key_hidden_states: torch.Tensor | None = None,
-        value_hidden_states: torch.Tensor | None = None,
-        cache_layer_idx: int | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        key_hidden_states (`torch.Tensor`, *optional*):
-            Input of the key projection, `hidden_states` by default. Differs from it in the passes after the first
-            through the loop core.
-        value_hidden_states (`torch.Tensor`, *optional*):
-            Input of the value projection, `hidden_states` by default.
-        cache_layer_idx (`int`, *optional*):
-            Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
-            pass through the loop core has its own.
-        """
-        # Difference from Inkling2
-        cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
-        key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
-        value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(
-            self.k_proj(key_hidden_states), cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
-        )
-        value_states = self.v_sconv(
-            self.v_proj(value_hidden_states), cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
-        )
-        relative_states = self.r_proj(hidden_states)
-        gate = self.gate_proj(hidden_states)
-        sinks = self.sink_proj(hidden_states)
-
-        q_length = query_states.shape[1]
-        if cache is not None:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, cache_layer_idx)
-            q_offset = cache.get_query_offset(cache_layer_idx)
-        else:
-            kv_length = q_length
-            q_offset, kv_offset = 0, 0
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
-        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
-
-        query_states = self.q_l2_clip(query_states.view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = value_states.view(hidden_shape)
-        value_states = self.v_norm(value_states.float()).to(value_states.dtype)
-        value_states = value_states.transpose(1, 2)
-        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
-
-        if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
-
-        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            position_bias=position_bias,
-            sinks=sinks.transpose(1, 2).unsqueeze(-1),
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+    pass
 
 
 class Inkling2LoopFullAttention(Inkling2FullAttention):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_hidden_states: torch.Tensor,
-        value_hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        conv_mask: torch.Tensor | None = None,
-        cache: Cache | None = None,
-        cache_layer_idx: int | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        key_hidden_states (`torch.Tensor`):
-            Input of the key projection and of the key convolution weights.
-        value_hidden_states (`torch.Tensor`):
-            Input of the value projection and of the value convolution weights.
-        cache_layer_idx (`int`, *optional*):
-            Cache layer holding the keys, values and convolution states of this call, `layer_idx` by default. Each
-            pass through the loop core has its own.
-        """
-        # Difference from Inkling2
-        cache_layer_idx = self.layer_idx if cache_layer_idx is None else cache_layer_idx
-
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(
-            self.k_proj(key_hidden_states),
-            key_hidden_states,
-            cache=cache,
-            conv_mask=conv_mask,
-            cache_layer_idx=cache_layer_idx,
-        )
-        value_states = self.v_sconv(
-            self.v_proj(value_hidden_states),
-            value_hidden_states,
-            cache=cache,
-            conv_mask=conv_mask,
-            cache_layer_idx=cache_layer_idx,
-        )
-        relative_states = self.r_proj(hidden_states)
-        gate = self.gate_proj(hidden_states)
-        sinks = self.sink_proj(hidden_states)
-
-        q_length = query_states.shape[1]
-        if cache is not None:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, cache_layer_idx)
-            q_offset = cache.get_query_offset(cache_layer_idx)
-        else:
-            kv_length = q_length
-            q_offset, kv_offset = 0, 0
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
-        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
-
-        # log scaling of the queries and relative states, in fp32 as in the original
-        tau = 1.0 + self.config.log_scaling_alpha * torch.log(
-            ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
-        )
-        tau = tau[..., None, None]
-
-        query_states = self.q_l2_clip(query_states.view(hidden_shape))
-        query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
-        key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = value_states.view(hidden_shape)
-        value_states = self.v_norm(value_states.float()).to(value_states.dtype)
-        value_states = value_states.transpose(1, 2)
-        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
-        relative_states = (relative_states.float() * tau).to(relative_states.dtype)
-
-        if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
-
-        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            position_bias=position_bias,
-            sinks=sinks.transpose(1, 2).unsqueeze(-1),
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = (attn_output.float() * torch.sigmoid(gate.float())).to(attn_output.dtype)
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+    pass
 
 
 class Inkling2LoopExperts(Inkling2Experts):
@@ -550,16 +266,16 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
-        cache_layer_idx: int | None = None,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop core for the query, key, value and MLP inputs, in the
+            Messages of the previous pass through the loop layers for the query, key, value and MLP inputs, in the
             passes after the first.
-        cache_layer_idx (`int`, *optional*):
-            Cache layer holding the states of this call, `layer_idx` by default. Each pass through the loop core has
-            its own.
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the keys, values and convolution states of
+            this call.
         """
         dtype = hidden_states.dtype
         block_residual = hidden_states
@@ -581,11 +297,11 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
             attention_mask=attention_mask,
             conv_mask=conv_mask,
             cache=cache,
-            cache_layer_idx=cache_layer_idx,
+            cache_offset=cache_offset,
             **kwargs,
         )
         hidden_states = self.post_attention_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
         )
 
         residual = hidden_states = hidden_states.float()
@@ -599,7 +315,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
             hidden_states = self.mlp_message_gate(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
         )
         return (residual + hidden_states).to(dtype)
 
@@ -625,16 +341,16 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
-        cache_layer_idx: int | None = None,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         messages (`torch.Tensor` of shape `(batch_size, sequence_length, 4, hidden_size)`, *optional*):
-            Messages of the previous pass through the loop core for the query, key, value and MLP inputs, in the
+            Messages of the previous pass through the loop layers for the query, key, value and MLP inputs, in the
             passes after the first.
-        cache_layer_idx (`int`, *optional*):
-            Cache layer holding the states of this call, `layer_idx` by default. Each pass through the loop core has
-            its own.
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the keys, values and convolution states of
+            this call.
         """
         dtype = hidden_states.dtype
         block_residual = hidden_states
@@ -658,11 +374,11 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             attention_mask=attention_mask,
             conv_mask=conv_mask,
             cache=cache,
-            cache_layer_idx=cache_layer_idx,
+            cache_offset=cache_offset,
             **kwargs,
         )
         hidden_states = self.post_attention_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
         )
 
         residual = hidden_states = hidden_states.float()
@@ -676,7 +392,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             hidden_states = self.mlp_message_gate(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_layer_idx=cache_layer_idx
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
         )
         return (residual + hidden_states).to(dtype)
 
@@ -831,7 +547,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
             previous_hidden_states = hidden_states
             hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
             # Each pass uses its own copies of the loop cache layers, appended after the model's layers
-            cache_layer_start = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers
+            cache_offset = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers - loop_start
             for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
                 messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
                 new_hidden_states = decoder_layer(
@@ -841,7 +557,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     conv_mask=causal_mask_mapping["linear_attention"],
                     cache=cache,
-                    cache_layer_idx=cache_layer_start + loop_layer_idx,
+                    cache_offset=cache_offset,
                     position_ids=position_ids,
                     **kwargs,
                 )

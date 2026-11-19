@@ -304,8 +304,14 @@ class Inkling2ShortConvolution(InklingShortConvolution):
         hidden_states: torch.Tensor,
         cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the state of this call.
+        """
+        cache_layer_idx = self.layer_idx + cache_offset
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
 
@@ -314,16 +320,16 @@ class Inkling2ShortConvolution(InklingShortConvolution):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        conv_state = None if cache is None else cache.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
+        conv_state = None if cache is None else cache.get_conv_state(cache_layer_idx, state_idx=self.conv_idx)
 
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
+        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(cache_layer_idx):
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
             )
         else:
             if cache is not None:
                 hidden_states = cache.update_conv_state(
-                    hidden_states, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
+                    hidden_states, cache_layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
             hidden_states = causal_conv1d_fn(
@@ -364,8 +370,13 @@ class Inkling2DynamicShortConvolution(nn.Module):
         dynamic_input: torch.Tensor,
         cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
+        r"""
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the state of this call.
+        """
         input_dtype = hidden_states.dtype
         batch_size, seq_len, hidden_size = hidden_states.shape
         dynamic_weights = self.weight_proj(dynamic_input).float()
@@ -377,7 +388,10 @@ class Inkling2DynamicShortConvolution(nn.Module):
         context = apply_mask_to_padding_states(hidden_states, conv_mask).transpose(1, 2)
         if cache is not None:
             context = cache.update_conv_state(
-                context, self.layer_idx, state_idx=self.conv_idx, conv_kernel_size=self.conv_kernel_size
+                context,
+                self.layer_idx + cache_offset,
+                state_idx=self.conv_idx,
+                conv_kernel_size=self.conv_kernel_size,
             )
         context = F.pad(context, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
         # windows[..., lag] is the token `lag` steps back
@@ -442,22 +456,41 @@ class Inkling2SlidingAttention(InklingAttention):
         attention_mask: torch.Tensor | None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
+        key_hidden_states: torch.Tensor | None = None,
+        value_hidden_states: torch.Tensor | None = None,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        r"""
+        key_hidden_states (`torch.Tensor`, *optional*):
+            Input of the key projection, `hidden_states` by default.
+        value_hidden_states (`torch.Tensor`, *optional*):
+            Input of the value projection, `hidden_states` by default.
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the keys, values and convolution states of
+            this call.
+        """
+        cache_layer_idx = self.layer_idx + cache_offset
+        key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
+        value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(self.k_proj(hidden_states), cache=cache, conv_mask=conv_mask)
-        value_states = self.v_sconv(self.v_proj(hidden_states), cache=cache, conv_mask=conv_mask)
+        key_states = self.k_sconv(
+            self.k_proj(key_hidden_states), cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+        )
+        value_states = self.v_sconv(
+            self.v_proj(value_hidden_states), cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+        )
         relative_states = self.r_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
 
         q_length = query_states.shape[1]
         if cache is not None:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, self.layer_idx)
-            q_offset = cache.get_query_offset(self.layer_idx)
+            kv_length, kv_offset = cache.get_mask_sizes(q_length, cache_layer_idx)
+            q_offset = cache.get_query_offset(cache_layer_idx)
         else:
             kv_length = q_length
             q_offset, kv_offset = 0, 0
@@ -472,7 +505,7 @@ class Inkling2SlidingAttention(InklingAttention):
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
 
         if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+            key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
 
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
@@ -538,6 +571,7 @@ class Inkling2FullAttention(InklingAttention):
         attention_mask: torch.Tensor | None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
@@ -545,17 +579,28 @@ class Inkling2FullAttention(InklingAttention):
             Input of the key projection and of the key convolution weights.
         value_hidden_states (`torch.Tensor`):
             Input of the value projection and of the value convolution weights.
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the keys, values and convolution states of
+            this call.
         """
+        cache_layer_idx = self.layer_idx + cache_offset
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(self.k_proj(key_hidden_states), key_hidden_states, cache=cache, conv_mask=conv_mask)
+        key_states = self.k_sconv(
+            self.k_proj(key_hidden_states),
+            key_hidden_states,
+            cache=cache,
+            conv_mask=conv_mask,
+            cache_offset=cache_offset,
+        )
         value_states = self.v_sconv(
             self.v_proj(value_hidden_states),
             value_hidden_states,
             cache=cache,
             conv_mask=conv_mask,
+            cache_offset=cache_offset,
         )
         relative_states = self.r_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
@@ -563,8 +608,8 @@ class Inkling2FullAttention(InklingAttention):
 
         q_length = query_states.shape[1]
         if cache is not None:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, self.layer_idx)
-            q_offset = cache.get_query_offset(self.layer_idx)
+            kv_length, kv_offset = cache.get_mask_sizes(q_length, cache_layer_idx)
+            q_offset = cache.get_query_offset(cache_layer_idx)
         else:
             kv_length = q_length
             q_offset, kv_offset = 0, 0
@@ -587,7 +632,7 @@ class Inkling2FullAttention(InklingAttention):
         relative_states = (relative_states.float() * tau).to(relative_states.dtype)
 
         if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+            key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
 
         position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
 
