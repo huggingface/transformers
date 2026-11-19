@@ -53,11 +53,13 @@ from transformers.models.auto.tokenization_auto import REGISTERED_TOKENIZER_CLAS
 from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import (
     TOKEN,
+    CaptureLogger,
     TemporaryHubRepo,
     get_tests_dir,
     is_staging_test,
     require_scipy,
     require_tokenizers,
+    require_vision,
 )
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
@@ -92,6 +94,18 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def test_processor_from_model_shortcut(self):
         processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    @require_tokenizers
+    @require_vision
+    def test_image_backend_kwarg_not_forwarded_to_tokenizer(self):
+        logger = transformers.logging.get_logger("transformers.models.auto.tokenization_auto")
+        with CaptureLogger(logger) as cl:
+            processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-CLIPModel", backend="pil")
+
+        # `backend="pil"` is meant for the image processor, the tokenizer must not try to load it
+        self.assertNotIn("backend='pil'", cl.out)
+        self.assertEqual(processor.image_processor.backend, "pil")
+        self.assertEqual(processor.tokenizer.backend, "tokenizers")
 
     def test_processor_from_local_directory_from_repo(self):
         with tempfile.TemporaryDirectory() as tmpdirname:

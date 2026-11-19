@@ -32,11 +32,21 @@ from .tokenization_utils_base import (
     generate_merges,
 )
 from .utils import add_end_docstrings, logging, requires_backends
+from .utils.hub import cached_file
 
 
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
+
+SENTENCEPIECE_MODEL_FILES = (
+    "tokenizer.model",
+    "spiece.model",
+    "sentencepiece.bpe.model",
+    "sentencepiece.model",
+    "spm.model",
+    "spm_char.model",
+)
 
 SPIECE_UNDERLINE = "▁"
 
@@ -55,6 +65,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
+    _backend_name = "sentencepiece"
     vocab_files_names = VOCAB_FILES_NAMES
 
     def __init__(self, **kwargs):
@@ -65,10 +76,6 @@ class SentencePieceBackend(PreTrainedTokenizer):
         self.vocab_file = kwargs.get("vocab_file")
         self.legacy = kwargs.get("legacy", True)
         self.sp_model_kwargs = kwargs.pop("sp_model_kwargs", {})
-
-        # Set backend to "sentencepiece" if not already set
-        if "backend" not in kwargs:
-            kwargs["backend"] = "sentencepiece"
 
         # Load the SentencePiece model before calling parent __init__
         # This is needed because parent __init__ may call methods that depend on sp_model
@@ -313,3 +320,21 @@ class SentencePieceExtractor:
         vocab_scores_list = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.GetPieceSize())]
 
         return vocab_ids, vocab_scores_list, merges
+
+
+def find_sentencepiece_model_file(pretrained_model_name_or_path: str | os.PathLike[str], **kwargs) -> str | None:
+    """Returns the resolved path of the SentencePiece model of a checkpoint, or `None` if it doesn't have one."""
+    for filename in SENTENCEPIECE_MODEL_FILES:
+        resolved_file = cached_file(
+            pretrained_model_name_or_path,
+            filename,
+            cache_dir=kwargs.get("cache_dir"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+            subfolder=kwargs.get("subfolder", ""),
+            _raise_exceptions_for_missing_entries=False,
+        )
+        if resolved_file is not None:
+            return resolved_file
+    return None

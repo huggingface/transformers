@@ -42,13 +42,14 @@ from transformers.utils import (
     resolve_revision,
     to_py_obj,
 )
+from transformers.utils.hub import cached_file
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
 
 if is_mistral_common_available():
     from mistral_common.protocol.instruct.request import ChatCompletionRequest, ReasoningEffort
     from mistral_common.protocol.instruct.validator import ValidationMode
-    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens
+    from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens, TokenizerVersion
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
     from mistral_common.tokens.tokenizers.tekken import Tekkenizer
     from mistral_common.tokens.tokenizers.utils import (
@@ -190,6 +191,28 @@ def _maybe_remove_lang(text: str | list[str], skip_special_tokens: bool) -> str 
 _VALID_INIT_KWARGS = {"_from_auto", "backend", "files_loaded"}
 
 
+def find_mistral_common_tokenizer_file(pretrained_model_name_or_path: str | os.PathLike[str], **kwargs) -> str | None:
+    """Returns the resolved path of the mistral-common tokenizer of a checkpoint, or `None` if it doesn't have one.
+
+    This is `tekken.json` or`tokenizer.model.v3`.
+    """
+    versioned_files = [f"tokenizer.model.{version}" for version in reversed(TokenizerVersion.__members__)]
+    for filename in ["tekken.json", *versioned_files]:
+        resolved_file = cached_file(
+            pretrained_model_name_or_path,
+            filename,
+            cache_dir=kwargs.get("cache_dir"),
+            token=kwargs.get("token"),
+            revision=kwargs.get("revision"),
+            local_files_only=kwargs.get("local_files_only", False),
+            subfolder=kwargs.get("subfolder", ""),
+            _raise_exceptions_for_missing_entries=False,
+        )
+        if resolved_file is not None:
+            return resolved_file
+    return None
+
+
 @requires(backends=("mistral-common",))
 class MistralCommonBackend(PreTrainedTokenizerBase):
     """
@@ -217,6 +240,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     If you have suggestions to improve this class, please open an issue on the [mistral-common GitHub repository](https://github.com/mistralai/mistral-common/issues) if it is related to the tokenizer or on the [Transformers GitHub repository](https://github.com/huggingface/transformers/issues) if it is related to the Hugging Face interface.
     """
 
+    _backend_name = "mistral_common"
     model_input_names: list[str] = ["input_ids", "attention_mask"]
     padding_side: str = "left"
     truncation_side: str = "right"
@@ -299,10 +323,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         self._all_special_ids = self._get_all_special_ids()
         self._all_special_tokens = self.convert_ids_to_tokens(self.all_special_ids)
-
-        # Set backend to "mistral_common" if not already set
-        if "backend" not in kwargs:
-            kwargs["backend"] = "mistral_common"
 
         super().__init__(
             truncation_side=truncation_side,
