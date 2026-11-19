@@ -137,6 +137,21 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.306)
         self.assertEqual(nested_simplify(outputs["predicted_depth"].min().item()), 2.662)
 
+    @slow
+    @require_torch
+    def test_bfloat16_model_pt(self):
+        depth_estimator = pipeline(
+            "depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf", dtype=torch.bfloat16
+        )
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = depth_estimator(image)
+
+        self.assertEqual(output["predicted_depth"].dtype, torch.bfloat16)
+        self.assertEqual(output["depth"].size, image.size)
+        depth = output["predicted_depth"].float()
+        expected = ((depth - depth.min()) / (depth.max() - depth.min()) * 255).to(torch.uint8)
+        self.assertEqual(output["depth"].tobytes(), expected.numpy().tobytes())
+
     @require_torch
     def test_small_model_pt(self):
         # This is highly irregular to have no small tests.
