@@ -214,17 +214,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # SentencePiece model (with TikToken fallback)
         if isinstance(vocab_file, str) and os.path.isfile(vocab_file) and vocab_file.endswith(".model"):
             # Unless the name is a known Tiktoken pattern, try to use SentencePiece
+            sentencepiece_error = None
             if os.path.basename(vocab_file) != TIKTOKEN_LEGACY_NAME:
                 try:
                     local_kwargs = cls._convert_from_sentencepiece(vocab_file, local_kwargs)
                     return local_kwargs
                 except Exception as e:  # TODO only catch deserialization error here!
+                    sentencepiece_error = e
                     logger.warning(
                         f"Could not extract SentencePiece model from {vocab_file} using sentencepiece library due to"
                         f" {e}. Falling back to TikToken extractor."
                     )
             # If the name is a known Tiktoken pattern or the SentencePiece extraction failed, use TikToken
-            local_kwargs = cls._convert_from_tiktoken(vocab_file, local_kwargs)
+            try:
+                local_kwargs = cls._convert_from_tiktoken(vocab_file, local_kwargs)
+            except Exception as tiktoken_error:
+                # The file was most likely a SentencePiece model, so its error is the useful one
+                if sentencepiece_error is not None:
+                    raise sentencepiece_error from tiktoken_error
+                raise
             return local_kwargs
 
         # Fallback to standard vocab/merges files if they existed!

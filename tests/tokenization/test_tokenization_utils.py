@@ -19,6 +19,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -389,6 +390,19 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(len(tokenizer), tokenizer.vocab_size + 1)
                 self.assertEqual(len(tokenizer.added_tokens_decoder), added_tokens_size + 1)
                 self.assertEqual(len(tokenizer.added_tokens_encoder), added_tokens_size + 1)
+
+    @require_tokenizers
+    def test_sentencepiece_error_kept_when_tiktoken_fallback_fails(self):
+        # A missing protobuf used to surface as "`tiktoken` is required" from the TikToken fallback
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab_file = os.path.join(tmp_dir, "sentencepiece.bpe.model")
+            with open(vocab_file, "wb") as f:
+                f.write(b"not a tiktoken file")
+            with mock.patch.object(
+                TokenizersBackend, "_convert_from_sentencepiece", side_effect=ImportError("requires protobuf")
+            ):
+                with self.assertRaisesRegex(ImportError, "requires protobuf"):
+                    TokenizersBackend.convert_to_native_format(vocab_file=vocab_file)
 
     @require_sentencepiece
     def test_sentencepiece_cohabitation(self):
