@@ -208,6 +208,17 @@ def meshgrid(*tensors: torch.Tensor | list[torch.Tensor], indexing: str | None =
     return torch.meshgrid(*tensors, indexing=indexing)
 
 
+def move_to_device(value, device: torch.device):
+    """Moves the tensors in `value`, including those nested in dicts, lists and tuples, onto `device`."""
+    if isinstance(value, torch.Tensor):
+        return value.to(device)
+    if isinstance(value, dict):
+        return type(value)({k: move_to_device(v, device) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return type(value)(move_to_device(v, device) for v in value)
+    return value
+
+
 def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     """
     Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
@@ -216,7 +227,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     non-overlapping lifetimes may have the same id.
     """
     if is_dtensor(tensor):
-        local_tensor = tensor.to_local()
+        local_tensor = tensor.to_local()  # type: ignore
         return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
 
     if tensor.device.type == "xla" and is_torch_xla_available():

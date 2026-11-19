@@ -20,12 +20,10 @@ import unittest
 from pathlib import Path
 
 from transformers import (
-    AudioFlamingo3EncoderConfig,
     AutoProcessor,
     MusicFlamingoConfig,
     MusicFlamingoForConditionalGeneration,
     MusicFlamingoModel,
-    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -54,15 +52,19 @@ class MusicFlamingoModelTester(ALMModelTester):
     config_class = MusicFlamingoConfig
     base_model_class = MusicFlamingoModel
     conditional_generation_class = MusicFlamingoForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = AudioFlamingo3EncoderConfig
+
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # feat_seq_length=60 → (60-1)//2+1=30 → (30-2)//2+1=15 audio embed tokens.
-        kwargs.setdefault("feat_seq_length", 60)
-        kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
-        super().__init__(parent, **kwargs)
+        "feat_seq_length": 60,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("max_source_positions", (values["feat_seq_length"] - 1) // 2 + 1)
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # AudioFlamingo3Encoder._get_feat_extract_output_lengths: conv2 (k=3,s=2) then avg_pool (k=2,s=2).
@@ -77,6 +79,7 @@ class MusicFlamingoModelTester(ALMModelTester):
         # MusicFlamingoConfig requires rope_parameters.
         config = super().get_config()
         config.rope_parameters = {"rope_type": "default", "rope_theta": 2048, "partial_rotary_factor": 0.5}
+        config.max_position_embeddings = 2048  # config syncs it with theta in `post-init`
         return config
 
 
@@ -193,7 +196,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
                     },
                 ],
             }
@@ -258,7 +261,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3",
                         },
                     ],
                 }
@@ -273,7 +276,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_2.mp3",
                         },
                     ],
                 }

@@ -17,19 +17,17 @@ import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
-import librosa
-
 from transformers import (
     AutoProcessor,
     Qwen2AudioConfig,
-    Qwen2AudioEncoderConfig,
     Qwen2AudioForConditionalGeneration,
     Qwen2AudioModel,
-    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
+    is_librosa_available,
+    require_librosa,
     require_torch,
     slow,
     torch_device,
@@ -37,6 +35,9 @@ from transformers.testing_utils import (
 
 from ...alm_tester import ALMModelTest, ALMModelTester
 
+
+if is_librosa_available():
+    import librosa
 
 if is_torch_available():
     import torch
@@ -46,16 +47,20 @@ class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
     base_model_class = Qwen2AudioModel
     conditional_generation_class = Qwen2AudioForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = Qwen2AudioEncoderConfig
+
     audio_mask_key = "feature_attention_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # feat_seq_length=60 → after conv2 s=2: 30 → after avg_pool s=2: 15 audio embed tokens.
-        kwargs.setdefault("feat_seq_length", 60)
+        "feat_seq_length": 60,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Encoder asserts input_features.shape[-1] == max_source_positions * conv1.stride * conv2.stride == 2 * max_source_positions.
-        kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
-        super().__init__(parent, **kwargs)
+        values.setdefault("max_source_positions", values["feat_seq_length"] // 2)
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors Qwen2AudioEncoder._get_feat_extract_output_lengths: conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).
@@ -82,6 +87,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
 
 @require_torch
+@require_librosa
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -97,7 +103,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             "Qwen/Qwen2-Audio-7B-Instruct", device_map=torch_device, dtype=torch.float16
         )
 
-        url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+        url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
         messages = [
             {
                 "role": "user",
@@ -148,7 +154,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -159,7 +165,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "What can you hear?"},
                 ],
@@ -172,7 +178,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac",
                     },
                     {"type": "text", "text": "What does the person say?"},
                 ],
@@ -206,7 +212,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat's that sound?\nassistant\nIt is the sound of glass shattering.\nuser\nAudio 2: \nWhat can you hear?\nassistant\ncough and throat clearing.",
-            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe original content of this audio is: 'Mister Quiller is the apostle of the middle classes and we are glad to welcome his gospel.'",
+            "system\nYou are a helpful assistant.\nuser\nAudio 1: \nWhat does the person say?\nassistant\nThe person says, 'Kids are talking by the door'.",
         ]
 
         self.assertEqual(
@@ -228,7 +234,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3",
                     },
                     {"type": "text", "text": "What's that sound?"},
                 ],
@@ -239,7 +245,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "audio_url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                        "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                     },
                     {"type": "text", "text": "How about this one?"},
                 ],

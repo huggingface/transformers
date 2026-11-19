@@ -109,6 +109,7 @@ class InklingFeatureExtractor(SequenceFeatureExtractor):
         self.mel_filters = torch.from_numpy(np.ascontiguousarray(mel_filters.T, dtype=np.float32))
 
     def _torch_extract_fbank_features(self, waveform: torch.Tensor, device: str = "cpu") -> torch.Tensor:
+        waveform = waveform.to(device)
         right_pad = math.ceil(waveform.shape[-1] / self.hop_length) * self.hop_length - waveform.shape[-1]
         left_pad = max(self.n_fft - self.hop_length, 0)
         waveform = F.pad(waveform, (left_pad, right_pad))
@@ -232,7 +233,7 @@ class InklingFeatureExtractor(SequenceFeatureExtractor):
         # Number of valid frames per clip == ceil(audio_length / hop_length); everything beyond it is
         # padding, which we zero out so it carries `padding_value`.
         num_frames = torch.div(
-            padded_inputs.audio_lengths + self.hop_length - 1, self.hop_length, rounding_mode="floor"
+            padded_inputs.audio_lengths.to(device) + self.hop_length - 1, self.hop_length, rounding_mode="floor"
         )
         input_features_mask = torch.arange(input_features.shape[1], device=device)[None, :] < num_frames[:, None]
         input_features = input_features * input_features_mask.unsqueeze(-1)

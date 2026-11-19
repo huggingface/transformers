@@ -351,7 +351,7 @@ def window_partition(hidden_state, window_size):
             Window size.
 
     Returns:
-        `tuple(torch.FloatTensor)` comprising various elements:
+        `tuple(torch.Tensor)` comprising various elements:
         - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
         - (padded_height, padded_width): padded height and width before partition
     """
@@ -570,7 +570,6 @@ class VitDetPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -674,7 +673,7 @@ class VitDetModel(VitDetPreTrainedModel):
     """
 )
 class VitDetBackbone(BackboneMixin, VitDetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VitDetConfig):
         super().__init__(config)
 
         self.embeddings = VitDetEmbeddings(config)

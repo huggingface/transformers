@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     DUMMY_INPUTS,
@@ -42,6 +42,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_reformer import ReformerConfig
 
 
@@ -79,7 +80,7 @@ class ReformerDynamicCache:
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
+        Support for backwards-compatible `cache` length, e.g. `len(cache)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.states_cache)
@@ -569,7 +570,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 sequence_length, buckets, num_hashes
             )
 
-            # make sure bucket idx is not longer then sequence length
+            # make sure bucket idx is not longer than sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx % sequence_length
 
             # cluster query key value vectors according to hashed buckets
@@ -1382,7 +1383,7 @@ class ReformerAttention(nn.Module):
     ):
         hidden_states = self.layer_norm(hidden_states)
 
-        # use cached buckets for backprob if buckets not None for LSHSelfAttention
+        # use cached buckets for backprop if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1625,7 +1626,7 @@ class ReformerLayer(nn.Module):
             # set seed to have correct dropout
             torch.manual_seed(self.attention_seed)
             # f(X_2)
-            # use cached buckets for backprob if buckets not None for LSHSelfAttention
+            # use cached buckets for backprop if buckets not None for LSHSelfAttention
             output = self.attention(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1825,7 +1826,7 @@ class ReformerOnlyLMHead(nn.Module):
         # Layer Norm is done over 2 * hidden_size
         self.seq_len_dim = 1
         self.chunk_size_lm_head = config.chunk_size_lm_head
-        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, hidden_states):
@@ -1851,7 +1852,6 @@ class ReformerPreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -1876,13 +1876,13 @@ class ReformerPreTrainedModel(PreTrainedModel):
 @dataclass
 class ReformerModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_predict, hidden_size)`):
         Sequence of hidden-states at the last layer of the model.
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+    past_buckets_states (`list[tuple(torch.LongTensor, torch.Tensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
         being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
         second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -1890,10 +1890,10 @@ class ReformerModelOutput(ModelOutput):
         up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor
-    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor
+    past_buckets_states: list[tuple[torch.LongTensor, torch.Tensor]] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -1904,15 +1904,15 @@ class ReformerModelOutput(ModelOutput):
 @dataclass
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_predict, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_predict, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+    past_buckets_states (`list[tuple(torch.LongTensor, torch.Tensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
         being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
         second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -1920,16 +1920,16 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
         up sequential decoding.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    past_buckets_states: list[tuple[torch.LongTensor, torch.Tensor]] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class ReformerModel(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         self.config = config
         assert self.config.num_hidden_layers > 0, (
@@ -1979,7 +1979,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
             For more information, see `num_hashes` in [`ReformerConfig`].
         past_buckets_states (`ReformerDynamicCache`, *optional*):
-            List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+            List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -2148,7 +2148,7 @@ class ReformerModel(ReformerPreTrainedModel):
     """
 )
 class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
         assert "local" not in self.config.attn_layers or config.local_num_chunks_after == 0, (
@@ -2205,8 +2205,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
-            List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+        past_buckets_states (`list[tuple(torch.LongTensor, torch.Tensor)]`, *optional*):
+            List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -2233,9 +2233,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = reformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -2257,18 +2256,29 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         # Overwritten -- attention mask or input ids size doesn't match with actual input size
         return None
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
-    ):
-        # Overitten -- different expected inputs/outputs
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        # Non standard cache name, so need to override here
+        if "past_buckets_states" in outputs:
+            model_kwargs["past_buckets_states"] = outputs.past_buckets_states
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def prepare_inputs_for_generation(
+        self, input_ids, cache=None, use_cache=None, num_hashes=None, is_first_iteration=False, **kwargs
+    ):
         # only last token for inputs_ids if past is defined in kwargs
-        if past_key_values is not None:
+        if kwargs.get("past_buckets_states") is not None:
             input_ids = input_ids[:, -1:]
 
         model_inputs = {
             "input_ids": input_ids,
-            "past_buckets_states": past_key_values,
+            "past_buckets_states": kwargs.get("past_buckets_states"),
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
@@ -2286,7 +2296,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class ReformerForMaskedLM(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         assert not config.is_decoder, (
             "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional"
@@ -2424,7 +2434,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     """
 )
 class ReformerForSequenceClassification(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -2466,10 +2476,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Example of single-label classification:
 
@@ -2575,7 +2581,7 @@ class ReformerClassificationHead(nn.Module):
 
 @auto_docstring
 class ReformerForQuestionAnswering(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

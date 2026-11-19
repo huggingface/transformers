@@ -20,7 +20,6 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
-    AutoProcessor,
     AutoTokenizer,
     MusicFlamingoProcessor,
     WhisperFeatureExtractor,
@@ -36,24 +35,7 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-musicflamingo"
     checkpoint = "nvidia/music-flamingo-2601-hf"
 
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = MusicFlamingoProcessor.from_pretrained(cls.tiny_model_id)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_audio_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    audio_unstructured_max_length = 201
 
     @classmethod
     def tearDownClass(cls):
@@ -155,7 +137,7 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }

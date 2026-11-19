@@ -32,10 +32,6 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-aya_vision"
 
     @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
-    @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(
@@ -142,25 +138,3 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 ],
             )
             images_patches_index += inputs["pixel_values"].shape[0]
-
-    def test_image_processor_defaults(self):
-        # AyaVisionProcessor has a default value `crop_to_patches=True` but the image processor's
-        # default is different. Override and pass the arg explicitly
-
-        image_processor = self.get_component("image_processor")
-
-        # Get all required components for processor
-        components = {}
-        for attribute in self.processor_class.get_attributes():
-            components[attribute] = self.get_component(attribute)
-
-        processor = self.processor_class(**components)
-        image_input = self.prepare_image_inputs()
-
-        input_image_proc = image_processor(image_input, crop_to_patches=False, return_tensors="pt")
-        input_processor = processor(images=image_input, crop_to_patches=False, return_tensors="pt")
-
-        # Verify outputs match
-        for key in input_image_proc:
-            if key in processor.model_input_names:
-                torch.testing.assert_close(input_image_proc[key], input_processor[key])

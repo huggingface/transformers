@@ -94,7 +94,7 @@ model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 # Without language hint (auto-detect)
 inputs = processor.apply_transcription_request(
-    audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+    audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
 ).to(model.device, model.dtype)
 output_ids = model.generate(**inputs, max_new_tokens=256)
 generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
@@ -102,7 +102,7 @@ print(f"Auto-detect: {processor.decode(generated_ids, return_format='transcripti
 
 # With forced language
 inputs = processor.apply_transcription_request(
-    audio="https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+    audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
     language="Chinese",  # or language code "zh"
 ).to(model.device, model.dtype)
 output_ids = model.generate(**inputs, max_new_tokens=256)
@@ -142,7 +142,7 @@ from transformers import AutoProcessor, AutoModelForMultimodalLM
 model_id = "Qwen/Qwen3-ASR-1.7B-hf"
 audio = [
     "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
-    "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
 ]
 
 processor = AutoProcessor.from_pretrained(model_id)
@@ -197,7 +197,7 @@ chat_template = [
             "content": [
                 {
                     "type": "audio",
-                    "path": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+                    "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav",
                 },
             ],
         },
@@ -221,32 +221,37 @@ for text in transcriptions:
 Qwen3 ASR can be trained with the loss outputted by the model. Put the target transcript in the assistant turn — in the model's output format `language <NAME><asr_text>...` to preserve the pretrained behavior — and pass `output_labels=True`. Audio and padding positions are masked automatically.
 
 ```python
+from datasets import Audio, load_dataset
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
 
 model_id = "Qwen/Qwen3-ASR-1.7B-hf"
+NUM_SAMPLES = 2
+
 processor = AutoProcessor.from_pretrained(model_id)
 model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
-transcript = "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
 conversation = [
     [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "audio",
-                    "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
-                },
-            ],
-        },
-        {"role": "assistant", "content": [{"type": "text", "text": f"language English<asr_text>{transcript}"}]},
-    ],
+        {"role": "user", "content": [{"type": "audio", "audio": sample["audio"]["array"]}]},
+        # the transcript follows the model's output format to preserve the pretrained behavior
+        {"role": "assistant", "content": [{"type": "text", "text": f"language English<asr_text>{sample['text']}"}]},
+    ]
+    for sample in ds.select(range(NUM_SAMPLES))
 ]
 
 inputs = processor.apply_chat_template(
-    conversation, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True},
-).to(model.device, model.dtype)
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())
@@ -337,13 +342,13 @@ from transformers import AutoModelForCTC, AutoProcessor, AutoModelForTokenClassi
 
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 parakeet_model = AutoModelForCTC.from_pretrained(
-    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="cuda",
+    "nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto",
 )
 
 aligner_model_id = "Qwen/Qwen3-ForcedAligner-0.6B-hf"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
 aligner_model = AutoModelForTokenClassification.from_pretrained(
-    aligner_model_id, dtype=torch.bfloat16, device_map="cuda",
+    aligner_model_id, dtype=torch.bfloat16, device_map="auto",
 )
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -411,7 +416,7 @@ aligner_inputs, word_lists = processor.prepare_forced_aligner_inputs(
     transcript=[transcript] * batch_size,
     language=["English"] * batch_size,
 )
-aligner_inputs = aligner_inputs.to("cuda", torch.bfloat16)
+aligner_inputs = aligner_inputs.to(model.device, torch.bfloat16)
 
 # Warm-up and apply model
 model = torch.compile(model)
@@ -442,7 +447,7 @@ model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16)
 audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
 inputs = processor.apply_transcription_request(
     audio=[audio_url] * 4,  # batch of 4
-).to("cuda", torch.bfloat16)
+).to(model.device, torch.bfloat16)
 
 compile_config = CompileConfig()
 

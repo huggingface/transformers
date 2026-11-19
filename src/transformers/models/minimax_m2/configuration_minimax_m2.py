@@ -46,7 +46,6 @@ class MiniMaxM2Config(PreTrainedConfig):
     ```"""
 
     model_type = "minimax_m2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
@@ -62,10 +61,9 @@ class MiniMaxM2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {
@@ -96,6 +94,13 @@ class MiniMaxM2Config(PreTrainedConfig):
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
     rope_parameters: RopeParameters | dict | None = None
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        # Released MiniMax-M2 checkpoints express partial RoPE through a legacy `rotary_dim` field instead of `partial_rotary_factor`
+        rotary_dim = kwargs.get("rotary_dim", getattr(self, "rotary_dim", None))
+        if rotary_dim is not None:
+            kwargs.setdefault("partial_rotary_factor", rotary_dim / self.head_dim)
+        return super().convert_rope_params_to_dict(**kwargs)
 
 
 __all__ = ["MiniMaxM2Config"]

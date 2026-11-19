@@ -22,7 +22,6 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    Cache,
     FineGrainedFP8Config,
     GlmMoeDsaConfig,
     is_torch_available,
@@ -51,26 +50,17 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
         base_model_class = GlmMoeDsaModel
         causal_lm_class = GlmMoeDsaForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        num_hidden_layers=2,
-        mlp_layer_types=["sparse", "dense"],
-    ):
-        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.mlp_layer_types = mlp_layer_types
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "v_head_dim": 128,
+        "mlp_layer_types": ["sparse", "dense"],
+        "index_topk": 8,
+        "num_hidden_layers": 2,
+    }
 
 
 @require_torch
@@ -82,23 +72,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
     def test_tp_generation_quantized(self):
         pass
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_default_mlp_layer_types(self):
         config = GlmMoeDsaConfig(num_hidden_layers=8)
@@ -124,10 +97,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
     def test_eager_matches_batched_and_grouped_inference(self, *args):
-        pass
-
-    @unittest.skip("DSA hard top-k selection is sensitive to padding shifts (selection can flip).")
-    def test_left_padding_compatibility(self):
         pass
 
     @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")

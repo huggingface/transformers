@@ -17,7 +17,8 @@
 from ...image_utils import ImageInput
 from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available
+from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -25,9 +26,13 @@ if is_vision_available():
     from .image_processing_emu3 import Emu3ImageProcessorKwargs, smart_resize
 
 
-class Emu3TextKwargs(TextKwargs, total=False):
+logger = logging.get_logger(__name__)
+
+
+class DeprecatedEmu3TextKwargs(TextKwargs, total=False):
     """
-    return_for_image_generation (`bool`, *optional*, defaults to `False`):
+    return_for_image_generation (`bool`, *optional*):
+        Deprecated, use [`Emu3ProcessorKwargs.return_for_image_generation`] instead.
         Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
         inputs for image generation by appending image start tokens and size information to the prompt, and
         images should not be provided. When `False`, the processor prepares inputs for text generation from
@@ -38,24 +43,34 @@ class Emu3TextKwargs(TextKwargs, total=False):
 
 
 class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: Emu3TextKwargs
+    """
+    return_for_image_generation (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
+        inputs for image generation by appending image start tokens and size information to the prompt, and
+        images should not be provided. When `False`, the processor prepares inputs for text generation from
+        images and text, requiring both inputs to be provided.
+    ratio (`str`, *optional*, defaults to `"1:1"`):
+        The ratio of the image to resize the image.
+    image_area (`int`, *optional*, defaults to `518400`):
+        The area of the image to resize the image.
+    """
+
+    text_kwargs: DeprecatedEmu3TextKwargs
     images_kwargs: Emu3ImageProcessorKwargs
-    _defaults = {
-        "text_kwargs": {
-            "return_for_image_generation": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "ratio": "1:1",
-            "image_area": 518400,
-        },
-    }
+
+    return_for_image_generation: bool
+    ratio: str
+    image_area: int
 
 
 @auto_docstring
 @requires(backends=("vision",))
 class Emu3Processor(ProcessorMixin):
     valid_processor_kwargs = Emu3ProcessorKwargs
+
+    return_for_image_generation = False
+    ratio = "1:1"
+    image_area = 518400
 
     def __init__(
         self,
@@ -82,13 +97,26 @@ class Emu3Processor(ProcessorMixin):
         **kwargs: Unpack[Emu3ProcessorKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
-            Emu3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        return_for_image_generation = output_kwargs["text_kwargs"].pop("return_for_image_generation", False)
-        ratio = output_kwargs["images_kwargs"].pop("ratio", None)
-        image_area = output_kwargs["images_kwargs"].pop("image_area", None)
+        for key, modality in (
+            ("return_for_image_generation", "text_kwargs"),
+            ("ratio", "images_kwargs"),
+            ("image_area", "images_kwargs"),
+        ):
+            if key in output_kwargs[modality]:
+                logger.warning_once(
+                    f"Passing `{key}` in `{modality}` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+        # Modality-specific kwargs have priority for backwards compatibility.
+        return_for_image_generation = output_kwargs["text_kwargs"].pop(
+            "return_for_image_generation", output_kwargs["return_for_image_generation"]
+        )
+        ratio = output_kwargs["images_kwargs"].pop("ratio", output_kwargs["ratio"])
+        image_area = output_kwargs["images_kwargs"].pop("image_area", output_kwargs["image_area"])
 
         # take different processing path when generarating images cond on text
         if return_for_image_generation:
@@ -98,7 +126,7 @@ class Emu3Processor(ProcessorMixin):
             image_prompt = f"{self.image_start_token}{height}*{width}{self.fake_token_around_image}"
             if isinstance(text, str):
                 text = [text]
-            text = [f"{self.bos_token}{sample}{image_prompt}" for sample in text]
+            text = [f"{sample}{image_prompt}" for sample in text]
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         if return_for_image_generation:
@@ -107,7 +135,7 @@ class Emu3Processor(ProcessorMixin):
 
     def prepare_inputs_layout(self, images=None, text=None, **kwargs):
         images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
-        if images is not None and text is not None:
+        if text is not None and kwargs.get("add_special_tokens", True):
             # Add BOS once per sample; GPT tokenizer doesn't add it automatically
             text = [f"{self.bos_token}{sample}" for sample in text]
         return images, text, None, None
@@ -206,4 +234,5 @@ class Emu3Processor(ProcessorMixin):
             )
 
 
+__getattr__ = deprecate_attr(__name__, remove={"Emu3TextKwargs": (DeprecatedEmu3TextKwargs, "5.29.0")})
 __all__ = ["Emu3Processor"]

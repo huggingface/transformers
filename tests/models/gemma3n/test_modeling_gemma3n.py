@@ -15,15 +15,18 @@
 
 import copy
 import inspect
+import os
+import tempfile
 import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
     Gemma3nAudioConfig,
@@ -44,6 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import WEIGHTS_NAME
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
@@ -55,6 +59,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -249,78 +254,50 @@ class Gemma3nTextModelTester(CausalLMModelTester):
         base_model_class = Gemma3nTextModel
         causal_lm_class = Gemma3nForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        vocab_size_per_layer_input=99,
-        hidden_size=16,
-        hidden_size_per_layer_input=16,
-        num_hidden_layers=4,  # override to correctly test sharing cache pattern
-        num_kv_shared_layers=2,  # important to override
-        layer_types=[
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "vocab_size_per_layer_input": 99,
+        "hidden_size": 16,
+        "hidden_size_per_layer_input": 16,
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": [
             "full_attention",
             "sliding_attention",
             "full_attention",
             "sliding_attention",
-        ],  # similarly we want to test sharing on both types
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        altup_num_inputs=2,
-        intermediate_size=22,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        is_decoder=False,
-    ):
-        self._verify_and_infer_model_attributes()
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.vocab_size_per_layer_input = vocab_size_per_layer_input
-        self.hidden_size = hidden_size
-        self.hidden_size_per_layer_input = hidden_size_per_layer_input
-        self.num_hidden_layers = num_hidden_layers
-        self.num_kv_shared_layers = num_kv_shared_layers
-        self.layer_types = layer_types
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.altup_num_inputs = altup_num_inputs
-        self.intermediate_size = intermediate_size
-        self.hidden_activation = hidden_activation
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.is_decoder = is_decoder
+        ],
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "altup_num_inputs": 2,
+        "intermediate_size": 22,
+        "hidden_activation": "gelu_pytorch_tanh",
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "is_decoder": False,
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
+        "attention_probs_dropout_prob": 0.0,
+    }
 
 
 @require_torch
@@ -414,11 +391,6 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -466,7 +438,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             generation_kwargs = {
                 "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
+                "return_dict_in_generate": True,  # Required to return `cache`
             }
 
             text_config = model.config.get_text_config()
@@ -487,9 +459,9 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             # -1 because the last generated token isn't yet in the cache.
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
-            self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers - text_config.num_kv_shared_layers)
-            self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
+            self.assertIsInstance(outputs.cache, StaticCache)
+            self.assertEqual(len(outputs.cache), num_hidden_layers)
+            self.assertListEqual(list(outputs.cache.layers[0].keys.shape), cache_shape)
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -516,7 +488,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             seq_length = self.model_tester.seq_length
             max_new_tokens = 20
 
-            for dtype in (torch.float32, torch.bfloat16):
+            for dtype in (torch.float32, torch.float16):
                 model = model_class(copy.deepcopy(config)).to(torch_device).to(dtype).eval()
                 inputs_dict = {
                     k: v.to(dtype) if isinstance(v, torch.Tensor) and torch.is_floating_point(v) else v
@@ -526,7 +498,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
 
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
-                    "return_dict_in_generate": True,  # Required to return `past_key_values`
+                    "return_dict_in_generate": True,  # Required to return `cache`
                     "output_scores": True,
                     "use_cache": True,
                 }
@@ -549,16 +521,17 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 )
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
-                self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(
-                    len(static_cache_generation.past_key_values)
-                    == num_hidden_layers - text_config.num_kv_shared_layers
-                )
-                self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
+                self.assertTrue(isinstance(static_cache_generation.cache, StaticCache))
+                self.assertTrue(len(static_cache_generation.cache) == num_hidden_layers)
+                self.assertTrue(static_cache_generation.cache.layers[0].keys.shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
                 dynamic_cache_generation = model.generate(**generation_kwargs, **inputs_dict)
-                assert_similar_generate_outputs(dynamic_cache_generation, static_cache_generation)
+                # Use same tolerances as the parent class test_generate_with_static_cache
+                atol = rtol = 1e-5 if dtype == torch.float32 else 5e-5
+                assert_similar_generate_outputs(
+                    dynamic_cache_generation, static_cache_generation, atol=atol, rtol=rtol
+                )
 
 
 class Gemma3nVision2TextModelTester:
@@ -699,7 +672,9 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     test_missing_keys = False
     _is_stateful = True
     has_attentions = False
-    model_split_percents = [0.5, 0.6]
+    # The unsplittable timm vision tower is ~60% of the test model: at 0.6 it does not fit on
+    # GPU 0, the whole model lands on GPU 1 and `test_model_parallelism` sees no split.
+    model_split_percents = [0.5, 0.7]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
@@ -717,12 +692,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             text_config={"activation_sparsity_pattern": None},
         )
 
-    @unittest.skip(
-        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
-    )
-    def test_flex_attention_with_grads(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -731,21 +700,31 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    def test_from_pretrained_fp16_initializes_gradient_clipping(self):
+        config = self.model_tester.get_config()
+        checkpoint_model = Gemma3nForConditionalGeneration(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            torch.save(checkpoint_model.state_dict(), os.path.join(tmp_dir, WEIGHTS_NAME))
+
+            model = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float16)
+
+        gradient_clipping = model.model.audio_tower.conformer[0].attention.gradient_clipping
+        self.assertEqual(gradient_clipping.dtype, torch.float16)
+        self.assertEqual(gradient_clipping.item(), torch.finfo(torch.float16).max)
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return 2
@@ -761,11 +740,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip("Audio modality is not tested here")
     def test_get_audio_features_attentions(self, return_dict: bool | None):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(
@@ -876,10 +850,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset(
-            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+        self.audio_file_path = hf_hub_download(
+            repo_id="etechgrid/28.5k_wavfiles_dataset",
+            filename="wav_dataset/103-1240-0000.wav",
+            repo_type="dataset",
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -903,6 +878,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
+            ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -962,11 +939,15 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+                        ),
                     },
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
@@ -988,6 +969,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
+            ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are **not identical**.\n\nHere's a breakdown of the differences:\n\n* **Subject Matter:** The first image shows a"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1014,6 +997,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1033,7 +1017,9 @@ class Gemma3nIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                        ),
                     },
                     {"type": "text", "text": "What do you see here?"},
                 ],
@@ -1053,9 +1039,10 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations({
-            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are some of the key elements:\n\n* **A'],
+            ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1099,8 +1086,9 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = Expectations({
-            ("cuda", None): [" and the people are so friendly. I'm so glad I came here. I'm so", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("cuda", None): [" and I find it very relaxing. I also like the food, which is very delicious. I also", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [' and the food is delicious. The staff is friendly and helpful. The atmosphere is relaxed and welcoming.', ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm sure others will too. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
@@ -1131,7 +1119,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
-            ("rocm", (9, 4)): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("rocm", (9, 4)): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

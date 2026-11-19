@@ -19,7 +19,6 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
-    AutoProcessor,
     AutoTokenizer,
     GlmAsrProcessor,
     WhisperFeatureExtractor,
@@ -34,24 +33,7 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-ASR-Nano-2512"
     tiny_model_id = "hf-internal-testing/tiny-processor-glmasr"
 
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = GlmAsrProcessor.from_pretrained(cls.tiny_model_id)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_audio_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    audio_unstructured_max_length = 201
 
     @classmethod
     def tearDownClass(cls):

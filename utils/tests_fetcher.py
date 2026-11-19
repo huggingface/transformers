@@ -55,16 +55,18 @@ import json
 import os
 import re
 from contextlib import contextmanager
+from functools import cache
 from pathlib import Path
 
 from git import Repo
+
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING, model_type_to_module_name
 
 
 # List here the models not to be filtered by `filter_tests`.
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
-PATH_TO_EXAMPLES = PATH_TO_REPO / "examples"
 PATH_TO_TRANSFORMERS = PATH_TO_REPO / "src/transformers"
 PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
@@ -317,7 +319,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         for model_class in impacted_model_classes:
             module = reversed_structure[model_class]
             fn = f"modeling_{module.split('.')[-1]}.py"
-            files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
+            files.add(f"src.transformers.{module}.{fn}".replace(".", "/").replace("/py", ".py"))
 
     return sorted(files)
 
@@ -440,12 +442,10 @@ def get_all_doctest_files() -> list[str]:
     Returns:
         `List[str]`: The complete list of Python and Markdown files on which we run doctest.
     """
-    py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
-    md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+    py_files = [x.relative_to(PATH_TO_REPO).as_posix() for x in PATH_TO_REPO.glob("**/*.py")]
+    md_files = [x.relative_to(PATH_TO_REPO).as_posix() for x in PATH_TO_REPO.glob("**/*.md")]
 
     test_files_to_run = py_files + md_files
-    # change to use "/" as path separator
-    test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
     # don't run doctest for files in `src/transformers/models/deprecated`
     test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
@@ -455,7 +455,7 @@ def get_all_doctest_files() -> list[str]:
     test_files_to_run = [x for x in test_files_to_run if not x.endswith(("__init__.py",))]
 
     # These are files not doctested yet.
-    with open("utils/not_doctested.txt") as fp:
+    with open("utils/not_doctested.txt", encoding="utf-8") as fp:
         not_doctested = {x.split(" ")[0] for x in fp.read().strip().split("\n")}
 
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
@@ -527,7 +527,7 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     test_files_to_run = list(set(test_files_to_run + new_test_files))
 
     # Do not run slow doctest tests on CircleCI
-    with open("utils/slow_documentation_tests.txt") as fp:
+    with open("utils/slow_documentation_tests.txt", encoding="utf-8") as fp:
         slow_documentation_tests = set(fp.read().strip().split("\n"))
     test_files_to_run = [
         x for x in test_files_to_run if x in all_test_files_to_run and x not in slow_documentation_tests
@@ -560,6 +560,71 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
+def _iter_descendants(config, seen: set[str]):
+    """Yield the model_type of every sub-config under `config`, at any depth, each once."""
+    specs = getattr(config, "sub_configs_defaults", None) or {}
+    for spec in specs.values():
+        model_type = getattr(spec, "model_type", None)
+        if not model_type or model_type in seen:
+            continue
+        seen.add(model_type)
+        yield model_type
+        yield from _iter_descendants(spec, seen)
+
+
+@cache
+def _get_backbone_map() -> dict[str, frozenset[str]]:
+    """
+    {composite_model_dir: {backbone_model_dir, ...}} built from `sub_configs_defaults[...].model_type`,
+    following nesting at any depth (`a` -> `b` -> `c` gives `a: {b, c}`).
+    Cached: the config imports are the expensive part, so do them at most once per process.
+    """
+    mapping = {}
+    for model_type in CONFIG_MAPPING:
+        parent = model_type_to_module_name(model_type)
+        config_cls = CONFIG_MAPPING[model_type]  # imports only this config module
+        children = {
+            model_type_to_module_name(descendant) for descendant in _iter_descendants(config_cls, {model_type})
+        }
+        children.discard(parent)
+        if children:
+            mapping[parent] = frozenset(children)
+    return mapping
+
+
+def existing_backbone_files(model: str) -> list[str]:
+    # processors aren't used as backbones
+    paths = (PATH_TO_TRANSFORMERS / "models" / model / f"{kind}_{model}.py" for kind in ("configuration", "modeling"))
+    return [path.as_posix() for path in paths if (PATH_TO_REPO / path).is_file()]
+
+
+def create_backbone_edges() -> list[tuple[str, str]]:
+    return [
+        (dep, target)
+        for parent, children in _get_backbone_map().items()
+        for target in existing_backbone_files(parent)
+        for child in children
+        for dep in existing_backbone_files(child)
+    ]
+
+
+def _file_exists_case_sensitive(path: Path) -> bool:
+    """Return True only if *path* exists and the filename casing matches exactly.
+
+    ``Path.is_file()`` on case-insensitive filesystems (Windows, macOS) returns
+    ``True`` even when the requested name differs in case from the on-disk name.
+    This matters for the fetcher's heuristic that distinguishes submodule files
+    from plain symbols: ``from .pkg import UPPER_NAME`` should NOT be treated as
+    a reference to ``pkg/upper_name.py`` just because the file happens to exist.
+
+    ``os.listdir()`` always returns the actual on-disk filenames, so a membership
+    check against it enforces case-sensitivity on every platform.
+    """
+    if not path.is_file():
+        return False
+    return path.name in os.listdir(path.parent)
+
+
 def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Get the imports a given module makes.
@@ -587,7 +652,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     splits = content.split('\"\"\"')  # fmt: skip
     content = "".join(splits[::2])
 
-    module_parts = str(module_fname).split(os.path.sep)
+    module_parts = str(module_fname).split("/")
     imported_modules = []
 
     # Let's start with relative imports
@@ -609,7 +674,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             dep_parts = module_parts[: len(module_parts) - level] + module.split(".")
         else:
             dep_parts = module_parts[: len(module_parts) - level]
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     # Let's continue with direct imports
@@ -622,17 +687,21 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     for module, imports in direct_imports:
         import_parts = module.split(".")[1:]  # ignore the name of the repo since we add it below.
         dep_parts = ["src", "transformers"] + import_parts
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     result = []
     # Double check we get proper modules (either a python file or a folder with an init).
     for module_file, imports in imported_modules:
-        if (PATH_TO_REPO / f"{module_file}.py").is_file():
+        if _file_exists_case_sensitive(PATH_TO_REPO / f"{module_file}.py"):
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
-            module_file = os.path.sep.join([module_file, "__init__.py"])
-        imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
+            module_file = f"{module_file}/__init__.py"
+        else:
+            # Some supported imports, such as deprecated module aliases, have no file on disk.
+            continue
+        imports = [imp.split(" as ")[0].strip() for imp in imports]
+        imports = [imp for imp in imports if imp and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
 
@@ -675,7 +744,12 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = dict(extract_imports(module, cache=cache))
+                new_imported_modules = {}
+                for _mod, _names in extract_imports(module, cache=cache):
+                    if _mod not in new_imported_modules:
+                        new_imported_modules[_mod] = list(_names)
+                    else:
+                        new_imported_modules[_mod].extend(n for n in _names if n not in new_imported_modules[_mod])
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
@@ -685,8 +759,7 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                 for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
                         # Import Structure returns _module keys as import paths rather than local paths
-                        # We replace with os.path.sep so that it's Windows-compatible
-                        _module = _module.replace(".", os.path.sep)
+                        _module = _module.replace(".", "/")
                         _module = module.replace("__init__.py", f"{_module}.py")
                         if _module not in new_imported_modules:
                             new_imported_modules[_module] = list(_imports)
@@ -703,16 +776,20 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                         imports = [i for i in imports if i not in new_imports]
 
                 if len(imports) > 0:
-                    # If there are any objects lefts, they may be a submodule
+                    # If there are any objects lefts, they may be a submodule.
+                    # Read the directory listing once; set-membership checks are O(1) and
+                    # exact-case, so a single listdir() replaces two _file_exists_case_sensitive
+                    # calls per import (which each called listdir internally).
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
+                    try:
+                        disk_files = set(os.listdir(path_to_module))
+                    except OSError:
+                        disk_files = set()
+                    submodule_names = {i for i in imports if f"{i}.py" in disk_files}
                     dependencies.extend(
-                        [
-                            os.path.join(module.replace("__init__.py", ""), f"{i}.py")
-                            for i in imports
-                            if (path_to_module / f"{i}.py").is_file()
-                        ]
+                        f"{module.replace('__init__.py', '')}{i}.py" for i in imports if i in submodule_names
                     )
-                    imports = [i for i in imports if not (path_to_module / f"{i}.py").is_file()]
+                    imports = [i for i in imports if i not in submodule_names]
                     if len(imports) > 0:
                         # Then if there are still objects left, they are fully defined in the init, so we keep it as a
                         # dependency.
@@ -733,9 +810,9 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
-
+    edges += create_backbone_edges()
     return list(set(edges))
 
 
@@ -800,38 +877,6 @@ def print_tree_deps_of(module, all_edges=None):
         print(line[0])
 
 
-def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
-    """
-    The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
-    care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
-    example files by linking each example to the example test file for the example folder.
-
-    Returns:
-        `Tuple[Dict[str, List[str]], List[str]]`: A tuple with two elements: the initialized dependency map which is a
-        dict test example file to list of example files potentially tested by that test file, and the list of all
-        example files (to avoid recomputing it later).
-    """
-    test_example_deps = {}
-    all_examples = []
-
-    test_files = list((PATH_TO_EXAMPLES / "pytorch").glob("test_*.py"))
-    all_examples.extend(test_files)
-    # Remove the files at the root of examples/pytorch since they are not proper examples (they are either utils
-    # or example test files).
-    examples = [f for f in (PATH_TO_EXAMPLES / "pytorch").glob("**/*.py") if f.parent != PATH_TO_EXAMPLES / "pytorch"]
-    all_examples.extend(examples)
-    for test_file in test_files:
-        with open(test_file, "r", encoding="utf-8") as f:
-            content = f.read()
-        # Map all examples to the test files found in examples/pytorch.
-        test_example_deps[str(test_file.relative_to(PATH_TO_REPO))] = [
-            str(e.relative_to(PATH_TO_REPO)) for e in examples if e.name in content
-        ]
-        # Also map the test files to themselves.
-        test_example_deps[str(test_file.relative_to(PATH_TO_REPO))].append(str(test_file.relative_to(PATH_TO_REPO)))
-    return test_example_deps, all_examples
-
-
 def create_reverse_dependency_map() -> dict[str, list[str]]:
     """
     Create the dependency map from module/test filename to the list of modules/tests that depend on it recursively.
@@ -843,16 +888,13 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     """
 
     cache = {}
-    # Start from the example deps init.
-    example_deps, examples = init_test_examples_dependencies()
-    # Add all modules and all tests to all examples
+    # Add all modules and all tests
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
-    all_modules += list(PATH_TO_TESTS.glob("**/*.py")) + examples
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
-    direct_deps.update(example_deps)
 
     # This recurses the dependencies
     something_changed = True
@@ -884,6 +926,57 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
         deps = sum((reverse_map[d] for d in direct_deps if not d.endswith("__init__.py")), direct_deps)
         reverse_map[m] = list(set(deps) - {m})
 
+    # Each key is a multimodal model name mapped to a set of its subconfigs (e.g. `llava: set(llama, clip)`)
+    # We have to reverse the mapping so that a modification on `clip` triggers a test of `llava`
+    for parent_model, children_models in _get_backbone_map().items():
+        # processors aren't used as backbones
+        for kind in ("configuration", "modeling"):
+            for child_model in children_models:
+                child_file = PATH_TO_TRANSFORMERS / "models" / child_model / f"{kind}_{child_model}.py"
+                if (PATH_TO_REPO / child_file).is_file():
+                    child_file_posix = child_file.relative_to(PATH_TO_REPO).as_posix()
+                    for parent_file in existing_backbone_files(parent_model):
+                        parent_file_posix = Path(parent_file).relative_to(PATH_TO_REPO).as_posix()
+                        reverse_map.setdefault(child_file_posix, []).extend(reverse_map.get(parent_file_posix, []))
+
+    # Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+    # statically imported by their test files because class resolution happens dynamically (e.g.
+    # via IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) or because processing_<model>.py
+    # itself has no static import of those classes (e.g. CLIP's processing_clip.py only imports
+    # ProcessorMixin). Wire them explicitly by naming convention: for each glob pattern we wire
+    # matching source files to the pattern-specific test file (e.g. test_image_processing_<model>.py)
+    # and to test_processing_<model>.py (the processor integration test).
+    preprocessor_patterns = [
+        ("image_processing*.py", "test_image_processing"),
+        ("video_processing*.py", "test_video_processing"),
+        ("feature_extraction*.py", "test_feature_extraction"),
+        ("audio_processing*.py", "test_audio_processing"),
+        ("tokenization*.py", "test_tokenization"),
+    ]
+    for model_dir in (PATH_TO_TRANSFORMERS / "models").iterdir():
+        if not model_dir.is_dir():
+            continue
+        model_name = model_dir.name
+        test_model_dir = PATH_TO_TESTS / "models" / model_name
+        processing_test = test_model_dir / f"test_processing_{model_name}.py"
+        for glob_pattern, test_prefix in preprocessor_patterns:
+            src_files = list(model_dir.glob(glob_pattern))
+            if not src_files:
+                continue
+            candidate_tests = [
+                test_model_dir / f"{test_prefix}_{model_name}.py",
+                processing_test,
+            ]
+            test_files = [t.relative_to(PATH_TO_REPO).as_posix() for t in candidate_tests if t.is_file()]
+            if not test_files:
+                continue
+            for src_file in src_files:
+                src_key = src_file.relative_to(PATH_TO_REPO).as_posix()
+                existing = set(reverse_map.get(src_key, []))
+                for test_file in test_files:
+                    if test_file not in existing:
+                        reverse_map.setdefault(src_key, []).append(test_file)
+
     return reverse_map
 
 
@@ -902,16 +995,8 @@ def create_module_to_test_map(reverse_map: dict[str, list[str]] | None = None) -
     if reverse_map is None:
         reverse_map = create_reverse_dependency_map()
 
-    # Utility that tells us if a given file is a test (taking test examples into account)
-    def is_test(fname):
-        if fname.startswith("tests"):
-            return True
-        if fname.startswith("examples") and fname.split(os.path.sep)[-1].startswith("test"):
-            return True
-        return False
-
     # Build the test map
-    test_map = {module: [f for f in deps if is_test(f)] for module, deps in reverse_map.items()}
+    test_map = {module: [f for f in deps if f.startswith("tests")] for module, deps in reverse_map.items()}
 
     return test_map
 
@@ -926,7 +1011,7 @@ def get_repo_utils_tests() -> list[str]:
     repo_utils_dir = PATH_TO_TESTS / "repo_utils"
     if not repo_utils_dir.is_dir():
         return []
-    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in repo_utils_dir.glob("test_*.py"))
+    return sorted(path.relative_to(PATH_TO_REPO).as_posix() for path in repo_utils_dir.glob("test_*.py"))
 
 
 def should_run_repo_utils_tests(modified_files: list[str]) -> bool:
@@ -953,7 +1038,7 @@ def get_conftest_tests() -> list[str]:
     conftest_dir = PATH_TO_TESTS / "conftest_tests"
     if not conftest_dir.is_dir():
         return []
-    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in conftest_dir.glob("test_*.py"))
+    return sorted(path.relative_to(PATH_TO_REPO).as_posix() for path in conftest_dir.glob("test_*.py"))
 
 
 def should_run_conftest_tests(modified_files: list[str]) -> bool:
@@ -989,7 +1074,6 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
             The path where to store the summary of the test fetcher analysis. Other files will be stored in the same
             folder:
 
-            - examples_test_list.txt: The list of examples tests to run.
             - test_repo_utils.txt: Will indicate if the repo utils tests should be run or not.
             - doctest_list.txt: The list of doctests to run.
 
@@ -1000,7 +1084,11 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
     if not test_all:
         modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     else:
-        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        modified_files = [
+            k.relative_to(PATH_TO_REPO).as_posix()
+            for k in PATH_TO_TESTS.glob("*/*")
+            if k.suffix == ".py" and "test_" in k.name
+        ]
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -1021,9 +1109,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
         or len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]
     ):
-        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True) + glob.glob(
-            "examples/**/*.py", recursive=True
-        )
+        test_files_to_run = [Path(f).as_posix() for f in glob.glob("tests/**/test_**.py", recursive=True)]
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted. CI is configured to test everything."
@@ -1047,7 +1133,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
 
     test_files_to_run = sorted(set(test_files_to_run))
     # Remove SageMaker tests
-    test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
+    test_files_to_run = [f for f in test_files_to_run if f.split("/")[1] != "sagemaker"]
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
@@ -1085,9 +1171,9 @@ def filter_tests(output_file: str, filters: list[str]):
         return
 
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
+        test_files = [f"tests/{f}" for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
-        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+        test_files = [f for f in test_files if f.split("/")[1] not in filters]
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
@@ -1124,17 +1210,20 @@ JOB_TO_TEST_FILE = {
     "tests_generate": r"(tests/models/.*/test_modeling_.*|tests/generation/test_.*\.py)",
     "tests_tokenization": r"tests/(?:models/.*/test_tokenization.*|test_tokenization_mistral_common\.py)",
     "tests_processors": r"tests/models/.*/test_(?!(?:modeling_|tokenization_)).*",  # takes feature extractors, image processors, processors
-    "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     # conftest tests exercise the test runner (repo-root conftest.py); they share the
     # consistency image and run alongside the repo utils tests in the same CI job.
     "tests_repo_utils": r"tests/(?:repo_utils|conftest_tests)/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    # don't include peft or conftest tests for non_model (conftest tests run in the repo_utils job)
-    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/)[^/]*?/test_.*\.py",
+    # Exclude the suites that have a job of their own, or they run twice: peft_integration, and
+    # the conftest + repo utils tests that the repo_utils job above already claims. That job runs
+    # them in the consistency image they are written for; non_model would run them again in
+    # torch-light.
+    "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/|repo_utils/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
-    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
+    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_.*\.py)?)",
+    "tests_expert_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/expert_parallel(?:/test_.*\.py)?)",
     "tests_fsdp_ci": r"(tests/models/.*/test_modeling_.*|tests/test_fsdp_mixin\.py)",
     "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }
@@ -1147,7 +1236,7 @@ def create_test_list_from_filter(full_test_list, out_path):
     # Collect info: job_name, file_name and files_to_test, so we can process after the loop
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
-        file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
+        file_name = Path(out_path) / f"{job_name}_test_list.txt"
         files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))
@@ -1156,7 +1245,7 @@ def create_test_list_from_filter(full_test_list, out_path):
             to_output.append((job_name, file_name, files_to_test))
 
     for _, file_name, files_to_test in to_output:
-        with open(file_name, "w") as f:
+        with open(file_name, "w", encoding="utf-8") as f:
             f.write("\n".join(files_to_test))
 
 

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import json
 import logging
 import os
 import tempfile
@@ -258,6 +259,27 @@ class GenerationConfigTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 GenerationConfig(assistant_ensemble_weight=invalid).validate()
 
+    def test_validate_suppress_forced_token_overlap(self):
+        """
+        A token that is both forced (`forced_bos_token_id`/`forced_eos_token_id`) and suppressed (`suppress_tokens`)
+        makes all logits `-inf` at the forcing step, yielding `nan` probabilities and a generation crash (see #24099).
+        `validate` must reject this combination with a clear error.
+        """
+        # Every forced token is also suppressed -> guaranteed crash -> must raise
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_eos_token_id=2, suppress_tokens=[2])
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_bos_token_id=3, suppress_tokens=[3, 4])
+        with self.assertRaises(ValueError):
+            GenerationConfig(forced_eos_token_id=[2, 5], suppress_tokens=[2, 5, 9])
+
+        # Partial overlap: at least one forced token survives, so no crash is possible -> must NOT raise
+        GenerationConfig(forced_eos_token_id=[2, 5], suppress_tokens=[2]).validate()
+        # No overlap, or only one of the two set -> must NOT raise
+        GenerationConfig(forced_eos_token_id=2, suppress_tokens=[5, 6]).validate()
+        GenerationConfig(suppress_tokens=[2]).validate()
+        GenerationConfig(forced_eos_token_id=2).validate()
+
     def test_assistant_ensemble_weight_default_and_round_trip(self):
         """Default is `None`; values round-trip through `to_dict`/`from_dict`."""
         self.assertIsNone(GenerationConfig().assistant_ensemble_weight)
@@ -366,6 +388,28 @@ class GenerationConfigTest(unittest.TestCase):
             self.assertEqual(len(captured_warnings), 0)
             self.assertEqual(len(captured_logs.out), 0)
             self.assertEqual(len(os.listdir(tmp_dir)), 1)
+
+    def test_save_unmodified_loaded_config(self):
+        """Tests that a config with issues can be saved back unchanged after loading, but not once it is modified."""
+        with tempfile.TemporaryDirectory() as load_dir:
+            # A Hub file may set `top_p` without `do_sample=True`, which `save_pretrained` would normally refuse
+            with open(os.path.join(load_dir, "generation_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"top_p": 0.95}, f)
+
+            # Untouched -> saved
+            config = GenerationConfig.from_pretrained(load_dir)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                self.assertEqual(GenerationConfig.from_pretrained(tmp_dir).top_p, 0.95)
+
+            # Modified -> refused, even if the change itself is valid
+            config = GenerationConfig.from_pretrained(load_dir)
+            config.max_new_tokens = 10
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with self.assertRaises(ValueError) as exc:
+                    config.save_pretrained(tmp_dir)
+                self.assertTrue("`top_p` is set to `0.95`" in str(exc.exception))
+                self.assertEqual(len(os.listdir(tmp_dir)), 0)
 
     def test_generation_mode(self):
         """Tests that the `get_generation_mode` method is working as expected."""

@@ -18,8 +18,6 @@ import math
 import tempfile
 import unittest
 
-import requests
-
 from transformers import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
 from transformers.testing_utils import (
     require_torch,
@@ -27,9 +25,10 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -47,10 +46,6 @@ if is_torch_available():
         AlignTextModel,
         AlignVisionModel,
     )
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class AlignVisionModelTester:
@@ -189,8 +184,8 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-            num_blocks = sum(config.num_block_repeats) * 4
-            self.assertEqual(len(hidden_states), num_blocks)
+            # One hidden state per block, plus the encoder's input
+            self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -460,10 +455,6 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
-    @unittest.skip(reason="Start to fail after using torch `cu118`.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -514,8 +505,8 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 

@@ -17,16 +17,14 @@ import json
 import pathlib
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import (
     AnnotationFormatTestMixin,
+    ImageProcessingTester,
     ImageProcessingTestMixin,
     PostProcessSemanticSegmentationTestMixin,
-    prepare_image_inputs,
 )
 
 
@@ -37,104 +35,18 @@ if is_vision_available():
     from PIL import Image
 
 
-class ConditionalDetrImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_pad=True,
-        num_labels=5,
-    ):
-        # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
-        size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
-        self.num_labels = num_labels
-        # for the post_process methods
-        self.num_queries = 3
-        self.height = 3
-        self.width = 4
+class ConditionalDetrImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
+        kwargs.setdefault("num_queries", 3)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_pad": self.do_pad,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 18, "longest_edge": 18})
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to ConditionalDetrImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            if w < h:
-                expected_height = int(self.size["shortest_edge"] * h / w)
-                expected_width = self.size["shortest_edge"]
-            elif w > h:
-                expected_height = self.size["shortest_edge"]
-                expected_width = int(self.size["shortest_edge"] * w / h)
-            else:
-                expected_height = self.size["shortest_edge"]
-                expected_width = self.size["shortest_edge"]
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
-
-    def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+        super().__init__(**kwargs)
 
     def prepare_post_process_semantic_segmentation_inputs(self):
         from transformers.models.conditional_detr.modeling_conditional_detr import ConditionalDetrSegmentationOutput
@@ -158,29 +70,10 @@ class ConditionalDetrImageProcessingTester:
 class ConditionalDetrImageProcessingTest(
     AnnotationFormatTestMixin, ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = ConditionalDetrImageProcessingTester(self)
+    image_processor_tester_class = ConditionalDetrImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
+    def test_from_dict_with_legacy_integer_size(self):
         for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
-            self.assertEqual(image_processor.do_pad, True)
-
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
 
@@ -188,7 +81,7 @@ class ConditionalDetrImageProcessingTest(
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -233,7 +126,7 @@ class ConditionalDetrImageProcessingTest(
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -286,7 +179,7 @@ class ConditionalDetrImageProcessingTest(
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -406,7 +299,7 @@ class ConditionalDetrImageProcessingTest(
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", encoding="utf-8") as f:
             target = json.loads(f.read())
 
         annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}

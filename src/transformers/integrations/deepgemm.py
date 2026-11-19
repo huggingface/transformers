@@ -31,20 +31,19 @@ import json
 import os
 import re
 import shutil
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 
 from ..utils import logging
-from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     is_kernels_available,
     maybe_import_error,
     resolve_internal_import,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .tensor_parallel import to_local
 
 
 logger = logging.get_logger(__name__)
@@ -108,7 +107,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_json = os.path.join(cuda_home, "version.json")
     if os.path.isfile(version_json):
         try:
-            with open(version_json) as f:
+            with open(version_json, encoding="utf-8") as f:
                 components = json.load(f)
             version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
             major, minor = version.split(".")[:2]
@@ -119,7 +118,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_txt = os.path.join(cuda_home, "version.txt")
     if os.path.isfile(version_txt):
         try:
-            with open(version_txt) as f:
+            with open(version_txt, encoding="utf-8") as f:
                 match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
             if match:
                 return int(match.group(1)), int(match.group(2))
@@ -130,7 +129,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     cuda_h = os.path.join(cuda_home, "include", "cuda.h")
     if os.path.isfile(cuda_h):
         try:
-            with open(cuda_h) as f:
+            with open(cuda_h, encoding="utf-8") as f:
                 match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
             if match:
                 cuda_version = int(match.group(1))
@@ -505,6 +504,7 @@ def _dispatch_routed_input(
     num_experts: int,
     m_alignment: int,
     use_psum_layout: bool,
+    is_expert_parallel: bool,
 ) -> tuple:
     """Sort tokens by expert id and build the M-grouped padded layout.
 
@@ -534,8 +534,10 @@ def _dispatch_routed_input(
     # keeps any per-row gather (e.g. bias) in-bounds — bias added at sentinel positions falls
     # in rows the kernel skips, so harmless. Safe to mutate now: the layout was built from the
     # unclamped tensor and nothing downstream needs the sentinel info from `expert_ids_g` itself.
-    sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
-    expert_ids_g.clamp_(max=num_experts - 1)
+    sentinel_mask = None
+    if is_expert_parallel:
+        sentinel_mask = (expert_ids_g >= num_experts).unsqueeze(-1)
+        expert_ids_g.clamp_(max=num_experts - 1)
     return (
         sorted_hidden_states_g,
         sample_weights_g,
@@ -551,7 +553,7 @@ def _dispatch_routed_input(
 def _combine_routed_output(
     out_padded: torch.Tensor,
     sorted_weights: torch.Tensor,
-    sentinel_mask: torch.Tensor,
+    sentinel_mask: torch.Tensor | None,
     perm: torch.Tensor,
     sorted_to_padded: torch.Tensor,
     num_tokens: int,
@@ -564,7 +566,8 @@ def _combine_routed_output(
     weighted = out * sorted_weights.to(out.dtype).unsqueeze(-1)
     # Sentinel rows past the valid expert blocks may carry NaN from allocator
     # reuse (`0 * NaN = NaN`); zero them so the top-k reduction stays finite.
-    weighted.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted.masked_fill_(sentinel_mask, 0.0)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(perm.size(0), device=out.device)
     # Deterministic reshape+sum (index_add_ with duplicates is non-deterministic on CUDA).
@@ -574,14 +577,12 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    output_dtype: torch.dtype | None = None,
     activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.
@@ -627,6 +628,8 @@ def deepgemm_bf16_experts_forward(
 ) -> torch.Tensor:
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
+    if self.has_post_expert_norm:
+        raise ValueError("The `deepgemm` experts implementation does not support experts with a post-expert norm.")
 
     deepgemm = load_deepgemm_kernel()
     # Non-transposed weights (E, N, K) → NT kernel; transposed (E, K, N) → NN kernel.
@@ -647,13 +650,19 @@ def deepgemm_bf16_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
+        is_expert_parallel=self._is_expert_parallel,
     )
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_down = to_local(self.down_proj)
-    up_bias = to_local(self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
-    down_bias = to_local(self.down_proj_bias) if self.has_bias else None
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_down = self.down_proj
+    up_bias = (self.gate_up_proj_bias if self.has_gate else self.up_proj_bias) if self.has_bias else None
+    down_bias = self.down_proj_bias if self.has_bias else None
 
     # Up projection.
     up_out_dim = weight_up.shape[-1] if self.is_transposed else weight_up.shape[1]
@@ -717,10 +726,10 @@ def deepgemm_fp8_fp4_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    weight_up = to_local(self.gate_up_proj if self.has_gate else self.up_proj)
-    weight_scale_up = to_local(self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv)
-    weight_down = to_local(self.down_proj)
-    weight_scale_down = to_local(self.down_proj_scale_inv)
+    weight_up = self.gate_up_proj if self.has_gate else self.up_proj
+    weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    weight_down = self.down_proj
+    weight_scale_down = self.down_proj_scale_inv
 
     cast_kwargs = _select_fp8_cast_kwargs(weight_up, weight_scale_up, self.block_size, is_sm100())
     (
@@ -733,7 +742,13 @@ def deepgemm_fp8_fp4_experts_forward(
         grouped_layout,
         total_padded_rows,
     ) = _dispatch_routed_input(
-        hidden_states, top_k_index, top_k_weights, self.num_experts, deepgemm.m_alignment, is_sm100()
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.num_experts,
+        deepgemm.m_alignment,
+        is_sm100(),
+        is_expert_parallel=self._is_expert_parallel,
     )
     sf_recipe = (1, 1, cast_kwargs["gran_k"]) if cast_kwargs.get("use_packed_ue8m0") else None
 
@@ -795,11 +810,11 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     side Parameters — the kernel takes raw pointers.
     """
     deepgemm = load_deepgemm_kernel()
-    gate_up_sf_raw = to_local(module.gate_up_proj_scale_inv.data)
-    down_sf_raw = to_local(module.down_proj_scale_inv.data)
+    gate_up_sf_raw = module.gate_up_proj_scale_inv.data
+    down_sf_raw = module.down_proj_scale_inv.data
     # Force int8 view: the kernel's interleave reshape/empty_like/copy_ is bit-level.
-    gate_up_w = to_local(module.gate_up_proj.data).view(torch.int8).contiguous()
-    down_w = to_local(module.down_proj.data).view(torch.int8).contiguous()
+    gate_up_w = module.gate_up_proj.data.view(torch.int8).contiguous()
+    down_w = module.down_proj.data.view(torch.int8).contiguous()
 
     intermediate_hidden = module.intermediate_dim
     num_local_experts = module.num_experts
@@ -835,6 +850,16 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
+# By EP group, then shape: allocating one is a slow collective, so every layer of a group shares it.
+_SYMM_BUFFERS: defaultdict[str, dict] = defaultdict(dict)
+
+
+def destroy_megamoe_buffers():
+    """Free the Mega MoE symmetric buffers of every EP group. Call it on every rank, before the process groups are
+    destroyed."""
+    _SYMM_BUFFERS.clear()
+
+
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -849,9 +874,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    `process_group` is supplied automatically by `MoeTensorParalellExperts._prepare_input_fn`
-    when the module is wrapped for TP — it's required for the symm-buffer rendezvous
-    on first forward. `top_k_index` is GLOBAL expert ids (`-1` marks skipped slots).
+    `process_group` is the EP group, passed by the `deepgemm_megamoe` expert-parallel implementation.
+    `top_k_index` holds global expert ids, with `-1` for skipped slots.
 
     Caller-managed `self` attributes:
       - `gate_up_proj`, `gate_up_proj_scale_inv`: L1 weight + UE8M0 SF.
@@ -865,6 +889,11 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     # SM100 gate; the explicit `!= int8` check below covers a non-FP4 (misconfigured) checkpoint.
     _assert_sm100_requirements(self.gate_up_proj, self.down_proj_scale_inv)
 
+    if torch.is_grad_enabled() and hidden_states.requires_grad:
+        raise NotImplementedError(
+            "DeepGEMM Mega MoE has no backward: run it under `torch.no_grad()` or `torch.inference_mode()`."
+        )
+
     if self.gate_up_proj.dtype != torch.int8:
         raise NotImplementedError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "
@@ -873,8 +902,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
 
     if process_group is None:
         raise ValueError(
-            "DeepGEMM Mega MoE requires a `process_group` for the EP group. The TP wrapping "
-            "(MoeTensorParalellMegaMoeExperts) supplies it automatically; pass it explicitly otherwise."
+            "DeepGEMM Mega MoE requires a `process_group`, the EP group its symmetric buffers rendezvous over. The "
+            "`deepgemm_megamoe` expert-parallel implementation supplies it; pass it explicitly otherwise."
         )
 
     deepgemm = load_deepgemm_kernel()
@@ -894,9 +923,18 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     intermediate_hidden = self.gate_up_proj.size(1) // 2
     num_global_experts = num_local_experts * process_group.size()
 
-    # Lazily (re)allocate the symmetric buffer when the cached one is too small.
-    if getattr(self, "symm_buffer", None) is None or self.symm_buffer.num_max_tokens_per_rank < num_tokens:
-        self.symm_buffer = deepgemm.get_symm_buffer_for_mega_moe(
+    # Allocate the symmetric buffer for this shape on first use, and again only for a larger batch, at that batch's size
+    # (DeepGEMM aligns it up to its token block): it is a collective and costs about 1 MiB per token per rank at
+    # DeepSeek-V4 sizes, so warming up once at the largest batch allocates it once. The old buffer goes first, once no
+    # rank still reads it, so its memory is reused instead of stacking up.
+    symm_buffers = _SYMM_BUFFERS[process_group.group_name]
+    buffer_key = (hidden_dim, num_top_k, num_global_experts, intermediate_hidden)
+    if buffer_key not in symm_buffers or symm_buffers[buffer_key].num_max_tokens_per_rank < num_tokens:
+        if buffer_key in symm_buffers:
+            torch.cuda.synchronize()
+            torch.distributed.barrier(group=process_group)
+            symm_buffers.pop(buffer_key).destroy()
+        symm_buffers[buffer_key] = deepgemm.get_symm_buffer_for_mega_moe(
             process_group,
             hidden=hidden_dim,
             num_topk=num_top_k,
@@ -906,10 +944,12 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         )
 
     x_fp8, x_sf = deepgemm.per_token_cast_to_fp8(hidden_states, use_ue8m0=True, gran_k=32, use_packed_ue8m0=True)
-    self.symm_buffer.x[:num_tokens].copy_(x_fp8)
-    self.symm_buffer.x_sf[:num_tokens].copy_(x_sf)
-    self.symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
-    self.symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
+
+    symm_buffer = symm_buffers[buffer_key]
+    symm_buffer.x[:num_tokens].copy_(x_fp8)
+    symm_buffer.x_sf[:num_tokens].copy_(x_sf)
+    symm_buffer.topk_idx[:num_tokens].copy_(top_k_index)
+    symm_buffer.topk_weights[:num_tokens].copy_(top_k_weights)
 
     # `activation_clamp` must match `_apply_gate`'s clamp on the regular path so the kernel's
     # fused SwiGLU sees the same value range the model was calibrated for.
@@ -918,7 +958,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
         y,
         (self.gate_up_proj, self.gate_up_proj_scale_inv),
         (self.down_proj, self.down_proj_scale_inv),
-        self.symm_buffer,
+        symm_buffer,
         activation_clamp=getattr(getattr(self, "config", None), "swiglu_limit", None),
     )
     return y.to(hidden_states.dtype)

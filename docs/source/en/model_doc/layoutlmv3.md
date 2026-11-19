@@ -15,6 +15,12 @@ rendered properly in your Markdown viewer.
 -->
 *This model was published in HF papers on 2022-04-18 and contributed to Hugging Face Transformers on 2022-05-24.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # LayoutLMv3
 
 ## Overview
@@ -99,7 +105,6 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 ## LayoutLMv3TokenizerFast
 
 [[autodoc]] LayoutLMv3TokenizerFast
-    - __call__
 
 ## LayoutLMv3Processor
 

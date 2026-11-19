@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import tempfile
 import unittest
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import (
@@ -23,6 +23,7 @@ from transformers import (
     AutoTokenizer,
     Qwen2TokenizerFast,
     Qwen3ASRFeatureExtractor,
+    WhisperFeatureExtractor,
 )
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import require_torch
@@ -32,42 +33,18 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Qwen3ASRProcessor
-
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.checkpoint = "Qwen/Qwen3-ASR-0.6B-hf"
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        processor = Qwen3ASRProcessor.from_pretrained(cls.checkpoint)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_feature_extractor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_asr"
 
     @require_torch
     def test_can_load_various_tokenizers(self):
-        processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        processor = Qwen3ASRProcessor.from_pretrained(self.tmpdirname)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
 
     @require_torch
     def test_save_load_pretrained_default(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
-        processor = Qwen3ASRProcessor.from_pretrained(self.checkpoint)
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
+        processor = Qwen3ASRProcessor.from_pretrained(self.tmpdirname)
         feature_extractor = processor.feature_extractor
 
         processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
@@ -83,7 +60,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
         expected_prompt = (
             "<|im_start|>system\n"
             "<|im_end|>\n"
@@ -97,7 +74,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "content": [
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav",
                     },
                 ],
             },
@@ -107,9 +84,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_with_language(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         outputs = processor.apply_transcription_request(audio=audio_url, language="English")
 
         for key in ("input_ids", "attention_mask", "input_features", "input_features_mask"):
@@ -121,9 +98,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_apply_transcription_request_with_prompt(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         context = "Vocabulary: Quilter, apostle, gospel."
         outputs = processor.apply_transcription_request(audio=audio_url, prompt=context, language="English")
 
@@ -135,9 +112,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     def test_apply_transcription_request_mixed_batch(self):
         """Mixed batch: forced-language samples get the prefill, auto-detect samples a bare generation prompt."""
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
-        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav"
         outputs = processor.apply_transcription_request(audio=[audio_url, audio_url], language=[None, "zh"])
 
         decoded_auto = processor.tokenizer.decode(outputs["input_ids"][0], skip_special_tokens=False)
@@ -147,7 +124,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_decode_formats(self):
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
+        processor = AutoProcessor.from_pretrained(self.tmpdirname)
 
         raw_text = "language English<asr_text>Mr. Quilter is the apostle of the middle classes."
 
@@ -163,6 +140,18 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # transcription_only
         transcription = processor.extract_transcription(raw_text)
         self.assertEqual(transcription, "Mr. Quilter is the apostle of the middle classes.")
+
+    @require_torch
+    def test_audio_longer_than_chunk_length_is_not_truncated(self):
+        # Original checkpoints use `WhisperFeatureExtractor`, which truncates by default
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
+        feature_extractor = WhisperFeatureExtractor(feature_size=128, chunk_length=1)
+        processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        audio = np.zeros(2 * feature_extractor.n_samples, dtype=np.float32)
+
+        inputs = processor(text="<|audio_start|><|audio_pad|><|audio_end|>", audio=audio, return_tensors="pt")
+
+        self.assertEqual(inputs["input_features"].shape[-1], 2 * feature_extractor.nb_max_frames)
 
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):

@@ -23,9 +23,9 @@ from transformers import LongcatFlashConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
-    require_large_cpu_ram,
     require_torch,
     require_torch_accelerator,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -37,85 +37,57 @@ from ...test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, Cache, LongcatFlashForCausalLM, LongcatFlashModel
+    from transformers import AutoTokenizer, LongcatFlashForCausalLM, LongcatFlashModel
 
 
 class LongcatFlashModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = LongcatFlashModel
 
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=144,
-        ffn_hidden_size=288,
-        expert_ffn_hidden_size=48,
-        num_layers=1,  # We have `self.num_hidden_layers = 2 * num_layers` in the body. See `LongcatFlashConfig`.
-        num_attention_heads=8,
-        num_key_value_heads=8,
-        kv_lora_rank=16,
-        q_lora_rank=48,
-        qk_rope_head_dim=4,
-        v_head_dim=8,
-        qk_nope_head_dim=8,
-        head_dim=4,
-        n_routed_experts=4,
-        zero_expert_num=2,
-        moe_topk=2,
-        routed_scaling_factor=1.0,
-        hidden_act="silu",
-        max_position_embeddings=128,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        bos_token_id=1,
-        eos_token_id=2,
-        pad_token_id=3,
-        type_sequence_label_size=2,
-        num_labels=3,
-        num_choices=4,
-    ):
-        super().__init__(parent)
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.ffn_hidden_size = ffn_hidden_size
-        self.expert_ffn_hidden_size = expert_ffn_hidden_size
-        self.num_layers = num_layers
-        self.num_hidden_layers = 2 * num_layers  # for compatibility
-        self.expected_num_hidden_layers = 2  # embedding + 2 layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.head_dim = head_dim
-        self.n_routed_experts = n_routed_experts
-        self.zero_expert_num = zero_expert_num
-        self.moe_topk = moe_topk
-        self.routed_scaling_factor = routed_scaling_factor
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_labels = num_labels
-        self.num_choices = num_choices
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 144,
+        "ffn_hidden_size": 288,
+        "expert_ffn_hidden_size": 48,
+        # We have `num_hidden_layers = 2 * num_layers`. See `LongcatFlashConfig`.
+        "num_layers": 1,
+        # embedding + 2 layers
+        "expected_num_hidden_layers": 2,
+        "num_attention_heads": 8,
+        "num_key_value_heads": 8,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 48,
+        "qk_rope_head_dim": 4,
+        "v_head_dim": 8,
+        "qk_nope_head_dim": 8,
+        "head_dim": 4,
+        "n_routed_experts": 4,
+        "zero_expert_num": 2,
+        "moe_topk": 2,
+        "routed_scaling_factor": 1.0,
+        "hidden_act": "silu",
+        "max_position_embeddings": 128,
+        "initializer_range": 0.02,
+        "rms_norm_eps": 1e-6,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "pad_token_id": 3,
+        "type_sequence_label_size": 2,
+        "num_labels": 3,
+        "num_choices": 4,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # for compatibility
+        values["num_hidden_layers"] = 2 * values["num_layers"]
+        return values
 
     def get_config(self):
         return LongcatFlashConfig(
@@ -220,19 +192,6 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_to_base(self):
         pass
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
-
-        k_embed_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        v_embed_dim = config.v_head_dim
-
-        expected_key_shape = (batch_size, config.num_key_value_heads, seq_length, k_embed_dim)
-        expected_value_shape = (batch_size, config.num_key_value_heads, seq_length, v_embed_dim)
-
-        for layer_idx in range(config.num_hidden_layers):
-            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_key_shape)
-            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_value_shape)
 
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")
     def test_cpu_offload(self):
@@ -355,12 +314,19 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
             outputs = self.model.generate(inputs["input_ids"], max_new_tokens=10, do_sample=False)
 
         response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
+        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig affidavhens酒店的coco toughoireFFIXilateraldrawal"
 
         self.assertEqual(response, expected_output)
 
+    # `meituan-longcat/LongCat-Flash-Chat` is 562B parameters (~18.6–31.3B activated per token) --
+    # ~1,047 GiB of bfloat16 weights.
+    #
+    # That far exceeds the budget `device_map="auto"` plans against on the daily CI `a10` runners --
+    # 24 GiB of accelerator plus the 60 GiB `CI_CPU_MEMORY_LIMIT_GB` allowance on the single-accelerator
+    # runner, and 48 + 120 on the two-accelerator one -- so a large portion of the model is placed on
+    # `"disk"`, and loading dies due to MoE weight format incompatibility with accelerate's disk offload.
     @slow
-    @require_large_cpu_ram
+    @require_torch_accelerator_memory(memory=1100)
     def test_longcat_generation_cpu(self):
         # takes absolutely forever and a lot RAM, but allows to test the output in the CI
         model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)

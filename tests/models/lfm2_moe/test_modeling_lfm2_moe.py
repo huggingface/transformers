@@ -41,17 +41,11 @@ class Lfm2MoeModelTester(CausalLMModelTester):
         base_model_class = Lfm2MoeModel
         causal_lm_class = Lfm2MoeForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        num_dense_layers=1,
-        num_hidden_layers=2,
-        layer_types=["full_attention", "conv"],
-    ):
-        super().__init__(parent)
-        self.layer_types = layer_types
-        self.num_dense_layers = num_dense_layers
-        self.num_hidden_layers = num_hidden_layers
+    small_config_overrides = {
+        "num_dense_layers": 1,
+        "num_hidden_layers": 2,
+        "layer_types": ["full_attention", "conv"],
+    }
 
 
 @require_torch
@@ -68,6 +62,7 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Lfm2MoeModelTester
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
@@ -151,7 +146,7 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
         EXPECTED_MEANS = Expectations(
             {
-                ("cuda", None): torch.tensor([[-1.3912, -0.4653, -1.3339, -1.3249, -1.0985, -1.2373, -1.4599, -0.7515, -0.6140, -1.2329, -1.1481, -1.0081, -0.9937, -0.8875, -1.5539, -1.7283, -1.6284]]),
+                ("cuda", None): torch.tensor([[-1.3860, -0.4783, -1.3262, -1.3255, -1.0911, -1.2327, -1.4554, -0.6795, -0.6239, -1.2616, -1.1753, -0.9708, -1.0130, -0.8823, -1.5871, -1.7426, -1.5803]]),
                 ("xpu", None): torch.tensor([[-1.3879, -0.4730, -1.3193, -1.3139, -1.0826, -1.2129, -1.4744, -0.7485, -0.6004, -1.2353, -1.1602, -1.0432, -1.0180, -0.9099, -1.5949, -1.7487, -1.5991]]),
             }
         )
@@ -163,7 +158,7 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
         # Expected portion of the logits
         EXPECTED_SLICES = Expectations(
             {
-                ("cuda", None): torch.tensor([-1.2734, 2.4844, 5.5000, -1.3438, -1.3281, -1.3516, 1.9375, 5.8438, -0.6641, -1.2969]),
+                ("cuda", None): torch.tensor([-1.2656, 2.4375, 5.4375, -1.3438, -1.3203, -1.3438, 1.9219, 5.7812, -0.6719, -1.3203]),
                 ("xpu", None): torch.tensor([-1.2734,  2.4531, 5.4688, -1.3438, -1.3281, -1.3516, 1.9297, 5.7812, -0.6719, -1.3125]),
             }
         )

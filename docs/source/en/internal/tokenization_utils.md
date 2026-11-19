@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Tokenizers
+# Utilities for tokenizers
 
 This page lists all the utility functions used by the tokenizers, mainly the class
 [`~tokenization_utils_base.PreTrainedTokenizerBase`] that implements the common methods between

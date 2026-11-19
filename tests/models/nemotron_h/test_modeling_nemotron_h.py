@@ -34,14 +34,17 @@ from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel, StaticCache
+    from transformers.cache_utils import DummyLayer
 
 
 class NemotronHModelTester:
@@ -156,7 +159,6 @@ class NemotronHModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             ssm_state_size=self.ssm_state_size,
             mamba_num_heads=self.mamba_num_heads,
             mamba_n_groups=self.mamba_n_groups,
@@ -237,7 +239,7 @@ class NemotronHModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -255,7 +257,7 @@ class NemotronHModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -311,14 +313,45 @@ class NemotronHModelTester:
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
         # Test with cache
-        cache_params = DynamicCache(config=config)
-        outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache_params=cache_params)
+        cache = DynamicCache(config=config)
+        outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache=cache)
 
         # Reset cache for fair comparison
-        cache_params_slow = DynamicCache(config=config)
-        outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache_params=cache_params_slow)
+        cache_slow = DynamicCache(config=config)
+        outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache=cache_slow)
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
+
+    def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
+        """
+        Kernel kwargs given to the model must reach the Mamba2 mixer, which splats them into
+        the fused conv1d+scan, the conv and the chunk scan. This is how `seq_idx` reaches the
+        kernels for packed / variable-length batches.
+        """
+        model = NemotronHModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        mixer = next(block.mixer for block in model.layers if block.block_type == "linear_attention")
+        original_forward = mixer.forward
+        seen = []
+
+        def recording_forward(*fwd_args, **fwd_kwargs):
+            seen.append(set(fwd_kwargs))
+            return original_forward(*fwd_args, **fwd_kwargs)
+
+        mixer.forward = recording_forward
+
+        input_ids = input_ids.to(torch_device)
+        seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
+
+        self.parent.assertTrue(seen, "the linear-attention mixer was never called")
+        self.parent.assertIn("seq_idx", seen[0])
 
     def create_and_check_nemotron_h_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         """
@@ -341,14 +374,14 @@ class NemotronHModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -371,7 +404,14 @@ class NemotronHModelTester:
 
 
 @require_torch
-class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronHModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     all_model_classes = (
         (
             NemotronHModel,
@@ -401,9 +441,9 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
-        if not isinstance(past_key_values, (DynamicCache, StaticCache)):
+        if not isinstance(cache, (DynamicCache, StaticCache)):
             raise ValueError("The cache does not use the correct Cache")
 
         # Use the correct config
@@ -423,11 +463,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check each layer has the correct shape
-        for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
+        for layer, layer_type in zip(cache.layers, config.layer_types):
+            # Moe layers use a DummyLayer
             if layer_type == "moe":
-                self.assertEqual(layer.conv_states[0], None)
-                self.assertEqual(layer.recurrent_states[0], None)
+                self.assertTrue(isinstance(layer, DummyLayer))
             # Attention layer cache
             elif layer_type == "full_attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
@@ -482,14 +521,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
-        pass
-
-    @unittest.skip(reason="A large nemotron3 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 
@@ -519,6 +550,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
+    def test_kwargs_reach_mamba2_mixer(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_kwargs_reach_mamba2_mixer(*config_and_inputs)
 
     def test_attention_outputs(self):
         r"""
@@ -807,7 +842,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = f"{tmpdir}/config.json"
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(legacy_config, f)
 
             # Load the config

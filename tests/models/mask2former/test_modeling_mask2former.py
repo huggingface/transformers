@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -234,13 +233,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="Mask2Former does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="Mask2Former has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @slow

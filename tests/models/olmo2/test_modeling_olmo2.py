@@ -203,11 +203,12 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_model_1b_logits_bfloat16(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = Olmo2ForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B").to(torch_device, torch.bfloat16)
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {
-                ("cuda", 8): [[-5.6700, -6.5557, -3.1545, -2.7418, -5.5887, -4.5179, -4.9077, -4.6530]],
+                ("cuda", 8): [[-5.6700, -6.5557, -3.2169, -2.7544, -5.5327, -4.4429, -4.9299, -4.6706]],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -225,7 +226,8 @@ class Olmo2IntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = Olmo2ForCausalLM.from_pretrained("shanearora/OLMo2-7B-1124-hf").to(torch_device, dtype=torch.bfloat16)
-        out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
         # Expected mean on dim = -1
         expectations = Expectations(
             {

@@ -49,14 +49,11 @@ class Lfm2VlModelTester(CausalLMModelTester):
         base_model_class = Lfm2VlModel
         causal_lm_class = Lfm2VlForConditionalGeneration
 
-    def __init__(
-        self,
-        parent,
-        is_training=True,
-        batch_size=2,
-        scale_factor=2,
-        num_images=2,
-        vision_config={
+    small_config_overrides = {
+        "is_training": True,
+        "batch_size": 2,
+        "scale_factor": 2,
+        "vision_config": {
             "hidden_size": 32,
             "intermediate_size": 37,
             "num_hidden_layers": 2,
@@ -68,7 +65,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
             "layer_norm_eps": 1e-6,
             "attention_dropout": 0.0,
         },
-        text_config={
+        "text_config": {
             "vocab_size": 100,
             "hidden_size": 32,
             "intermediate_size": 37,
@@ -86,21 +83,11 @@ class Lfm2VlModelTester(CausalLMModelTester):
             "block_multiple_of": 2,
             "full_attn_idxs": [0],
         },
-        image_token_id=4,
-        downsample_factor=4,
-        projector_hidden_size=32,
-    ):
-        super().__init__(parent)
-        self.vision_config = vision_config
-        self.text_config = text_config
-        self.image_token_id = image_token_id
-        self.is_training = is_training
-        self.batch_size = batch_size
-        self.scale_factor = scale_factor
-        self.num_images = num_images
-        self.downsample_factor = downsample_factor
-        self.projector_hidden_size = projector_hidden_size
-        self.image_seq_length = 4
+        "image_token_id": 4,
+        "downsample_factor": 4,
+        "projector_hidden_size": 32,
+        "image_seq_length": 4,
+    }
 
     def get_config(self):
         return Lfm2VlConfig(
@@ -112,16 +99,16 @@ class Lfm2VlModelTester(CausalLMModelTester):
         )
 
     def prepare_config_and_inputs(self):
-        # Create dummy pixel values: [num_images, num_patches, channels * patch_size^2]
+        # Create dummy pixel values: [batch_size, num_patches, channels * patch_size^2]
         patch_size = self.vision_config["patch_size"]
-        pixel_values = floats_tensor([self.num_images, 64, 3 * patch_size * patch_size])
+        pixel_values = floats_tensor([self.batch_size, 64, 3 * patch_size * patch_size])
 
         # Spatial shapes: one (height_patches, width_patches) per image
         patches = int(math.sqrt(64))
-        spatial_shapes = torch.tensor([[patches, patches]] * self.num_images, dtype=torch.long, device=torch_device)
+        spatial_shapes = torch.tensor([[patches, patches]] * self.batch_size, dtype=torch.long, device=torch_device)
 
         # Pixel attention mask: mark all patches as valid (no padding)
-        pixel_attention_mask = torch.ones((self.num_images, 64), dtype=torch.long, device=torch_device)
+        pixel_attention_mask = torch.ones((self.batch_size, 64), dtype=torch.long, device=torch_device)
         config = self.get_config()
         return config, pixel_values, spatial_shapes, pixel_attention_mask
 
@@ -207,7 +194,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor.tokenizer.padding_side = "left"
         self.image = load_coco_image("000000039769.jpg")
         self.image2 = load_test_image(
-            "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -232,11 +219,11 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", (8, 0)): [
+                ("cuda", 8): [
                     "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
                 ],
-                ("cuda", (8, 6)): [
-                    "In this image, we see two cats sleeping on a pink blanket. They are both very relaxed and comfortable. They are both grey"
+                ("xpu", 5): [
+                    "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
                 ],
             }
         )
@@ -260,9 +247,7 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = (
-            "In this image, we see the Statue of Liberty, standing tall on its pedestal. The statue is made of metal,"
-        )
+        expected_generated_text = "In this image, we see the Statue of Liberty, which is a well-known landmark. However, upon closer inspection, it"
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @require_deterministic_for_xpu
@@ -284,13 +269,17 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", (8, 0)): [
-                    "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-                    "In this image, we see a cat that is lying on its side on a cat bed.",
+                (None, None): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
                 ],
                 ("cuda", (8, 6)): [
-                    "In this image, we see a panoramic view of the New York City skyline. The iconic Statics and the New York",
-                    "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
+                ],
+                ("xpu", 5): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
                 ],
             }
         )
@@ -306,7 +295,7 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor.tokenizer.padding_side = "left"
         self.image = load_coco_image("000000039769.jpg")
         self.image2 = load_test_image(
-            "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
         )
 
     def tearDown(self):
@@ -351,7 +340,13 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands on Liberty Island in"
+        expected_generated_text = Expectations(
+            {
+                (None, None): [
+                    "In this image, we see the Statue of Liberty, a symbol of freedom and democracy. It stands on a small island in"
+                ],
+            }
+        ).get_expectation()[0]
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @require_deterministic_for_xpu
@@ -373,12 +368,8 @@ class Lfm2_5VlForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", 8): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
-                    "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
-                ],
-                ("xpu", 5): [
-                    "In this image, we see the Statue of Liberty, an iconic symbol of freedom and democracy. It stands tall on a small",
+                (None, None): [
+                    "In this image, we see the Statue of Liberty, a symbol of freedom and democracy. It stands on a small island in",
                     "In this image, we see two cats lying on a pink blanket. One cat is a tabby, and the other is a",
                 ],
             }

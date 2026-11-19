@@ -144,7 +144,7 @@ class MptModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layers)
+        self.parent.assertEqual(len(result.cache), config.n_layers)
 
     def create_and_check_mpt_model_past(self, config, input_ids, input_mask, *args):
         model = MptModel(config=config)
@@ -160,7 +160,7 @@ class MptModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past = outputs["past_key_values"]
+        past = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -169,7 +169,7 @@ class MptModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -209,7 +209,7 @@ class MptModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -230,7 +230,7 @@ class MptModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -250,7 +250,7 @@ class MptModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )
         hidden_states_from_past = output_from_past["hidden_states"][0]
@@ -297,7 +297,7 @@ class MptModelTester:
         model = MptForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
@@ -417,6 +417,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     @slow
     def test_model_from_pretrained(self):
         model_name = "mosaicml/mpt-7b"
@@ -428,6 +429,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @require_torch_accelerator
 @require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -454,6 +456,7 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     def test_generation(self):
         model_id = "mosaicml/mpt-7b"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -481,6 +484,7 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     @require_deterministic_for_xpu
     def test_generation_batched(self):
         model_id = "mosaicml/mpt-7b"
@@ -527,6 +531,7 @@ class MptIntegrationTests(unittest.TestCase):
         for i, predicted_output in enumerate(decoded_outputs):
             self.assertEqual(predicted_output, expected_output[i])
 
+    @unittest.skip("The model is gone from the hub see https://github.com/huggingface/transformers/issues/48328")
     @require_deterministic_for_xpu
     def test_model_logits(self):
         model_id = "mosaicml/mpt-7b"

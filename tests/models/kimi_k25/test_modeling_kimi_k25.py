@@ -19,13 +19,9 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
-    DeepseekV3Config,
     Kimi_K25Config,
-    Kimi_K25VisionConfig,
     is_torch_available,
-    is_vision_available,
 )
-from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -37,6 +33,7 @@ from transformers.testing_utils import (
 from ...test_modeling_common import (
     floats_tensor,
 )
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -46,65 +43,61 @@ if is_torch_available():
     from transformers import Kimi_K25ForConditionalGeneration, Kimi_K25Model
 
 
-if is_vision_available():
-    pass
-
-
 class Kimi_K25VisionText2TextModelTester(VLMModelTester):
     base_model_class = Kimi_K25Model
     config_class = Kimi_K25Config
-    text_config_class = DeepseekV3Config
-    vision_config_class = Kimi_K25VisionConfig
+
     conditional_generation_class = Kimi_K25ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 16)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("pos_emb_height", 4)
-        kwargs.setdefault("merge_kernel_size", (1, 1))
-        kwargs.setdefault("pos_emb_width", 4)
-        kwargs.setdefault("pos_emb_time", 1)
-        kwargs.setdefault("kv_lora_rank", 16)
-        kwargs.setdefault("q_lora_rank", 32)
-        kwargs.setdefault("qk_rope_head_dim", 16)
-        kwargs.setdefault("v_head_dim", 32)
-        kwargs.setdefault("qk_nope_head_dim", 32)
-        kwargs.setdefault("attention_probs_dropout_prob", 0.0)
-
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "image_size": 32,
+        "patch_size": 8,
+        "num_image_tokens": 16,
+        "hidden_act": "silu",
+        "head_dim": 8,
+        "num_heads": 4,
+        "pos_emb_height": 4,
+        "merge_kernel_size": (1, 1),
+        "pos_emb_width": 4,
+        "pos_emb_time": 1,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
+        "qk_nope_head_dim": 32,
+        "attention_probs_dropout_prob": 0.0,
         # MoE fields synced with DeepSeekV3Tester
         # `first_k_dense_replace` enables MoEs after `layer=0`
-        kwargs.setdefault("first_k_dense_replace", 1)
-        kwargs.setdefault("n_group", 2)
-        kwargs.setdefault("topk_group", 1)
-        kwargs.setdefault("num_experts_per_tok", 8)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("aux_loss_alpha", 0.001)
-        kwargs.setdefault("routed_scaling_factor", 2.5)
+        "first_k_dense_replace": 1,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 8,
+        "n_shared_experts": 1,
+        "n_routed_experts": 8,
+        "moe_intermediate_size": 16,
+        "aux_loss_alpha": 0.001,
+        "routed_scaling_factor": 2.5,
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000,
+        },
+    }
 
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "rope_type": "default",
-                "rope_theta": 10000,
-            },
-        )
-        super().__init__(parent, **kwargs)
-
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # These can be inferred from existing properties and don't get separate kwargs
-        self.projection_hidden_size = self.hidden_size
+        values["projection_hidden_size"] = values["hidden_size"]
+        return values
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                batch_size * (self.image_size**2) // (self.patch_size**2),
                 self.num_channels,
                 self.patch_size,
                 self.patch_size,
@@ -122,67 +115,16 @@ class Kimi_K25VisionText2TextModelTester(VLMModelTester):
         input_ids[:, : self.num_image_tokens] = self.image_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, pixel_values):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return {
-            "image_grid_thw": torch.tensor([[1, 4, 4]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 4, 4]] * batch_size, device=torch_device),
         }
 
 
 @require_torch
 class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Kimi_K25VisionText2TextModelTester
-
-    # Kimi has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # We don't want a few model inputs in our model input dictionary for generation tests
-        input_keys_to_ignore = [
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            "use_cache",
-            "labels",
-        ]
-
-        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
-        patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-
-        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
@@ -212,10 +154,6 @@ class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Needs to update values in `grid_thw` otherwise it just gets broadcasted")
-    def test_mismatching_num_image_tokens(self):
-        pass
-
 
 @slow
 @require_torch
@@ -236,7 +174,9 @@ class KimiK25IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -248,13 +188,30 @@ class KimiK25IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
             }
         ]
         cls.message3 = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
+
+        cls.message_video = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -389,6 +346,50 @@ class KimiK25IntegrationTest(unittest.TestCase):
 
         inputs = self.processor.apply_chat_template(
             [self.message1, self.message2],
+            tokenize=True,
+            add_generation_prompt=True,
+            padding=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_video(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.0000e+00, -2.6417e-02,  1.7078e-02, -8.2328e-02,  1.2016e-01,
+                    -1.5290e-01, -8.2528e-02,  1.5658e-01, -4.1732e-02,  1.0555e-01],
+                    [ 0.0000e+00, -2.6399e-02,  1.7066e-02, -8.2299e-02,  1.2015e-01,
+                    -1.5290e-01, -8.2511e-02,  1.5659e-01, -4.1722e-02,  1.0556e-01],
+                    [ 0.0000e+00, -2.6396e-02,  1.7089e-02, -8.2330e-02,  1.2016e-01,
+                    -1.5291e-01, -8.2535e-02,  1.5659e-01, -4.1734e-02,  1.0555e-01],
+                    [ 0.0000e+00, -2.6388e-02,  1.7073e-02, -8.2334e-02,  1.2015e-01,
+                    -1.5293e-01, -8.2515e-02,  1.5659e-01, -4.1720e-02,  1.0556e-01],
+                    [ 0.0000e+00, -2.1670e-01,  1.6695e-01, -3.0506e-02,  1.4273e-01,
+                    -7.2325e-02, -2.1406e-01, -6.7767e-02, -4.7789e-02,  6.6907e-02],
+                    [ 0.0000e+00, -1.6136e-02,  4.4733e-02, -7.7766e-02,  1.3756e-01,
+                    -2.0453e-01, -1.0643e-01,  1.8437e-01, -7.5915e-02,  1.0252e-01],
+                    [ 0.0000e+00, -2.1125e-01,  1.7319e-01, -2.3906e-02,  1.4516e-01,
+                    -8.5956e-02, -2.1811e-01, -6.3858e-02, -5.6757e-02,  6.4419e-02],
+                    [ 0.0000e+00, -1.0793e-02,  5.9532e-02, -7.1375e-02,  1.4503e-01,
+                    -2.3454e-01, -1.1700e-01,  1.9887e-01, -9.4966e-02,  1.0046e-01],
+                    [ 0.0000e+00,  1.1804e-02, -9.0175e-02, -9.4707e-02,  1.3777e-01,
+                    -2.0531e-01, -1.1191e-01,  1.2696e-02, -7.1477e-02,  1.5818e-01],
+                    [ 0.0000e+00, -1.5441e-04,  5.1317e-02, -7.6136e-02,  1.2778e-01,
+                    -2.3561e-01, -1.0532e-01,  1.8567e-01, -8.6557e-02,  1.1266e-01]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.0129})
+
+        inputs = self.processor.apply_chat_template(
+            [self.message_video],
             tokenize=True,
             add_generation_prompt=True,
             padding=True,

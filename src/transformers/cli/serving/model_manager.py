@@ -18,19 +18,26 @@ Model loading, caching, and lifecycle management.
 import asyncio
 import gc
 import json
+import os
 import threading
 from collections.abc import Callable
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from huggingface_hub import scan_cache_dir
-from tqdm import tqdm
+from huggingface_hub import CacheNotFound
 
 import transformers
 from transformers import BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .utils import Modality, make_progress_tqdm_class, reset_torch_cache
+from .utils import (
+    Modality,
+    get_gen_models,
+    make_progress_tqdm_class,
+    model_owner,
+    reset_torch_cache,
+    split_model_id,
+    split_revision,
+)
 
 
 if TYPE_CHECKING:
@@ -38,6 +45,9 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+# Metal flash attention, the default for continuous batching on MPS where `kernels` can fetch it.
+METAL_FLASH_ATTN = "kernels-community/metal-flash-sdpa"
 
 
 class TimedModel:
@@ -101,6 +111,7 @@ class ModelManager:
         dtype: Torch dtype override. "auto" derives from model weights.
         trust_remote_code: Whether to trust remote code when loading models.
         attn_implementation: Attention implementation override (e.g. "flash_attention_2").
+        continuous_batching: Whether continuous batching is enabled, to default to a Metal flash kernel on MPS.
         quantization: Quantization method ("bnb-4bit" or "bnb-8bit").
         model_timeout: Seconds before an idle model is unloaded. -1 disables.
         force_model: If set, preload this model at init time.
@@ -112,6 +123,7 @@ class ModelManager:
         dtype: str | None = "auto",
         trust_remote_code: bool = False,
         attn_implementation: str | None = None,
+        continuous_batching: bool = False,
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
@@ -130,7 +142,9 @@ class ModelManager:
         self.device = int(device) if device.isdigit() else device
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
+        self.attn_implementation = self._resolve_attn_implementation(
+            attn_implementation, self.device, continuous_batching
+        )
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -143,7 +157,8 @@ class ModelManager:
 
         # Preload the forced model after all state is initialized
         if force_model is not None:
-            self.load_model_and_processor(self.process_model_name(force_model))
+            repo, gguf_file = split_model_id(force_model)
+            self.load_model_and_processor(self.process_model_name(repo), gguf_file=gguf_file)
 
     @staticmethod
     def _resolve_dtype(dtype: str | None):
@@ -158,12 +173,12 @@ class ModelManager:
             )
         return resolved
 
-    @classmethod
-    def _resolve_attn_implementation(cls, attn_implementation: str | None, device: str | int) -> str | None:
-        r"""
-        Default to a fast kernel for `mps` when available.
-        """
-        if attn_implementation is not None:
+    @staticmethod
+    def _resolve_attn_implementation(
+        attn_implementation: str | None, device: str | int, continuous_batching: bool
+    ) -> str | None:
+        """Default to the Metal flash kernel for continuous batching on `mps`, when `kernels` is installed."""
+        if attn_implementation is not None or not continuous_batching:
             return attn_implementation
 
         import torch
@@ -177,11 +192,10 @@ class ModelManager:
         )
         if is_mps_device and is_kernels_available():
             logger.warning_once(
-                "MPS detected and `kernels` is installed: defaulting attention to "
-                "`kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62. "
+                f"Continuous batching on MPS with `kernels` installed: defaulting attention to `{METAL_FLASH_ATTN}`. "
                 "Pass `--attn-implementation sdpa` to opt out."
             )
-            return "kernels-community/metal-flash-sdpa@223ca3350d7ba32ecf19341ff2cbb8c43fa47d62"
+            return METAL_FLASH_ATTN
         return attn_implementation
 
     def _validate_args(self):
@@ -189,25 +203,33 @@ class ModelManager:
             raise ValueError(
                 f"Unsupported quantization method: '{self.quantization}'. Must be 'bnb-4bit' or 'bnb-8bit'."
             )
+        from ...integrations.hub_kernels import is_kernel
+
         VALID_ATTN_IMPLEMENTATIONS = {"eager", "sdpa", "flash_attention_2", "flash_attention_3", "flex_attention"}
-        is_kernels_community = self.attn_implementation is not None and self.attn_implementation.startswith(
-            "kernels-community/"
-        )
         if (
             self.attn_implementation is not None
-            and not is_kernels_community
+            and not is_kernel(self.attn_implementation)
             and self.attn_implementation not in VALID_ATTN_IMPLEMENTATIONS
         ):
             raise ValueError(
                 f"Unsupported attention implementation: '{self.attn_implementation}'. "
-                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS} or a kernels-community kernel (e.g. 'kernels-community/flash-attn2')."
+                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS} or a hub kernel (e.g. 'kernels-community/flash-attn2')."
             )
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
-        """Canonicalize to `'model_id@revision'` format. Defaults to `@main`."""
-        if "@" in model_id:
+        """Canonical name of a model, the one it is cached under.
+
+        - A Hub repo is named `'model_id@revision'`: `"org/model"` -> `"org/model@main"`, `"org/model@dev"` is kept.
+        - An existing local path is kept as it is: it has no revision, and an `@` in it is part of the path.
+        """
+        if os.path.exists(model_id):
+            # A local path has no revision, and an `@` in it is part of the path.
             return model_id
+        if "@" in model_id:
+            # A Hub repo that already names its revision, e.g. `"org/model@dev"`.
+            return model_id
+        # A Hub repo with no revision: default to `main`.
         return f"{model_id}@main"
 
     def get_quantization_config(self) -> BitsAndBytesConfig | None:
@@ -222,19 +244,30 @@ class ModelManager:
             return BitsAndBytesConfig(load_in_8bit=True)
         return None
 
-    def _load_processor(self, model_id_and_revision: str) -> "ProcessorMixin | PreTrainedTokenizerFast":
+    def _load_processor(
+        self, model_id_and_revision: str, gguf_file: str | None = None
+    ) -> "ProcessorMixin | PreTrainedTokenizerFast":
         """Load a processor for the given model.
 
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
         """
-        from transformers import AutoProcessor
+        from transformers import AutoProcessor, AutoTokenizer
 
-        model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = split_revision(model_id_and_revision)
+        if gguf_file is not None:
+            # A GGUF repo ships no tokenizer files: the vocabulary is read out of the file's metadata.
+            return AutoTokenizer.from_pretrained(
+                model_id, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
+            )
         return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
-        self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None
+        self,
+        model_id_and_revision: str,
+        tqdm_class: type | None = None,
+        progress_callback: Callable | None = None,
+        gguf_file: str | None = None,
     ) -> "PreTrainedModel":
         """Load a model.
 
@@ -248,7 +281,7 @@ class ModelManager:
         """
         from transformers import AutoConfig
 
-        model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = split_revision(model_id_and_revision)
 
         model_kwargs = {
             "revision": revision,
@@ -262,11 +295,21 @@ class ModelManager:
         if quantization_config is not None:
             model_kwargs["quantization_config"] = quantization_config
 
+        if gguf_file is not None:
+            model_kwargs["gguf_file"] = gguf_file
+
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
+        from transformers import AutoModelForDecision
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        # A decision model, or a checkpoint shipping a decision head next to its weights: loaded like the pipeline does
+        try:
+            return AutoModelForDecision.from_pretrained(model_id, **model_kwargs)
+        except ValueError:  # not a decision model, nor a checkpoint with a decision head: as the pipeline does
+            pass
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM
@@ -281,6 +324,7 @@ class ModelManager:
         model_id_and_revision: str,
         progress_callback: Callable | None = None,
         tqdm_class: type | None = None,
+        gguf_file: str | None = None,
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
         """Load a model (or return it from cache), resetting its inactivity timer.
 
@@ -290,36 +334,42 @@ class ModelManager:
                 ``{"status": "loading", "model": ..., "stage": ...}`` during loading.
             tqdm_class: Optional tqdm subclass for progress bars during ``from_pretrained``.
         """
+        # Cached under the weights, not the repository: two quantizations of one repo are two models.
+        key = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
+
         # Per-model lock prevents duplicate loads when concurrent requests arrive
         with self._model_locks_guard:
-            lock = self._model_locks.setdefault(model_id_and_revision, threading.Lock())
+            lock = self._model_locks.setdefault(key, threading.Lock())
 
         with lock:
-            if model_id_and_revision not in self.loaded_models:
-                logger.warning(f"Loading {model_id_and_revision}")
+            if key not in self.loaded_models:
+                logger.warning(f"Loading {key}")
                 if progress_callback is not None:
-                    progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "processor"})
-                processor = self._load_processor(model_id_and_revision)
+                    progress_callback({"status": "loading", "model": key, "stage": "processor"})
+                processor = self._load_processor(model_id_and_revision, gguf_file=gguf_file)
                 model = self._load_model(
-                    model_id_and_revision, tqdm_class=tqdm_class, progress_callback=progress_callback
+                    model_id_and_revision,
+                    tqdm_class=tqdm_class,
+                    progress_callback=progress_callback,
+                    gguf_file=gguf_file,
                 )
-                self.loaded_models[model_id_and_revision] = TimedModel(
+                self.loaded_models[key] = TimedModel(
                     model,
                     timeout_seconds=self.model_timeout,
                     processor=processor,
-                    on_unload=lambda key=model_id_and_revision: self.loaded_models.pop(key, None),
+                    on_unload=lambda cached=key: self.loaded_models.pop(cached, None),
                 )
                 if progress_callback is not None:
-                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
+                    progress_callback({"status": "ready", "model": key, "cached": False})
             else:
-                self.loaded_models[model_id_and_revision].reset_timer()
-                model = self.loaded_models[model_id_and_revision].model
-                processor = self.loaded_models[model_id_and_revision].processor
+                self.loaded_models[key].reset_timer()
+                model = self.loaded_models[key].model
+                processor = self.loaded_models[key].processor
                 if progress_callback is not None:
-                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
+                    progress_callback({"status": "ready", "model": key, "cached": True})
         return model, processor
 
-    async def load_model_streaming(self, model_id_and_revision: str):
+    async def load_model_streaming(self, model_id_and_revision: str, gguf_file: str | None = None):
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
@@ -329,11 +379,12 @@ class ModelManager:
 
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
+            gguf_file (`str`, *optional*): GGUF file to load from the repository.
 
         Yields:
             `str`: SSE ``data: ...`` lines with progress updates.
         """
-        mid = model_id_and_revision
+        mid = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already cached
@@ -379,9 +430,10 @@ class ModelManager:
                 try:
                     await asyncio.to_thread(
                         self.load_model_and_processor,
-                        mid,
+                        model_id_and_revision,
                         progress_callback=enqueue,
                         tqdm_class=tqdm_class,
+                        gguf_file=gguf_file,
                     )
                 finally:
                     logging.set_tqdm_hook(previous_hook)
@@ -443,55 +495,58 @@ class ModelManager:
         else:
             raise ValueError(f"Unknown modality for: {model_classname}")
 
-    @staticmethod
-    @lru_cache
-    def get_gen_models(cache_dir: str | None = None) -> list[dict]:
-        """List generative models (LLMs and VLMs) available in the HuggingFace cache.
+    def list_models(self, cache_dir: str | None = None) -> list[dict]:
+        """List the models to show in `/v1/models`: the generative models of the HuggingFace cache, then the
+        loaded models that are not in it, such as a model loaded from a local path. A server pinned to one
+        model (`force_model`) lists that model alone.
 
         Args:
             cache_dir (`str`, *optional*): Path to the HuggingFace cache directory.
                 Defaults to the standard cache location.
 
         Returns:
-            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc.
+            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc., and a ``status``
+            telling whether the model is loaded.
         """
-        from transformers.models.auto.modeling_auto import (
-            MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
-            MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
-            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
-        )
+        if self.force_model is not None:
+            # A pinned server only answers for its model, under the name it was given: list it alone.
+            repo, gguf_file = split_model_id(self.force_model)
+            name = self.process_model_name(repo)
+            is_loaded = (name if gguf_file is None else f"{name}:{gguf_file}") in self.loaded_models
+            return [
+                {
+                    "owned_by": model_owner(repo),
+                    "id": self.force_model,
+                    "object": "model",
+                    "created": 0,
+                    "status": {"value": "loaded" if is_loaded else "unloaded"},
+                }
+            ]
 
-        generative_models = []
-        logger.warning("Scanning the cache directory for LLMs and VLMs.")
+        try:
+            models = list(get_gen_models(cache_dir))
+        except CacheNotFound:
+            # Nothing was downloaded yet, as in a fresh container.
+            models = []
 
-        for repo in tqdm(scan_cache_dir(cache_dir).repos):
-            if repo.repo_type != "model":
-                continue
+        loaded_models = {}
+        for name in list(self.loaded_models):
+            name, gguf_file = split_model_id(name)
+            model_id, revision = split_revision(name)
+            owned_by = model_owner(model_id)
+            # Named as the cache names them: `main` is left out, a GGUF file comes after a colon.
+            if revision not in (None, "main"):
+                model_id = f"{model_id}@{revision}"
+            if gguf_file is not None:
+                model_id = f"{model_id}:{gguf_file}"
+            # `created` is the date of a checkpoint, which is only known for the ones of the cache.
+            loaded_models[model_id] = {"owned_by": owned_by, "id": model_id, "object": "model", "created": 0}
 
-            for ref, revision_info in repo.refs.items():
-                config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
-                if not config_path:
-                    continue
+        listed = {model["id"] for model in models}
+        models += [model for model_id, model in loaded_models.items() if model_id not in listed]
 
-                config = json.loads(config_path.open().read())
-                if not (isinstance(config, dict) and "architectures" in config):
-                    continue
-
-                architectures = config["architectures"]
-                llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
-                vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
-                multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
-
-                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
-                    author = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
-                    repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
-                    generative_models.append(
-                        {
-                            "owned_by": author,
-                            "id": repo_handle,
-                            "object": "model",
-                            "created": repo.last_modified,
-                        }
-                    )
-
-        return generative_models
+        # `status` is not an OpenAI field: it tells which of the listed models are in memory.
+        for index, model in enumerate(models):
+            status = "loaded" if model["id"] in loaded_models else "unloaded"
+            models[index] = {**model, "status": {"value": status}}
+        return models

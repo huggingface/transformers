@@ -601,7 +601,6 @@ class YosoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "yoso"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -614,7 +613,7 @@ class YosoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class YosoModel(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.config = config
 
@@ -706,7 +705,7 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         "cls.predictions.decoder.weight": "yoso.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
@@ -736,12 +735,6 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.yoso(
@@ -803,7 +796,7 @@ class YosoClassificationHead(nn.Module):
     """
 )
 class YosoForSequenceClassification(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.yoso = YosoModel(config)
@@ -826,12 +819,6 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.yoso(
@@ -884,7 +871,7 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
 
 @auto_docstring
 class YosoForMultipleChoice(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
@@ -929,14 +916,10 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -989,7 +972,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
 
 @auto_docstring
 class YosoForTokenClassification(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1014,10 +997,6 @@ class YosoForTokenClassification(YosoPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.yoso(
@@ -1064,7 +1043,7 @@ class YosoForTokenClassification(YosoPreTrainedModel):
 
 @auto_docstring
 class YosoForQuestionAnswering(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         config.num_labels = 2

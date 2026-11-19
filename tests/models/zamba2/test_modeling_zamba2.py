@@ -147,7 +147,6 @@ class Zamba2ModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             layers_block_type=self.layers_block_type,
             num_mem_blocks=self.num_mem_blocks,
             use_mem_rope=self.use_mem_rope,
@@ -221,7 +220,7 @@ class Zamba2ModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -239,7 +238,7 @@ class Zamba2ModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -283,14 +282,14 @@ class Zamba2ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -379,10 +378,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @unittest.skip(reason="Zamba2 has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_config(self):
@@ -661,3 +656,33 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             rtol=1e-3,
             atol=6e-3 if device == "cpu" else 1e-3,
         )
+
+    @slow
+    def test_num_mem_blocks_2_official_checkpoint(self):
+        # Regression test for #47994: every published `num_mem_blocks=2` checkpoint (Zamba2-2.7B and
+        # Zamba2-7B) raised at construction, before any weight was read, because `block_id` followed
+        # the global layer index while the weight-tie cycle follows hybrid-layer order. This checkpoint
+        # is the one to test because its hybrid layers `[6, 12, 18, 24, 30, 36, 42, 47, 51]` are not
+        # all congruent modulo `num_mem_blocks`; an evenly spaced layout constructs fine without the fix.
+        model_id = "Zyphra/Zamba2-2.7B-instruct"
+        model, loading_info = Zamba2ForCausalLM.from_pretrained(
+            model_id, dtype=torch.bfloat16, output_loading_info=True
+        )
+        self.assertSetEqual(set(loading_info["missing_keys"]), set())
+        self.assertSetEqual(set(loading_info["unexpected_keys"]), set())
+        model.to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        messages = [{"role": "user", "content": "Hey how are you doing on this lovely evening?"}]
+        inputs = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(torch_device)
+        out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        output_sentence = tokenizer.decode(out[0, :])
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                (None, None): "<|im_start|> user\nHey how are you doing on this lovely evening?<|im_end|> \n<|im_start|> assistant\nHello! I'm just a computer program, so I don't have feelings or experiences,",
+            }
+        )  # fmt: skip
+        self.assertEqual(output_sentence, EXPECTED_TEXTS.get_expectation())

@@ -36,7 +36,6 @@ class Pop2PianoConfig(PreTrainedConfig):
     """
 
     model_type = "pop2piano"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_hidden_layers": "num_layers", "hidden_size": "d_model", "num_attention_heads": "num_heads"}
 
     vocab_size: int = 2400
@@ -64,6 +63,12 @@ class Pop2PianoConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.num_decoder_layers = self.num_decoder_layers if self.num_decoder_layers is not None else self.num_layers
         self.is_gated_act = self.feed_forward_proj.split("-")[0] == "gated"
+
+        # Same quirk as T5: `tie_word_embeddings=False` indicates no decoder output scaling, but the checkpoint
+        # only stores `shared.weight` so weights are always tied.
+        self.scale_decoder_outputs = self.tie_word_embeddings
+        self.tie_word_embeddings = True
+
         super().__post_init__(**kwargs)
 
 

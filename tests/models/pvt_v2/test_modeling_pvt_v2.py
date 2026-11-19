@@ -288,14 +288,14 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
             outputs = model(pixel_values)
 
         # verify the logits
-        expected_shape = torch.Size((1, 50, 512))
+        expected_shape = torch.Size((1, 256, 7, 7))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
+            [[0.0841, -0.4613, 0.7303], [2.0947, -1.1510, -1.5494], [1.2120, -2.2824, 0.8753]]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_accelerate

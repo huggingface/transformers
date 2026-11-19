@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# torch.compile
+# torch.compile for training
 
 [torch.compile](https://docs.pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) compiles PyTorch code to fused kernels to make it run faster. For training, it traces both the forward and backward pass together and compiles them into optimized kernels, reducing the overhead of individual op launches and fusing operations to cut memory bandwidth usage.
 
@@ -34,7 +34,7 @@ args = TrainingArguments(
 
 When no backend is specified, [`TrainingArguments`] selects one based on your hardware. On most CPUs and GPUs, the default is `inductor`, which compiles to Triton kernels with AOTAutograd and suits most training workloads. On Intel Gaudi (HPU), the default is `hpu_backend`. On AWS Trainium and Inferentia (Neuron), the default is `neuron`.
 
-Use `cudagraphs` for fixed-shape inputs, or `ipex` for Intel CPU training.
+Use `cudagraphs` for fixed-shape inputs.
 
 ## Compile mode
 

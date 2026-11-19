@@ -19,8 +19,10 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import (
     GraniteAttention,
@@ -122,12 +124,13 @@ class HyperCLOVAXDecoderLayer(GraniteDecoderLayer):
             HyperCLOVAXRMSNorm(config.hidden_size, eps=config.rms_norm_eps) if config.use_post_norm else nn.Identity()
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -139,7 +142,7 @@ class HyperCLOVAXDecoderLayer(GraniteDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -170,13 +173,14 @@ class HyperCLOVAXModel(GraniteModel):
 class HyperCLOVAXForCausalLM(GraniteForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -203,16 +207,16 @@ class HyperCLOVAXForCausalLM(GraniteForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         # MuP: multiply logits by logits_scaling (cf. GraniteForCausalLM which divides)
-        logits = self.lm_head(hidden_states[:, slice_indices, :]) * self.config.logits_scaling
+        logits = self.lm_head(hidden_states) * self.config.logits_scaling
 
         loss = None
         if labels is not None:
@@ -221,7 +225,7 @@ class HyperCLOVAXForCausalLM(GraniteForCausalLM):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

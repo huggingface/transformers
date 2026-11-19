@@ -38,19 +38,18 @@ class LagunaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = LagunaModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.vocab_size = 64
-        self.head_dim = 8
-        self.sliding_window = 32
-        self.shared_expert_intermediate_size = 16
-        self.mlp_layer_types = ["dense", "sparse"]
-        self.layer_types = ["full_attention", "sliding_attention"]
+    small_config_overrides = {
+        "vocab_size": 64,
+        "head_dim": 8,
+        "sliding_window": 32,
+        "shared_expert_intermediate_size": 16,
+        "mlp_layer_types": ["dense", "sparse"],
+        "layer_types": ["full_attention", "sliding_attention"],
+    }
 
 
 @require_torch
 class LagunaModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = LagunaModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
@@ -103,11 +102,13 @@ class LagunaIntegrationTest(unittest.TestCase):
         expected_left = Expectations(
             {
                 ("cuda", 8): [[0.0033, 0.0581, -0.1718], [-0.0559, -0.1834, 0.0085], [-0.0235, -0.0824, -0.0569]],
+                ("xpu", 5): [[0.0033, 0.0581, -0.1718], [-0.0559, -0.1834, 0.0085], [-0.0235, -0.0824, -0.0569]],
             }
         )  # fmt: skip
         expected_right = Expectations(
             {
                 ("cuda", 8): [[0.0132, -0.0518, -0.1204], [-0.0231, -0.0547, 0.0684], [-0.1406, -0.2664, -0.1904]],
+                ("xpu", 5): [[0.0132, -0.0518, -0.1204], [-0.0231, -0.0547, 0.0684], [-0.1406, -0.2664, -0.1904]],
             }
         )  # fmt: skip
         expected_left = torch.tensor(expected_left.get_expectation(), device=torch_device)
@@ -115,6 +116,5 @@ class LagunaIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             logits = model(dummy_input, attention_mask=attention_mask).logits.float()
-
         torch.testing.assert_close(logits[0, -3:, -3:], expected_left, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, -3:, -3:], expected_right, atol=1e-3, rtol=1e-3)

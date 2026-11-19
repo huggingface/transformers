@@ -15,6 +15,7 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -25,15 +26,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class InklingProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 @auto_docstring
 @requires(backends=("torch",))
 class InklingProcessor(ProcessorMixin):
-    valid_processor_kwargs = InklingProcessorKwargs
-
     def __init__(
         self,
         feature_extractor=None,
@@ -78,13 +73,16 @@ class InklingProcessor(ProcessorMixin):
         self.num_dmel_bins = num_dmel_bins
         self.dmel_min_value = dmel_min_value
         self.dmel_max_value = dmel_max_value
-        self.bin_centers = torch.linspace(dmel_min_value, dmel_max_value, num_dmel_bins, dtype=torch.float64)
+        # float64 then cast to float32: reproduces the float64 bins exactly
+        self.bin_centers = torch.linspace(dmel_min_value, dmel_max_value, num_dmel_bins, dtype=torch.float64).to(
+            torch.float32
+        )
 
         super().__init__(feature_extractor, image_processor, tokenizer, chat_template=chat_template)
 
     def _extract_dmel_bins(self, input_features: "torch.Tensor") -> "torch.Tensor":
         bin_centers = self.bin_centers.to(input_features.device)
-        mel = input_features.to(torch.float64).clamp(min=self.dmel_min_value, max=self.dmel_max_value)
+        mel = input_features.clamp(min=self.dmel_min_value, max=self.dmel_max_value)
         return (mel.unsqueeze(-1) - bin_centers).abs().argmin(dim=-1).to(torch.int32)
 
     def _process_audio(self, audio, **kwargs):
@@ -124,5 +122,7 @@ class InklingProcessor(ProcessorMixin):
         ]
         return [name for name in dict.fromkeys(names) if name not in self.unused_input_names]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"InklingProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["InklingProcessor"]

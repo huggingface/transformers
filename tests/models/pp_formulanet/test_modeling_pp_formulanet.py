@@ -25,8 +25,6 @@ from transformers import (
     PPFormulaNetConfig,
     PPFormulaNetForConditionalGeneration,
     PPFormulaNetModel,
-    PPFormulaNetTextConfig,
-    PPFormulaNetVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -50,50 +48,48 @@ if is_torch_available():
 class PPFormulaNetModelTester(VLMModelTester):
     base_model_class = PPFormulaNetModel
     config_class = PPFormulaNetConfig
-    text_config_class = PPFormulaNetTextConfig
-    vision_config_class = PPFormulaNetVisionConfig
+
     conditional_generation_class = PPFormulaNetForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("hidden_size", 48)
-        kwargs.setdefault("image_size", 768)
-        kwargs.setdefault("patch_size", 768)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("num_hidden_layers", 1)
-        kwargs.setdefault("is_training", False)
-        kwargs.setdefault(
-            "vision_config",
-            {
-                "image_size": 768,
-                "patch_size": 16,
-                "hidden_size": 48,
-                "windows_size": 14,
-                "num_hidden_layers": 1,
-                "output_channels": 16,
-                "num_attention_heads": 2,
-                "global_attn_indexes": [1, 1, 1, 1],
-                "mlp_dim": 1,
-                "post_conv_in_channels": 16,
-                "post_conv_mid_channels": 16,
-                "post_conv_out_channels": 16,
-                "decoder_hidden_size": 48,
-            },
-        )
-        kwargs.setdefault(
-            "text_config",
-            {
-                "decoder_ffn_dim": 16,
-                "decoder_layers": 1,
-                "d_model": 48,
-                "vocab_size": 99,
-            },
-        )
-        super().__init__(parent, **kwargs)
-        self.seq_length = self.image_size // self.patch_size
-        self.encoder_seq_length = self.vision_config["windows_size"] ** 2
-        self.decoder_seq_length = 1
+    small_config_overrides = {
+        "batch_size": 2,
+        "hidden_size": 48,
+        "image_size": 768,
+        "patch_size": 768,
+        "num_attention_heads": 2,
+        "num_channels": 3,
+        "num_hidden_layers": 1,
+        "is_training": False,
+        "vision_config": {
+            "image_size": 768,
+            "patch_size": 16,
+            "hidden_size": 48,
+            "windows_size": 14,
+            "num_hidden_layers": 1,
+            "output_channels": 16,
+            "num_attention_heads": 2,
+            "global_attn_indexes": [1, 1, 1, 1],
+            "mlp_dim": 1,
+            "post_conv_in_channels": 16,
+            "post_conv_mid_channels": 16,
+            "post_conv_out_channels": 16,
+            "decoder_hidden_size": 48,
+        },
+        "text_config": {
+            "decoder_ffn_dim": 16,
+            "decoder_layers": 1,
+            "d_model": 48,
+            "vocab_size": 99,
+        },
+        "decoder_seq_length": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["image_size"] // values["patch_size"]
+        values["encoder_seq_length"] = values["vision_config"]["windows_size"] ** 2
+        return values
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -274,10 +270,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_mismatching_num_image_tokens(self):
         pass
 
-    @unittest.skip(reason="PPFormulaNet does not support data parallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     @unittest.skip(reason="PPFormulaNet does not support assisted decoding.")
@@ -289,10 +281,8 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(
-        reason="PPFormulaNet does not support continuing generation from past_key_values across generate calls."
-    )
-    def test_generate_continue_from_past_key_values(self):
+    @unittest.skip(reason="PPFormulaNet does not support continuing generation from cache across generate calls.")
+    def test_generate_continue_from_cache(self):
         pass
 
 
@@ -305,7 +295,7 @@ class PPFormulaNetModelIntegrationTest(unittest.TestCase):
         self.model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path).to(torch_device)
         self.processor = AutoProcessor.from_pretrained(model_path)
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         )
         self.image = load_image(img_url)
 
@@ -317,7 +307,7 @@ class PPFormulaNetModelIntegrationTest(unittest.TestCase):
 
         formula_text = self.processor.post_process(outputs)
         expected_formula_text = [
-            "\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,"
+            "\\mathsf{N e t a\\_0(N u)}=-\\mathsf{M r a c}{\\{\\mathsf{N u}\\backslash\\mathsf{r h o}^{\\wedge}\\{-2\\mathsf{N u}\\}\\}}{\\{\\mathsf{N p i}\\}\\mathsf{N i n t\\_N u}}\\land\\mathsf{N i n f t y}\\mathsf{d}\\mathsf{N o m e g a}\\mathsf{N i n t\\_()}"
         ]
 
         self.assertEqual(formula_text, expected_formula_text)

@@ -31,6 +31,8 @@ You can find all the official Qwen2 checkpoints under the [Qwen2](https://huggin
 
 > [!TIP]
 > Click on the Qwen2 models in the right sidebar for more examples of how to apply Qwen2 to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line using the instruction-tuned models.
 
@@ -149,10 +151,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] Qwen2Tokenizer
     - save_vocabulary
-
-## Qwen2TokenizerFast
-
-[[autodoc]] Qwen2TokenizerFast
 
 ## Qwen2RMSNorm
 

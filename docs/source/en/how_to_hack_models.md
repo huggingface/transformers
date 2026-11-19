@@ -57,7 +57,7 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
         self._register_load_state_dict_pre_hook(self.split_q_k_v_load_hook)
 ```
 
-2. The `_split_qkv_load_hook` function splits the pretrained `qkv` weights into separate `q`, `k`, and `v` weights when loading the model to ensure compatibility with any pretrained model.
+2. The `split_q_k_v_load_hook` function splits the pretrained `qkv` weights into separate `q`, `k`, and `v` weights when loading the model to ensure compatibility with any pretrained model.
 
 ```py
     def split_q_k_v_load_hook(self, state_dict, prefix, *args):
@@ -105,18 +105,17 @@ class SamVisionAttentionSplit(SamVisionAttention, nn.Module):
 
 Assign the custom `SamVisionAttentionSplit` class to the original models `SamVisionAttention` module to replace it. All instances of `SamVisionAttention` in the model are replaced with the split attention version.
 
-Load the model with [`~PreTrainedModel.from_pretrained`].
+Swap the class *before* calling [`~PreTrainedModel.from_pretrained`]. The load hook only runs while the checkpoint is loading, so replacing the modules on an already loaded model leaves the new `q`, `k`, and `v` layers randomly initialized.
 
 ```py
 from transformers import SamModel
+from transformers.models.sam import modeling_sam
 
-# load the pretrained SAM model
-model = SamModel.from_pretrained("facebook/sam-vit-base")
+# replace the attention class the vision layers instantiate
+modeling_sam.SAM_VISION_ATTENTION_CLASSES["eager"] = SamVisionAttentionSplit
 
-# replace the attention class in the vision_encoder module
-for layer in model.vision_encoder.layers:
-    if hasattr(layer, "attn"):
-        layer.attn = SamVisionAttentionSplit(model.config.vision_config, model.config.vision_config.window_size)
+# load the pretrained SAM model, the hook splits the qkv weights during loading
+model = SamModel.from_pretrained("facebook/sam-vit-base", attn_implementation="eager")
 ```
 
 ## LoRA

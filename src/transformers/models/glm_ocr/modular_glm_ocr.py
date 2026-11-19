@@ -28,7 +28,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4VisionMlp,
     Glm4vModel,
-    Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vRMSNorm,
     Glm4vTextAttention,
@@ -142,10 +141,6 @@ class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 
-class GlmOcrModelOutputWithPast(Glm4vModelOutputWithPast):
-    pass
-
-
 class GlmOcrVisionAttention(Glm4vVisionAttention):
     def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__()
@@ -237,7 +232,7 @@ class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
 
 
 class GlmOcrVisionModel(Glm4vVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         del self.embeddings
         del self.post_conv_layernorm
@@ -266,9 +261,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
-        rotary_emb = self.rotary_pos_emb(position_ids)
-        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
         for blk in self.blocks:
             hidden_states = blk(

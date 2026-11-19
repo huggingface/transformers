@@ -103,8 +103,8 @@ class HerbertTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.post_processor = processors.BertProcessing(
-            sep=(self.sep_token, 2),
-            cls=(self.cls_token, 0),
+            (self.sep_token, 2),
+            (self.cls_token, 0),
         )
 
 

@@ -32,6 +32,7 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import PaddingStrategy, TensorType, add_end_docstrings, logging
+from .utils.chat_template_utils import encode_marked_chat
 
 
 logger = logging.get_logger(__name__)
@@ -116,6 +117,10 @@ class Trie:
         ["[CLS]", " This is a ", "extra_id_100"]
         ```
         """
+        # No added token can match if none of their first characters appear in the text.
+        if not any(first_char in text for first_char in self.data):
+            return [text] if text else []
+
         # indexes are counted left of the chars index.
         # "hello", index 0, is left of h, index 1 is between h and e.
         # index 5 is right of the "o".
@@ -736,8 +741,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             batch_outputs = {}
             for current_text, current_pair in zip(text, pairs):
                 # Handle tuples/lists as sequence pairs like ("text1", "text2")
-                # For is_split_into_words=True: only unpack if it's a tuple of exactly 2 sequences (pair)
-                # Otherwise, treat the list as a single pretokenized sequence
+                # For is_split_into_words=True, only tuples are treated as pairs; lists are single pretokenized sequences
                 if (
                     isinstance(current_text, (list, tuple))
                     and current_text
@@ -747,6 +751,7 @@ class PythonBackend(PreTrainedTokenizerBase):
                     # Check if this looks like a pair: tuple/list of length 2 where elements are strings or lists/tuples
                     is_pair = (
                         len(current_text) == 2
+                        and (not is_split_into_words or isinstance(current_text, tuple))
                         and (isinstance(current_text[0], str) or isinstance(current_text[0], (list, tuple)))
                         and (isinstance(current_text[1], str) or isinstance(current_text[1], (list, tuple)))
                     )
@@ -800,6 +805,8 @@ class PythonBackend(PreTrainedTokenizerBase):
 
         # Single sequence handling
         def get_input_ids(text):
+            if isinstance(text, str) and kwargs.get("sanitize_control_tokens"):  # marked by `mark_control_tokens`
+                return encode_marked_chat(self, text)
             if isinstance(text, str):
                 # Normal case: tokenize string
                 return self.convert_tokens_to_ids(self.tokenize(text, **kwargs))

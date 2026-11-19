@@ -36,7 +36,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate jiwer soundfile librosa torchcodec
+pip install transformers datasets evaluate jiwer soundfile torchcodec
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -188,7 +188,7 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...         return batch
 ```
 
-Now instantiate your `DataCollatorForCTCWithPadding`:
+Now instantiate your `DataCollatorCTCWithPadding`:
 
 ```py
 >>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding="longest")
@@ -230,7 +230,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 

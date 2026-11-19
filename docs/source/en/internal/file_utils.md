@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# General Utilities
+# General utilities
 
 This page lists all of Transformers general utility functions that are found in the file `utils.py`.
 

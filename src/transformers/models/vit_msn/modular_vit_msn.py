@@ -68,7 +68,6 @@ class ViTMSNLayer(ViTLayer):
 class ViTMSNPreTrainedModel(ViTPreTrainedModel):
     base_model_prefix = "vit"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, ViTMSNEmbeddings):
@@ -109,7 +108,7 @@ class ViTMSNModel(ViTModel):
         >>> from transformers import AutoImageProcessor, ViTMSNModel
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -172,7 +171,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMSNForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(2)  # doctest: +IGNORE_RESULT

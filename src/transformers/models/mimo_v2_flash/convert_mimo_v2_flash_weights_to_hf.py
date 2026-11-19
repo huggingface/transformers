@@ -49,6 +49,9 @@ def convert_config(original_config: dict):
     }
     new_config_kwargs = {k: v for k, v in original_config.items() if k not in keys_to_drop}
 
+    if original_config.get("sliding_window_size") is not None:
+        new_config_kwargs["sliding_window"] = original_config["sliding_window_size"] + 1
+
     if "layernorm_epsilon" in new_config_kwargs:
         new_config_kwargs["rms_norm_eps"] = new_config_kwargs.pop("layernorm_epsilon")
 
@@ -91,7 +94,7 @@ def convert_config(original_config: dict):
 
 def convert_mimo_v2_flash_model(input_dir, output_dir):
     # Load and convert config
-    with open(os.path.join(input_dir, "config.json")) as f:
+    with open(os.path.join(input_dir, "config.json"), encoding="utf-8") as f:
         original_config = json.load(f)
     config = convert_config(original_config)
     config.save_pretrained(output_dir)

@@ -84,6 +84,7 @@ class OpenAIPrivacyFilterConfig(GptOssConfig):
     eos_token_id: int | list[int] | None = 199999
     layer_types = AttributeError()  # SWA only
     hidden_act = AttributeError()  # Not used as it's expert MLPs only
+    base_model_tp_plan = AttributeError()  # No head to tie the embedding to
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -328,15 +329,14 @@ class OpenAIPrivacyFilterEncoderLayer(GptOssDecoderLayer):
 class OpenAIPrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     config: OpenAIPrivacyFilterConfig
     _no_split_modules = ["OpenAIPrivacyFilterEncoderLayer"]
-    _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
     _keep_in_fp32_modules_strict = ["sinks"]
-    # metal-flash-sdpa carries the sliding-window + attention-sink path on MPS (Apple Silicon);
-    # the others remain the defaults on CUDA.
+    # metal-flash-sdpa covers MPS and aiter-flash-attn ROCm, the others CUDA
     _compatible_flash_implementations = [
         "kernels-community/vllm-flash-attn3",
         "flash_attention_4",
         "kernels-community/metal-flash-sdpa",
+        "kernels-community/aiter-flash-attn",
     ]
 
     _can_record_outputs = {
@@ -365,7 +365,7 @@ class OpenAIPrivacyFilterModel(GptOssModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):

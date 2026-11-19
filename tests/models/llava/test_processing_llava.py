@@ -26,10 +26,6 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "llava-hf/llava-1.5-7b-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-llava"
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     @staticmethod
     def prepare_processor_dict():
         return {
@@ -78,7 +74,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = LlavaProcessor.from_pretrained("hf-internal-testing/tiny-processor-llava")
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
 
         _ = processor(
             text=input_str,

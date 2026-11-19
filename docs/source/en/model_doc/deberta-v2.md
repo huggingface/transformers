@@ -117,10 +117,6 @@ print(f"Predicted label: {predicted_label}")
     - get_special_tokens_mask
     - save_vocabulary
 
-## DebertaV2TokenizerFast
-
-[[autodoc]] DebertaV2TokenizerFast
-
 ## DebertaV2Model
 
 [[autodoc]] DebertaV2Model

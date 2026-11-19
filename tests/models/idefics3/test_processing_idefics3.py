@@ -29,13 +29,15 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
     # Tiny processor created with make_tiny_processor.py from "HuggingFaceM4/Idefics3-8B-Llama3"
     tiny_model_id = "hf-internal-testing/tiny-processor-idefics3"
+    model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
     # Default 76 is too small: idefics3 with the tiny tokenizer expands <image> to ~78 tokens, then with
     # surrounding text tokens we exceed 76, truncation cuts through image tokens, and _check_special_mm_tokens
     # raises a mismatch error.
-    image_unstructured_max_length = 100
+    images_unstructured_max_length = 100
 
-    def get_processor(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
+    def get_processor(self, use_tiny_ckpt: bool = True):
+        load_dir = self.model_id if not use_tiny_ckpt else self.tmpdirname
+        processor = self.processor_class.from_pretrained(load_dir)
         processor.tokenizer.add_bos_token = True
         processor.tokenizer.add_eos_token = False
         return processor
@@ -428,32 +430,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
-    @require_torch
-    @require_vision
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
-
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
-
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
-        ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
-
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
+    @unittest.skip(reason="Cannot remove image_seq_len argument from __call__ without breaking BC.")
+    def test_call_arguments_not_in_attributes(self):
+        pass

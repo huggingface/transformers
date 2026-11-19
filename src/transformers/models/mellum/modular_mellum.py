@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -42,6 +41,12 @@ class MellumConfig(Qwen3MoeConfig):
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — `"dense"` or `"sparse"`. Length must equal
         `num_hidden_layers`. Defaults to all sparse.
+    num_mtp_layers (`int`, *optional*):
+        Number of multi-token prediction (MTP) layers. At most one is supported.
+    mtp_layer_types (`list[str]`, *optional*):
+        Attention type of each MTP layer. Defaults to `"sliding_attention"`.
+    mtp_mlp_layer_types (`list[str]`, *optional*):
+        MLP type of each MTP layer. Defaults to `"sparse"`.
 
     ```python
     >>> from transformers import MellumModel, MellumConfig
@@ -53,6 +58,10 @@ class MellumConfig(Qwen3MoeConfig):
     """
 
     model_type = "mellum"
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "num_mtp_layers": "num_nextn_predict_layers",
+    }
 
     vocab_size: int = 98304
     hidden_size: int = 2304
@@ -67,6 +76,9 @@ class MellumConfig(Qwen3MoeConfig):
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     rope_parameters: dict | RopeParameters | None = None
+    num_mtp_layers: int | None = None
+    mtp_layer_types: list[str] | None = None
+    mtp_mlp_layer_types: list[str] | None = None
 
     use_sliding_window = AttributeError()
     decoder_sparse_step = AttributeError()
@@ -89,6 +101,18 @@ class MellumConfig(Qwen3MoeConfig):
             **kwargs,
             ignore_keys_at_rope_validation={"sliding_attention", "full_attention"},
         )
+
+        if self.num_mtp_layers:
+            if self.mtp_layer_types is None:
+                self.mtp_layer_types = ["sliding_attention"] * self.num_mtp_layers
+            if self.mtp_mlp_layer_types is None:
+                self.mtp_mlp_layer_types = ["sparse"] * self.num_mtp_layers
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        PreTrainedConfig.validate_architecture(self)
+        if self.num_mtp_layers is not None and self.num_mtp_layers > 1:
+            raise ValueError(f"Mellum supports a single MTP layer, but got num_mtp_layers={self.num_mtp_layers}.")
 
     def convert_rope_params_to_dict(self, **kwargs):
         # No need to handle BC for new models, because they have no old-format `rope_scaling`
@@ -116,7 +140,8 @@ class MellumDecoderLayer(LagunaDecoderLayer):
 
 
 class MellumPreTrainedModel(Qwen3MoePreTrainedModel):
-    @torch.no_grad()
+    _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
+
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MellumRotaryEmbedding):

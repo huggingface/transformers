@@ -54,7 +54,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_diffusion_gemma import DiffusionGemmaConfig, DiffusionGemmaTextConfig
@@ -62,14 +62,13 @@ from .generation_diffusion_gemma import DiffusionGemmaGenerationConfig, Diffusio
 
 
 class DiffusionGemmaTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
     def __init__(self, config: DiffusionGemmaTextConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.layer_types = set(config.layer_types)
+        self.layer_types = sorted(set(config.layer_types))
         self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
         self.rope_type: dict[str, str] = {}
 
@@ -122,24 +121,15 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -311,12 +301,13 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # The code in this function is adapted from Gemma4TextAttention. ** The modified parts are clearly indicated **
@@ -341,8 +332,8 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         value_states = self.v_norm(value_states)
         value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -372,7 +363,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
     This layer is just like `Gemma4TextAttention`, with three key differences:
     1. Removes shared KV cache logic, as it is unused in DiffusionGemma.
     2. It doesn't update the KV cache in the forward pass. The KV cache here corresponds to the
-       encoder's KV cache, which is passed in via `past_key_values` -- from the decoder's perspective, it can be seen
+       encoder's KV cache, which is passed in via `cache` -- from the decoder's perspective, it can be seen
        as a read-only encoder KV cache.
     3. `self.is_causal` is set to `False`. `config.use_bidirectional_attention` only controls the
        encoder, not the decoder attention.
@@ -413,12 +404,13 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         self.k_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         self.v_norm = DiffusionGemmaRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         # The code in this function is adapted from Gemma4TextAttention. ** The modified parts are clearly indicated **
@@ -443,8 +435,8 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         value_states = self.v_norm(value_states)
         value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            key_states, value_states = self.append_to_cache(past_key_values, key_states, value_states)
+        if cache is not None:
+            key_states, value_states = self.append_to_cache(cache, key_states, value_states)
 
         # CHANGED: removed the `if self.store_full_length_kv` branch
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -469,14 +461,14 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         return attn_output, attn_weights
 
     def append_to_cache(
-        self, past_key_values: Cache, key_states: torch.Tensor, value_states: torch.Tensor
+        self, cache: Cache, key_states: torch.Tensor, value_states: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Append the key and value caches and return the full key-values. It doesn't modify
-        anything in-place in contrast to `past_key_values.update`, the tensors are concatenated and returned
+        anything in-place in contrast to `cache.update`, the tensors are concatenated and returned
         """
-        cache_layer = past_key_values.layers[self.layer_idx]
-        if not past_key_values.is_compileable:
+        cache_layer = cache.layers[self.layer_idx]
+        if not cache.is_compileable:
             keys = torch.cat([cache_layer.keys, key_states], dim=-2)
             values = torch.cat([cache_layer.values, value_states], dim=-2)
         else:
@@ -571,7 +563,7 @@ class DiffusionGemmaTextExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -619,13 +611,14 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.post_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -636,7 +629,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -697,13 +690,14 @@ class DiffusionGemmaDecoderTextLayer(GradientCheckpointingLayer):
         self.post_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -714,7 +708,7 @@ class DiffusionGemmaDecoderTextLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -832,8 +826,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
         "DiffusionGemmaDecoderTextLayer",
         "DiffusionGemmaEncoderTextLayer",
     ]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_sdpa = True
     _supports_flex_attn = True
 
@@ -842,7 +835,6 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
@@ -919,13 +911,14 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | dict | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -934,11 +927,11 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -949,7 +942,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             # Create the masks
@@ -971,7 +964,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -979,7 +972,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1005,6 +998,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
 class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _can_record_outputs = {
         "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
@@ -1026,7 +1020,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -1044,46 +1038,44 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         return vision_outputs
 
     def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-    ) -> torch.BoolTensor:
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
+    ) -> tuple[torch.BoolTensor, torch.BoolTensor, torch.BoolTensor]:
         """
-        Obtains mask for multimodal placeholders (replaced by soft tokens) and hard text tokens.
-
-        Masks will be obtained from `input_ids` or `inputs_embeds` as available and in that
-        precedence order.
-
-        Args:
-            input_ids: A tensor containing the hard token IDs from the text tokenizer.
-            inputs_embeds: A tensor containing the embeddings for all hard text tokens.
-
-        Returns:
-            image_mask
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
-        if input_ids is not None:
-            special_image_mask = input_ids == self.config.image_token_id
-        else:
-            image_token_embeddings = self.get_input_embeddings()(
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = (inputs_embeds == image_token_embeddings).all(-1)
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
 
+        n_image_tokens = special_image_mask.sum()
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features:"
+            f" {image_features.shape[0]}",
+        )
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | dict | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         image_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -1094,36 +1086,31 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        image_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        # Replace image id with PAD if the image token if OOV, to avoid index-errors
-        llm_input_ids = None
         if inputs_embeds is None:
-            llm_input_ids = input_ids.clone()
-            llm_input_ids[image_mask] = self.config.text_config.pad_token_id
-            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values,
+                image_position_ids,
+                return_dict=True,
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-
-            # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
-            n_image_tokens = image_mask.sum()
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            torch_compilable_check(
-                inputs_embeds[image_mask].numel() == image_features.numel(),
-                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features:"
-                f" {image_features.shape[0]}",
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-
-            inputs_embeds = inputs_embeds.masked_scatter(
-                image_mask.to(inputs_embeds.device), image_features.to(inputs_embeds.device)
-            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1132,7 +1119,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
                 config=self.config.get_text_config(),
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
                 mm_token_type_ids=mm_token_type_ids,
             )
@@ -1140,7 +1127,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
@@ -1148,7 +1135,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1160,11 +1147,12 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
         self.language_model.embed_tokens_per_layer = value
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         position_ids: torch.Tensor | None,
         mm_token_type_ids: torch.Tensor | None = None,
     ) -> dict:
@@ -1174,7 +1162,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
 
@@ -1235,11 +1223,12 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         decoder_input_ids: torch.LongTensor,
-        past_key_values: Cache | None = None,
-        self_conditioning_logits: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        self_conditioning_logits: torch.Tensor | None = None,
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
@@ -1248,7 +1237,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`):
             Token IDs for the canvas to be refined.
-        self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
+        self_conditioning_logits (`torch.Tensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the
             self-conditioning embeddings.
         self_conditioning_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
@@ -1261,8 +1250,8 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             The position IDs for the tokens in the canvas.
         """
         kwargs.pop("use_cache", None)  # the decoder never writes a cache
-        if past_key_values is None:
-            raise ValueError("The decoder reads the encoder prefix from `past_key_values`, which must not be `None`.")
+        if cache is None:
+            raise ValueError("The decoder reads the encoder prefix from `cache`, which must not be `None`.")
 
         inputs_embeds = self.embed_tokens(decoder_input_ids)
 
@@ -1283,7 +1272,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         # canvas.
         if decoder_position_ids is None:
             canvas_length = inputs_embeds.shape[1]
-            cache_seq_length = past_key_values.get_seq_length(layer_idx=0) if past_key_values is not None else 0
+            cache_seq_length = cache.get_seq_length(layer_idx=0) if cache is not None else 0
             decoder_position_ids = torch.arange(
                 cache_seq_length,
                 cache_seq_length + canvas_length,
@@ -1297,7 +1286,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             mask_mapping = self.create_diffusion_decoder_attention_mask(
                 config=self.text_config,
                 inputs_embeds=inputs_embeds,
-                past_key_values=past_key_values,
+                cache=cache,
                 decoder_attention_mask=decoder_attention_mask,
             )
 
@@ -1313,20 +1302,20 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 position_embeddings=position_embeddings[self.text_config.layer_types[i]],
                 attention_mask=mask_mapping[self.text_config.layer_types[i]],
                 position_ids=decoder_position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
 
-        # No past_key_values in the output: the decoder doesn't produce a KV cache
+        # No cache in the output: the decoder doesn't produce a KV cache
         return BaseModelOutput(last_hidden_state=hidden_states)
 
     @staticmethod
     def create_diffusion_decoder_attention_mask(
         config: DiffusionGemmaConfig,
         inputs_embeds: torch.Tensor,
-        past_key_values: Cache,
+        cache: Cache,
         decoder_attention_mask: torch.Tensor | dict | None = None,
     ) -> dict[str, torch.Tensor | None]:
         """
@@ -1360,21 +1349,19 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
                 The config used by the model.
             inputs_embeds (`torch.Tensor` of shape `(batch_size, canvas_length, hidden_dimension)`):
                 The input embeddings used in the current forward pass. Only used to obtain the first two dimensions.
-            past_key_values (`Cache`):
+            cache (`Cache`):
                 The cache produced by the encoder part of the model.
             decoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length+canvas_length)` or `dict`, *optional*):
                 Attention mask for the decoder KV cache. Used to specify padded/unpopulated encoder KV cached entries.
         """
 
-        if past_key_values is None:
-            raise ValueError(
-                "The diffusion mask requires `past_key_values` to construct the next attention mask correctly"
-            )
+        if cache is None:
+            raise ValueError("The diffusion mask requires `cache` to construct the next attention mask correctly")
 
         # Shortcut: not compiling for sure AND no padding -> delegate mask creation to the inner functions by returning None
         if (
             decoder_attention_mask is None
-            or (not past_key_values.is_compileable and decoder_attention_mask.all())
+            or (not cache.is_compileable and decoder_attention_mask.all())
             or config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping
         ):
             return {"full_attention": None, "sliding_attention": None}
@@ -1392,9 +1379,9 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
         text_config = config.get_text_config()
         q_length = inputs_embeds.shape[1]
-        q_offset = past_key_values.get_seq_length()
+        q_offset = cache.get_seq_length()
         q_offset = q_offset.to(inputs_embeds.device) if isinstance(q_offset, torch.Tensor) else q_offset
-        additional_kv_length = config.canvas_length if past_key_values.is_compileable else 0
+        additional_kv_length = config.canvas_length if cache.is_compileable else 0
 
         # DiT module doesn't need a sliding mask and has to attend fully to prev context and itself
         # To enforce a full mask we pass `or_mask_function`, while keeping the functionality of
@@ -1402,17 +1389,17 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
         mask_mapping = {}
         for layer_pattern in set(text_config.layer_types):
             if layer_pattern == "sliding_attention":
-                layer_idx = past_key_values.is_sliding.index(True)
+                layer_idx = cache.is_sliding.index(True)
             else:
-                layer_idx = past_key_values.is_sliding.index(False)
+                layer_idx = cache.is_sliding.index(False)
 
-            kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
+            kv_length, kv_offset = cache.get_mask_sizes(q_length, layer_idx)
             kv_length += additional_kv_length  # Add current canvas length
 
             # StaticSlidingLayers cannot go beyond sliding window, even with `additional_kv_length`!
-            if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
-                layer_idx = past_key_values.is_sliding.index(True)
-                sliding_layer = past_key_values.layers[layer_idx]
+            if layer_pattern == "sliding_attention" and cache.is_compileable:
+                layer_idx = cache.is_sliding.index(True)
+                sliding_layer = cache.layers[layer_idx]
                 if kv_length >= sliding_layer.get_max_length() + additional_kv_length:
                     kv_length = sliding_layer.get_max_length() + additional_kv_length
 
@@ -1442,28 +1429,28 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 @dataclass
 class DiffusionGemmaModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    encoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
         provided, e.g. to compute an autoregressive loss on the encoder during training.
     """
 
-    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
 
 
 @auto_docstring
 @dataclass
 class DiffusionGemmaBlockDiffusionOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Language modeling loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, canvas_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    encoder_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden states at the output of the last layer of the encoder. Only set when `input_ids` is
         provided, e.g. to compute an autoregressive loss on the encoder during training.
     """
 
-    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -1511,17 +1498,19 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | dict | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        self_conditioning_logits: torch.FloatTensor | None = None,
+        self_conditioning_logits: torch.Tensor | None = None,
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DiffusionGemmaModelOutputWithPast:
         r"""
@@ -1531,7 +1520,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
             Mask for the input tokens.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`, *optional*):
             Token IDs for the canvas to be refined.
-        self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
+        self_conditioning_logits (`torch.Tensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the
             self-conditioning embeddings.
         self_conditioning_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
@@ -1550,14 +1539,15 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
+                mm_encoder_outputs=mm_encoder_outputs,
                 **kwargs,
             )
             encoder_last_hidden_state = encoder_outputs.last_hidden_state
-            past_key_values = encoder_outputs.past_key_values
-        elif past_key_values is None:
-            raise ValueError("Either `input_ids` or `past_key_values` must be provided.")
+            cache = encoder_outputs.cache
+        elif cache is None:
+            raise ValueError("Either `input_ids` or `cache` must be provided.")
 
         # 2: Run decoder with bidirectional self-attention in the canvas, and cross-attention to the KV cache.
         # In other words, the decoder attends to all tokens, KV cache and canvas, by default.
@@ -1575,7 +1565,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
         # 2.b.: Run the decoder
         decoder_outputs = self.decoder(
             decoder_input_ids=decoder_input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             self_conditioning_logits=self_conditioning_logits,
             self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
@@ -1587,7 +1577,7 @@ class DiffusionGemmaModel(DiffusionGemmaPreTrainedModel):
             last_hidden_state=decoder_outputs.last_hidden_state,
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
-            past_key_values=past_key_values,
+            cache=cache,
             encoder_last_hidden_state=encoder_last_hidden_state,
         )
 
@@ -1602,6 +1592,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
 
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
     generation_config_class = DiffusionGemmaGenerationConfig
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: DiffusionGemmaConfig):
         super().__init__(config)
@@ -1615,17 +1606,19 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | dict | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_ids: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        self_conditioning_logits: torch.FloatTensor | None = None,
+        self_conditioning_logits: torch.Tensor | None = None,
         self_conditioning_mask: torch.BoolTensor | None = None,
         decoder_attention_mask: torch.Tensor | dict | None = None,
         decoder_position_ids: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DiffusionGemmaBlockDiffusionOutputWithPast:
         r"""
@@ -1635,7 +1628,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             Mask for the input tokens.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, canvas_length)`, *optional*):
             Token IDs for the canvas to be refined.
-        self_conditioning_logits (`torch.FloatTensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
+        self_conditioning_logits (`torch.Tensor` of shape `(batch_size, canvas_length, vocab_size)`, *optional*):
             Self-conditioning logits from the previous denoising step, used to compute the self-conditioning
             embeddings.
         self_conditioning_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
@@ -1652,13 +1645,14 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
         model_outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
             decoder_input_ids=decoder_input_ids,
             self_conditioning_logits=self_conditioning_logits,
             self_conditioning_mask=self_conditioning_mask,
             decoder_attention_mask=decoder_attention_mask,
             decoder_position_ids=decoder_position_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -1673,7 +1667,7 @@ class DiffusionGemmaForBlockDiffusion(DiffusionGemmaPreTrainedModel, DiffusionGe
             logits=logits,
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
-            past_key_values=model_outputs.past_key_values,
+            cache=model_outputs.cache,
             encoder_last_hidden_state=model_outputs.encoder_last_hidden_state,
         )
 

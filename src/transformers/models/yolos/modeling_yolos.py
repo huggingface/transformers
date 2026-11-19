@@ -42,15 +42,15 @@ logger = logging.get_logger(__name__)
 @dataclass
 class YolosObjectDetectionOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
         A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~YolosImageProcessor.post_process`] to retrieve the unnormalized bounding
@@ -59,18 +59,18 @@ class YolosObjectDetectionOutput(ModelOutput):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
         `pred_boxes`) for each decoder layer.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     loss_dict: dict | None = None
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    pred_boxes: torch.Tensor | None = None
     auxiliary_outputs: list[dict] | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class YolosEmbeddings(nn.Module):
@@ -148,8 +148,15 @@ class InterpolateMidPositionEmbeddings(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.config = config
+        seq_length = (
+            1 + (config.image_size[0] * config.image_size[1] // config.patch_size**2) + config.num_detection_tokens
+        )
+        self.mid_position_embeddings = nn.Parameter(
+            torch.zeros(config.num_hidden_layers - 1, 1, seq_length, config.hidden_size)
+        )
 
-    def forward(self, pos_embed, img_size=(800, 1344)) -> torch.Tensor:
+    def forward(self, img_size=(800, 1344)) -> torch.Tensor:
+        pos_embed = self.mid_position_embeddings
         cls_pos_embed = pos_embed[:, :, 0, :]
         cls_pos_embed = cls_pos_embed[:, None]
         det_pos_embed = pos_embed[:, :, -self.config.num_detection_tokens :, :]
@@ -401,23 +408,6 @@ class YolosEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([YolosLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
-
-        seq_length = (
-            1 + (config.image_size[0] * config.image_size[1] // config.patch_size**2) + config.num_detection_tokens
-        )
-        self.mid_position_embeddings = (
-            nn.Parameter(
-                torch.zeros(
-                    config.num_hidden_layers - 1,
-                    1,
-                    seq_length,
-                    config.hidden_size,
-                )
-            )
-            if config.use_mid_position_embeddings
-            else None
-        )
-
         self.interpolation = InterpolateMidPositionEmbeddings(config) if config.use_mid_position_embeddings else None
 
     def forward(
@@ -427,14 +417,14 @@ class YolosEncoder(nn.Module):
         width: int,
     ) -> BaseModelOutput:
         if self.config.use_mid_position_embeddings:
-            interpolated_mid_position_embeddings = self.interpolation(self.mid_position_embeddings, (height, width))
+            interpolated_mid_position_embeddings = self.interpolation((height, width))
 
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states)
 
             if self.config.use_mid_position_embeddings:
                 if i < (self.config.num_hidden_layers - 1):
-                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i]
+                    hidden_states = hidden_states + interpolated_mid_position_embeddings[i].to(hidden_states.device)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -446,7 +436,7 @@ class YolosPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["YolosEmbeddings", "YolosLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -568,25 +558,18 @@ class YolosForObjectDetection(YolosPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> YolosObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: `'class_labels'` and `'boxes'` (the class labels and bounding boxes of an image in the
-            batch respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding
-            boxes in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image,
-            4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

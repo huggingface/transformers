@@ -46,18 +46,22 @@ class AudioFlamingo3ModelTester(ALMModelTester):
     config_class = AudioFlamingo3Config
     base_model_class = AudioFlamingo3Model
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = AudioFlamingo3EncoderConfig
+
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # feat_seq_length → (L-1)//2+1 after conv2 → (·-2)//2+1 after avg_pool, so
         # feat_seq_length=60 gives 15 audio embed tokens (fits inside seq_length=32 + BOS + text).
-        kwargs.setdefault("feat_seq_length", 60)
+        "feat_seq_length": 60,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Encoder adds a learned positional embedding of size max_source_positions to post-conv2 features,
         # so it must equal (feat_seq_length - 1) // 2 + 1.
-        kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
-        super().__init__(parent, **kwargs)
+        values.setdefault("max_source_positions", (values["feat_seq_length"] - 1) // 2 + 1)
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors AudioFlamingo3Encoder._get_feat_extract_output_lengths:
@@ -162,7 +166,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
@@ -205,7 +209,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                         },
                     ],
                 }
@@ -224,7 +228,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+                            "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
                         },
                     ],
                 }

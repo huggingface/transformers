@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import time
 from collections.abc import Callable
 
@@ -22,10 +23,10 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -33,16 +34,16 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
-from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
+from ..auto import AutoConfig, AutoModel
+from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vVisionRotaryEmbedding
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
@@ -79,29 +80,60 @@ def get_vision_frame_index(grid_thw: torch.Tensor, kwargs: dict | None = None) -
 
 def get_vision_temporal_merge_index(
     grid_thw: torch.Tensor, kernel_height: int, kernel_width: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index regrouping a flat patch sequence into `(total_merged, t, kernel_height *
-    kernel_width)` for the temporal-pooling merger, or pop `"temporal_merge_index"` from `kwargs`.
+) -> tuple[torch.Tensor, torch.Tensor, int]:
+    """Per-patch scatter target for temporal-pooling merge, fully vectorized over ragged videos.
 
-    Row `m` collects the `t` frames × `kernel_height*kernel_width` source patches that pool into
-    merged token `m`; the caller means over the frame axis. Precomputable, so the encoder avoids a
-    per-clip `grid_thw.tolist()` loop.
+    Returns:
+        destination_index: (num_patches,) long. merged_token_index * kernel_size + position_in_kernel.
+        frame_weight: (num_patches,) float. 1 / num_frames of the video each patch belongs to,
+            so index_add_ yields the mean over frames.
+        num_merged_tokens: total merged tokens across all videos.
     """
     if kwargs is not None and (index := kwargs.pop("temporal_merge_index", None)) is not None:
         return index
+
     device = grid_thw.device
-    running, rows = 0, []
-    for t, h, w in grid_thw.tolist():
-        t, h, w = int(t), int(h), int(w)
-        new_h, new_w = h // kernel_height, w // kernel_width
-        base = torch.arange(running, running + t * h * w, device=device).view(
-            t, new_h, kernel_height, new_w, kernel_width
-        )
-        # (t, new_h, new_w, kh, kw) → (new_h*new_w, t, kh*kw): frame axis kept for the caller's mean.
-        base = base.permute(1, 3, 0, 2, 4).reshape(new_h * new_w, t, kernel_height * kernel_width)
-        rows.append(base)
-        running += t * h * w
-    return torch.cat(rows, dim=0)
+    kernel_size = kernel_height * kernel_width
+
+    num_frames, height, width = grid_thw.unbind(-1)  # each (num_videos,)
+    merged_height = height // kernel_height
+    merged_width = width // kernel_width
+
+    patches_per_video = num_frames * height * width
+    merged_tokens_per_video = merged_height * merged_width
+
+    patch_offset_per_video = torch.cumsum(patches_per_video, 0) - patches_per_video
+    merged_offset_per_video = torch.cumsum(merged_tokens_per_video, 0) - merged_tokens_per_video
+
+    num_patches = int(patches_per_video.sum())  # one sync; pass precomputed values to avoid it
+    num_merged_tokens = int(merged_tokens_per_video.sum())
+
+    # Which video each flat patch belongs to, and its index within that video.
+    video_index = torch.repeat_interleave(
+        torch.arange(len(patches_per_video), device=device),
+        patches_per_video,
+        output_size=num_patches,
+    )
+    patch_index_in_video = torch.arange(num_patches, device=device) - patch_offset_per_video[video_index]
+
+    patch_height = height[video_index]
+    patch_width = width[video_index]
+    patch_merged_width = merged_width[video_index]
+
+    # Position within a single frame (the frame index is dropped: that's the pooled axis).
+    index_in_frame = patch_index_in_video % (patch_height * patch_width)
+    row = index_in_frame // patch_width
+    col = index_in_frame % patch_width
+
+    merged_index_in_video = (row // kernel_height) * patch_merged_width + (col // kernel_width)
+    position_in_kernel = (row % kernel_height) * kernel_width + (col % kernel_width)
+
+    destination_index = (
+        merged_offset_per_video[video_index] + merged_index_in_video
+    ) * kernel_size + position_in_kernel
+    frame_weight = 1.0 / num_frames[video_index].to(torch.float32)
+
+    return destination_index, frame_weight, num_merged_tokens
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
@@ -119,6 +151,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     """
 
     model_type = "kimi_k25_vision"
+    default_rope_type = "axial"
 
     patch_size: int = 14
     pos_emb_height: int = 64
@@ -130,8 +163,7 @@ class Kimi_K25VisionConfig(PreTrainedConfig):
     intermediate_size: int = 4304
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
-    rope_parameters: dict | None = None  # defaults set by `RopeConfigMixin`
-    max_position_embeddings: int | None = None
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-K2.6")
@@ -145,7 +177,10 @@ class Kimi_K25Config(PreTrainedConfig):
     """
 
     model_type = "kimi_k25"
-    sub_configs = {"text_config": AutoConfig, "vision_config": Kimi_K25VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="deepseek_v3"),
+        "vision_config": Kimi_K25VisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -159,22 +194,8 @@ class Kimi_K25Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # BC: load from remote config on the hub where the model-type points to remote config
-        if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "deepseek_v3")
-            if model_type == "kimi_k2":
-                model_type = "deepseek_v3"
-            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["deepseek_v3"]()
-        else:
-            model_type = self.text_config.model_type
-            if model_type == "kimi_k2":
-                self.text_config.model_type = "deepseek_v3"
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Kimi_K25VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Kimi_K25VisionConfig()
+        if isinstance(self.text_config, dict) and self.text_config.get("model_type", "deepseek_v3") == "kimi_k2":
+            self.text_config["model_type"] = "deepseek_v3"
         super().__post_init__(**kwargs)
 
 
@@ -246,23 +267,14 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-# Similarly to gemma4, applies the same freq to H and W grids
-# The difference is that gemma4 stacks H/W embeds on `dim`, while Kimi interleaves them
-class Kimi_K25VisionRotaryEmbedding(Gemma4VisionRotaryEmbedding):
-    def forward(self, x, position_ids):
-        position_ids_expanded = position_ids.transpose(0, 1)[..., None].float()  # (positions, 2, 1)
-        inv_freq_expanded = (
-            self.inv_freq[None, None, :].float().expand(position_ids_expanded.shape[0], 2, -1).to(x.device)
-        )  # (positions, 2, freq_dim)
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() * position_ids_expanded.float()).transpose(1, 2).flatten(1)
-            emb = torch.cat([freqs, freqs], dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos, sin
+class Kimi_K25VisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        # interleave within the head dim for WH
+        freq_wh = freq.transpose(1, 2).flip(-1).flatten(1)
+        return torch.cat([freq_wh, freq_wh], dim=-1)
 
 
 class Kimi_K25VisionMLP(VisionMlp):
@@ -372,6 +384,7 @@ class Kimi_K25PreTrainedModel(Qwen2VLPreTrainedModel):
             init.trunc_normal_(module.position_embeddings, mean=0.0)
 
 
+@auto_docstring
 class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
     config: Kimi_K25VisionConfig
     input_modalities = ("image", "video")
@@ -390,33 +403,16 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-05)
         self.post_init()
 
-    def temporal_patch_merger(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-    ) -> torch.Tensor:
-        r"""
-        Merges temporal frames by spatially pooling patch embeddings across time, returning
-        `(total_merged_patches, kernel_height * kernel_width, hidden_dim)`.
-
-        Kept for backward compatibility: `forward` now pools with the export-friendly
-        `get_vision_temporal_merge_index` gather instead of this Python per-clip loop.
-        """
-        hidden_dim = hidden_states.size(-1)
-        kernel_height, kernel_width = self.merge_kernel_size
-
-        outputs = []
-        running_length = 0
-        for t, h, w in grid_thw.tolist():
-            seq = hidden_states[running_length : running_length + t * h * w]
-            new_height, new_width = h // kernel_height, w // kernel_width
-            reshaped_seq = seq.view(t, new_height, kernel_height, new_width, kernel_width, hidden_dim)
-            reshaped_seq = reshaped_seq.transpose(2, 3).mean(dim=0)  # temporal pooling
-            padded_seq = reshaped_seq.reshape(new_height * new_width, kernel_height * kernel_width, -1)
-            outputs.append(padded_seq)
-            running_length += t * h * w
-
-        return torch.cat(outputs, dim=0)
+    def temporal_merge(self, hidden_states, grid_thw, kernel_height, kernel_width, kwargs=None):
+        destination_index, frame_weight, num_merged_tokens = get_vision_temporal_merge_index(
+            grid_thw, kernel_height, kernel_width, kwargs=kwargs
+        )
+        kernel_size = kernel_height * kernel_width
+        pooled_states = hidden_states.new_zeros(
+            num_merged_tokens * kernel_size, hidden_states.shape[-1], dtype=torch.float32
+        )
+        pooled_states.index_add_(0, destination_index, hidden_states.float() * frame_weight[:, None])
+        return pooled_states.view(num_merged_tokens, kernel_size, -1).to(hidden_states.dtype)
 
     @capture_outputs
     @auto_docstring
@@ -432,7 +428,6 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw, **kwargs)
         position_ids = get_vision_position_ids(grid_thw, spatial_merge_size=1, kwargs=kwargs)
-        position_ids = position_ids.transpose(0, 1).flip(0)  # (2, positions)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
@@ -449,8 +444,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             )
 
         hidden_states = self.final_layernorm(hidden_states)
-        merge_index = get_vision_temporal_merge_index(grid_thw, *self.merge_kernel_size, kwargs=kwargs)
-        pooled_hidden_states = hidden_states[merge_index].mean(dim=1)
+        pooled_hidden_states = self.temporal_merge(hidden_states, grid_thw, *self.merge_kernel_size, kwargs=kwargs)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
@@ -479,6 +473,7 @@ class Kimi_K25MultimodalProjection(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Kimi_K25Model(Kimi_K25PreTrainedModel):
     def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
@@ -497,41 +492,36 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
-        split_sizes = (image_grid_thw.prod(-1) // merge_kernel_size).tolist()
+        split_sizes = (image_grid_thw[:, 1:].prod(-1) // merge_kernel_size).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
+    @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -569,26 +559,26 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kimi_K25ModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             multimodal_mask = (input_ids == self.config.image_token_id) | (input_ids == self.config.video_token_id)
@@ -596,17 +586,30 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             llm_input_ids[multimodal_mask] = 0
             inputs_embeds = self.get_input_embeddings()(llm_input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -616,29 +619,31 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
         return Kimi_K25ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
 
+@auto_docstring
 class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -646,18 +651,10 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
         pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Kimi_K25CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-
         Example:
 
         ```python
@@ -703,16 +700,16 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             video_grid_thw=video_grid_thw,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -723,7 +720,7 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
         return Kimi_K25CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -731,25 +728,15 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
     def _prepare_position_ids_for_generation(self, **kwargs):
         raise AttributeError("Kimi doesn't use m-rope!")
 
-    def _get_image_nums_and_video_nums(self, **super_kwargs):
-        raise AttributeError()
-
-    def _expand_inputs_for_generation(self, **super_kwargs):
+    def _expand_multimodal_outputs(self, **super_kwargs):
         raise AttributeError("Uses normal super call")
-
-
-class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 @auto_docstring
 class Kimi_K25Processor(Qwen2VLProcessor):
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = AttributeError()
+
     def __init__(
         self,
         image_processor=None,
@@ -804,6 +791,50 @@ class Kimi_K25Processor(Qwen2VLProcessor):
             video_structure += f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
         return video_structure
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        merged_kwargs = self._merge_kwargs(**kwargs)
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = merged_kwargs["images_kwargs"]
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = merged_kwargs["videos_kwargs"]
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            temporal_patch_size = (
+                videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
+            )
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            # Each of the `num_chunks_per_video` chunks costs one frame's worth of merged patches
+            num_video_tokens = [
+                math.ceil(num_frames / temporal_patch_size) * (num_patches // num_frames) // merge_size**2
+                for (num_frames, _, _), num_patches in zip(video_sizes, num_video_patches)
+            ]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
+
     @property
     def model_input_names(self) -> list[str]:
         model_input_names = []
@@ -818,6 +849,8 @@ class Kimi_K25Processor(Qwen2VLProcessor):
     def unused_input_names(self):
         return ["num_chunks_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Kimi_K25ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Kimi_K25Config",

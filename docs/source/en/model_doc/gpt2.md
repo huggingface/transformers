@@ -32,6 +32,8 @@ You can find all the original GPT-2 checkpoints under the [OpenAI community](htt
 
 > [!TIP]
 > Click on the GPT-2 models in the right sidebar for more examples of how to apply GPT-2 to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
@@ -101,7 +103,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## Notes
 
 - Pad inputs on the right because GPT-2 uses absolute position embeddings.
-- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [`~GPT2Model.forward#past_key_values`] parameter in [`GPT2Model.forward`].
+- GPT-2 can reuse previously computed key-value attention pairs. Access this feature with the [`~GPT2Model.forward#cache`] parameter in [`GPT2Model.forward`].
 - Enable the [`~GPT2Config#scale_attn_by_inverse_layer_idx`] and [`~GPT2Config#reorder_and_upcast_attn`] parameters to apply the training stability improvements from [Mistral](./mistral).
 
 ## GPT2Config
@@ -112,10 +114,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] GPT2Tokenizer
     - save_vocabulary
-
-## GPT2TokenizerFast
-
-[[autodoc]] GPT2TokenizerFast
 
 ## GPT2 specific outputs
 

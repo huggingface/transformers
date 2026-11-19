@@ -21,7 +21,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="facebook/wav2vec2-bert-rel-pos-large")
+@auto_docstring(checkpoint="facebook/w2v-bert-2.0")
 @strict
 class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""

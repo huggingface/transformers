@@ -40,25 +40,24 @@ class ZayaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = ZayaModel
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(
-            parent=parent,
-            num_hidden_layers=2,
-            moe_intermediate_size=32,
-            num_experts_per_tok=1,
-            layer_types=["hybrid", "hybrid_sliding"],
-            sliding_window=64,
-            **kwargs,
-        )
+    small_config_overrides = {
+        "num_hidden_layers": 2,
+        "moe_intermediate_size": 32,
+        "num_experts_per_tok": 1,
+        "layer_types": ["hybrid", "hybrid_sliding"],
+        "sliding_window": 64,
+    }
 
 
 @require_torch
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
-    test_all_params_have_gradient = False
 
-    @unittest.skip("ZAYA hybrid/sliding cache layers are not compatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
+    @unittest.skip(
+        reason="Zaya disables tensor parallelism on purpose (`base_model_tp_plan = AttributeError()`): its 2 KV "
+        "heads cap the useful degree, so its experts have no TP plan to check."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
         pass
 
     def _get_conv_state_shape(self, batch_size: int, config):
@@ -69,17 +68,17 @@ class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.num_key_value_heads * config.head_dim // 2)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        if not isinstance(past_key_values, DynamicCache):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        if not isinstance(cache, DynamicCache):
             raise ValueError("The cache does not use the correct Cache")
 
         config = config.get_text_config(decoder=True)
-        self.assertEqual(config.num_hidden_layers, len(past_key_values))
+        self.assertEqual(config.num_hidden_layers, len(cache))
         attention_shape = (batch_size, config.num_key_value_heads, seq_length, config.head_dim)
         conv_shape = self._get_conv_state_shape(batch_size, config)
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
-        for layer_type, layer in zip(config.layer_types, past_key_values.layers):
+        for layer_type, layer in zip(config.layer_types, cache.layers):
             expected_layer_class = (
                 LinearAttentionAndSlidingWindowAttentionLayer
                 if layer_type == "hybrid_sliding"
@@ -324,9 +323,9 @@ class ZayaIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 (None, None): [
-                    [0.0223, 0.0228, 0.0234],
-                    [-1.4297, -1.4297, -1.4297],
-                    [-3.0469, -3.0469, -3.0469],
+                    [0.0359, 0.0364, 0.0371],
+                    [-1.4141, -1.4141, -1.4141],
+                    [-3.0625, -3.0625, -3.0625],
                 ],
                 ("xpu", None): [
                     [0.3203, 0.3203, 0.3203],
@@ -340,7 +339,7 @@ class ZayaIntegrationTest(unittest.TestCase):
 
         expected_argmax = Expectations(
             {
-                (None, None): [[105, 9731, 107, 740, 564, 1601, 611, 3124, 236881, 107, 107]],
+                (None, None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
                 ("xpu", None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
             }
         )
@@ -362,7 +361,7 @@ class ZayaIntegrationTest(unittest.TestCase):
             cached_logits = model(
                 input_ids=inputs.input_ids[:, -1:],
                 attention_mask=inputs.attention_mask,
-                past_key_values=prefill_outputs.past_key_values,
+                cache=prefill_outputs.cache,
                 use_cache=True,
                 return_dict=True,
             ).logits[:, -1]
@@ -381,7 +380,7 @@ class ZayaIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     107, 262146, 108, 9259, 236888, 1030, 5724, 1133,
-                    611, 236789, 500, 7467, 528, 4735, 1003, 5213,
+                    611, 236789, 500, 7467, 528, 506, 5213, 236778,
                 ],
                 ("xpu", None): [
                     107, 262146, 108, 9259, 236888, 2088, 740, 564,

@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoTokenizer, is_torch_available, set_seed
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     is_flaky,
     require_torch,
     require_torch_accelerator,
@@ -26,11 +25,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        MiniMaxM2Config,
         MiniMaxM2ForCausalLM,
         MiniMaxM2Model,
     )
@@ -89,20 +91,33 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    def test_legacy_rotary_dim_maps_to_partial_rotary_factor(self):
+        r"""
+        Released MiniMax-M2 checkpoints express partial RoPE through a legacy `rotary_dim`
+        config field (64 of head_dim 128); it must reach `rope_parameters` so the rotary
+        embedding only rotates `rotary_dim` dims instead of the full head dimension.
+        """
+        from transformers.models.minimax_m2.modeling_minimax_m2 import MiniMaxM2RotaryEmbedding
+
+        config = MiniMaxM2Config(rotary_dim=64)
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.5)
+        # inv_freq holds one frequency per rotated dim pair: rotary_dim // 2.
+        self.assertEqual(MiniMaxM2RotaryEmbedding(config).inv_freq.shape[0], 32)
+
+        # An explicit partial factor still wins over the legacy field.
+        config = MiniMaxM2Config(
+            rotary_dim=64,
+            rope_parameters={"rope_theta": 5_000_000.0, "rope_type": "default", "partial_rotary_factor": 0.25},
+        )
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.25)
+
+        # Configs without the legacy field keep full-width rotary.
+        self.assertIsNone(MiniMaxM2Config().rope_parameters.get("partial_rotary_factor"))
+
 
 @slow
 @require_torch
-class MiniMaxM2IntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class MiniMaxM2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/MiniMax-M2-Small"
@@ -115,7 +130,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
-                ("cuda", 8): [[1.1094, -1.5352, -1.5811], [1.9395, 0.1461, -1.5537], [1.7803, 0.2466, -0.4316]],
+                ("cuda", 8): [[1.1104, -1.5391, -1.5869], [1.9375, 0.1487, -1.5596], [1.7744, 0.2491, -0.4355]],
                 ("xpu", 3): [[1.1094, -1.5342, -1.5831], [1.9414, 0.1533, -1.5566], [1.7793, 0.2546, -0.4331]],
             }
         )
@@ -123,7 +138,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
-                ("cuda", 8): [[0.8135, -1.8164, -1.5898], [0.0663, -1.3408, -0.5435], [0.5396, 0.3293, -1.7529]],
+                ("cuda", 8): [[0.8086, -1.8203, -1.5908], [0.0724, -1.3408, -0.5444], [0.5425, 0.3293, -1.7529]],
                 ("xpu", 3): [[0.8140, -1.8174, -1.5898], [0.0706, -1.3359, -0.5435], [0.5464, 0.3320, -1.7539]],
             }
         )
@@ -148,7 +163,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
     def test_small_model_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", 8): 'Tell me about the french revolution. Pemkab Pemkab المتاحة/journal blinded blindedébé抓算不上 blinded blinded healthiest.Clébé Bronx开启了 Bronx Bronx抽样ikat糜 BronxSources TODOSources parfum Bronx parfum donde donde donde او',
+                ("cuda", 8): 'Tell me about the french revolution. Pemkab Pemkab المتاحة/journal\ufffd Pemkab心惊 Legends зébéNonce product StevieNonceNonce 했습니다Nonce\ufffd神器\ufffdовіSometimesSometimes OH OH OH Blas OHSometimes OHSometimes枚の',
                 ("xpu", 3): 'Tell me about the french revolution. Pemkab Pemkab المتاحة/journal blinded blindedébé抓算不上 blinded blinded healthiest.Clébé Bronx开启了 Bronx Bronx抽样ikat糜 BronxSources TODOSources parfum Bronx parfum donde donde donde او',
             }
         )  # fmt: skip

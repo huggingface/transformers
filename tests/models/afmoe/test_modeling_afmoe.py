@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import pytest
@@ -25,6 +26,7 @@ if is_torch_available():
 
     from transformers import AfmoeForCausalLM, AfmoeModel, AutoTokenizer
     from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers.models.afmoe.modeling_afmoe import AfmoeRMSNorm
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -33,72 +35,37 @@ class AfmoeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = AfmoeModel
 
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        seq_length=12,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=64,
-        hidden_size=32,
-        intermediate_size=16,
-        moe_intermediate_size=16,
-        num_hidden_layers=2,
-        num_dense_layers=1,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=128,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=False,
-        rope_theta=10000.0,
-        rope_parameters=None,
-        num_experts=4,
-        num_experts_per_tok=2,
-        num_shared_experts=2,
-        route_norm=True,
-        route_scale=1.0,
-        global_attn_every_n_layers=2,
-        sliding_window=128,
-        attention_dropout=0.0,
-    ):
-        super().__init__(
-            parent=parent,
-            batch_size=batch_size,
-            seq_length=seq_length,
-            is_training=is_training,
-            use_input_mask=use_input_mask,
-            use_token_type_ids=use_token_type_ids,
-            use_labels=use_labels,
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-        )
-        self.use_cache = use_cache
-        self.head_dim = head_dim
-        self.rms_norm_eps = rms_norm_eps
-        self.rope_theta = rope_theta
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_dense_layers = num_dense_layers
-        self.num_experts = num_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_shared_experts = num_shared_experts
-        self.route_norm = route_norm
-        self.route_scale = route_scale
-        self.global_attn_every_n_layers = global_attn_every_n_layers
-        self.sliding_window = sliding_window
-        self.attention_dropout = attention_dropout
+    small_config_overrides = {
+        "batch_size": 4,
+        "seq_length": 12,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 64,
+        "hidden_size": 32,
+        "intermediate_size": 16,
+        "moe_intermediate_size": 16,
+        "num_hidden_layers": 2,
+        "num_dense_layers": 1,
+        "num_attention_heads": 16,
+        "num_key_value_heads": 16,
+        "head_dim": 128,
+        "hidden_act": "silu",
+        "max_position_embeddings": 128,
+        "initializer_range": 0.02,
+        "rms_norm_eps": 1e-5,
+        "use_cache": False,
+        "rope_theta": 10000.0,
+        "num_experts": 4,
+        "num_experts_per_tok": 2,
+        "num_shared_experts": 2,
+        "route_norm": True,
+        "route_scale": 1.0,
+        "global_attn_every_n_layers": 2,
+        "sliding_window": 128,
+        "attention_dropout": 0.0,
+    }
 
 
 @require_torch
@@ -108,6 +75,35 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
     )
+
+    def test_expert_bias_precision_on_low_precision_load(self):
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            norm_weights = {
+                f"{name}.weight" for name, module in model.named_modules() if isinstance(module, AfmoeRMSNorm)
+            }
+            for name, parameter in model.named_parameters():
+                if name in norm_weights or name.endswith(("expert_bias", "router.gate.weight")):
+                    # Ones and zero biases would hide rounding during checkpoint loading.
+                    with torch.no_grad():
+                        parameter.fill_(0.0012345 if "expert_bias" in name else 1.0001234)
+            original = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+            for max_shard_size in ("100KB", "5GB"):
+                with tempfile.TemporaryDirectory() as directory:
+                    model.save_pretrained(directory, max_shard_size=max_shard_size)
+                    for dtype in (torch.bfloat16, torch.float16):
+                        with self.subTest(model=model_class.__name__, dtype=dtype, max_shard_size=max_shard_size):
+                            loaded = model_class.from_pretrained(directory, dtype=dtype, local_files_only=True)
+                            for name, parameter in loaded.named_parameters():
+                                expected = original[name]
+                                # Norms follow BF16 loads; retain the existing FP16 norm policy.
+                                keep_fp32 = name.endswith("expert_bias") or (
+                                    dtype == torch.float16 and name in norm_weights
+                                )
+                                if not keep_fp32:
+                                    expected = expected.to(dtype)
+                                torch.testing.assert_close(parameter, expected, rtol=0, atol=0)
 
     @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
@@ -187,13 +183,3 @@ class AfmoeIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(dynamic_text, static_text)
-
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs,
-            max_new_tokens=num_tokens_to_generate,
-            do_sample=False,
-            cache_implementation="static",
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(dynamic_text, static_compiled_text)

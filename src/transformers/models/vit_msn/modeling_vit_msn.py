@@ -302,7 +302,6 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "patch_embeddings"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -349,7 +348,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMSNModel
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -412,7 +411,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMSNForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(2)  # doctest: +IGNORE_RESULT

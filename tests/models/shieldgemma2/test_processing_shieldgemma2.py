@@ -66,6 +66,10 @@ _SHIELDGEMMA2_POLICIES: Mapping[str, str] = {
 class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ShieldGemma2Processor
 
+    images_text_kwargs_max_length = 740
+    images_text_kwargs_override_max_length = 750
+    images_unstructured_max_length = 742
+
     @classmethod
     def _setup_image_processor(cls):
         # Use 64×64 instead of the default 224×224 to avoid large tensors.
@@ -114,7 +118,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        images = self.prepare_image_inputs()
+        images = self.prepare_images_inputs()
         processed_inputs = processor(images=images, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
         self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
@@ -142,7 +146,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "specialized_advice": "Test policy related to specialized advice.",
         }
 
-        images = self.prepare_image_inputs()
+        images = self.prepare_images_inputs()
         processed_inputs = processor(images=images, custom_policies=custom_policies, policies=policies)
         self.assertEqual(len(processed_inputs[self.text_input_name]), expected_batch_size)
         self.assertEqual(len(processed_inputs[self.images_input_name]), expected_batch_size)
@@ -153,7 +157,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        images = self.prepare_image_inputs(batch_size=2)
+        images = self.prepare_images_inputs(batch_size=2)
         processed_inputs = processor(images=images)
         self.assertEqual(len(processed_inputs[self.text_input_name]), 6)
         self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
@@ -164,43 +168,16 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
         pass
 
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_unstructured_kwargs_batched(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_unstructured_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_structured_kwargs_nested_from_dict(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_structured_kwargs_nested(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        pass
-
-    # TODO(ryanmullins): Adapt this test for ShieldGemma 2
-    @unittest.skip("Parent test needs to be adapted for ShieldGemma 2.")
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        pass
-
     @unittest.skip("ShieldGemma requires images in input, and fails in text-only processing")
     def test_apply_chat_template_assistant_mask(self):
+        pass
+
+    @unittest.skip("model creates new samples on-the-fly and thus requires padding. Not worth testing")
+    def test_replacement_offsets(self):
+        pass
+
+    @unittest.skip("model creates new samples on-the-fly and thus requires padding. Not worth testing")
+    def test_subprocessor_defaults_1_images(self):
         pass
 
     def test_processor_text_has_no_visual(self):
@@ -208,7 +185,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         text = self.prepare_text_inputs(batch_size=3, modalities="image")
-        image_inputs = self.prepare_image_inputs(batch_size=3)
+        image_inputs = self.prepare_images_inputs(batch_size=3)
         processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
 
         # Call with nested list of vision inputs

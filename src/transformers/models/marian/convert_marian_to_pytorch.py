@@ -289,7 +289,7 @@ def make_registry(repo_path="Opus-MT-train/models"):
         if n_dash == 0:
             continue
         else:
-            lns = list(open(p / "README.md").readlines())
+            lns = list(open(p / "README.md", encoding="utf-8").readlines())
             results[p.name] = _parse_readme(lns)
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
@@ -322,7 +322,7 @@ def fetch_test_set(test_set_url):
     import wget
 
     fname = wget.download(test_set_url, "opus_test.txt")
-    lns = Path(fname).open().readlines()
+    lns = Path(fname).open(encoding="utf-8").readlines()
     src = lmap(str.strip, lns[::4])
     gold = lmap(str.strip, lns[1::4])
     mar_model = lmap(str.strip, lns[2::4])
@@ -685,7 +685,7 @@ def load_yaml(path):
 
 
 def save_json(content: dict | list, path: str) -> None:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(content, f)
 
 

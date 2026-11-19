@@ -17,7 +17,6 @@ rendered properly in your Markdown viewer.
 
 # LayoutXLM
 
-
 ## Overview
 
 LayoutXLM was proposed in [LayoutXLM: Multimodal Pre-training for Multilingual Visually-rich Document Understanding](https://huggingface.co/papers/2104.08836) by Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha
@@ -82,10 +81,6 @@ As LayoutXLM's architecture is equivalent to that of LayoutLMv2, one can refer t
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## LayoutXLMTokenizerFast
-
-[[autodoc]] LayoutXLMTokenizerFast
-    - __call__
 
 ## LayoutXLMProcessor
 

@@ -21,9 +21,10 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
 from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
@@ -118,6 +119,8 @@ class MiniCPM3Config(LlamaConfig):
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
         self.head_dim = self.qk_rope_head_dim
+        # Also tells shared code this is an MLA config (key and value head dims differ)
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         # When explicitly set to `None`, these collapse to no-op scalings (e.g. for a randomly
         # initialised tiny model); the class defaults otherwise match `openbmb/MiniCPM3-4B`.
         if self.v_head_dim is None:
@@ -158,23 +161,13 @@ class MiniCPM3Attention(DeepseekV2Attention):
     module construction and override only `forward`.
     """
 
-    def expand_kv(self, k_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key_shape = (*k_nope.shape[:-1], -1, self.qk_nope_head_dim + self.v_head_dim)
-
-        k_nope = self.kv_b_proj(k_nope).view(key_shape).transpose(1, 2)
-        k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-
-        k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
-        key_states = torch.cat((k_nope, k_pe), dim=-1)
-
-        return key_states, value_states
-
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -189,7 +182,8 @@ class MiniCPM3Attention(DeepseekV2Attention):
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass)
+        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
@@ -197,12 +191,13 @@ class MiniCPM3Attention(DeepseekV2Attention):
         # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
+        # Cache read / write is performed while the latent KV is still compressed
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
+
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
         key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -231,12 +226,13 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
         # (Llama adds the branch directly). Precompute the constant once instead of per forward.
         self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -247,7 +243,7 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -262,7 +258,6 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
 
 
 class MiniCPM3PreTrainedModel(LlamaPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, MiniCPM3ScaledWordEmbedding):
@@ -283,13 +278,14 @@ class MiniCPM3Model(LlamaModel):
 class MiniCPM3ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -315,7 +311,7 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -324,8 +320,8 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
         hidden_states = outputs.last_hidden_state
         # MiniCPM3 scales hidden states down before the LM head (not present in Llama).
         hidden_states = hidden_states / self.config.logits_scaling
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -334,7 +330,7 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

@@ -41,9 +41,9 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     audio_input_name = "audio_input_features"
 
     # Max-length values used in image-text kwargs tests. Override as phi4 needs lots of tokens for images.
-    image_text_kwargs_max_length = 400
-    image_text_kwargs_override_max_length = 396
-    image_unstructured_max_length = 407
+    images_text_kwargs_max_length = 400
+    images_text_kwargs_override_max_length = 396
+    images_unstructured_max_length = 407
 
     # Max-length values used in audio-text kwargs tests. Override as phi4 needs lots of tokens for audio.
     audio_text_kwargs_max_length = 300
@@ -51,24 +51,17 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     audio_unstructured_max_length = 76
 
     # Max-length values used in video-text kwargs tests. Override in subclasses if needed.
-    video_text_kwargs_max_length = 167
-    video_text_kwargs_override_max_length = 162
-    video_unstructured_max_length = 176
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.image_token_id = processor.image_token_id
-        cls.audio_token = processor.audio_token
-        cls.audio_token_id = processor.audio_token_id
+    videos_text_kwargs_max_length = 167
+    videos_text_kwargs_override_max_length = 162
+    videos_unstructured_max_length = 176
 
     # override: audio_attention_mask is returned conditionally, and not expected in the input names in this case
     def test_model_input_names(self):
         processor = self.get_processor()
 
-        text = self.prepare_text_inputs(modalities=["image", "video", "audio"])
-        image_input = self.prepare_image_inputs()
-        video_inputs = self.prepare_video_inputs()
+        text = self.prepare_text_inputs(modalities=["images", "videos", "audio"])
+        image_input = self.prepare_images_inputs()
+        video_inputs = self.prepare_videos_inputs()
         audio_inputs = self.prepare_audio_inputs()
         inputs_dict = {"text": text, "images": image_input, "videos": video_inputs, "audio": audio_inputs}
 

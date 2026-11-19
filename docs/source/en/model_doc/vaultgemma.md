@@ -22,7 +22,7 @@ limitations under the License.
 ## Overview
 
 [VaultGemma](https://services.google.com/fh/files/blogs/vaultgemma_tech_report.pdf) is a text-only decoder model
-derived from [Gemma 2](https://huggingface.co/docs/transformers/en/model_doc/gemma2), notably it drops the norms after
+derived from [Gemma 2](./gemma2), notably it drops the norms after
 the Attention and MLP blocks, and uses full attention for all layers instead of alternating between full attention and
 local sliding attention. VaultGemma is available as a pretrained model with 1B parameters that uses a 1024 token
 sequence length.

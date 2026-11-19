@@ -31,19 +31,21 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_large_accelerator,
     require_torchcodec,
     slow,
     torch_device,
 )
-from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -53,10 +55,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_torchcodec_available():
-    import torchcodec
 
 
 class Phi4MultimodalModelTester:
@@ -225,10 +223,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    @unittest.skip(reason="Test tries to instantiate dynamic cache with an arg")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Test is only for old attention format")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
@@ -281,8 +275,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+    image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
@@ -293,9 +287,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        audio_bytes = requests.get(self.audio_url, stream=True).raw.data
-        samples = torchcodec.decoders.AudioDecoder(audio_bytes).get_all_samples()
-        self.audio, self.sampling_rate = samples.data, samples.sample_rate
+        self.sampling_rate = 16000
+        self.audio = load_audio(self.audio_url, sampling_rate=self.sampling_rate)
 
         cleanup(torch_device, gc_collect=True)
 
@@ -308,7 +301,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images=None, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=None, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -321,13 +314,14 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
+    @require_deterministic_for_xpu
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images=self.image, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=self.image, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -340,6 +334,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 7): 'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"',
                 ("cuda", 8): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
+                ("xpu", 5): 'The image shows a vibrant street scene in a bustling city, likely in a region with a rich cultural',
             }
         )  # fmt: skip
         EXPECTED_RESPONSE = EXPECTED_RESPONSES.get_expectation()
@@ -355,12 +350,12 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         images = []
         placeholder = ""
         for i in range(1, 5):
-            url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
-            images.append(Image.open(requests.get(url, stream=True).raw))
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_{i}.jpg"
+            images.append(load_test_image(url))
             placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=images, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -369,7 +364,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The presentation provides an overview of Microsoft Azure, a cloud computing platform by Microsoft, and its various services"
+        EXPECTED_RESPONSE = "This presentation provides an introduction to cloud computing, focusing on Microsoft Azure services. It outlines a four-part"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
@@ -380,9 +375,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self.processor(
+            text=prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt"
+        ).to(torch_device)
 
         output = model.generate(
             **inputs,
