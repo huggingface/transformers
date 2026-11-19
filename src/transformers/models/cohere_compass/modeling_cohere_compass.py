@@ -34,6 +34,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -41,7 +42,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1296,6 +1297,7 @@ class CohereCompassModel(CohereCompassPreTrainedModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1340,9 +1342,6 @@ class CohereCompassModel(CohereCompassPreTrainedModel, MultimodalMixin):
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
             deepstack_image_embeds = mm_encoder_outputs["image"].deepstack_features
-            if not isinstance(image_embeds, torch.Tensor):
-                image_embeds = torch.cat(image_embeds, dim=0)
-                deepstack_image_embeds = [torch.cat(feat, dim=0) for feat in deepstack_image_embeds]
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1352,9 +1351,6 @@ class CohereCompassModel(CohereCompassPreTrainedModel, MultimodalMixin):
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
             deepstack_video_embeds = mm_encoder_outputs["video"].deepstack_features
-            if not isinstance(video_embeds, torch.Tensor):
-                video_embeds = torch.cat(video_embeds, dim=0)
-                deepstack_video_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds

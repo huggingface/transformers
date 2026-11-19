@@ -639,6 +639,14 @@ class Granite4VisionModel(LlavaNextModel):
         ]
         return outputs
 
+    @staticmethod
+    def merge_modality_outputs(outputs):
+        """Concatenates each `(layer, features)` deepstack pair back into one tensor."""
+        if isinstance(outputs.deepstack_features[0][1], torch.Tensor):
+            return outputs
+        deepstack_features = [(layer, torch.cat(features)) for layer, features in outputs.deepstack_features]
+        return type(outputs)(**{**outputs, "deepstack_features": deepstack_features})
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -680,8 +688,6 @@ class Granite4VisionModel(LlavaNextModel):
         if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
             for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
-                if not isinstance(packed_features, torch.Tensor):
-                    packed_features = torch.cat(packed_features, dim=0)
                 packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     vision_mask = self.get_placeholder_mask(

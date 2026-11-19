@@ -18,8 +18,9 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import MultimodalMixin, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -152,6 +153,7 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
     @auto_docstring
     @deprecate_kwarg("image_patches", version="v5.24", new_name="pixel_values")
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -187,8 +189,6 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
             patch_embeddings = mm_encoder_outputs["image"].pooler_output
             if patch_embeddings is None:
                 patch_embeddings = mm_encoder_outputs["image"].last_hidden_state
-            elif not isinstance(patch_embeddings, torch.Tensor):
-                patch_embeddings = torch.cat(patch_embeddings, dim=0)
             patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
