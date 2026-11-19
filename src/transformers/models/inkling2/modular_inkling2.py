@@ -32,6 +32,7 @@ from ...integrations import use_experts_implementation, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
@@ -1227,6 +1228,7 @@ class Inkling2Model(InklingModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1296,8 +1298,6 @@ class Inkling2Model(InklingModel):
         image_embeds = None
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            if not isinstance(image_embeds, torch.Tensor):
-                image_embeds = torch.cat(image_embeds, dim=0)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
