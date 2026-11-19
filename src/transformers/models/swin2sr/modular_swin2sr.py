@@ -232,7 +232,7 @@ class Swin2SRPreTrainedModel(Swinv2PreTrainedModel):
 
 
 class Swin2SREncoder(Swin2SRPreTrainedModel):
-    def __init__(self, config, grid_size):
+    def __init__(self, config: Swin2SRConfig, grid_size):
         super().__init__(config)
         self.num_stages = len(config.depths)
         self.config = config
@@ -274,7 +274,7 @@ class Swin2SREncoder(Swin2SRPreTrainedModel):
 
 @auto_docstring
 class Swin2SRModel(Swin2SRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swin2SRConfig):
         super().__init__(config)
         self.config = config
 
@@ -488,7 +488,7 @@ class Swin2SRPixelShuffleAuxUpsampler(nn.Module):
     """
 )
 class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swin2SRConfig):
         super().__init__(config)
 
         self.swin2sr = Swin2SRModel(config)

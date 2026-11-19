@@ -219,7 +219,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel, ConvNextForIma
     """
 )
 class ConvNextV2Backbone(ConvNextBackbone):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
 
         self.embeddings = ConvNextV2Embeddings(config)

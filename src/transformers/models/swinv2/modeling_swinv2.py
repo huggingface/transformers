@@ -758,7 +758,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 
 
 class Swinv2Encoder(Swinv2PreTrainedModel):
-    def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
+    def __init__(self, config: Swinv2Config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
         super().__init__(config)
         self.num_layers = len(config.depths)
         self.config = config
@@ -1074,7 +1074,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     """
 )
 class Swinv2Backbone(BackboneMixin, Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]

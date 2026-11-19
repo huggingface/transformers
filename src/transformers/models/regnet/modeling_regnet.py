@@ -278,7 +278,7 @@ class RegNetEncoder(RegNetPreTrainedModel):
 
 @auto_docstring
 class RegNetModel(RegNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RegNetConfig):
         super().__init__(config)
         self.config = config
         self.embedder = RegNetEmbeddings(config)

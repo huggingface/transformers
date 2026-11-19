@@ -353,7 +353,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 class ConvNextV2Backbone(BackboneMixin, ConvNextV2PreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
 
         self.embeddings = ConvNextV2Embeddings(config)
