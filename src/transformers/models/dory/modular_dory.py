@@ -289,7 +289,8 @@ class DoryModel(LlamaModel):
 
         n_loops = self.config.n_recurrent_loops
         recurrent_start = self.config.n_input_layers
-        recurrent_end = recurrent_start + self.config.n_recurrent_layers
+        n_recurrent = self.config.n_recurrent_layers
+        recurrent_end = recurrent_start + n_recurrent
         last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
 
         shared_kv_states = None
@@ -300,8 +301,9 @@ class DoryModel(LlamaModel):
             }
         elif past_key_values is not None and len(past_key_values.layers) == self.config.num_hidden_layers:
             # Loops 1, 2, ... write to copies of the recurrent cache layers, appended at the end
-            recurrent_cache = past_key_values.layers[recurrent_start:recurrent_end] * (n_loops - 1)
-            past_key_values.layers += [copy.deepcopy(layer) for layer in recurrent_cache]
+            past_key_values.layers += [
+                copy.deepcopy(c) for c in past_key_values.layers[recurrent_start:recurrent_end] * (n_loops - 1)
+            ]
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
@@ -313,24 +315,21 @@ class DoryModel(LlamaModel):
                 **kwargs,
             )
 
+        # Loop i > 0 writes to its copies of the recurrent cache layers, appended after the model's layers
+        offset = len(self.layers) - recurrent_start - n_recurrent
         # Each loop restarts from the input section's output
         input_hidden_states = self.norm(hidden_states)
         for loop_idx in range(n_loops):
             hidden_states = self.norm(hidden_states) + input_hidden_states
-            is_read_only = last_loop_only and loop_idx < n_loops - 1
-            # Shifts each layer's cache index to this loop's copies (0 for loop 0 and for `last_loop`)
-            cache_offset = 0
-            if loop_idx > 0 and not last_loop_only:
-                cache_offset = self.config.num_hidden_layers + (loop_idx - 1) * (recurrent_end - recurrent_start)
-                cache_offset -= recurrent_start
+            cache_offset = 0 if loop_idx == 0 or last_loop_only else offset + loop_idx * n_recurrent
             for decoder_layer in self.layers[recurrent_start:recurrent_end]:
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                     position_embeddings=position_embeddings[decoder_layer.attention_type],
-                    past_key_values=None if is_read_only else past_key_values,
+                    past_key_values=past_key_values,
                     cache_offset=cache_offset,
-                    shared_kv_states=shared_kv_states if is_read_only else None,
+                    shared_kv_states=shared_kv_states if loop_idx < n_loops - 1 else None,
                     **kwargs,
                 )
 
