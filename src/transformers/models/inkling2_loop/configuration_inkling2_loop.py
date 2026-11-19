@@ -139,6 +139,10 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
         if self.loop_config is None:
             # TODO: Better naming: layer_index_start, layer_index_end, num_passes, gate_rank
             self.loop_config = {"core_start": 6, "core_end": 18, "num_passes": 3, "gate_rank": 64}
+
+        # TODO: remove before merge. Currently needed because vision_config.text_hidden_size is missing from
+        # the hub config.
+        self.vision_config.text_hidden_size = self.text_config.hidden_size
         if self.layer_types is None:
             self.layer_types = [
                 "hybrid" if (i + 1) % 6 == 0 else "hybrid_sliding" for i in range(self.num_hidden_layers)
@@ -155,21 +159,6 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
     def total_num_hidden_layers(self) -> int:
         """Total number of decoder layers visited in each forward pass. This takes looped layers into account."""
         return len(self.cache_layer_indices)
-
-    # TODO: move to validate archictecture?
-    def validate_loop_config(self):
-        core_start, core_end = self.loop_config["core_start"], self.loop_config["core_end"]
-        if not 0 <= core_start < core_end <= self.num_hidden_layers:
-            raise ValueError(
-                f"The loop core [{core_start}, {core_end}) must lie within the {self.num_hidden_layers} layers."
-            )
-        if core_start % self.n_layers_per_attn_res_block or core_end % self.n_layers_per_attn_res_block:
-            raise ValueError(
-                f"The loop core boundaries ({core_start}, {core_end}) must be multiples of "
-                f"`n_layers_per_attn_res_block` ({self.n_layers_per_attn_res_block})."
-            )
-        if self.loop_config["num_passes"] < 2 or self.loop_config["gate_rank"] < 1:
-            raise ValueError("`loop_config` needs `num_passes` >= 2 and `gate_rank` >= 1.")
 
 
 @auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
