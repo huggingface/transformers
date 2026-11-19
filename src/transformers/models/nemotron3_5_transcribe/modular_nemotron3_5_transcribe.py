@@ -631,7 +631,8 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
 
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
-        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.audio_tower = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
+        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size, dtype=torch.float32)
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
 
     def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.Tensor:

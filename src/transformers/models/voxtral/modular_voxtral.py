@@ -70,6 +70,11 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "hidden_states": VoxtralEncoderLayer,
     }
 
+    def __init__(self, config: VoxtralConfig):
+        super().__init__(config)
+        embed_dim = config.d_model
+        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim, dtype=torch.float32)
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(

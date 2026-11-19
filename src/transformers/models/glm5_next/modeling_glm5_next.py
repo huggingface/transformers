@@ -649,6 +649,7 @@ class Glm5NextTextLinearAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
+            dtype=torch.flot32,
         )
 
         self.forget_gate = Glm5NextTextForgetGate(config)
