@@ -336,6 +336,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # Consumed by cache_utils to select indexed-attention cache layers.
     "HYV4VLTextConfig": ["layer_types"],
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
+    # Use the DeepseekV3 implementation, which the auto mappings point to
+    "SarvamMLAConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
