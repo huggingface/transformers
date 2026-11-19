@@ -16,84 +16,79 @@ rendered properly in your Markdown viewer.
 
 # Metal
 
-Metal quantization performs affine quantization on Apple Silicon (MPS) devices using Metal kernels hosted on the Hugging Face Hub ([kernels-community/mlx-quantization-metal-kernels](https://huggingface.co/kernels-community/mlx-quantization-metal-kernels)). These kernels originate from the [MLX](https://github.com/ml-explore/mlx) framework and are compiled via the [`kernels`](https://github.com/huggingface/kernels) library.
+Metal quantization packs weights into `uint32` tensors with an affine scale and bias for each group, and runs a fused dequantize and matmul kernel on the Apple silicon GPU. The kernels come from [MLX](https://github.com/ml-explore/mlx) and load from the Hub ([kernels-community/mlx-quantization-metal-kernels](https://huggingface.co/kernels-community/mlx-quantization-metal-kernels)) through the [kernels](https://github.com/huggingface/kernels) library. Use it to run 2-, 4-, or 8-bit models on a Mac with MPS.
 
-Weights are packed into `uint32` tensors with per-group scales and biases, and the forward pass uses a fused dequantization + matmul Metal kernel (`affine_qmm_t`). This keeps memory usage low while running inference entirely on the GPU with no CPU round-trips.
+The table below summarizes what Metal supports in Transformers.
 
-Supported bit-widths are **2, 4, and 8**. Group size is configurable (default 64).
+| | |
+|---|---|
+| Config | [`MetalConfig`] |
+| `quant_method` | `metal` |
+| Workflow | Quantize while loading |
+| Bits | 2, 4, 8 |
+| Hardware | Apple silicon (MPS) |
+| Save | ✅ |
+| Fine-tune | ❌ |
+| Auto-compile | ❌ |
 
-## Requirements
+## Install Metal
 
-- Apple Silicon Mac (M1 / M2 / M3 / M4) with MPS support
-- The `kernels` package:
+Install Transformers with the kernels extra. The Metal kernels download from the Hub the first time a quantized layer runs.
 
 ```bash
-pip install kernels
+pip install -U "transformers[kernels]"
 ```
 
-The Metal kernels are downloaded from the Hub automatically on first use — no manual compilation required.
+## Quantize a model with Metal
 
-## Quantize on-the-fly
+Create a [`MetalConfig`] and pass it to [`~PreTrainedModel.from_pretrained`]. Set `device_map="mps"` so the model runs on the Apple silicon GPU. The example below quantizes every linear layer to 4 bits in groups of 64 weights.
 
-Load any model and quantize it during loading by passing a [`MetalConfig`]. All eligible `nn.Linear` layers are replaced with quantized versions.
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer, MetalConfig
+```py
+from transformers import AutoModelForCausalLM, MetalConfig
 
 quantization_config = MetalConfig(bits=4, group_size=64)
 model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-1B",
-    device_map="mps",
+    "Qwen/Qwen3-0.6B",
     quantization_config=quantization_config,
-)
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
-inputs = tokenizer("Apple Silicon is", return_tensors="pt").to("mps")
-output = model.generate(**inputs, max_new_tokens=50)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
-```
-
-## Load a pre-quantized model
-
-If a checkpoint already contains quantized weights (`weight` as packed uint32, `scales`, `qbiases`), they are loaded directly — no re-quantization needed.
-
-```python
-from transformers import AutoModelForCausalLM, MetalConfig
-
-model = AutoModelForCausalLM.from_pretrained(
-    "your-org/model-metal-4bit",
     device_map="mps",
 )
 ```
 
-## Dequantize
+A checkpoint saved with Metal quantization stores the packed weights, scales, and biases. Loading it with [`~PreTrainedModel.from_pretrained`] reads them directly without quantizing again.
 
-On machines without MPS, a pre-quantized checkpoint is automatically dequantized back to float so the model remains usable on CPU or CUDA. You can also force this behavior explicitly:
+## Configure Metal
 
-```python
+These [`MetalConfig`] parameters change how the weights are quantized.
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `bits` | `4` | Number of bits per weight. Supports 2, 4, and 8. |
+| `group_size` | `64` | Number of weights that share a scale and bias. Must be positive. |
+| `modules_to_not_convert` | `None` | Modules to leave unquantized. |
+
+## Load a Metal checkpoint without Apple silicon
+
+If you load a Metal checkpoint on a machine without MPS, Transformers logs a warning and dequantizes the weights back to floating point, so the model runs as a regular model on the CPU or a CUDA GPU. To dequantize on any machine, set `dequantize=True`. The example below loads the model from [Quantize a model with Metal](#quantize-a-model-with-metal) after it was saved with `model.save_pretrained("Qwen3-0.6B-metal")`.
+
+```py
 from transformers import AutoModelForCausalLM, MetalConfig
 
-config = MetalConfig(dequantize=True)
 model = AutoModelForCausalLM.from_pretrained(
-    "your-org/model-metal-4bit",
-    quantization_config=config,
+    "Qwen3-0.6B-metal",
+    quantization_config=MetalConfig(dequantize=True),
     device_map="cpu",
 )
 ```
 
-## Exclude layers
+`dequantize` only applies when loading. It isn't saved in the checkpoint's config.
 
-Certain layers (e.g., `lm_head`) can be excluded from quantization via `modules_to_not_convert`:
+## Limitations
 
-```python
-config = MetalConfig(bits=4, group_size=64, modules_to_not_convert=["lm_head"])
-```
+- Quantizing a model needs an MPS device. Quantizing without one raises a `RuntimeError`.
+- Loading without the kernels package installed raises an `ImportError`.
+- Quantizing a model with `"cpu"` or `"disk"` in its `device_map` raises a `ValueError`.
 
-## Configuration options
+## Resources
 
-| Parameter | Default | Description |
-|---|---|---|
-| `bits` | `4` | Bit-width for weight quantization (2, 4, or 8) |
-| `group_size` | `64` | Number of elements per quantization group |
-| `modules_to_not_convert` | `None` | List of module names to keep in full precision |
-| `dequantize` | `False` | Force dequantization to float (for non-MPS devices) |
+- [MLX](https://github.com/ml-explore/mlx) repository
+- [kernels-community/mlx-quantization-metal-kernels](https://huggingface.co/kernels-community/mlx-quantization-metal-kernels) on the Hub

@@ -767,6 +767,8 @@
         title: Kolibri1
       - local: model_doc/laguna
         title: Laguna
+      - local: model_doc/lara_mini
+        title: Lara Mini
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -776,7 +778,7 @@
       - local: model_doc/lfm3
         title: LFM3
       - local: model_doc/bailing_hybrid
-        title: Ling 3.0
+        title: Ling 3
       - local: model_doc/llama
         title: LLaMA
       - local: model_doc/llama2
