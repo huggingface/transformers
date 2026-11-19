@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -57,76 +58,75 @@ if is_vision_available():
     from PIL import Image
 
 
-class ModernVBertModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=7,
-        num_images=2,
-        text_config=None,
-        is_training=True,
-        vision_config=None,
-        image_token_id: int = 57,
-        pixel_shuffle_factor=2,
-        num_labels=3,
-        use_labels=True,
-        type_sequence_label_size=2,
-    ):
-        if text_config is None:
-            text_config = {
-                "vocab_size": 99,
-                "pad_token_id": 0,
-                "hidden_size": 32,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "intermediate_size": 64,
-                "hidden_activation": "gelu",
-                "mlp_dropout": 0.1,
-                "attention_dropout": 0.1,
-                "embedding_dropout": 0.1,
-                "classifier_dropout": 0.1,
-                "max_position_embeddings": 512,
-                "type_vocab_size": 2,
-                "is_decoder": False,
-                "initializer_range": 0.02,
-                "reference_compile": False,
-            }
-        if vision_config is None:
-            vision_config = {
-                "image_size": 16,
-                "patch_size": 4,
-                "hidden_size": 64,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "intermediate_size": 32,
-                "dropout": 0.1,
-                "attention_dropout": 0.1,
-                "initializer_range": 0.02,
-            }
-        self.parent = parent
-        self.batch_size = batch_size
-        self.text_config = ModernBertConfig(**text_config)
-        self.vision_config = vision_config
-        self.num_images = num_images
-        self.image_token_id = image_token_id
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_size = vision_config["image_size"]
-        self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.image_seq_length = (
-            int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (pixel_shuffle_factor**2))
-            * self.num_images
-        )
-        self.seq_length = self.image_seq_length + seq_length
+class ModernVBertModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 7,
+        "num_images": 2,
+        "text_config": {
+            "vocab_size": 99,
+            "pad_token_id": 0,
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 64,
+            "hidden_activation": "gelu",
+            "mlp_dropout": 0.1,
+            "attention_dropout": 0.1,
+            "embedding_dropout": 0.1,
+            "classifier_dropout": 0.1,
+            "max_position_embeddings": 512,
+            "type_vocab_size": 2,
+            "is_decoder": False,
+            "initializer_range": 0.02,
+            "reference_compile": False,
+        },
+        "is_training": True,
+        "vision_config": {
+            "image_size": 16,
+            "patch_size": 4,
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 32,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
+            "initializer_range": 0.02,
+        },
+        "image_token_id": 57,
+        "pixel_shuffle_factor": 2,
+        "num_labels": 3,
+        "use_labels": True,
+        "type_sequence_label_size": 2,
+    }
 
-        self.vocab_size = text_config["vocab_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.num_labels = num_labels
-        self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["image_size"] = vision_config["image_size"]
+        values["image_seq_length"] = (
+            int(
+                ((vision_config["image_size"] // vision_config["patch_size"]) ** 2)
+                / (values["pixel_shuffle_factor"] ** 2)
+            )
+            * values["num_images"]
+        )
+        values["seq_length"] = values["image_seq_length"] + values["seq_length"]
+
+        values["vocab_size"] = text_config["vocab_size"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+        self.text_config = ModernBertConfig(**self.text_config)
 
     def get_config(self):
         config = ModernVBertConfig(
@@ -274,6 +274,7 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
     skip_test_image_features_output_shape = True  # ModernVBert merges batch_size with num_images in index 0
     model_split_percents = [0.5, 0.8, 0.9]
+    model_tester_class = ModernVBertModelTester
 
     def setUp(self):
         self.model_tester = ModernVBertModelTester(self)
