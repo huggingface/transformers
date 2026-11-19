@@ -93,6 +93,30 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
+_TP_CLASSES: dict[type[nn.Module], type[nn.Module]] = {}
+
+
+def _tp_class(cls: type[nn.Module]) -> type[nn.Module]:
+    """Subclass of `cls` whose forward wraps `cls.forward` in the module's TP style (see `install_forward`)."""
+    if cls not in _TP_CLASSES:
+
+        def forward(self, *args, **kwargs):
+            style, mesh = self._tp_style, self._tp_mesh
+            args, kwargs = style.transform_inputs_pre_forward(self, args, kwargs, mesh)
+            with style.context_around_forward(self, mesh):
+                output = cls.forward(self, *args, **kwargs)
+            return style.transform_output_post_forward(self, output, mesh)
+
+        attrs = {
+            "forward": forward,
+            "_is_tp_class": True,
+            "__module__": cls.__module__,
+            "__qualname__": cls.__qualname__,
+        }
+        _TP_CLASSES[cls] = type(cls)(cls.__name__, (cls,), attrs)
+    return _TP_CLASSES[cls]
+
+
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
@@ -127,16 +151,28 @@ class TensorParallelLayer:
         )
 
     def install_forward(self, module, mesh):
-        """Install pre / around / post transforms by replacing module.forward."""
-        original_forward = module.forward
+        """Install pre / around / post transforms around module.forward.
 
-        def tp_forward(*args, **kwargs):
-            args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
-            with self.context_around_forward(module, mesh):
-                output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh)
+        The module's class is swapped for a subclass, shared by all the modules of that class, whose forward reads
+        the style and mesh from the module. A forward set on each instance works too, but torch.compile then guards
+        every sharded module's forward and closure before each call: about 1 ms per decoding step for a 7B model on
+        2 GPUs. A module whose forward was already replaced on the instance keeps a per-instance wrapper."""
+        if "forward" in module.__dict__:
+            original_forward = module.forward
 
-        module.forward = tp_forward
+            def tp_forward(*args, **kwargs):
+                args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
+                with self.context_around_forward(module, mesh):
+                    output = original_forward(*args, **kwargs)
+                return self.transform_output_post_forward(module, output, mesh)
+
+            module.forward = tp_forward
+            return module
+
+        module._tp_style = self
+        module._tp_mesh = mesh
+        if not getattr(type(module), "_is_tp_class", False):
+            module.__class__ = _tp_class(type(module))
         return module
 
 

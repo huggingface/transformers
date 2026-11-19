@@ -273,6 +273,32 @@ class TestTensorParallelLayer(TestCasePlus):
                     ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
                 self.assertIn("linear layers", str(context.exception))
 
+    def test_install_forward_shares_one_forward_per_class(self):
+        # A forward closure per sharded module makes torch.compile guard each module's closure before every call
+        colwise, rowwise = ALL_PARALLEL_STYLES["colwise"], ALL_PARALLEL_STYLES["rowwise"]
+        first, second = torch.nn.Linear(4, 8), torch.nn.Linear(8, 4)
+        colwise.install_forward(first, mesh=None)
+        rowwise.install_forward(second, mesh=None)
+
+        self.assertNotIn("forward", first.__dict__)
+        self.assertIs(type(first), type(second))
+        self.assertIsInstance(first, torch.nn.Linear)
+        self.assertEqual(type(first).__name__, "Linear")
+        self.assertIs(first._tp_style, colwise)
+        self.assertIs(second._tp_style, rowwise)
+
+        # Installing again replaces the style instead of nesting subclasses
+        rowwise.install_forward(first, mesh=None)
+        self.assertIs(type(first).__mro__[1], torch.nn.Linear)
+        self.assertIs(first._tp_style, rowwise)
+
+    def test_install_forward_runs_the_module_forward(self):
+        module = torch.nn.Linear(4, 8)
+        inputs = torch.randn(2, 4)
+        expected = module(inputs)
+        ALL_PARALLEL_STYLES["replicate"].install_forward(module, mesh=None)
+        torch.testing.assert_close(module(inputs), expected)
+
     def test_embedding_uneven_local_shapes(self):
         rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
         colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
