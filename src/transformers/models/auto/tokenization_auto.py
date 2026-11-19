@@ -861,9 +861,9 @@ class AutoTokenizer:
             )
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        # if there is a config, we can check that the tokenizer class != than model class.
-        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
-        # Hub class should prioritize tokenizer_config.json or fallback to config.tokenizer_class.
+        # If the hub's tokenizer_class doesn't match the class registered for this model type, we trust the hub
+        # unless the model type is in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS. If either class is generic
+        # (ex. TokenizersBackend), there's no specific class to enforce, so we just load tokenizer.json as-is.
         _hub_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
             tokenizer_auto_map is None
@@ -880,7 +880,7 @@ class AutoTokenizer:
                 "PythonBackend",
                 "PreTrainedTokenizerFast",
                 "MistralCommonBackend",
-            ):
+            ) and _hub_class.removesuffix("Fast") not in ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizer"):
                 # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
                 class_name = (
                     registered_class_name
