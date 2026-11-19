@@ -447,7 +447,6 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):

@@ -149,7 +149,6 @@ class VideomtPreTrainedModel(EomtPreTrainedModel):
     main_input_name = "pixel_values_videos"
     input_modalities = ("video",)
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
         if isinstance(module, VideomtEmbeddings):

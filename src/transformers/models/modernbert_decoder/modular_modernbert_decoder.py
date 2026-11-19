@@ -86,7 +86,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert-decoder"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     vocab_size: int = 50368
@@ -336,7 +335,6 @@ class ModernBertDecoderPredictionHead(ModernBertPredictionHead):
 
 @auto_docstring
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
-    _skip_keys_device_placement = ["cache"]
     _no_split_modules = ["ModernBertDecoderLayer"]
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -346,7 +344,6 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         "attentions": ModernBertDecoderAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)
 

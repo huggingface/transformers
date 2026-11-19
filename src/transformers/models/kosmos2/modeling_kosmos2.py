@@ -64,7 +64,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False  # cuda device errors
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)

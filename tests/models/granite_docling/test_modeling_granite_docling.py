@@ -52,28 +52,35 @@ class GraniteDoclingModelTester(VLMModelTester):
     config_class = GraniteDoclingConfig
     conditional_generation_class = GraniteDoclingForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 7)  # fixes unwanted conversions during sdpa vs eager tests (forces bsz==7)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("out_hidden_size", kwargs["hidden_size"])
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("shared_intermediate_size", 37)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        # The checkpoint defaults scale attention scores by 1/64; keep the usual 1/sqrt(head_dim) for the tiny model
-        kwargs.setdefault("attention_multiplier", (kwargs["hidden_size"] // kwargs["num_attention_heads"]) ** -0.5)
+    small_config_overrides = {
+        # fixes unwanted conversions during sdpa vs eager tests (forces bsz==7)
+        "batch_size": 7,
+        "hidden_size": 64,
+        "intermediate_size": 37,
+        "shared_intermediate_size": 37,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
         # A 16x16 tile with 4x4 patches gives 16 patch tokens per tile; pixel shuffling by 2 leaves 4 image tokens
         # on the coarse path, which the shared tests take, and 16 on the fine path.
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("scale_factor", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("num_tiles", 1)
-        kwargs.setdefault("seq_length", 7 + 4 * kwargs["num_image_tokens"])
-        kwargs.setdefault("deepstack_visual_indexes", [1])
-        kwargs.setdefault("density_router_hidden_size", 8)
-        super().__init__(parent, **kwargs)
+        "image_size": 16,
+        "patch_size": 4,
+        "scale_factor": 2,
+        "num_image_tokens": 4,
+        "num_tiles": 1,
+        "deepstack_visual_indexes": [1],
+        "density_router_hidden_size": 8,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("out_hidden_size", values["hidden_size"])
+        # The checkpoint defaults scale attention scores by 1/64; keep the usual 1/sqrt(head_dim) for the tiny model
+        values.setdefault("attention_multiplier", (values["hidden_size"] // values["num_attention_heads"]) ** -0.5)
+        if "seq_length" not in kwargs:
+            values["seq_length"] = 7 + 4 * values["num_image_tokens"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

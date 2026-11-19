@@ -274,7 +274,6 @@ class BltRMSNorm(MllamaTextRMSNorm):
 
 
 class BltRotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -368,7 +367,6 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     # (or 1 / sqrt(hidden_dim) for FFN outputs), and unit initialization for normalization layers.
     # We follow the same scheme here, but expressed in the Transformers APIs.
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize BLT weights following the original ByteLatentTransformer:

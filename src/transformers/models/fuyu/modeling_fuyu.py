@@ -41,7 +41,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = []
-    _skip_keys_device_placement = ["cache"]
 
 
 @auto_docstring(

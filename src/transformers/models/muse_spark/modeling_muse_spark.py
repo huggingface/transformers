@@ -499,7 +499,6 @@ class MuseSparkPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MuseSparkTextDecoderLayer", "MuseSparkVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -564,7 +563,6 @@ class MuseSparkTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -676,53 +674,6 @@ class MuseSparkTextModel(MuseSparkPreTrainedModel):
             last_hidden_state=hidden_states,
             cache=cache,
         )
-
-
-class MuseSparkVisionPatchEmbedder(nn.Module):
-    def __init__(self, config: MuseSparkVisionConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.patch_embedding = nn.Linear(
-            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
-        )
-        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
-        # FIXME: only if square images - vision utils don't yet support non-square
-        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
-        self.num_grid_per_side = config.pos_emb_height
-        # muse_spark resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
-        self.interpolation_mode = "bilinear"
-        self.interpolation_align_corners = False
-        self.interpolation_padding = "zeros"
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
-        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
-
-        # Patch (h, w) reads the position table at (w, h): ref code passes
-        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw[:, [0, 2, 1]],
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-            padding=self.interpolation_padding,
-            kwargs=kwargs,
-        )
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 def apply_rotary_pos_emb_vision(
@@ -862,6 +813,54 @@ class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class MuseSparkVisionPatchEmbedder(nn.Module):
+    def __init__(self, config: MuseSparkVisionConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.patch_embedding = nn.Linear(
+            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
+        )
+        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
+        # FIXME: only if square images - vision utils don't yet support non-square
+        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
+        self.num_grid_per_side = config.pos_emb_height
+        # muse_spark resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
+        self.interpolation_mode = "bilinear"
+        self.interpolation_align_corners = False
+        self.interpolation_padding = "zeros"
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+                The tensors corresponding to the input images.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
+        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
+
+        # Patch (h, w) reads the position table at (w, h): ref code passes
+        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw[:, [0, 2, 1]],
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            padding=self.interpolation_padding,
+            kwargs=kwargs,
+        )
+        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
+        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
+        return embeddings + pos_embeds.to(embeddings.dtype)
+
+
 class MuseSparkVisionRotaryEmbedding(nn.Module):
     """
     Simple axial 2D rope with same freqs used for H and W grids. The freqs are
@@ -903,7 +902,6 @@ class MuseSparkVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
