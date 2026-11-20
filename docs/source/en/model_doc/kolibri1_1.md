@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-11.*
+*This model was contributed to Hugging Face Transformers on 2026-11-23.*
 
 # Kolibri 1.1
 
@@ -38,8 +38,8 @@ This is a reference implementation. Sparse layers apply their key selection as a
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("<checkpoint>")
-model = AutoModelForCausalLM.from_pretrained("<checkpoint>", device_map="auto", attn_implementation="sdpa")
+tokenizer = AutoTokenizer.from_pretrained("Aleph-Alpha/Kolibri-1.1")
+model = AutoModelForCausalLM.from_pretrained("Aleph-Alpha/Kolibri-1.1", device_map="auto", attn_implementation="sdpa")
 
 messages = [{"role": "user", "content": "Erkläre kurz, was ein Mixture-of-Experts-Modell ist."}]
 inputs = tokenizer.apply_chat_template(
