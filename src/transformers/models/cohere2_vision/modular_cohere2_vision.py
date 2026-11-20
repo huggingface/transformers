@@ -152,13 +152,7 @@ class Cohere2VisionModel(AyaVisionModel):
             **kwargs,
         )
 
-        return Cohere2VisionModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Cohere2VisionModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
@@ -243,7 +237,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

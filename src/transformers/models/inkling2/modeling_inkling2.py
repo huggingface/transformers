@@ -39,14 +39,19 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeModelOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -56,52 +61,35 @@ from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vi
 from .configuration_inkling2 import Inkling2Config, Inkling2TextConfig, Inkling2VisionConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Inkling2 outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class Inkling2ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
+logger = logging.get_logger(__name__)
 
-    image_hidden_states: torch.Tensor | None = None
+
+@auto_docstring
+@dataclass
+class Inkling2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Inkling2 causal language model (or autoregressive) outputs.
-    """
-)
+
+@auto_docstring
 @dataclass
-class Inkling2CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
+class Inkling2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -1607,7 +1595,8 @@ class Inkling2Model(Inkling2PreTrainedModel):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
             router_logits=outputs.router_logits,
         )
 
@@ -1729,7 +1718,8 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

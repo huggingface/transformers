@@ -19,6 +19,7 @@ from transformers import XLNetConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,59 +39,40 @@ if is_torch_available():
     )
 
 
-class XLNetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        mem_len=10,
-        clamp_len=-1,
-        reuse_len=15,
-        is_training=True,
-        use_labels=True,
-        vocab_size=99,
-        cutoffs=[10, 50, 80],
-        hidden_size=32,
-        num_attention_heads=4,
-        d_inner=128,
-        num_hidden_layers=2,
-        type_sequence_label_size=2,
-        bi_data=False,
-        same_length=False,
-        initializer_range=0.05,
-        seed=1,
-        type_vocab_size=2,
-        bos_token_id=1,
-        eos_token_id=2,
-        pad_token_id=5,
-        num_choices=4,
-    ):
-        self.parent = parent
-        self.batch_size = 14
-        self.seq_length = 7
-        self.mem_len = 10
+class XLNetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "mem_len": 10,
         # self.key_len = seq_length + mem_len
-        self.clamp_len = -1
-        self.reuse_len = 15
-        self.is_training = True
-        self.use_labels = True
-        self.vocab_size = 99
-        self.cutoffs = [10, 50, 80]
-        self.hidden_size = 32
-        self.num_attention_heads = 4
-        self.d_inner = 128
-        self.num_hidden_layers = 3
-        self.type_sequence_label_size = 2
-        self.bi_data = False
-        self.same_length = False
-        self.initializer_range = 0.05
-        self.seed = 1
-        self.type_vocab_size = 2
-        self.bos_token_id = 1
-        self.eos_token_id = 2
-        self.pad_token_id = 5
-        self.num_choices = 4
+        "clamp_len": -1,
+        "reuse_len": 15,
+        "is_training": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "cutoffs": [10, 50, 80],
+        "hidden_size": 32,
+        "num_attention_heads": 4,
+        "d_inner": 128,
+        "num_hidden_layers": 3,
+        "type_sequence_label_size": 2,
+        "bi_data": False,
+        "same_length": False,
+        "initializer_range": 0.05,
+        "seed": 1,
+        "type_vocab_size": 2,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "pad_token_id": 5,
+        "num_choices": 4,
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -506,6 +488,8 @@ class XLNetModelTester:
 
 @require_torch
 class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = XLNetModelTester
+
     all_model_classes = (
         (
             XLNetModel,

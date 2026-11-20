@@ -17,6 +17,7 @@ import unittest
 from transformers import AutoTokenizer, UltrabertConfig, is_torch_available
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -38,57 +39,46 @@ if is_torch_available():
     )
 
 
-class UltrabertModelTester:
+class UltrabertModelTester(ModelTesterConfigMixin):
     if is_torch_available():
         base_model_class = UltrabertModel
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        num_labels=3,
-        pad_token_id=0,
-        sliding_window=2,
-        prediction_head_size=32,
-        layer_types=None,
-    ):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
+        "hidden_act": "silu",
+        "attention_dropout": 0.0,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "pad_token_id": 0,
+        "sliding_window": 2,
+        "prediction_head_size": 32,
+        "layer_types": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if values["layer_types"] is None:
+            values["layer_types"] = [
+                "sliding_attention" if i % 2 == 0 else "full_attention" for i in range(values["num_hidden_layers"])
+            ]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.sliding_window = sliding_window
-        self.prediction_head_size = prediction_head_size
-        self.layer_types = (
-            layer_types
-            if layer_types is not None
-            else ["sliding_attention" if i % 2 == 0 else "full_attention" for i in range(num_hidden_layers)]
-        )
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self, **kwargs):
         options = {
