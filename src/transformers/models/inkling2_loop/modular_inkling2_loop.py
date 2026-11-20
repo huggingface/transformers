@@ -14,7 +14,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -217,7 +216,9 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
         hidden_size = stacked_states.shape[-1]
         query_states = self.query[loop_layer_idx].float()
         query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
-        return F.scaled_dot_product_attention(query_states, stacked_states, stacked_states, scale=hidden_size**-0.5)
+        attn_weights = torch.matmul(query_states, stacked_states.transpose(-1, -2)) * hidden_size**-0.5
+        attn_weights = attn_weights.softmax(dim=-1)
+        return torch.matmul(attn_weights, stacked_states)
 
 
 class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):
