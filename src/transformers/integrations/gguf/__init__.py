@@ -17,7 +17,7 @@ from ...utils import _LazyModule
 
 
 _import_structure = {
-    "gguf_config_mapping": ["GGUF_CONFIG_ARCHS", "get_gguf_config"],
+    "gguf_config_mapping": ["GGUF_CONFIG_ARCHS", "get_gguf_config", "resolve_gguf_architecture"],
     "gguf_conversion_mapping": ["GGUF_ARCHS"],
     "gguf_tokenizer_mapping": ["GGUF_TOKENIZER_MAPPING", "convert_gguf_tokenizer", "get_gguf_tokenizer"],
     "reader": ["GgufHeader", "load_gguf_state_dict", "read_gguf_metadata"],
@@ -30,7 +30,7 @@ _import_structure = {
 }
 
 if TYPE_CHECKING:
-    from .gguf_config_mapping import GGUF_CONFIG_ARCHS, get_gguf_config
+    from .gguf_config_mapping import GGUF_CONFIG_ARCHS, get_gguf_config, resolve_gguf_architecture
     from .gguf_conversion_mapping import GGUF_ARCHS
     from .gguf_tokenizer_mapping import GGUF_TOKENIZER_MAPPING, convert_gguf_tokenizer, get_gguf_tokenizer
     from .reader import GgufHeader, load_gguf_state_dict, read_gguf_metadata

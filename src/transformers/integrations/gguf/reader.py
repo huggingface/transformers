@@ -22,6 +22,7 @@ import numpy as np
 import torch
 
 from .dequant import GGML_BLOCK, GGML_NAME
+from .gguf_config_mapping import resolve_gguf_architecture
 
 
 # the ggml type ids a GGUF holds values rather than blocks under, and what they are
@@ -50,7 +51,7 @@ class GgufHeader(NamedTuple):
     """A GGUF file's metadata: everything the loading path needs except the tensor data."""
 
     path: str
-    architecture: str
+    architecture: str  # resolved loader architecture, e.g. mixtral for a llama file with experts
     tensors: tuple[TensorInfo, ...]
     data_start: int  # where the tensor data begins, after the aligned metadata
 
@@ -82,7 +83,7 @@ class GgufHeader(NamedTuple):
         """Parse a file's metadata and tensor table, without touching its tensor data."""
         blob = _mapped(gguf_path)
         metadata, tensor_count, pos = _read_metadata(blob, gguf_path)
-        architecture = metadata["general.architecture"]
+        architecture = resolve_gguf_architecture(metadata)
         alignment = metadata.get("general.alignment", 32)  # llama.cpp's default
 
         entries, pos = _read_tensor_table(blob, tensor_count, pos)

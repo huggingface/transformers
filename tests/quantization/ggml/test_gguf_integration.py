@@ -14,6 +14,7 @@
 """Integration tests for loading GGUF checkpoints through `from_pretrained`."""
 
 import math
+import os
 import tempfile
 import unittest
 import unittest.mock
@@ -25,12 +26,16 @@ from transformers import (
     GenerationConfig,
     GgufConfig,
     Lfm2ForCausalLM,
+    MixtralConfig,
+    MixtralForCausalLM,
     Qwen3_5ForCausalLM,
     Qwen3_5MoeForCausalLM,
 )
 from transformers.testing_utils import (
+    require_accelerate,
     require_gguf,
     require_kernels,
+    require_torch,
     require_torch_accelerator,
     require_torch_mps,
     slow,
@@ -64,6 +69,226 @@ class GgufDequantizeTest(unittest.TestCase):
                 theirs = reference(blocks.numpy().reshape(-1).copy(), GGMLQuantizationType(ggml_type))
                 # `equal_nan`: a random scale can be a NaN, and both sides must produce the same one
                 self.assertTrue(np.array_equal(ours, theirs.reshape(-1)[: ours.size], equal_nan=True))
+
+
+@require_torch
+@require_gguf
+@require_accelerate
+class GgufMixtralTest(unittest.TestCase):
+    """A tiny Mixtral exported in llama.cpp's layout loads without the legacy reader."""
+
+    def write_checkpoint(
+        self,
+        directory,
+        sliding_window=None,
+        tie_word_embeddings=False,
+        quantized=False,
+        extra_metadata=None,
+        stacked=True,
+    ):
+        from gguf import GGUFWriter
+        from gguf.constants import GGMLQuantizationType
+        from gguf.quants import dequantize, quantize
+
+        config = MixtralConfig(
+            vocab_size=32,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_local_experts=4,
+            num_experts_per_tok=2,
+            max_position_embeddings=128,
+            sliding_window=sliding_window,
+            tie_word_embeddings=tie_word_embeddings,
+            rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
+        )
+        with torch.random.fork_rng():
+            torch.manual_seed(42)
+            reference = MixtralForCausalLM(config).eval()
+
+        path = os.path.join(directory, "tiny-mixtral.gguf")
+        writer = GGUFWriter(path, "llama")
+        for name, value in {
+            "context_length": 128,
+            "embedding_length": 32,
+            "feed_forward_length": 64,
+            "block_count": 2,
+            "attention.head_count": 4,
+            "attention.head_count_kv": 2,
+            "expert_count": 4,
+            "expert_used_count": 2,
+            "rope.dimension_count": 8,
+        }.items():
+            writer.add_uint32(f"llama.{name}", value)
+        writer.add_float32("llama.attention.layer_norm_rms_epsilon", config.rms_norm_eps)
+        writer.add_float32("llama.rope.freq_base", 10000.0)
+        if sliding_window is not None:
+            writer.add_uint32("llama.attention.sliding_window", sliding_window)
+        writer.add_token_list([f"token{i}" for i in range(config.vocab_size)])
+        writer.add_bos_token_id(1)
+        writer.add_eos_token_id(2)
+        for name, value in (extra_metadata or {}).items():
+            writer.add_uint32(f"llama.{name}", value)
+
+        # This is an exporter, independent of the loader's mappings. llama.cpp interleaves Q/K
+        # rotary rows and stacks each expert's w1, w2 and w3 separately in expert-index order.
+        state = reference.state_dict()
+        tensors = {
+            "token_embd.weight": state["model.embed_tokens.weight"],
+            "output_norm.weight": state["model.norm.weight"],
+        }
+        if not tie_word_embeddings:
+            tensors["output.weight"] = state["lm_head.weight"]
+        for layer in range(config.num_hidden_layers):
+            prefix = f"model.layers.{layer}."
+            for source, target in {
+                "input_layernorm.weight": "attn_norm.weight",
+                "post_attention_layernorm.weight": "ffn_norm.weight",
+                "self_attn.q_proj.weight": "attn_q.weight",
+                "self_attn.k_proj.weight": "attn_k.weight",
+                "self_attn.v_proj.weight": "attn_v.weight",
+                "self_attn.o_proj.weight": "attn_output.weight",
+                "mlp.gate.weight": "ffn_gate_inp.weight",
+                "mlp.experts.down_proj": "ffn_down_exps.weight",
+            }.items():
+                tensor = state[prefix + source]
+                if source in ("self_attn.q_proj.weight", "self_attn.k_proj.weight"):
+                    heads = config.num_attention_heads if "q_proj" in source else config.num_key_value_heads
+                    tensor = tensor.reshape(heads, 2, -1, config.hidden_size).transpose(1, 2).reshape(tensor.shape)
+                tensors[f"blk.{layer}.{target}"] = tensor
+            gate, up = state[prefix + "mlp.experts.gate_up_proj"].chunk(2, dim=1)
+            tensors[f"blk.{layer}.ffn_gate_exps.weight"] = gate
+            tensors[f"blk.{layer}.ffn_up_exps.weight"] = up
+            if not stacked:
+                for projection in ("gate", "up", "down"):
+                    experts = tensors.pop(f"blk.{layer}.ffn_{projection}_exps.weight")
+                    for expert, tensor in enumerate(experts):
+                        tensors[f"blk.{layer}.ffn_{projection}.{expert}.weight"] = tensor
+        for name, tensor in tensors.items():
+            array = tensor.contiguous().numpy()
+            if quantized and tensor.ndim >= 2:
+                writer.add_tensor(
+                    name, quantize(array, GGMLQuantizationType.Q8_0), raw_dtype=GGMLQuantizationType.Q8_0
+                )
+            else:
+                writer.add_tensor(name, array)
+        writer.write_header_to_file()
+        writer.write_kv_data_to_file()
+        writer.write_tensors_to_file()
+        writer.close()
+        if quantized:
+            # Independent gguf-py reference, applied in HF layout: Q8_0 quantizes each row in
+            # blocks, so expert concatenation and rotary row permutations commute with it.
+            with torch.no_grad():
+                for tensor in reference.parameters():
+                    if tensor.ndim >= 2:
+                        array = quantize(tensor.numpy(), GGMLQuantizationType.Q8_0)
+                        tensor.copy_(torch.from_numpy(dequantize(array, GGMLQuantizationType.Q8_0)))
+        return reference, path
+
+    def test_mixtral_round_trip(self):
+        # Nonuniform weights expose Q/K permutations, expert order and swapped gate/up halves.
+        for window, tied, quantized, stacked in (
+            (None, False, False, True),
+            (4, True, False, True),
+            (None, False, True, True),
+            (None, False, False, False),
+            (None, False, True, False),
+        ):
+            with (
+                self.subTest(sliding_window=window, tied=tied, quantized=quantized, stacked=stacked),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                reference, path = self.write_checkpoint(directory, window, tied, quantized, stacked=stacked)
+                with unittest.mock.patch(
+                    "transformers.modeling_gguf_pytorch_utils.load_gguf_checkpoint",
+                    side_effect=AssertionError("Mixtral must use the new GGUF loader"),
+                ):
+                    config = AutoConfig.from_pretrained(directory, gguf_file=path)
+                    self.assertIsInstance(config, MixtralConfig)
+                    for name in (
+                        "vocab_size",
+                        "hidden_size",
+                        "intermediate_size",
+                        "num_hidden_layers",
+                        "num_attention_heads",
+                        "num_key_value_heads",
+                        "num_local_experts",
+                        "num_experts_per_tok",
+                        "max_position_embeddings",
+                        "sliding_window",
+                        "tie_word_embeddings",
+                    ):
+                        self.assertEqual(getattr(config, name), getattr(reference.config, name), name)
+                    loaded, info = AutoModelForCausalLM.from_pretrained(
+                        directory,
+                        gguf_file=path,
+                        dtype=torch.float32,
+                        quantization_config=GgufConfig(dequantize=True),
+                        attn_implementation="eager",
+                        output_loading_info=True,
+                    )
+                for key in ("missing_keys", "unexpected_keys", "mismatched_keys"):
+                    self.assertFalse(info[key], (key, info[key]))
+                for name, tensor in reference.state_dict().items():
+                    torch.testing.assert_close(loaded.state_dict()[name], tensor, rtol=0, atol=0)
+                inputs = torch.tensor([[1, 5, 8, 13, 21, 3, 2], [2, 3, 7, 11, 17, 23, 1]])
+                reference.set_attn_implementation("eager")
+                with torch.no_grad():
+                    torch.testing.assert_close(loaded(inputs).logits, reference(inputs).logits, rtol=1e-5, atol=1e-6)
+
+    def test_unsupported_expert_layout_is_rejected(self):
+        from transformers.integrations.gguf import GgufHeader
+
+        for metadata in ({"expert_shared_count": 1}, {"expert_gating_func": 2}):
+            with self.subTest(metadata=metadata), tempfile.TemporaryDirectory() as directory:
+                _, path = self.write_checkpoint(directory, extra_metadata=metadata)
+                with self.assertRaisesRegex(ValueError, "Mixtral"):
+                    AutoConfig.from_pretrained(directory, gguf_file=path)
+                with self.assertRaisesRegex(ValueError, "Mixtral"):
+                    GgufHeader.from_file(path)
+
+    @require_torch_mps
+    @require_kernels
+    def test_packed_mixtral_round_trip(self):
+        for stacked in (True, False):
+            with self.subTest(stacked=stacked), tempfile.TemporaryDirectory() as directory:
+                reference, path = self.write_checkpoint(directory, quantized=True, stacked=stacked)
+                loaded = AutoModelForCausalLM.from_pretrained(
+                    directory,
+                    gguf_file=path,
+                    dtype=torch.float32,
+                    device_map="mps",
+                    attn_implementation="eager",
+                )
+                self.assertFalse(loaded.hf_quantizer.quantization_config.dequantize)
+                self.assertEqual(loaded.model.layers[0].self_attn.q_proj.weight.dtype, torch.uint8)
+                self.assertEqual(loaded.model.layers[0].mlp.experts.gate_up_proj.dtype, torch.uint8)
+                reference = reference.to("mps")
+                reference.set_attn_implementation("eager")
+                inputs = torch.tensor([[1, 5, 8, 13, 21, 3, 2]], device="mps")
+                with torch.no_grad():
+                    torch.testing.assert_close(loaded(inputs).logits, reference(inputs).logits, rtol=1e-4, atol=1e-5)
+
+    def test_other_llama_architectures_keep_their_loader(self):
+        from gguf import GGUFWriter
+
+        from transformers.quantizers.quantizer_gguf import GgufHfQuantizer
+
+        for architecture, experts in (("llama", 0), ("llama4", 4)):
+            with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as directory:
+                path = os.path.join(directory, "other.gguf")
+                writer = GGUFWriter(path, architecture)
+                writer.add_expert_count(experts)
+                writer.write_header_to_file()
+                writer.write_kv_data_to_file()
+                writer.write_tensors_to_file()
+                writer.close()
+                quantizer = GgufHfQuantizer(GgufConfig(dequantize=True))
+                quantizer.read_header(path)
+                self.assertFalse(quantizer.supported)
 
 
 class GgufTokenizerTesterMixin:

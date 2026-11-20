@@ -53,7 +53,7 @@ moe_model = AutoModelForCausalLM.from_pretrained(moe_model_id, gguf_file=moe_fil
 moe_tokenizer = AutoTokenizer.from_pretrained(moe_model_id, gguf_file=moe_filename)
 ```
 
-The packed path currently supports Qwen3.5 and Qwen3.5 MoE. Packed loads use float32 automatically because it's faster on MPS. If you set another `dtype`, the loader returns a warning. Other architectures go through the legacy loader.
+The packed path currently supports Mixtral, LFM2, Qwen3.5, and Qwen3.5 MoE. Packed loads use float32 automatically because it's faster on MPS. If you set another `dtype`, the loader returns a warning. Other architectures go through the legacy loader.
 
 ## Attention
 
@@ -84,7 +84,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 You get a regular dense model in the `dtype` you passed.
 
-Architectures other than Qwen3.5 and Qwen3.5 MoE go through the legacy loader, which always dequantizes.
+Architectures other than Mixtral, LFM2, Qwen3.5, and Qwen3.5 MoE go through the legacy loader, which always dequantizes.
 
 > [!TIP]
 > The legacy loader supports Llama, Mistral, Qwen2, Qwen2Moe, Phi3, Bloom, Falcon, StableLM, GPT2, Starcoder2, and [more](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/ggml.py).
