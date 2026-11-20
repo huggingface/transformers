@@ -728,7 +728,6 @@ class ContinuousBatchingManager:
             config=self.model.config.get_text_config(),
             cb_config=continuous_batching_config,
             workload_hints=workload_hints,
-            has_logit_processors=self.logit_processor.do_processing,
             device=model.device,
         )
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__

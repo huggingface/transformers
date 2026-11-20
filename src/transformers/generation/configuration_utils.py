@@ -1697,8 +1697,7 @@ class ContinuousBatchingConfig:
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
         max_memory_percent (`float`, *optional*):
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
-            resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
-            vocabulary-sized temporary tensors.
+            resolved at runtime to 0.9, or 0.6 on MPS and CPU where memory is shared with the host.
         max_requests_per_batch (`int`, *optional*):
             Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
