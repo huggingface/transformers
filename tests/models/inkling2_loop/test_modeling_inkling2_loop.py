@@ -27,6 +27,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_accelerator_memory,
@@ -216,6 +217,117 @@ class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     )
     def test_can_set_attention_dynamically_composite_model(self):
         pass
+
+
+@slow
+@require_torch_accelerator
+class Inkling2LoopSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    r"""Greedy completions and first-step logits of a tiny checkpoint sliced from the original one.
+    Differences to the original checkpoint:
+
+    - decoder layers: 18 instead of 24 (original layers 0-11 and 18-23), with a single attn-res block of loop layers
+      (6-11) instead of two (6-17); NVFP4 experts on layers 0-13 and MXFP8 experts on layers 14-17
+    - text: hidden size 256 instead of 2304, 16 experts (top-4) instead of 128
+    - vision: hidden size 128, 2 layers instead of 23
+
+    Expectations are gibberish as the model is not trained.
+    """
+
+    model_id = "hf-internal-testing/tiny-inkling2-mini"
+
+    MAX_NEW_TOKENS = 20
+
+    image_url = (
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Inkling2LoopForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype=torch.bfloat16, device_map=torch_device
+            )
+        return cls.model
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+
+    def _generate(self, messages, **kwargs):
+        model = self.get_model()
+        inputs = self.processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", **kwargs
+        )
+        inputs = inputs.to(model.device).to(model.dtype)
+        output = model.generate(
+            **inputs,
+            max_new_tokens=self.MAX_NEW_TOKENS,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+        completion = self.processor.decode(
+            output.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False
+        )
+        return output, completion
+
+    @require_deterministic_for_xpu
+    def test_small_model_integration_test_text(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Explain in one sentence why the sky is usually blue."}],
+            }
+        ]
+        output, completion = self._generate(messages, reasoning_effort="none")
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 10): [1.9970425367355347, 0.26171210408210754, 3.4687917232513428, 2.6803338527679443, 0.9059745073318481],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        EXPECTED_COMPLETION = Expectations(
+            {
+                ("cuda", 10): "floursigne턽 перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек",
+            }
+        )  # fmt: skip
+        self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
+
+    @require_vision
+    @require_deterministic_for_xpu
+    def test_small_model_integration_test_image(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": url_to_local_path(self.image_url)},
+                    {"type": "text", "text": "What animal is in this image, and where is it?"},
+                ],
+            }
+        ]
+        output, completion = self._generate(messages)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 10): [0.4452798366546631, -1.3506488800048828, 3.8689591884613037, 0.6053866147994995, 1.5688800811767578],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        EXPECTED_COMPLETION = Expectations(
+            {
+                ("cuda", 10): " Studyпсихијатventovécudostępучитель�SenStudieпсихијатventoperdere● Studyпсихијатventoperdere",
+            }
+        )  # fmt: skip
+        self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
 
 
 @slow
