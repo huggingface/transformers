@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="FunAudioLLM/Fun-ASR-Nano-2512-hf")
@@ -81,10 +81,24 @@ class FunAsrNanoConfig(PreTrainedConfig):
     """
 
     model_type = "fun_asr_nano"
-    sub_configs = {
-        "adaptor_config": FunAsrNanoAdaptorConfig,
-        "audio_config": AutoConfig,
-        "text_config": AutoConfig,
+    sub_configs_defaults = {
+        "adaptor_config": SubConfigSpec(
+            config_class=FunAsrNanoAdaptorConfig, init_kwargs={"hidden_size": 1024, "intermediate_size": 1024 // 4}
+        ),
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="fun_asr_nano_encoder"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3",
+            init_kwargs={
+                "hidden_size": 1024,
+                "intermediate_size": 3072,
+                "num_hidden_layers": 28,
+                "num_attention_heads": 16,
+                "num_key_value_heads": 8,
+                "max_position_embeddings": 40960,
+                "tie_word_embeddings": True,
+            },
+        ),
     }
 
     adaptor_config: dict | PreTrainedConfig | None = None
@@ -93,37 +107,6 @@ class FunAsrNanoConfig(PreTrainedConfig):
     audio_token_id: int = 151646
     initializer_range: float = 0.02
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "fun_asr_nano_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["fun_asr_nano_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                hidden_size=1024,
-                intermediate_size=3072,
-                num_hidden_layers=28,
-                num_attention_heads=16,
-                num_key_value_heads=8,
-                max_position_embeddings=40960,
-                tie_word_embeddings=True,
-            )
-
-        if isinstance(self.adaptor_config, dict):
-            self.adaptor_config = FunAsrNanoAdaptorConfig(**self.adaptor_config)
-        elif self.adaptor_config is None:
-            self.adaptor_config = FunAsrNanoAdaptorConfig(
-                hidden_size=self.text_config.hidden_size,
-                intermediate_size=self.text_config.hidden_size // 4,
-            )
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

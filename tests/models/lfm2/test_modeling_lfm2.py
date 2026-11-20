@@ -36,13 +36,9 @@ class Lfm2ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Lfm2Model
 
-    def __init__(
-        self,
-        parent,
-        layer_types=["full_attention", "conv"],
-    ):
-        super().__init__(parent)
-        self.layer_types = layer_types
+    small_config_overrides = {
+        "layer_types": ["full_attention", "conv"],
+    }
 
 
 @require_torch

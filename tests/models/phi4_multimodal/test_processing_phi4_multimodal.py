@@ -55,13 +55,6 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     videos_text_kwargs_override_max_length = 162
     videos_unstructured_max_length = 176
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.image_token_id = processor.image_token_id
-        cls.audio_token = processor.audio_token
-        cls.audio_token_id = processor.audio_token_id
-
     # override: audio_attention_mask is returned conditionally, and not expected in the input names in this case
     def test_model_input_names(self):
         processor = self.get_processor()

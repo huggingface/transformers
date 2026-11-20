@@ -80,6 +80,9 @@ class VideoLlama3ImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.3
+
     image_processor_tester_class = VideoLlama3ImageProcessingTester
 
     def test_image_processor_to_json_string(self):
@@ -260,9 +263,9 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         reference = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values)
-            self.assertEqual(reference.image_grid_thw.dtype, encoding.image_grid_thw.dtype)
-            self._assert_tensors_equivalence(reference.image_grid_thw.float(), encoding.image_grid_thw.float())
+            self._assert_encodings_equivalence(
+                reference, encoding, reference_backend, backend_name, atol=self.backend_equivalence_atol
+            )
 
     @require_vision
     @require_torch
@@ -288,9 +291,9 @@ class VideoLlama3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         reference = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             encoding = encodings[backend_name]
-            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values)
-            self.assertEqual(reference.image_grid_thw.dtype, encoding.image_grid_thw.dtype)
-            self._assert_tensors_equivalence(reference.image_grid_thw.float(), encoding.image_grid_thw.float())
+            self._assert_encodings_equivalence(
+                reference, encoding, reference_backend, backend_name, atol=self.backend_equivalence_atol
+            )
 
     def test_get_num_patches_without_images(self):
         for image_processing_class in self.image_processing_classes.values():

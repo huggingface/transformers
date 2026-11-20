@@ -28,7 +28,7 @@ from transformers.core_model_loading import convert_and_load_state_dict_in_model
 from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.pipeline_parallel import PipelineIdentityLayer, PipelineStage, apply_pipeline_parallelism
 from transformers.modeling_utils import LoadStateDictConfig
-from transformers.testing_utils import TestCasePlus, require_torch_greater_or_equal
+from transformers.testing_utils import TestCasePlus
 from transformers.utils.loading_report import log_state_dict_report
 
 
@@ -299,8 +299,13 @@ class TestPipelineStage(unittest.TestCase):
         self.assertTrue(stage.comm_on_cpu)
         mock_get_backend.assert_called_once_with(stage.pp_group)
 
+    @patch("transformers.distributed.pipeline_parallel.dist.get_backend", return_value="gloo")
+    def test_layer_range_for_rank(self, mock_get_backend):
+        stage = PipelineStage(_FakeDeviceMesh(rank=0, size=3))
+        ranges = [stage.layer_range_for_rank(rank, 32) for rank in range(3)]
+        self.assertEqual(ranges, [(0, 11), (11, 22), (22, 32)])
 
-@require_torch_greater_or_equal("2.5")
+
 class TestPipelineParallelLoadReport(TestCasePlus):
     @parameterized.expand([(pp_size, tie_word_embeddings) for pp_size in [2] for tie_word_embeddings in [True, False]])
     def test_pp_loading_report_table(self, pp_size, tie_word_embeddings):
@@ -314,7 +319,6 @@ class TestPipelineParallelLoadReport(TestCasePlus):
         )
 
 
-@require_torch_greater_or_equal("2.5")
 class TestPipelineParallelSplit(TestCasePlus):
     @parameterized.expand([(pp_size, tie_word_embeddings) for pp_size in [2] for tie_word_embeddings in [True, False]])
     def test_pp_split(self, pp_size, tie_word_embeddings):
@@ -328,7 +332,6 @@ class TestPipelineParallelSplit(TestCasePlus):
         )
 
 
-@require_torch_greater_or_equal("2.5")
 class TestPipelineParallelWeightLoading(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
     def test_pp_weight_loading(self, pp_size):
@@ -342,7 +345,6 @@ class TestPipelineParallelWeightLoading(TestCasePlus):
         )
 
 
-@require_torch_greater_or_equal("2.5")
 class TestPipelineParallelGeneration(TestCasePlus):
     @parameterized.expand([(pp_size,) for pp_size in [2]])
     def test_pp_generation(self, pp_size):

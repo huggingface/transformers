@@ -319,7 +319,6 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["RTDetrResNetConvLayer", "RTDetrResNetShortCut"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, nn.Conv2d):
@@ -349,7 +348,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
 class RTDetrResNetBackbone(BackboneMixin, RTDetrResNetPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: RTDetrResNetConfig):
         super().__init__(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes

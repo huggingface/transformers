@@ -45,7 +45,7 @@ from ...utils import (
     safe_load_json_file,
 )
 from ...utils.hub import cached_file, resolve_revision
-from ...utils.import_utils import is_torchvision_available, is_tracing, requires
+from ...utils.import_utils import is_torchvision_available, is_tracing
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -93,7 +93,6 @@ class Ernie4_5_VLMoeVideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torchvision",))
 class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 299 * 28 * 28, "longest_edge": 1196 * 28 * 28}
@@ -487,7 +486,6 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
@@ -505,9 +503,6 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
-
             height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
             resized_height, resized_width = height, width
             if do_resize:

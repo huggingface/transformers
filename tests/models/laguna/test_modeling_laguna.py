@@ -38,19 +38,18 @@ class LagunaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = LagunaModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.vocab_size = 64
-        self.head_dim = 8
-        self.sliding_window = 32
-        self.shared_expert_intermediate_size = 16
-        self.mlp_layer_types = ["dense", "sparse"]
-        self.layer_types = ["full_attention", "sliding_attention"]
+    small_config_overrides = {
+        "vocab_size": 64,
+        "head_dim": 8,
+        "sliding_window": 32,
+        "shared_expert_intermediate_size": 16,
+        "mlp_layer_types": ["dense", "sparse"],
+        "layer_types": ["full_attention", "sliding_attention"],
+    }
 
 
 @require_torch
 class LagunaModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = LagunaModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 

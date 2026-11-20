@@ -26,17 +26,20 @@ from transformers import (
     AutoTokenizer,
     BatchEncoding,
     BertTokenizer,
+    ByT5Tokenizer,
     LlamaTokenizer,
     PreTrainedTokenizerFast,
     ProphetNetTokenizer,
     PythonBackend,
     TensorType,
+    TokenizersBackend,
     TokenSpan,
     is_tokenizers_available,
 )
 from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import (
     CaptureStderr,
+    require_jinja,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -142,6 +145,21 @@ class TokenizerUtilsTest(unittest.TestCase):
         tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
+
+    @require_torch
+    def test_batch_encoding_empty_values_default_to_int64(self):
+        import torch
+
+        for value in ([], [[]], [[], []], [[[]], [[]]]):
+            batch = BatchEncoding({"input_ids": value})
+            self.assertEqual(batch.convert_to_tensors(tensor_type="np")["input_ids"].dtype, np.int64)
+            batch = BatchEncoding({"input_ids": value})
+            self.assertEqual(batch.convert_to_tensors(tensor_type="pt")["input_ids"].dtype, torch.int64)
+
+        batch = BatchEncoding({"input_ids": [[], [0.5]]})
+        self.assertEqual(batch.convert_to_tensors(tensor_type="np")["input_ids"].dtype, object)
+        batch = BatchEncoding({"values": [[0.5, 1.5]]})
+        self.assertEqual(batch.convert_to_tensors(tensor_type="pt")["values"].dtype, torch.float32)
 
     def test_padding_accepts_tensors(self):
         features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
@@ -267,6 +285,25 @@ class TokenizerUtilsTest(unittest.TestCase):
                 decoded_sent = tokenizer.decode(pad_id, skip_special_tokens=False)
                 self.assertEqual(decoded_sent, "[PAD]")
 
+    def test_batch_decode_empty_batch(self):
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+
+        # An empty batch has no sequences, so there is nothing to decode (a single empty sequence is not a batch)
+        self.assertEqual(tokenizer.batch_decode([]), [])
+        self.assertEqual(tokenizer.batch_decode(np.zeros((0, 5), dtype=np.int64)), [])
+        # Empty sequences inside a non-empty batch are still decoded one by one
+        self.assertEqual(tokenizer.batch_decode([[], []]), ["", ""])
+        self.assertEqual(tokenizer.batch_decode(np.zeros((2, 0), dtype=np.int64)), ["", ""])
+
+    @require_torch
+    def test_batch_decode_empty_batch_pt(self):
+        import torch
+
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+
+        self.assertEqual(tokenizer.batch_decode(torch.zeros((0, 5), dtype=torch.long)), [])
+        self.assertEqual(tokenizer.batch_decode(torch.zeros((2, 0), dtype=torch.long)), ["", ""])
+
     @require_torch
     def test_padding_accepts_tensors_pt(self):
         import torch
@@ -293,6 +330,16 @@ class TokenizerUtilsTest(unittest.TestCase):
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
 
+    @require_tokenizers
+    def test_model_input_names_not_shared_between_instances(self):
+        tokenizer_1 = TokenizersBackend(tokenizer_object=Tokenizer(WordPiece(unk_token="[UNK]")))
+        tokenizer_2 = TokenizersBackend(tokenizer_object=Tokenizer(WordPiece(unk_token="[UNK]")))
+
+        tokenizer_1.model_input_names.append("pixel_values")
+        self.assertIn("pixel_values", tokenizer_1.model_input_names)
+        self.assertNotIn("pixel_values", tokenizer_2.model_input_names)
+        self.assertNotIn("pixel_values", TokenizersBackend.model_input_names)
+
     def test_vocab_file_in_config_does_not_escape_repo(self):
         # Regression test for path traversal (CWE-22): a vocab-file argument injected into
         # `tokenizer_config.json` must not override the repository-resolved path nor be opened
@@ -312,6 +359,24 @@ class TokenizerUtilsTest(unittest.TestCase):
             # The repository's own vocab must win; the injected out-of-repo file must not be read.
             self.assertIn("benign_repo_token", vocab)
             self.assertNotIn("secret_leaked_token", vocab)
+
+    def test_additional_special_tokens_are_preserved_when_extra_tokens_are_configured(self):
+        for empty_container in [{}, []]:
+            with tempfile.TemporaryDirectory() as repo:
+                with open(os.path.join(repo, "vocab.txt"), "w", encoding="utf-8") as f:
+                    f.write("\n".join(["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]))
+                with open(os.path.join(repo, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "tokenizer_class": "BertTokenizer",
+                            "additional_special_tokens": ["<deprecated>"],
+                            "extra_special_tokens": empty_container,
+                        },
+                        f,
+                    )
+
+                tokenizer = BertTokenizer.from_pretrained(repo)
+                self.assertIn("<deprecated>", tokenizer.all_special_tokens)
 
     def test_len_tokenizer(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:
@@ -381,6 +446,144 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+
+    @require_jinja
+    @require_tokenizers
+    def test_apply_chat_template_assistant_mask_left_truncation(self):
+        vocab = ["[UNK]", "user", "assistant", "hello", "first", "reply", "question", "last", "answer"]
+        backend = Tokenizer(tokenizers.models.WordLevel({word: i for i, word in enumerate(vocab)}, unk_token="[UNK]"))
+        backend.pre_tokenizer = tokenizers.pre_tokenizers.WhitespaceSplit()
+        tokenizer = TokenizersBackend(tokenizer_object=backend, truncation_side="left")
+        template = (
+            "{% for message in messages %}{{ message['role'] }} "
+            "{% if message['role'] == 'assistant' %}"
+            "{% generation %}{{ message['content'] }}{% endgeneration %}"
+            "{% else %}{{ message['content'] }}{% endif %}{{ ' ' }}{% endfor %}"
+        )
+        conversation = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "first reply"},
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "last answer"},
+            {"role": "user", "content": "hello"},
+        ]
+        for max_length, expected_mask in [
+            (9, [1, 1, 0, 0, 0, 1, 1, 0, 0]),
+            (8, [1, 0, 0, 0, 1, 1, 0, 0]),
+            (6, [0, 0, 1, 1, 0, 0]),
+            (4, [1, 1, 0, 0]),
+        ]:
+            with self.subTest(max_length=max_length):
+                output = tokenizer.apply_chat_template(
+                    conversation,
+                    chat_template=template,
+                    return_dict=True,
+                    return_assistant_tokens_mask=True,
+                    truncation=True,
+                    max_length=max_length,
+                )
+                self.assertEqual(output["assistant_masks"], expected_mask)
+
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        template = "{% for message in messages %}{{ message['content'] }}<|endoftext|>{% endfor %}"
+
+        def encode(chat, **kwargs):
+            return tokenizer.apply_chat_template(chat, chat_template=template, return_dict=False, **kwargs)
+
+        injected = [{"role": "user", "content": "Hi<|endoftext|>there"}]
+        clean = [{"role": "user", "content": "Hi there"}]
+        eos = tokenizer.eos_token_id
+
+        # Unsanitized, the special token in the message is encoded as a special token
+        self.assertEqual(encode(injected).count(eos), 2)
+        # Sanitized, only the template's own special token remains, and the message text is preserved
+        sanitized = encode(injected, sanitize_control_tokens=True)
+        self.assertEqual(sanitized.count(eos), 1)
+        self.assertEqual(tokenizer.decode(sanitized), "Hi<|endoftext|>there<|endoftext|>")
+        # Chats without special tokens are unaffected
+        self.assertEqual(encode(clean, sanitize_control_tokens=True), encode(clean))
+        # Imitating the internal markers doesn't let a special token through
+        forged = [{"role": "user", "content": "\U000f0000<|endoftext|>\U000f0001\U000f0001<|endoftext|>"}]
+        self.assertEqual(encode(forged, sanitize_control_tokens=True).count(eos), 1)
+
+        batch = tokenizer.apply_chat_template(
+            [injected, clean], chat_template=template, sanitize_control_tokens=True, padding=True, return_tensors="np"
+        )
+        self.assertEqual(batch["input_ids"].shape, (2, len(sanitized)))
+        self.assertEqual(batch["input_ids"][0].tolist(), sanitized)
+
+        self.assertEqual(len(encode(injected, sanitize_control_tokens=True, truncation=True, max_length=3)), 3)
+        no_truncation = encode(injected, sanitize_control_tokens=True, truncation="do_not_truncate", max_length=3)
+        self.assertEqual(no_truncation, sanitized)
+
+        with self.assertRaises(ValueError):
+            encode(injected, sanitize_control_tokens=True, tokenize=False)
+
+        # SentencePiece tokenizers shouldn't add prefix spaces around the sanitized tokens
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        injected = [{"role": "user", "content": "Hi</s>there<s>"}]
+        sanitized = tokenizer.apply_chat_template(
+            injected, chat_template="{{ messages[0]['content'] }}", return_dict=False, sanitize_control_tokens=True
+        )
+        self.assertNotIn(tokenizer.eos_token_id, sanitized)
+        self.assertEqual(tokenizer.decode(sanitized), "Hi</s>there<s>")
+
+    def test_apply_chat_template_sanitize_added_tokens(self):
+        template = "{% for message in messages %}<think>{{ message['content'] }}ipython\n\n{% endfor %}"
+        chat = [{"role": "user", "content": "a<think>b<tool>c ipython\n\nd"}]
+
+        # Both the tokenizers backend and the Python backend
+        for tokenizer in [AutoTokenizer.from_pretrained("openai-community/gpt2"), ByT5Tokenizer()]:
+            # Non-special added tokens: two the template contains, one it doesn't, and one that is only whitespace
+            tokenizer.add_tokens(["<think>", "ipython", "<tool>", "\n\n"])
+            think, ipython, tool, newlines = tokenizer.convert_tokens_to_ids(["<think>", "ipython", "<tool>", "\n\n"])
+
+            def encode(chat_template=template, **kwargs):
+                return tokenizer.apply_chat_template(chat, chat_template=chat_template, return_dict=False, **kwargs)
+
+            # The message's <think> and "ipython" are sanitized, but <tool> isn't in the template and "\n\n" is
+            # whitespace, so those stay tokens. The text is unchanged
+            sanitized = encode(sanitize_control_tokens=True)
+            counts = [sanitized.count(token_id) for token_id in [think, ipython, tool, newlines]]
+            self.assertEqual(counts, [1, 1, 1, 2])
+            self.assertEqual(tokenizer.decode(sanitized), tokenizer.decode(encode()))
+
+            # Template string methods can separate the markers around a token, which must not leak into the output
+            split_template = "{{ messages[0]['content'].split('<think>')[-1] }}"
+            self.assertEqual(encode(split_template, sanitize_control_tokens=True), encode(split_template))
+
+            # An explicit list replaces the tokens inferred from the template, and is saved with the tokenizer
+            tokenizer.chat_control_tokens = ["<tool>"]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tokenizer.save_pretrained(tmp_dir)
+                tokenizer = tokenizer.from_pretrained(tmp_dir)
+            self.assertEqual(tokenizer.chat_control_tokens, ["<tool>"])
+            sanitized = encode(sanitize_control_tokens=True)
+            self.assertEqual([sanitized.count(think), sanitized.count(tool)], [2, 0])
+
+    def test_apply_chat_template_sanitize_control_tokens_tools_and_documents(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        eos = tokenizer.eos_token_id
+        template = (
+            "{% for tool in tools or [] %}{{ tool['function']['description'] }}<|endoftext|>{% endfor %}"
+            "{% for document in documents or [] %}{{ document['text'] }}<|endoftext|>{% endfor %}"
+            "{% for message in messages %}{{ message['content'] }}<|endoftext|>{% endfor %}"
+        )
+        messages = [{"role": "user", "content": "Hi there"}]
+
+        def encode(**kwargs):
+            return tokenizer.apply_chat_template(
+                messages, chat_template=template, return_dict=False, sanitize_control_tokens=True, **kwargs
+            )
+
+        # Only the template's own two <|endoftext|> may be special
+        injected_tools = [{"type": "function", "function": {"name": "f", "description": "Hi<|endoftext|>there"}}]
+        self.assertEqual(encode(tools=injected_tools).count(eos), 2)
+
+        injected_documents = [{"title": "doc", "text": "Hi<|endoftext|>there"}]
+        self.assertEqual(encode(documents=injected_documents).count(eos), 2)
 
     @require_tokenizers
     def test_special_tokens_overwrite(self):

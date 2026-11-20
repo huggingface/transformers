@@ -59,7 +59,6 @@ class HyperCLOVAXConfig(PreTrainedConfig):
     ```"""
 
     model_type = "hyperclovax"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `HyperCLOVAXModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

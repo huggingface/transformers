@@ -110,29 +110,17 @@ class DeepseekV32ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV32Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        first_k_dense_replace=1,
-        n_group=1,
-        topk_group=1,
-        index_topk=8,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.first_k_dense_replace = first_k_dense_replace
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.index_topk = index_topk
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "first_k_dense_replace": 1,
+        "n_group": 1,
+        "topk_group": 1,
+        "index_topk": 8,
+    }
 
 
 @require_torch
@@ -145,8 +133,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV32ModelTester
     model_split_percents = [0.5, 0.7, 0.8]

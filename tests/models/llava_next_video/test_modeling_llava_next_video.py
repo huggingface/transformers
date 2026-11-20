@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -56,18 +57,18 @@ if is_vision_available():
     from PIL import Image
 
 
-class LlavaNextVideoVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        video_token_index=1,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        text_config={
+class LlavaNextVideoVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "video_token_index": 1,
+        "projector_hidden_act": "gelu",
+        "seq_length": 7,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -90,8 +91,8 @@ class LlavaNextVideoVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 3,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "image_size": 8,
             "patch_size": 4,
             "num_channels": 3,
@@ -105,32 +106,29 @@ class LlavaNextVideoVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["batch_size"] = 3
+        values["num_channels"] = 3
+        values["image_size"] = 30
+        values["image_grid_pinpoints"] = [[16, 16]]
+        values["num_image_tokens"] = 24
+        values["num_video_tokens"] = 8
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"] + values["num_video_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 30
-
-        self.image_grid_pinpoints = [[16, 16]]
-        self.num_image_tokens = 24
-        self.num_video_tokens = 8
-        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return LlavaNextVideoConfig(
@@ -197,6 +195,8 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
     Model tester for `LlavaNextVideoForConditionalGeneration`.
     """
+
+    model_tester_class = LlavaNextVideoVisionText2TextModelTester
 
     all_model_classes = (
         (
@@ -328,17 +328,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    def _video_features_prepare_config_and_inputs(self):
-        """
-        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
-
-        Despite using `pixel_values_videos` in forward, LlavaNextVideo's `get_video_features` method
-        instead uses `pixel_values` as input, so we need to override the inputs accordingly.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
-        return config, inputs_dict
-
 
 @require_torch
 class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -364,7 +353,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt")
@@ -392,7 +380,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(
@@ -422,7 +409,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs = self.processor(
@@ -458,7 +444,6 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaNextVideoForConditionalGeneration.from_pretrained(
             "llava-hf/LLaVA-NeXT-Video-7B-hf",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            cache_dir="./",
         )
 
         inputs_batched = self.processor(
@@ -484,12 +469,12 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         # its own expected value separately. See https://github.com/pytorch/pytorch/issues/196886
         EXPECTED_BATCHED = Expectations(
             {
-                ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems to be struggling with the content, possibly due to",
+                ("cuda", (8, 6)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while wearing a pair of glasses that are too large for them. The glasses are so large that they cover the child's eyes",
             }
         ).get_expectation()  # fmt: skip
         EXPECTED_SINGLE = Expectations(
             {
-                ("cuda", None): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while wearing a pair of glasses that are too large for her. The glasses are so large that they cover her eyes, making it",
+                ("cuda", (8, 6)): "USER: \nWhy is this video funny? ASSISTANT: The humor in this video comes from the unexpected and somewhat comical situation of a young child reading a book while another child is attempting to read the same book. The child who is reading the book seems to be struggling with the content, possibly due to",
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(decoded_batched, EXPECTED_BATCHED)

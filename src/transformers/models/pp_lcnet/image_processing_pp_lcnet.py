@@ -30,7 +30,6 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
-from ...utils.import_utils import requires
 
 
 class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
@@ -46,7 +45,6 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPLCNetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]

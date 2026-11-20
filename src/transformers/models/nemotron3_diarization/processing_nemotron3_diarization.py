@@ -17,6 +17,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -29,11 +30,6 @@ DEFAULT_STREAMING_MODES = {
     "very_low_latency": (6, 2),  # 0.64 s
     "ultra_low_latency": (3, 1),  # 0.32 s
 }
-
-
-class Nemotron3DiarizationProcessorKwargs(ProcessingKwargs, total=False):
-    # Defaults travel with the checkpoint, in `processor_config.json`.
-    _defaults = {}
 
 
 @auto_docstring
@@ -76,7 +72,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         is_streaming: bool = False,
         is_first_audio_chunk: bool = True,
         is_last_audio_chunk: bool = False,
-        **kwargs: Unpack[Nemotron3DiarizationProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         sampling_rate (`int`, *optional*):
@@ -96,12 +92,13 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
             Whether this chunk ends the streaming session. A chunk of a session ends with `chunk_right_context`
             look-ahead encoder frames that the model scores at the next step only, and that its next chunk opens
-            with. The last chunk has no next step, so every one of its frames is scored, whatever their number. Must
-            be `False` when `is_streaming=False`.
+            with. The last chunk has no next step, so every one of its frames is scored, whatever their number, and
+            its end is zero-padded as a full-utterance pass pads the end of the audio, so that it yields the last
+            frames of the utterance. Must be `False` when `is_streaming=False`.
 
         Returns:
             [`BatchFeature`]: the feature extractor outputs, `input_features` and `attention_mask`. In streaming mode
-            the trailing frames whose analysis window reaches past the chunk are dropped, so `input_features` holds
+            the trailing frames whose analysis window reaches past a chunk other than the last are dropped, so `input_features` holds
             exactly the frames of the chunk and can be passed to the model as is, and every chunk but the last also
             carries `num_lookahead_frames`, the number of its trailing look-ahead encoder frames, which puts the
             model in streaming mode.
@@ -114,9 +111,13 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
                 )
 
         audio = make_list_of_audio(audio)
-        output_kwargs = self._merge_kwargs(Nemotron3DiarizationProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         inputs = self.feature_extractor(
-            audio, sampling_rate=sampling_rate, center=is_first_audio_chunk, **output_kwargs["audio_kwargs"]
+            audio,
+            sampling_rate=sampling_rate,
+            center=is_first_audio_chunk,
+            is_last_audio_chunk=is_last_audio_chunk,
+            **output_kwargs["audio_kwargs"],
         )
         if is_streaming:
             num_frames = int(inputs["attention_mask"].sum(-1).max())
@@ -258,5 +259,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
     def model_input_names(self):
         return self.feature_extractor.model_input_names + ["num_lookahead_frames"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Nemotron3DiarizationProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Nemotron3DiarizationProcessor"]

@@ -31,11 +31,6 @@ from ...utils import TensorType, auto_docstring
 
 # Adapted from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
 class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
-        The size by which to make sure both the height and width can be divided.
-    """
-
     size_divisor: int
 
 

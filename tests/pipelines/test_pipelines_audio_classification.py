@@ -246,3 +246,53 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         num_labels = classification_pipeline.model.config.num_labels
 
         self.assertEqual(len(result), num_labels, "Should cap top_k to number of labels")
+
+    @require_torch
+    def test_problem_type_defaults_and_overrides(self):
+        classifier = pipeline("audio-classification", model="anton-l/wav2vec2-random-tiny-classifier")
+        audio = np.ones(8000, dtype=np.float32)
+        num_labels = classifier.model.config.num_labels
+        labels = [classifier.model.config.id2label[i] for i in range(num_labels)]
+
+        raw = classifier(audio, top_k=num_labels, function_to_apply="none")
+        raw_scores = {item["label"]: item["score"] for item in raw}
+        logits = torch.tensor([raw_scores[label] for label in labels])
+
+        for problem_type, activation in (
+            ("regression", "none"),
+            ("multi_label_classification", "sigmoid"),
+            ("single_label_classification", "softmax"),
+            (None, "softmax"),
+        ):
+            with self.subTest(problem_type=problem_type):
+                classifier.model.config.problem_type = problem_type
+                result = classifier(audio, top_k=num_labels)
+                scores = {item["label"]: item["score"] for item in result}
+                expected = {
+                    "none": logits,
+                    "sigmoid": logits.sigmoid(),
+                    "softmax": logits.softmax(-1),
+                }[activation]
+                self.assertEqual(len(scores), num_labels)
+                for label, value in zip(labels, expected.tolist()):
+                    self.assertAlmostEqual(scores[label], value, places=4)
+
+        # Initialization-time override must survive subsequent calls.
+        classifier.model.config.problem_type = "regression"
+        initialized = pipeline(
+            "audio-classification",
+            model=classifier.model,
+            feature_extractor=classifier.feature_extractor,
+            function_to_apply="softmax",
+        )
+
+        for override, expected in (
+            (None, logits.softmax(-1)),
+            ("none", logits),
+            ("sigmoid", logits.sigmoid()),
+        ):
+            with self.subTest(call_override=override):
+                result = initialized(audio, top_k=num_labels, function_to_apply=override)
+                scores = {item["label"]: item["score"] for item in result}
+                for label, value in zip(labels, expected.tolist()):
+                    self.assertAlmostEqual(scores[label], value, places=4)

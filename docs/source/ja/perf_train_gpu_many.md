@@ -111,57 +111,6 @@ DPとDDPの他にも違いがありますが、この議論には関係ありま
 
 これら2つのモードを深く理解したい場合、この[記事](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/)を強くお勧めします。素晴らしいダイアグラムを含み、さまざまなハードウェアでの複数のベンチマークとプロファイラの出力を示し、知っておく必要があるすべての微妙なニュアンスを説明しています。
 
-実際のベンチマークを見てみましょう：
-
-| Type   | NVlink | Time |
-| :----- | -----  | ---: |
-| 2:DP   | Y      | 110s |
-| 2:DDP  | Y      | 101s |
-| 2:DDP  | N      | 131s |
-
-
-解析：
-
-ここで、DPはNVlinkを使用したDDPに比べて約10％遅く、NVlinkを使用しないDDPに比べて約15％高速であることが示されています。
-
-実際の違いは、各GPUが他のGPUと同期する必要があるデータの量に依存します。同期するデータが多いほど、遅いリンクが合計の実行時間を遅くする可能性が高くなります。
-
-以下は完全なベンチマークコードと出力です：
-
-`NCCL_P2P_DISABLE=1`を使用して、対応するベンチマークでNVLink機能を無効にしました。
-
-
-```bash
-
-# DP
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
-
-# DDP w/ NVlink
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
-
-# DDP w/o NVlink
-rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
-```
-
-ハードウェア: 2x TITAN RTX、各24GB + 2つのNVLink（`nvidia-smi topo -m`で `NV2`）
-
-ソフトウェア: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
-
 ## ZeRO Data Parallelism
 
 ZeROパワードデータ並列処理（ZeRO-DP）は、次の[ブログ投稿](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)のダイアグラムで説明されています。

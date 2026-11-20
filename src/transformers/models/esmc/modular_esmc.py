@@ -52,7 +52,7 @@ from ..nomic_bert.modeling_nomic_bert import NomicBertPreTrainedModel
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="biohub/ESMC-6B-hf")
+@auto_docstring(checkpoint="biohub/ESMC-6B")
 @strict
 class EsmcConfig(LlamaConfig):
     r"""
@@ -66,7 +66,7 @@ class EsmcConfig(LlamaConfig):
     ```python
     >>> from transformers import EsmcConfig, EsmcModel
 
-    >>> # Initializing an ESMC biohub/ESMC-6B-hf style configuration
+    >>> # Initializing an ESMC biohub/ESMC-6B style configuration
     >>> configuration = EsmcConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
@@ -97,7 +97,6 @@ class EsmcConfig(LlamaConfig):
     rms_norm_eps = AttributeError()
     pretraining_tp = AttributeError()
     use_cache = AttributeError()
-    keys_to_ignore_at_inference = AttributeError()
 
     def __post_init__(self, **kwargs):
         # The special-token ids are fixed by the vocabulary every checkpoint shares (`<cls>`=0 doubles
@@ -221,7 +220,7 @@ class EsmcLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class EsmcPreTrainedModel(NomicBertPreTrainedModel):
-    config_class = EsmcConfig
+    config: EsmcConfig
     base_model_prefix = "esmc"
     _no_split_modules = ["EsmcLayer"]
     _can_record_outputs = {
@@ -280,8 +279,8 @@ class EsmcModel(EsmcPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, EsmcModel
 
-        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
+        >>> model = EsmcModel.from_pretrained("biohub/ESMC-300M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQVQLV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.last_hidden_state.shape
@@ -383,8 +382,8 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         >>> from transformers import AutoTokenizer, EsmcForMaskedLM
         >>> import torch
 
-        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M-hf")
+        >>> model = EsmcForMaskedLM.from_pretrained("biohub/ESMC-300M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("biohub/ESMC-300M")
         >>> inputs = tokenizer(["MLKNVQ<mask>LV"], return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> outputs.logits.shape

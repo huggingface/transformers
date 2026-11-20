@@ -84,9 +84,43 @@ def _qwen35moe_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """LFM2: short convolutions, with full attention on some layers."""
+    key = lambda name: metadata[f"lfm2.{name}"]  # noqa: E731
+    # one count per layer, zero on the convolution ones: the file says which layer is which this way
+    kv_heads_per_layer = key("attention.head_count_kv")
+
+    return {
+        "model_type": "lfm2",
+        "architectures": ["Lfm2ForCausalLM"],
+        "max_position_embeddings": key("context_length"),
+        "hidden_size": key("embedding_length"),
+        "intermediate_size": key("feed_forward_length"),
+        # the width above is the final one, which the config would otherwise rescale
+        "block_auto_adjust_ff_dim": False,
+        "num_hidden_layers": key("block_count"),
+        "num_attention_heads": key("attention.head_count"),
+        "num_key_value_heads": max(kv_heads_per_layer),
+        "layer_types": ["full_attention" if heads else "conv" for heads in kv_heads_per_layer],
+        "norm_eps": key("attention.layer_norm_rms_epsilon"),
+        "conv_L_cache": key("shortconv.l_cache"),
+        "conv_bias": any(name.startswith("blk.") and name.endswith("shortconv.in_proj.bias") for name in tensor_names),
+        "rope_parameters": {"rope_type": "default", "rope_theta": key("rope.freq_base")},
+        # `read_gguf_metadata` leaves the vocabulary as its length
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        # llama.cpp writes the output projection only when it is not the embedding matrix
+        "tie_word_embeddings": "output.weight" not in tensor_names,
+        # absent ids stay `None`, as they are on a config by default
+        "eos_token_id": metadata.get("tokenizer.ggml.eos_token_id"),
+        "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
+    "lfm2": _lfm2_config,
 }
 
 

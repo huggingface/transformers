@@ -18,9 +18,7 @@ import unittest
 
 from transformers import (
     BitsAndBytesConfig,
-    Gemma3TextConfig,
     ShieldGemma2Config,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -49,45 +47,48 @@ if is_torch_available():
 
 class ShieldGemma2ModelTester(VLMModelTester):
     config_class = ShieldGemma2Config
-    text_config_class = Gemma3TextConfig
-    vision_config_class = SiglipVisionConfig
 
     if is_torch_available():
         base_model_class = Gemma3Model
         conditional_generation_class = Gemma3ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 7)
-        kwargs.setdefault("seq_length", 8)
-        kwargs.setdefault("vocab_size", 99)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("sliding_window", 8)
-        kwargs.setdefault("layer_types", ["sliding_attention", "full_attention"])
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("mm_tokens_per_image", 4)
-        kwargs.setdefault("num_image_tokens", kwargs["mm_tokens_per_image"])
-        kwargs.setdefault("image_token_index", 0)
-        kwargs.setdefault("image_token_id", kwargs["image_token_index"])
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("pad_token_id", 1)
-        kwargs.setdefault("eos_token_id", 2)
-        kwargs.setdefault("bos_token_id", 3)
-        kwargs.setdefault("yes_token_index", 4)
-        kwargs.setdefault("no_token_index", 5)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "batch_size": 7,
+        "seq_length": 8,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "sliding_window": 8,
+        "layer_types": ["sliding_attention", "full_attention"],
+        "image_size": 8,
+        "patch_size": 4,
+        "num_channels": 3,
+        "mm_tokens_per_image": 4,
+        "image_token_id": 0,
+        "tie_word_embeddings": True,
+        "pad_token_id": 1,
+        "eos_token_id": 2,
+        "bos_token_id": 3,
+        "yes_token_index": 4,
+        "no_token_index": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if "num_image_tokens" not in kwargs:
+            values["num_image_tokens"] = values["mm_tokens_per_image"]
+        return values
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {
-            self.image_token_index,
+            self.image_token_id,
             self.yes_token_index,
             self.no_token_index,
         }
@@ -98,10 +99,7 @@ class ShieldGemma2ModelTester(VLMModelTester):
         config.no_token_index = self.no_token_index
         return config
 
-    def create_attention_mask(self, input_ids):
-        return input_ids.ne(self.pad_token_id).to(torch_device)
-
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_id] = 1
         return {"token_type_ids": token_type_ids}

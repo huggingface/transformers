@@ -228,6 +228,14 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
+
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
         pass
@@ -235,6 +243,10 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @parameterized.expand([True, False, None])
     @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
     def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_pooler_output(self):
         pass
 
     @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
@@ -391,6 +403,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
                 (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch'],
+                ("cuda", (8, 6)): ["Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch"],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -435,6 +448,10 @@ class ChameleonIntegrationTest(unittest.TestCase):
                     'Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch',
                     "What constellation is this image showing?srem291ve&07lld'83456[t](…—.\\$     ve",
                 ],
+                ("cuda", (8, 6)): [
+                    "Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch",
+                    "What constellation is this image showing?srem1&92llve0d347586['](\\’ vet—…@",
+                ],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -468,7 +485,12 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a night sky with a large number of stars and a small, bright object in the center of each image. The first image shows a close-up view of the object, which']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): ["What do these two images have in common?The two images show a night sky with a large number of stars and a small, bright object in the center of each image. The first image shows a close-up view of the object, which"],
+                ("cuda", (8, 6)): ["What do these two images have in common?The two images show a night sky with a large number of stars and a bright, full moon."],
+            }
+        ).get_expectation()  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
