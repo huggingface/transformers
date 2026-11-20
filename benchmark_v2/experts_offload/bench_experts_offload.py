@@ -318,6 +318,9 @@ for index, config in enumerate(configs, 1):
             f.write(json.dumps(result) + "\n")
     except Exception as error:  # keep going: one broken config should not lose the others
         log(f"  FAILED {name}: {type(error).__name__}: {error}")
+        import traceback
+
+        log("".join(traceback.format_exc().splitlines(True)[-14:]))
     model = None  # free it (and its CUDA graphs) before the next config
     torch._dynamo.reset()
     gc.collect()
