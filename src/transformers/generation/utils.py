@@ -485,8 +485,13 @@ class DeferredStopCheck(StopCheck):
         if self.cache is not None:
             self.cache.crop(-steps_to_undo)
             # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
-            # memory spike on the next prefill
-            for layer in self.cache.layers:
+            # memory spike on the next prefill. Encoder-decoder caches keep layers on
+            # `self_attention_cache`, not on the wrapper.
+            layers = getattr(self.cache, "layers", None)
+            if layers is None:
+                self_attention_cache = getattr(self.cache, "self_attention_cache", None)
+                layers = getattr(self_attention_cache, "layers", None)
+            for layer in layers or []:
                 if hasattr(layer, "record_past"):
                     layer.record_past = False
         return steps_to_undo

@@ -6276,3 +6276,28 @@ class DeferredStopCheckIntegrationTest(unittest.TestCase):
         (deferred, _), (immediate, _) = self._generate_deferred_and_immediate(inputs)
         self.assertTrue(torch.equal(deferred.sequences, immediate.sequences))
         self.assertEqual(len(deferred.scores), deferred.sequences.shape[1] - prompt_length)
+
+
+class DeferredStopCheckEncoderDecoderCacheTest(unittest.TestCase):
+    def test_finish_clears_recording_on_encoder_decoder_cache(self):
+        from transformers.cache_utils import DynamicCache, DynamicSlidingWindowLayer, EncoderDecoderCache
+        from transformers.generation.utils import DeferredStopCheck
+
+        self_layer = DynamicSlidingWindowLayer(sliding_window=8)
+        cross_layer = DynamicSlidingWindowLayer(sliding_window=8)
+        states = torch.zeros(1, 1, 2, 2)
+        self_layer.update(states, states)
+        cross_layer.update(states, states)
+        self_layer.record_past = True
+        cross_layer.record_past = True
+        self_cache = DynamicCache()
+        cross_cache = DynamicCache()
+        self_cache.layers = [self_layer]
+        cross_cache.layers = [cross_layer]
+        cache = EncoderDecoderCache(self_cache, cross_cache)
+        input_ids = torch.zeros(1, 2, dtype=torch.long)
+        checker = DeferredStopCheck(input_ids, max_length=4, cache=cache, cache_is_returned=True)
+        self.assertEqual(checker.finish(), 0)
+        self.assertFalse(self_layer.record_past)
+        # Recording is only turned off on the self-attention cache, which is what past recording uses.
+        self.assertTrue(cross_layer.record_past)
