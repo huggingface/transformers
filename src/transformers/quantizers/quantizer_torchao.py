@@ -34,12 +34,6 @@ MIN_TORCH_VERSION = "2.6.0"
 if is_torch_available():
     import torch
 
-if is_torchao_available():
-    from torchao.prototype.safetensors.safetensors_support import (
-        flatten_tensor_state_dict,
-    )
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -83,6 +77,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         """
         We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
+        from torchao.prototype.safetensors.safetensors_support import flatten_tensor_state_dict
+
         return flatten_tensor_state_dict(model.state_dict())
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
