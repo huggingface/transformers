@@ -22,15 +22,10 @@ from typing import TYPE_CHECKING
 import torch
 
 from ..core_model_loading import build_glob_alternation
-from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
 from ..utils.loading_report import LoadStateDictInfo
-from .checkpoint import (
-    _load_model_checkpoint_distributed,
-    _save_model_checkpoint_distributed,
-    consolidate_distributed_checkpoint,
-)
+from .checkpoint import _load_model_checkpoint_distributed, _save_model_checkpoint_distributed
 from .configuration_utils import DistributedConfig
 from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
@@ -355,12 +350,13 @@ class DistributedMixin:
         *,
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
+        max_shard_size: int | str = "50GB",
         repo_id: str | None = None,
         commit_message: str | None = None,
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save rank-local DCP files, optionally consolidating into consolidated/ on rank 0 for Hub upload."""
+        """Save rank-local DCP files, and with `push_to_hub` also a regular checkpoint in consolidated/ to upload."""
         if not _check_distributed_checkpointing_available():
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.8.")
 
@@ -377,17 +373,20 @@ class DistributedMixin:
         _save_model_checkpoint_distributed(model_to_save, save_directory)
 
         if push_to_hub:
+            # The Hub needs regular safetensors files in the original format, of at most `max_shard_size` each. The
+            # sharded model is still in memory, so every rank writes some of these files with the default save,
+            # which reverts the weight conversions. Consolidating the DCP files from disk could not revert them.
+            output_dir = os.path.join(save_directory, "consolidated")
             try:
                 if self.should_save_on_this_rank(save_on_this_rank):
-                    output_dir = os.path.join(save_directory, "consolidated")
                     # Everything in output_dir is uploaded, so drop leftovers from a previous save.
                     shutil.rmtree(output_dir, ignore_errors=True)
-                    consolidate_distributed_checkpoint(save_directory, output_dir)
-                    if self.is_remote_code():
-                        custom_object_save(model_to_save, output_dir, config=model_to_save.config)
-                    model_to_save.config.save_pretrained(output_dir)
-                    if self.can_generate():
-                        model_to_save.generation_config.save_pretrained(output_dir)
+                _distributed_barrier()
+                # Every rank must call it: it gathers the weights and writes some of the files.
+                model_to_save.save_pretrained(
+                    output_dir, is_main_process=save_on_this_rank, max_shard_size=max_shard_size
+                )
+                if self.should_save_on_this_rank(save_on_this_rank):
                     model_card = create_and_tag_model_card(repo_id, self.model_tags, token=token)
                     model_card.save(os.path.join(output_dir, "README.md"))
                     self._upload_modified_files(
