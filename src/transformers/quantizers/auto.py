@@ -149,7 +149,6 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     Mxfp4Config,
     MetalConfig,
     FineGrainedFP8Config,
-    NVFP4Config,
 )
 
 logger = logging.get_logger(__name__)
@@ -752,8 +751,6 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         hf_quantizer = AutoHfQuantizer.from_plan(plan, quantization_config, pre_quantized, checkpoint_names)
         if not checkpoint_names:  # else the checkpoint's own config is kept, e.g. ModelOpt's `quantized_layers`
             config.quantization_config = hf_quantizer.quantization_config
-
-    if hf_quantizer is not None:
         quant_method = getattr(hf_quantizer.quantization_config, "quant_method", "plan")
         if gguf_file is not None and quant_method != QuantizationMethod.GGUF:
             raise ValueError(

@@ -495,9 +495,9 @@ class Mxfp4Experts(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = getattr(config, "swiglu_limit", None)
 
-        up_proj = "gate_up_proj" if has_gate else "up_proj"
+        self.in_proj = "gate_up_proj" if has_gate else "up_proj"
         up_dim = 2 * self.intermediate_dim if has_gate else self.intermediate_dim
-        self._alloc_proj(up_proj, up_dim, self.hidden_dim)
+        self._alloc_proj(self.in_proj, up_dim, self.hidden_dim)
         self._alloc_proj("down_proj", self.hidden_dim, self.intermediate_dim)
 
     def _alloc_proj(self, proj: str, out_dim: int, in_dim: int):
@@ -511,8 +511,7 @@ class Mxfp4Experts(nn.Module):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
         if self.limit is not None:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+            gate, up = gate.clamp(max=self.limit), up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
 
     def dequantized(self, proj: str, expert_idx: int, dtype: torch.dtype) -> torch.Tensor:
@@ -524,7 +523,6 @@ class Mxfp4Experts(nn.Module):
     ) -> torch.Tensor:
         # Default: dequantize each routed expert to the activations' dtype, accumulate in float32
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
-        up_proj = "gate_up_proj" if self.has_gate else "up_proj"
 
         with torch.no_grad():
             expert_mask = nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
@@ -536,7 +534,9 @@ class Mxfp4Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            proj_out = nn.functional.linear(current_state, self.dequantized(up_proj, expert_idx, current_state.dtype))
+            proj_out = nn.functional.linear(
+                current_state, self.dequantized(self.in_proj, expert_idx, current_state.dtype)
+            )
             proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
             proj_out = nn.functional.linear(proj_out, self.dequantized("down_proj", expert_idx, proj_out.dtype))
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
@@ -547,8 +547,7 @@ class Mxfp4Experts(nn.Module):
 
 def _w4a8_experts(self, hidden_states, matmul):
     """up (-> gate) -> down on the routed rows, each projection through `matmul(input, weight, scale)`"""
-    up_proj = "gate_up_proj" if self.has_gate else "up_proj"
-    proj_out = matmul(hidden_states, getattr(self, up_proj), getattr(self, f"{up_proj}_scale_inv"))
+    proj_out = matmul(hidden_states, getattr(self, self.in_proj), getattr(self, f"{self.in_proj}_scale_inv"))
     proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
     return matmul(proj_out, self.down_proj, self.down_proj_scale_inv)
 
@@ -634,7 +633,6 @@ def deepgemm_fp4_experts_forward(self, hidden_states, top_k_index, top_k_weights
         return out
 
     out = _w4a8_experts(self, _pad_for_deepgemm(sorted_hidden, sorted_to_padded, padded_rows), matmul)
-    hidden_dim = hidden_states.size(-1)
     return _combine_routed_output(
         out,
         sorted_weights,
@@ -643,7 +641,7 @@ def deepgemm_fp4_experts_forward(self, hidden_states, top_k_index, top_k_weights
         sorted_to_padded,
         num_tokens,
         num_top_k,
-        hidden_dim,
+        hidden_states.size(-1),
         hidden_states.dtype,
     )
 

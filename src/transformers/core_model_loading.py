@@ -903,7 +903,6 @@ class WeightTransform:
         for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
-            # `gate` matches `*.gate`, not `*.gate_*`
             # `gate` in a WeightConverter matches `*.gate`, not `*.gate_*` nor `*.gate.weight`
             # `gate_up_proj.weight` matches `gate_up_proj.weight` but also `gate_up_proj.weight_scale_inv`
             # `gate_` matches `gate_*`

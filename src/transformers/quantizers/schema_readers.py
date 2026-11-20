@@ -78,8 +78,4 @@ SCHEMA_READERS = [modelopt_plan, fp4_experts_plan]
 
 def read_quantization_schema(config: dict) -> dict | None:
     """The quantization plan of the first reader knowing the checkpoint's `quantization_config`, if any"""
-    for reader in SCHEMA_READERS:
-        plan = reader(config)
-        if plan is not None:
-            return plan
-    return None
+    return next((plan for reader in SCHEMA_READERS if (plan := reader(config)) is not None), None)

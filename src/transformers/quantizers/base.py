@@ -219,9 +219,7 @@ class HfQuantizer(ABC):
         """
         replaced, swapped = set(), ()
         for name, module in list(model.named_modules()):
-            if name.startswith(swapped):  # inside a module already swapped
-                continue
-            if not module._parameters:  # containers are never swapped
+            if name.startswith(swapped) or not module._parameters:  # inside a swapped module, or a container
                 continue
 
             quantizer = self.get_quantizer(f"{name}.")
