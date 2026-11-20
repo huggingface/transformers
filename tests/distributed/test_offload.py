@@ -15,7 +15,13 @@ import tempfile
 import unittest
 
 from transformers import MetalConfig, Qwen3MoeConfig, Qwen3MoeForCausalLM
-from transformers.testing_utils import require_kernels, require_torch, require_torch_mps
+from transformers.testing_utils import (
+    require_kernels,
+    require_torch,
+    require_torch_gpu,
+    require_torch_mps,
+    require_triton,
+)
 from transformers.utils import is_torch_available
 
 
@@ -146,3 +152,46 @@ class MetalExpertsOffloadTest(unittest.TestCase):
             store = streamed._experts_offload
             self.assertEqual(next(iter(store.pools.values())).layout["gate_up_proj"][1], torch.uint32)
             self.assertGreater(store.reads, 0)
+
+
+@require_torch_gpu
+@require_triton()
+class TritonAffineExpertsTest(unittest.TestCase):
+    def test_gather_qmv_matches_dequantized(self):
+        from transformers.integrations.metal_quantization import _affine_dequantize_tensor, _affine_quantize_tensor
+        from transformers.integrations.triton_affine_moe import gather_qmv
+
+        torch.manual_seed(0)
+        weight = torch.randn(4 * 96, 256, device="cuda")
+        packed, scales, biases = _affine_quantize_tensor(weight, 64, 4)
+        reference = _affine_dequantize_tensor(packed, scales, biases, 64, 4).view(4, 96, 256)
+        x, ids = torch.randn(10, 256, device="cuda"), torch.randint(0, 4, (10,), device="cuda")
+        out = gather_qmv(x, packed.view(4, 96, -1), scales.view(4, 96, -1), biases.view(4, 96, -1), ids, 64, 4)
+        torch.testing.assert_close(out, torch.einsum("sk,snk->sn", x, reference[ids]), rtol=1e-4, atol=1e-4)
+
+    def test_streamed_quantized_experts_match_in_memory(self):
+        torch.manual_seed(0)
+        config = Qwen3MoeConfig(
+            vocab_size=64,
+            hidden_size=128,
+            intermediate_size=128,
+            moe_intermediate_size=64,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            num_experts=8,
+            num_experts_per_tok=2,
+        )
+        ids = torch.randint(0, 64, (1, 12), device="cuda")
+        plan = {"*.mlp.experts": MetalConfig(bits=4, group_size=64)}
+        with tempfile.TemporaryDirectory() as path:
+            Qwen3MoeForCausalLM(config).save_pretrained(path)
+            kwargs = {"quantization_config": plan, "dtype": torch.float32}
+            reference = Qwen3MoeForCausalLM.from_pretrained(path, device_map="cuda", **kwargs)
+            streamed = Qwen3MoeForCausalLM.from_pretrained(
+                path, device_map={"": "cuda", "experts": "disk"}, max_memory={"cuda": 10 << 20}, **kwargs
+            )
+            with torch.no_grad():
+                expected = reference.generate(ids, max_new_tokens=8, do_sample=False)
+                torch.testing.assert_close(streamed.generate(ids, max_new_tokens=8, do_sample=False), expected)

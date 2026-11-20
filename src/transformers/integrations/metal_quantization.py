@@ -170,8 +170,13 @@ class MetalExperts(nn.Module):
         return self._apply_gate_fn(self, gate_up_out)
 
     def _qmm(self, x, name, ids, sorted_indices):
-        kernel = _get_metal_kernel()
         scales = getattr(self, f"{name}_scales")
+        if x.device.type == "cuda":  # same packed layout, Triton kernel
+            from .triton_affine_moe import gather_qmv
+
+            biases = getattr(self, f"{name}_qbiases")
+            return gather_qmv(x, getattr(self, name), scales, biases, ids, self.group_size, self.bits)
+        kernel = _get_metal_kernel()
         out = kernel.gather_qmm(
             x[:, None, :],
             getattr(self, name),

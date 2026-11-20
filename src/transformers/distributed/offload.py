@@ -182,7 +182,7 @@ class ExpertsOffloadStore:
         self.pool_of: dict[str, _Pool] = {}  # module name -> its pool
         self.device_tables: dict[str, torch.Tensor] = {}  # module name -> expert -> slot, on the device
         self.pending = {}  # (layer, expert) -> Future of its device tensors
-        self.hits = self.misses = self.reads = 0
+        self.hits = self.misses = self.reads = self.covered = 0
         # Host time blocked on the routing copy (device sync) and on expert reads, see `stats`
         self.sync_seconds = self.wait_seconds = 0.0
 
@@ -192,12 +192,13 @@ class ExpertsOffloadStore:
             "hits": self.hits,
             "misses": self.misses,
             "reads": self.reads,
+            "covered": self.covered,  # misses whose read the lookahead had already started
             "sync_seconds": self.sync_seconds,
             "wait_seconds": self.wait_seconds,
         }
 
     def reset_stats(self):
-        self.hits = self.misses = self.reads = 0
+        self.hits = self.misses = self.reads = self.covered = 0
         self.sync_seconds = self.wait_seconds = 0.0
 
     def owns(self, param_name: str) -> bool:
@@ -423,6 +424,7 @@ class ExpertsOffloadStore:
             if (name, e) in pool.cache:
                 pool.cache.move_to_end((name, e))
         pool.count([(name, e) for e in experts])
+        self.covered += sum((name, e) in self.pending for e in misses)  # already read ahead by the lookahead
         futures = self.fetch_many(name, misses)
         # 2. Reads for the next layers overlap this layer's compute
         for index, next_name in enumerate(guessed):

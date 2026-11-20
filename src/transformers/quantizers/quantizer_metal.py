@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING, Any
 
-from ..utils import is_kernels_available, is_torch_available, logging
+from ..utils import is_kernels_available, is_torch_available, is_triton_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -44,6 +44,8 @@ class MetalHfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
+        if torch.cuda.is_available() and is_triton_available():
+            return  # experts run on the Triton counterpart of `gather_qmm` (`integrations/triton_affine_moe.py`)
         if not torch.backends.mps.is_available():
             if self.pre_quantized:
                 logger.warning_once(
