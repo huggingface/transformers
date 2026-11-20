@@ -75,6 +75,7 @@ request_logger = logging.get_logger("transformers.cli.serving.requests")
 X_REQUEST_ID = "x-request-id"
 
 
+@lru_cache(maxsize=256)
 def parse_model_id(model_id: str) -> tuple[str, str | None, str | None]:
     """Split a model name, `repo[@revision][:file.gguf]`, into its repo, revision and GGUF file:
     `"org/model@dev:weights.gguf"` -> `("org/model", "dev", "weights.gguf")`.
@@ -91,6 +92,7 @@ def parse_model_id(model_id: str) -> tuple[str, str | None, str | None]:
     return repo, revision or None, gguf_file
 
 
+@lru_cache(maxsize=256)
 def canonical_model_id(model_id: str) -> str:
     """The one name a model goes by: `repo@revision` for a Hub repo (`@main` by default), an existing local path as
     it is, then `:file.gguf` if it names a GGUF file."""
@@ -997,6 +999,7 @@ class CBGenerateRunner(GenerateRunner):
             cb_config = ContinuousBatchingConfig()
         cb_config.per_request_processors = True  # each request sets its own temperature, top-k and top-p
         manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        manager.warmup()
         manager.start()
 
         def send_outputs_to_api_servers() -> None:
