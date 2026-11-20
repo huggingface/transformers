@@ -301,6 +301,7 @@ class BackgroundThreadStatus:
 # step is launched, while the device computes it, instead of before the next batch is prepared.
 _PROTO_TP_STATE_OVERLAP = os.environ.get("CB_PROTO_TP_STATE_OVERLAP", "0") == "1"
 _PROTO_IDLE_DRIVER_WAIT = os.environ.get("CB_PROTO_IDLE_DRIVER_WAIT", "0") == "1"
+_PROTO_UPLOADS_ON_COMPUTE_STREAM = os.environ.get("CB_PROTO_UPLOADS_ON_COMPUTE_STREAM", "0") == "1"
 
 
 class ContinuousBatchProcessor:
@@ -538,14 +539,20 @@ class ContinuousBatchProcessor:
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
-        self.inputs_and_outputs.prepare_batch_tensors(
-            requests_in_batch=requests_in_batch,
-            logits_processors=self.logit_processor,
-            use_decode_fast_path=use_decode_fast_path,
-            num_q_tokens=num_q_tokens,
-            max_kv_read=max_kv_read,
-            use_padding=self.model_runner.pad_inputs,
-        )
+        # PROTOTYPE (CB_PROTO_UPLOADS_ON_COMPUTE_STREAM=1): in synchronous mode the inputs are written to device tensors
+        # here, on the thread's current stream, while the step is launched on the compute stream: nothing orders the last
+        # copy kernel before the step. Issuing the uploads on the compute stream does (no-op for asynchronous batching,
+        # whose host tensors are transferred on a dedicated stream with events).
+        upload_stream = self.inputs_and_outputs.compute_stream if _PROTO_UPLOADS_ON_COMPUTE_STREAM else None
+        with stream_context(upload_stream):
+            self.inputs_and_outputs.prepare_batch_tensors(
+                requests_in_batch=requests_in_batch,
+                logits_processors=self.logit_processor,
+                use_decode_fast_path=use_decode_fast_path,
+                num_q_tokens=num_q_tokens,
+                max_kv_read=max_kv_read,
+                use_padding=self.model_runner.pad_inputs,
+            )
         return True
 
     def update_batch(self) -> None:
