@@ -284,12 +284,15 @@ class Inkling2LoopShortConvolution(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        dynamic_input: torch.Tensor | None = None,
         cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
         cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
+        dynamic_input (`torch.Tensor`, *optional*):
+            Ignored, accepted for interface compatibility with `Inkling2LoopDynamicShortConvolution`.
         cache_offset (`int`, *optional*, defaults to 0):
             Offset added to `layer_idx` to get the cache layer holding the state of this call.
         """
@@ -327,14 +330,99 @@ class Inkling2LoopShortConvolution(nn.Module):
         return hidden_states.to(dtype=input_dtype)
 
 
-class Inkling2LoopSlidingKeyValueProjection(nn.Module):
-    """Key or value states of the sliding-attention layers: projection followed by a short convolution."""
+class Inkling2LoopDynamicShortConvolution(nn.Module):
+    """
+    Short causal convolution whose taps are the sum of static per-channel weights and per-token weights projected from
+    `dynamic_input`, shared within each key/value head. Used for keys and values in the full-attention layers.
+    """
 
-    def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int, conv_idx: int):
+    def __init__(
+        self, hidden_size: int, input_size: int, num_heads: int, conv_kernel_size: int, layer_idx: int, conv_idx: int
+    ):
         super().__init__()
-        hidden_size = config.swa_num_key_value_heads * config.swa_head_dim
-        self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
-        self.sconv = Inkling2LoopShortConvolution(hidden_size, config.sconv_kernel_size, layer_idx, conv_idx=conv_idx)
+        self.layer_idx = layer_idx
+        self.conv_idx = conv_idx
+        self.conv_kernel_size = conv_kernel_size
+        self.num_heads = num_heads
+        # tap index is the backward distance: `static_weight[0]` weights the current token
+        self.static_weight = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
+        self.weight_proj = nn.Linear(input_size, num_heads * conv_kernel_size, bias=False)
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        dynamic_input: torch.Tensor,
+        cache: Cache | None = None,
+        conv_mask: torch.Tensor | None = None,
+        cache_offset: int = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        r"""
+        cache_offset (`int`, *optional*, defaults to 0):
+            Offset added to `layer_idx` to get the cache layer holding the state of this call.
+        """
+        input_dtype = hidden_states.dtype
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        dynamic_weights = self.weight_proj(dynamic_input).float()
+        dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
+        weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
+
+        hidden_states = hidden_states.float()
+        residual = hidden_states
+        context = apply_mask_to_padding_states(hidden_states, conv_mask).transpose(1, 2)
+        if cache is not None:
+            context = cache.update_conv_state(
+                context,
+                self.layer_idx + cache_offset,
+                state_idx=self.conv_idx,
+                conv_kernel_size=self.conv_kernel_size,
+            )
+        context = F.pad(context, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
+        # windows[..., lag] is the token `lag` steps back
+        windows = context.unfold(-1, self.conv_kernel_size, 1).flip(-1).transpose(1, 2)
+        windows = windows.reshape(batch_size, seq_len, self.num_heads, -1, self.conv_kernel_size)
+        if (seq_idx := kwargs.get("seq_idx")) is not None:
+            seq_idx = seq_idx.to(windows.device)
+            context_seq_idx = torch.cat([seq_idx[:, :1].expand(-1, self.conv_kernel_size - 1), seq_idx], dim=1)
+            window_seq_idx = context_seq_idx.unfold(-1, self.conv_kernel_size, 1).flip(-1)
+            windows = windows * (window_seq_idx == seq_idx[..., None])[:, :, None, None, :]
+        hidden_states = (windows * weights).sum(-1).reshape(batch_size, seq_len, hidden_size)
+        hidden_states = (hidden_states + residual) / math.sqrt(2 * self.conv_kernel_size + 1)
+        return hidden_states.to(input_dtype)
+
+
+class Inkling2LoopKeyValueProjection(nn.Module):
+    """
+    Key or value states of the attention layers: projection followed by a short convolution. With `dynamic=True` the
+    convolution is a dynamic short convolution whose weights are computed from the same input as the projection.
+    """
+
+    def __init__(
+        self,
+        config: Inkling2LoopTextConfig,
+        num_heads: int,
+        head_dim: int,
+        layer_idx: int,
+        conv_idx: int,
+        dynamic: bool = False,
+    ):
+        super().__init__()
+        self.linear = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)
+        self.sconv = (
+            Inkling2LoopDynamicShortConvolution(
+                num_heads * head_dim,
+                config.hidden_size,
+                num_heads,
+                config.sconv_kernel_size,
+                layer_idx,
+                conv_idx=conv_idx,
+            )
+            if dynamic
+            else Inkling2LoopShortConvolution(
+                num_heads * head_dim, config.sconv_kernel_size, layer_idx, conv_idx=conv_idx
+            )
+        )
 
     def forward(
         self,
@@ -345,7 +433,7 @@ class Inkling2LoopSlidingKeyValueProjection(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         states = self.linear(hidden_states)
-        return self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
+        return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
 
 
 class Inkling2LoopGatedOutputProjection(nn.Module):
@@ -425,8 +513,12 @@ class Inkling2LoopSlidingAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = Inkling2LoopSlidingKeyValueProjection(config, layer_idx, conv_idx=0)
-        self.v_proj = Inkling2LoopSlidingKeyValueProjection(config, layer_idx, conv_idx=1)
+        self.k_proj = Inkling2LoopKeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0
+        )
+        self.v_proj = Inkling2LoopKeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1
+        )
         self.o_proj = Inkling2LoopGatedOutputProjection(config, self.num_heads, self.head_dim)
         self.q_norm = Inkling2LoopScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2LoopL2Clip(config.qk_l2_clip_threshold)
@@ -506,99 +598,6 @@ class Inkling2LoopSlidingAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Inkling2LoopDynamicShortConvolution(nn.Module):
-    """
-    Short causal convolution whose taps are the sum of static per-channel weights and per-token weights projected from
-    `dynamic_input`, shared within each key/value head. Used for keys and values in the full-attention layers.
-    """
-
-    def __init__(
-        self, hidden_size: int, input_size: int, num_heads: int, conv_kernel_size: int, layer_idx: int, conv_idx: int
-    ):
-        super().__init__()
-        self.layer_idx = layer_idx
-        self.conv_idx = conv_idx
-        self.conv_kernel_size = conv_kernel_size
-        self.num_heads = num_heads
-        # tap index is the backward distance: `static_weight[0]` weights the current token
-        self.static_weight = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
-        self.weight_proj = nn.Linear(input_size, num_heads * conv_kernel_size, bias=False)
-
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        dynamic_input: torch.Tensor,
-        cache: Cache | None = None,
-        conv_mask: torch.Tensor | None = None,
-        cache_offset: int = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        r"""
-        cache_offset (`int`, *optional*, defaults to 0):
-            Offset added to `layer_idx` to get the cache layer holding the state of this call.
-        """
-        input_dtype = hidden_states.dtype
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        dynamic_weights = self.weight_proj(dynamic_input).float()
-        dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
-        weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
-
-        hidden_states = hidden_states.float()
-        residual = hidden_states
-        context = apply_mask_to_padding_states(hidden_states, conv_mask).transpose(1, 2)
-        if cache is not None:
-            context = cache.update_conv_state(
-                context,
-                self.layer_idx + cache_offset,
-                state_idx=self.conv_idx,
-                conv_kernel_size=self.conv_kernel_size,
-            )
-        context = F.pad(context, (self.conv_kernel_size - 1, 0))[..., -(seq_len + self.conv_kernel_size - 1) :]
-        # windows[..., lag] is the token `lag` steps back
-        windows = context.unfold(-1, self.conv_kernel_size, 1).flip(-1).transpose(1, 2)
-        windows = windows.reshape(batch_size, seq_len, self.num_heads, -1, self.conv_kernel_size)
-        if (seq_idx := kwargs.get("seq_idx")) is not None:
-            seq_idx = seq_idx.to(windows.device)
-            context_seq_idx = torch.cat([seq_idx[:, :1].expand(-1, self.conv_kernel_size - 1), seq_idx], dim=1)
-            window_seq_idx = context_seq_idx.unfold(-1, self.conv_kernel_size, 1).flip(-1)
-            windows = windows * (window_seq_idx == seq_idx[..., None])[:, :, None, None, :]
-        hidden_states = (windows * weights).sum(-1).reshape(batch_size, seq_len, hidden_size)
-        hidden_states = (hidden_states + residual) / math.sqrt(2 * self.conv_kernel_size + 1)
-        return hidden_states.to(input_dtype)
-
-
-class Inkling2LoopFullKeyValueProjection(nn.Module):
-    """
-    Key or value states of the full-attention layers: projection followed by a dynamic short convolution. The
-    convolution weights are computed from the same input as the projection.
-    """
-
-    def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int, conv_idx: int):
-        super().__init__()
-        hidden_size = config.num_key_value_heads * config.head_dim
-        self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
-        self.sconv = Inkling2LoopDynamicShortConvolution(
-            hidden_size,
-            config.hidden_size,
-            config.num_key_value_heads,
-            config.sconv_kernel_size,
-            layer_idx,
-            conv_idx=conv_idx,
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cache: Cache | None = None,
-        conv_mask: torch.Tensor | None = None,
-        cache_offset: int = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        states = self.linear(hidden_states)
-        return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
-
-
 class Inkling2LoopFullAttention(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__()
@@ -616,8 +615,12 @@ class Inkling2LoopFullAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = Inkling2LoopFullKeyValueProjection(config, layer_idx, conv_idx=0)
-        self.v_proj = Inkling2LoopFullKeyValueProjection(config, layer_idx, conv_idx=1)
+        self.k_proj = Inkling2LoopKeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0, dynamic=True
+        )
+        self.v_proj = Inkling2LoopKeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1, dynamic=True
+        )
         self.o_proj = Inkling2LoopGatedOutputProjection(config, self.num_heads, self.head_dim)
         self.q_norm = Inkling2LoopLogScaledL2Clip(config, self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2LoopL2Clip(config.qk_l2_clip_threshold)
