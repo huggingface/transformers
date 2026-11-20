@@ -667,7 +667,7 @@ def save_model_architecture_to_file(model: Any, output_dir: str):
         elif is_torch_available() and (
             isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
         ):
-            print(model, file=f)
+            print(model.base_model, file=f)
 
 
 class WandbLogModel(str, Enum):
