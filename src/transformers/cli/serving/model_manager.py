@@ -250,9 +250,9 @@ class EngineClient:
                 (`tokens`, with the id of its request in `ids`) to its request's streamer, and each result of
                 `finished` to its request's future, which ends the request."""
                 for request_id, token in zip(ids, tokens):
-                    if request_id not in self.pending_requests:  # cancelled
+                    future, streamer = self.pending_requests.get(request_id, (None, None))
+                    if future is None or future.done():
                         continue
-                    future, streamer = self.pending_requests[request_id]
                     try:
                         streamer.put_token(token)
                     except Exception as error:  # the request fails, not the others whose tokens came with its own
@@ -262,8 +262,9 @@ class EngineClient:
                 for request_id, result in finished:
                     if isinstance(result, EngineDeadError) and not self.is_dead:
                         self._mark_dead(str(result))
-                    if request_id in self.pending_requests:  # else cancelled
-                        self.pending_requests[request_id][0].set_result(result)
+                    future, _ = self.pending_requests.get(request_id, (None, None))
+                    if future is not None and not future.done():
+                        future.set_result(result)
 
             while True:
                 try:
