@@ -435,6 +435,7 @@ else:
     _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
+    _import_structure["modeling_multimodal_utils"] = []
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "RopeParameters", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["AttentionInterface", "PreTrainedModel"]
