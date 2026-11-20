@@ -14,8 +14,8 @@
 import tempfile
 import unittest
 
-from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
-from transformers.testing_utils import require_torch
+from transformers import MetalConfig, Qwen3MoeConfig, Qwen3MoeForCausalLM
+from transformers.testing_utils import require_kernels, require_torch, require_torch_mps
 from transformers.utils import is_torch_available
 
 
@@ -69,16 +69,15 @@ class ExpertsOffloadTest(unittest.TestCase):
                     with self.subTest(slots=slots, lookahead=lookahead):
                         model, store = self.load(path, slots)
                         store.lookahead = lookahead
-                        self.assertEqual(sum(p.num_slots for p in store.pools.values()), slots)
                         torch.testing.assert_close(self.generate(model), self.expected)
+                        self.assertEqual(sum(p.num_slots for p in store.pools.values()), slots)
                         self.assertGreater(store.reads, 0)
 
     def test_lfu_matches_eager(self):
         with tempfile.TemporaryDirectory() as path:
             self.model.save_pretrained(path)
             model, store = self.load(path, 5)
-            for pool in store.pools.values():
-                pool.policy = "lfu"
+            store.policy = "lfu"  # pools are made at the first forward
             torch.testing.assert_close(self.generate(model), self.expected)
             self.assertTrue(any(pool.counts for pool in store.pools.values()))
 
@@ -89,3 +88,38 @@ class ExpertsOffloadTest(unittest.TestCase):
             model, store = self.load(path, 5)
             torch.testing.assert_close(self.generate(model), self.expected)
             self.assertGreater(store.hits, 0)
+
+
+@require_torch_mps
+@require_kernels
+class MetalExpertsOffloadTest(unittest.TestCase):
+    def test_streamed_quantized_experts_match_in_memory(self):
+        """Experts quantized on the fly (Metal `gather_qmm`) give the same tokens streamed or in memory."""
+        torch.manual_seed(0)
+        config = Qwen3MoeConfig(
+            vocab_size=64,
+            hidden_size=128,
+            intermediate_size=128,
+            moe_intermediate_size=64,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            num_experts=8,
+            num_experts_per_tok=2,
+        )
+        ids = torch.randint(0, 64, (1, 12), device="mps")
+        quantization = MetalConfig(bits=4, group_size=64)
+        with tempfile.TemporaryDirectory() as path:
+            Qwen3MoeForCausalLM(config).save_pretrained(path)
+            kwargs = {"quantization_config": quantization, "dtype": torch.float32}
+            reference = Qwen3MoeForCausalLM.from_pretrained(path, device_map="mps", **kwargs)
+            streamed = Qwen3MoeForCausalLM.from_pretrained(
+                path, device_map={"": "mps", "experts": "disk"}, max_memory={"mps": 10 << 20}, **kwargs
+            )
+            with torch.no_grad():
+                expected = reference.generate(ids, max_new_tokens=8, do_sample=False)
+                torch.testing.assert_close(streamed.generate(ids, max_new_tokens=8, do_sample=False), expected)
+            store = streamed._experts_offload
+            self.assertEqual(next(iter(store.pools.values())).layout["gate_up_proj"][1], torch.uint32)
+            self.assertGreater(store.reads, 0)

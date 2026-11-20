@@ -77,9 +77,11 @@ class MetalHfQuantizer(HfQuantizer):
         return device_map
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.metal_quantization import MetalLinear
+        from ..integrations.metal_quantization import MetalExperts, MetalLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
+        if isinstance(module, MetalExperts):
+            return not self.pre_quantized and tensor_name in MetalExperts.PROJECTIONS
         if isinstance(module, MetalLinear):
             if self.pre_quantized or tensor_name != "weight":
                 return False
@@ -92,9 +94,20 @@ class MetalHfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.metal_quantization import MetalLinear
+        from ..integrations.metal_quantization import MetalExperts, MetalLinear
 
-        if self.quantization_config.dequantize or not isinstance(module, torch.nn.Linear):
+        if self.quantization_config.dequantize:
+            return None
+        if all(
+            getattr(module, p, None) is not None and getattr(module, p).dim() == 3 for p in MetalExperts.PROJECTIONS
+        ):
+            return MetalExperts(
+                module,
+                bits=self.quantization_config.bits,
+                group_size=self.quantization_config.group_size,
+                **({} if self.pre_quantized else {"dtype": getattr(module, "gate_up_proj").dtype}),
+            )
+        if not isinstance(module, torch.nn.Linear):
             return None
         return MetalLinear(
             in_features=module.in_features,

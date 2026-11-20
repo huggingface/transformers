@@ -1812,8 +1812,12 @@ def convert_and_load_state_dict_in_model(
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
             if experts_offload is not None and experts_offload.owns(first_param_name):
-                experts_offload.add_reader(first_param_name, mapping, mapping.collected_tensors)
-                loading_info.missing_keys.difference_update({first_param_name, *mapping.layer_targets})
+                experts_offload.add_reader(first_param_name, mapping, mapping.collected_tensors, hf_quantizer)
+                # Every per-expert param of the module (e.g. quantization scales made on the fly) is streamed
+                module_name = first_param_name.rpartition(".")[0]
+                loading_info.missing_keys.difference_update(
+                    f"{module_name}.{param}" for param in experts_offload.params[module_name]
+                )
                 continue
             try:
                 realized_value = mapping.convert(

@@ -52,7 +52,10 @@ def _get_metal_kernel():
         try:
             from .hub_kernels import get_kernel
 
-            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
+            try:  # v2 has `gather_qmm` and the builds for recent torch versions
+                _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=2)
+            except Exception:
+                _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
         except Exception as e:
             raise ImportError(
                 f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
@@ -129,6 +132,79 @@ class MetalLinear(nn.Linear):
         return output
 
 
+class MetalExperts(nn.Module):
+    """
+    Quantized experts (3D banks) run by the ``gather_qmm`` Metal kernel: each route multiplies its token by the packed
+    weights of its expert, no dequantized copy. Replaces an experts module (`gate_up_proj` / `down_proj` banks of
+    shape `[num_experts, N, K]`) with `[num_experts, N, K_packed]` uint32 banks and their `_scales` / `_qbiases`.
+
+    Expert ids `>= num_experts` are expert-parallel / streamed-experts sentinels: their routes contribute zero.
+    """
+
+    PROJECTIONS = ("gate_up_proj", "down_proj")
+
+    def __init__(self, experts: nn.Module, bits: int = 4, group_size: int = 64, dtype=torch.uint32):
+        super().__init__()
+        self.num_experts = experts.num_experts
+        self.bits = bits
+        self.group_size = group_size
+        self.act_fn = experts.act_fn
+        self.config = getattr(experts, "config", None)
+        for flag in ("has_gate", "has_bias", "is_concatenated", "is_transposed"):
+            setattr(self, flag, getattr(experts, flag, None))
+        self._apply_gate_fn = type(experts)._apply_gate
+        for name in self.PROJECTIONS:
+            num_experts, rows, columns = getattr(experts, name).shape
+            groups = columns // group_size
+            if dtype == torch.uint32:
+                weight = torch.zeros(num_experts, rows, columns * bits // 32, dtype=torch.uint32)
+                scales_dtype = torch.float32
+            else:  # quantized on the fly: the float bank is loaded first
+                weight = torch.zeros(num_experts, rows, columns, dtype=dtype)
+                scales_dtype = None
+            self.register_parameter(name, nn.Parameter(weight, requires_grad=False))
+            for suffix in ("scales", "qbiases"):
+                tensor = torch.zeros(num_experts, rows, groups, dtype=scales_dtype)
+                self.register_parameter(f"{name}_{suffix}", nn.Parameter(tensor, requires_grad=False))
+
+    def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
+        return self._apply_gate_fn(self, gate_up_out)
+
+    def _qmm(self, x, name, ids, sorted_indices):
+        kernel = _get_metal_kernel()
+        scales = getattr(self, f"{name}_scales")
+        out = kernel.gather_qmm(
+            x[:, None, :],
+            getattr(self, name),
+            scales.to(x.dtype),
+            getattr(self, f"{name}_qbiases").to(x.dtype),
+            rhs_indices=ids,
+            transpose=True,
+            group_size=self.group_size,
+            bits=self.bits,
+            sorted_indices=sorted_indices,
+        )
+        return out.squeeze(1)
+
+    def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
+        num_tokens, top_k = top_k_index.shape
+        ids = top_k_index.reshape(-1)
+        weights = top_k_weights.reshape(-1) * (ids < self.num_experts)  # sentinels contribute zero
+        ids = ids.clamp(max=self.num_experts - 1).to(torch.int32)
+        rows = torch.arange(num_tokens * top_k, device=ids.device) // top_k
+        # MLX picks its batched kernel for sorted ids (prefill); decode rows stay in place
+        sorted_indices = ids.numel() >= 16
+        if sorted_indices:
+            ids, order = torch.sort(ids, stable=True)
+            rows, weights = rows[order], weights[order]
+        x = hidden_states[rows]
+        out = self._qmm(
+            self._apply_gate(self._qmm(x, "gate_up_proj", ids, sorted_indices)), "down_proj", ids, sorted_indices
+        )
+        out = out * weights[:, None].to(out.dtype)
+        return torch.zeros_like(hidden_states).index_add_(0, rows, out)
+
+
 def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):
     """
     Quantize a 2-D float weight ``[N, K]`` into packed uint32 + scales + biases.
@@ -203,11 +279,17 @@ class MetalQuantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        w_packed, scales, biases = _affine_quantize_tensor(value, group_size, bits)
+        # Experts banks `[num_experts, N, K]` are quantized row by row like a `[num_experts * N, K]` weight
+        w_packed, scales, biases = _affine_quantize_tensor(value.reshape(-1, value.shape[-1]), group_size, bits)
+        lead = value.shape[:-1]
+        w_packed, scales, biases = (t.reshape(*lead, -1) for t in (w_packed, scales, biases))
 
-        base = target_key.rsplit(".", 1)[0] if "." in target_key else ""
-        scale_key = f"{base}.scales" if base else "scales"
-        bias_key = f"{base}.qbiases" if base else "qbiases"
+        base, _, name = target_key.rpartition(".")
+        if name == "weight":
+            scale_key = f"{base}.scales" if base else "scales"
+            bias_key = f"{base}.qbiases" if base else "qbiases"
+        else:  # several quantized params in one module (experts): `gate_up_proj_scales`, ...
+            scale_key, bias_key = f"{target_key}_scales", f"{target_key}_qbiases"
 
         orig_dtype = value.dtype
         return {

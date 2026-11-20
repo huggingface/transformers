@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from ..integrations.moe import batched_mm_experts_forward
 from ..utils import logging
 from .tensor_parallel import TensorParallelLayer
 
@@ -55,7 +56,14 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-EXPERT_PARAMS = ("gate_up_proj", "down_proj")
+
+def expert_params(module: nn.Module) -> list[str]:
+    """The module's per-expert params (leading dim `num_experts`): banks, and e.g. their quantization scales."""
+    return [
+        name
+        for name, param in module.named_parameters(recurse=False)
+        if param.dim() >= 2 and param.shape[0] == module.num_experts
+    ]
 
 
 def split_offloaded_experts(device_map):
@@ -90,6 +98,8 @@ class _Pool:
                 name: torch.empty(self.num_slots, *shape, dtype=dtype, device=device)
                 for name, (shape, dtype) in self.layout.items()
             }
+        # bf16 / fp32 banks, run by the experts interface; packed (quantized) banks have their own kernels
+        self.floating = all(dtype.is_floating_point for _, dtype in self.layout.values())
 
     def count(self, keys):
         """Record lookups (lfu): every lookup counts, hit or miss, and old counts decay."""
@@ -139,7 +149,10 @@ class ExpertsOffloadStore:
         self.lookahead = lookahead
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload")
         self.layers: dict[str, nn.Module] = {}  # module name -> experts module, in forward order
-        self.routers: dict[str, nn.Module | None] = {}  # module name -> its router, to guess its experts ahead
+        self.routers: dict[str, nn.Module | None] = {}
+        self.params: dict[
+            str, list[str]
+        ] = {}  # module name -> its per-expert params  # module name -> its router, to guess its experts ahead
         self.order: list[str] = []
         self.readers: dict[str, list] = {}  # module name -> [read(expert) -> {param: tensor}]
         self.pools: dict[str, _Pool] = {}
@@ -165,20 +178,27 @@ class ExpertsOffloadStore:
 
     def owns(self, param_name: str) -> bool:
         module_name, _, param = param_name.rpartition(".")
-        return param in EXPERT_PARAMS and module_name in self.layers
+        return module_name in self.layers and param in self.params[module_name]
 
     def add_layer(self, name: str, module: nn.Module, router: nn.Module | None):
         self.layers[name] = module
+        self.params[name] = expert_params(module)
         self.routers[name] = router
         self.order.append(name)
 
-    def allocate(self, resident_bytes: int = 0):
-        """Split `cache_bytes - resident_bytes` between the expert layouts, in proportion to their layer count."""
-        layouts = {}
+    def allocate(self):
+        """Split `cache_bytes - resident_bytes` between the expert layouts, in proportion to their layer count.
+
+        A layout is what a read returns (e.g. quantized on the fly), so one expert of each kind of layer is read."""
+        layouts, probes = {}, {}
         for name, module in self.layers.items():
-            layout = {p: (tuple(getattr(module, p).shape[1:]), getattr(module, p).dtype) for p in EXPERT_PARAMS}
-            layouts.setdefault(repr(layout), (layout, []))[1].append(name)
-        budget = self.cache_bytes - resident_bytes
+            kind = (type(module), tuple(getattr(module, p).shape for p in self.params[name]))
+            if kind not in probes:
+                tensors, _ = self._read(name, 0)
+                probes[kind] = {p: (tuple(t.shape), t.dtype) for p, t in tensors.items()}
+            layouts.setdefault(repr(probes[kind]), (probes[kind], []))[1].append(name)
+        self.reads = 0
+        budget = self.cache_bytes - self.resident_bytes
         for key, (layout, names) in layouts.items():
             expert_bytes = sum(torch.Size(shape).numel() * dtype.itemsize for shape, dtype in layout.values())
             total = sum(self.layers[name].num_experts for name in names)
@@ -190,7 +210,7 @@ class ExpertsOffloadStore:
                 self.pool_of[name] = pool
         logger.info(f"Streaming experts through {[p.num_slots for p in self.pools.values()]} device slots")
 
-    def add_reader(self, target_name: str, mapping, reads: dict[str, list], dtype=None):
+    def add_reader(self, target_name: str, mapping, reads: dict[str, list], hf_quantizer=None):
         """Register how to read one expert of `target_name` from the checkpoint slices the loader collected.
 
         `mapping` is the `WeightConverter` / `WeightRenaming` of that target and `reads` its collected
@@ -208,7 +228,7 @@ class ExpertsOffloadStore:
                     pattern: [lambda s=slices[expert]: s[0][...].to(self.read_device, s[1])]
                     for pattern, slices in reads.items()
                 }
-                out = one.convert(target_name)
+                out = one.convert(target_name, hf_quantizer=hf_quantizer)  # quantized on the fly if planned
                 return {name.rpartition(".")[2]: tensor[0] for name, tensor in out.items()}
         else:
             ((bank, bank_dtype),) = next(iter(reads.values()))
@@ -267,8 +287,10 @@ class ExpertsOffloadLayer(TensorParallelLayer):
         def offload_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
             if torch.is_grad_enabled():
                 raise RuntimeError("Streamed experts are inference-only: use torch.no_grad() / inference_mode()")
+            if not store.pools:
+                store.allocate()
             pool = store.pool_of[name]
-            if "gate_up_proj" in module._parameters:  # first call: the meta banks become the pool's
+            if store.params[name][0] in module._parameters:  # first call: the meta banks become the pool's
                 _use_pool(module, pool, store.device)
             num_experts = module.offload_num_experts
             # 1. One host copy: this layer's routing and the guesses for the next layers
@@ -311,6 +333,10 @@ class ExpertsOffloadLayer(TensorParallelLayer):
                 table = torch.full((num_experts,), pool.num_slots, dtype=top_k_index.dtype)
                 table[selected] = torch.tensor([pool.cache[(name, e)] for e in selected], dtype=top_k_index.dtype)
                 slots = table[routing].to(store.device, non_blocking=True)
+                if decode and pool.floating:
+                    # Gathers only the routed slots: `grouped_mm` iterates every slot on the host where it has no
+                    # device kernel (sm < 90), and the pool has thousands of them
+                    return batched_mm_experts_forward(module, hidden_states, slots, top_k_weights)
                 return original_forward(hidden_states, slots, top_k_weights, **kwargs)
 
             # 3. Pass 1 on the resident experts is queued before waiting on any read
@@ -359,7 +385,7 @@ def _find_router(parent: nn.Module, experts: nn.Module):
 def _use_pool(module, pool, device):
     """Swap the module's meta banks for the pool banks: its forward then indexes slots, not experts."""
     pool.materialize(device)
-    for param in EXPERT_PARAMS:
+    for param in pool.layout:
         module._parameters.pop(param, None)
         setattr(module, param, pool.banks[param])
     module.num_experts = pool.num_slots
@@ -372,8 +398,10 @@ def apply_experts_offload(model: nn.Module, patterns: list[str], device, cache_b
     store = ExpertsOffloadStore(device, cache_bytes, **kwargs)
     modules = dict(model.named_modules())
     for name, module in modules.items():
-        if all(hasattr(module, p) for p in EXPERT_PARAMS) and any(
-            fnmatch.fnmatch(name, p) or fnmatch.fnmatch(name, f"*.{p}") for p in patterns
+        if (
+            getattr(module, "num_experts", None)
+            and expert_params(module)
+            and any(fnmatch.fnmatch(name, p) or fnmatch.fnmatch(name, f"*.{p}") for p in patterns)
         ):
             module.offload_num_experts = module.num_experts
             store.add_layer(name, module, _find_router(modules[name.rpartition(".")[0]], module))
@@ -384,7 +412,7 @@ def apply_experts_offload(model: nn.Module, patterns: list[str], device, cache_b
     resident = sum(
         p.numel() * p.element_size() for n, p in model.named_parameters() if not store.owns(n) and n not in tied
     ) + sum(b.numel() * b.element_size() for b in model.buffers())
-    store.allocate(resident)
+    store.resident_bytes = resident  # pools are sized at the first forward, from what a read returns
     style = ExpertsOffloadLayer()
     for module in store.layers.values():
         style.install_forward(module, store)
