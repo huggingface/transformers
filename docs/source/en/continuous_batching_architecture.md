@@ -112,7 +112,7 @@ The cache reserves two chunks ahead of the data chunks for padding reads and wri
 
 ### Cache sizing
 
-The manager infers how many chunks fit at startup from free GPU memory. It accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` of the available memory. When unset, it defaults to a value according to the hardware and continuous batching parameters. MPS reserve less space for the cache, where the CPU and GPU share memory, to avoid swapping. `num_blocks` expresses capacity as whole model blocks of `page_size` tokens when you set it explicitly.
+The manager infers how many chunks fit at startup from free GPU memory. It builds a probe with a small cache and runs a few eager batches of `max_batch_tokens` tokens on fake requests to measure the memory of a batch: the static input and output tensors, the decoder activations and how they grow with each cached token read, and the LM head, logits processing and sampling. The memory left within `max_memory_percent` of the available memory then becomes cache. When unset, `max_memory_percent` defaults to 0.9, which leaves room for memory allocated outside of PyTorch like CUDA graphs. On MPS and CPU, it defaults to 0.6 to avoid swapping, since memory is shared with the host. Activations aren't measured on CPU, nor on MPS before torch 2.13, so that margin also has to absorb them. `num_blocks` expresses capacity as whole model blocks of `page_size` tokens when you set it explicitly, which skips the probe.
 
 You can pin the values in [`ContinuousBatchingConfig`].
 

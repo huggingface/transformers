@@ -1692,12 +1692,14 @@ class ContinuousBatchingConfig:
             The number of tokens stored for each layer inside a (full-attention) page. A block storing the cache of N
             layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Default is 256.
         num_blocks (`int`, *optional*):
-            Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
+            Number of blocks in the KV cache. When `None`, inferred from GPU memory by measuring the activations of a
+            few probe batches and filling the rest of the memory budget with cache.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Defaults to 8192 when `None`.
         max_memory_percent (`float`, *optional*):
-            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
-            resolved at runtime to 0.9, or 0.6 on MPS and CPU where memory is shared with the host.
+            Maximum percentage of free GPU memory (after the model is loaded) to use for continuous batching: the KV
+            cache, the input / output buffers and the activations. When `None`, resolved at runtime to 0.9, or 0.6 on
+            MPS and CPU where memory is shared with the host.
         max_requests_per_batch (`int`, *optional*):
             Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
