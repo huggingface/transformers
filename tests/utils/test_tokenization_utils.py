@@ -301,13 +301,9 @@ class ExtensionsTrieTest(unittest.TestCase):
         self.assertEqual(len(values), 0)
 
     def test_no_extension_match_non_empty_trie(self):
-        trie = ExtensionsTrie()
-        trie.add("foo")
-        trie.add("food")
-        trie.add("foodie")
-        trie.add("helium")
-        # A prefix that diverges below the root must not combine the query with
-        # suffixes from an unrelated node.
+        trie = ExtensionsTrie(["foo", "food", "foodie", "helium"])
+        # Neither a missing first character nor a later mismatch may produce
+        # fabricated extensions.
         self.assertEqual(trie.extensions("unknown"), [])
         self.assertEqual(trie.extensions("foe"), [])
 
