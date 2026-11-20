@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import torch
 
 from .cache_utils import Cache, EncoderDecoderCache
-from .utils import ModelOutput, MultimodalModelOutput
+from .utils import ModelOutput
 
 
 @dataclass
@@ -507,6 +507,23 @@ class Seq2SeqModelOutput(ModelOutput):
     encoder_last_hidden_state: torch.Tensor | None = None
     encoder_hidden_states: tuple[torch.Tensor, ...] | None = None
     encoder_attentions: tuple[torch.Tensor, ...] | None = None
+
+
+# NOTE: lives here rather than in `utils/generic.py` so that subclassing `ModelOutput` (which registers a torch pytree
+# node) doesn't happen at `import transformers` time.
+class MultimodalModelOutput(ModelOutput):
+    """
+    Base class for multimodal model outputs. This dataclass has to be subclassed to add model output fields including
+    `image/video/audio outputs` fields. The modality-related fields cannot be added by default due to dataclass field
+    ordering in subclasses.
+    """
+
+    def to_tuple(self) -> tuple:
+        # `keys()` skips None fields, like `ModelOutput.to_tuple`
+        return tuple(
+            self[k] if k not in ("image_outputs", "video_outputs", "audio_outputs") else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 @dataclass
