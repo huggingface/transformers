@@ -44,6 +44,28 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 
 
+# --- WP glue (bench only): fewer tiny kernels per decode step, each change behind an env var that defaults to off ------
+import os as _glue_os
+
+_GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "0") == "1"  # F.rms_norm: 1 kernel instead of 8
+_GLUE_ROPE = _glue_os.environ.get("GLUE_ROPE", "0") == "1"  # rotary written in place: 4 kernels per tensor instead of 7
+_GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "0") == "1"  # no group selection when there is a single group
+# cache writes of the prototype kept out of torch.compile graphs, like `PagedAttentionCache.update` upstream: traced, an
+# in-place write into a view of the cache pool is functionalized into a copy of the whole view
+_GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") == "1"
+
+
+@torch.compiler.disable
+def _glue_write_latents(kv_latent_cache, rotated_key_cache, write_index, k_pass, k_rot):
+    kv_latent_cache.index_copy_(0, write_index, k_pass)
+    rotated_key_cache.index_copy_(0, write_index, k_rot)
+
+
+@torch.compiler.disable
+def _glue_update_indexer(cache, k, layer_idx):
+    return cache.update_indexer(k, layer_idx)
+
+
 @use_kernel_forward_from_hub("RMSNorm")
 class GlmMoeDsaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
@@ -55,6 +77,9 @@ class GlmMoeDsaRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if _GLUE_RMSNORM:
+            # fused native kernel, accumulates in fp32 and rounds once
+            return F.rms_norm(hidden_states, (hidden_states.shape[-1],), self.weight, self.variance_epsilon)
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -145,6 +170,19 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
 
     q1, q2 = q[..., 0::2], q[..., 1::2]
     k1, k2 = k[..., 0::2], k[..., 1::2]
+
+    if _GLUE_ROPE:
+        # same rotation written straight into the output halves: no temporaries, no cat
+        half = cos.shape[-1]
+        embeds = []
+        for x1, x2, x in ((q1, q2, q), (k1, k2, k)):
+            out = x.new_empty(torch.broadcast_shapes(x1.shape, cos.shape)[:-1] + (2 * half,))
+            torch.mul(x1, cos, out=out[..., :half])
+            out[..., :half].addcmul_(x2, sin, value=-1)
+            torch.mul(x2, cos, out=out[..., half:])
+            out[..., half:].addcmul_(x1, sin)
+            embeds.append(out)
+        return embeds[0], embeds[1]
 
     q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
     k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
@@ -347,7 +385,10 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
     k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [1, M, D]
-    keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
+    if _GLUE_OPAQUE_CACHE_WRITE:
+        keys = _glue_update_indexer(cache, k, indexer.layer_idx)[0]
+    else:
+        keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
 
     num_tokens, device = seq_len, hidden_states.device
     tok = torch.arange(num_tokens, device=device)
@@ -385,8 +426,14 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
     read_index = kwargs["read_index"][allocator.index]  # [N] physical rows of the packed context (past + new)
     write_index = kwargs["write_index"][allocator.index]  # [M]
     kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
-    kv_latent_cache.index_copy_(0, write_index, k_pass.reshape(-1, module.kv_lora_rank))
-    rotated_key_cache.index_copy_(0, write_index, k_rot.reshape(-1, module.qk_rope_head_dim))
+    if _GLUE_OPAQUE_CACHE_WRITE:
+        _glue_write_latents(
+            kv_latent_cache, rotated_key_cache, write_index, k_pass.reshape(-1, module.kv_lora_rank),
+            k_rot.reshape(-1, module.qk_rope_head_dim),
+        )
+    else:
+        kv_latent_cache.index_copy_(0, write_index, k_pass.reshape(-1, module.kv_lora_rank))
+        rotated_key_cache.index_copy_(0, write_index, k_rot.reshape(-1, module.qk_rope_head_dim))
     allocator._last_indices[module.layer_idx] = (read_index, write_index)
     if read_index.numel() == 0:  # CB skips the read-back when the batch has no past: the context is the new tokens
         read_index = write_index
@@ -626,6 +673,13 @@ class GlmMoeDsaTopkRouter(nn.Module):
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
+        if _GLUE_ROUTER and self.num_group == 1 and self.topk_group == 1:
+            # a single group is always selected: the group top-k and its mask select every expert
+            topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+            topk_weights = scores.gather(1, topk_indices)
+            if self.norm_topk_prob:
+                topk_weights /= topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            return router_logits, topk_weights * self.routed_scaling_factor, topk_indices
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]

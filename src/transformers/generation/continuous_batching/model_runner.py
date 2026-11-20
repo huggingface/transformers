@@ -34,6 +34,11 @@ from .utils import (
 )
 
 
+import os as _glue_os
+
+_GLUE_SAMPLE = _glue_os.environ.get("GLUE_SAMPLE", "0") == "1"
+
+
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
     """Returns the largest total length a single request can have on an empty cache, i.e. the largest length for
     which all allocators can be served enough sectors at the same time."""
@@ -219,6 +224,13 @@ class ModelRunner:
 
     def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
         """Private method to sample next tokens from the scores."""
+        # WP glue (bench only), off by default: Gumbel-max sampling straight from the logits (4 kernels, no softmax and
+        # no multinomial) when no logprobs are requested. Same distribution, different random stream
+        if _GLUE_SAMPLE and self.do_sample and not self.return_logprobs:
+            noise = torch.empty_like(scores[0]).exponential_().log_()
+            next_tokens = torch.argmax(scores[0] - noise, dim=-1)  # shape [num_logits]
+            output_ids[0, : next_tokens.size(0)].copy_(next_tokens)
+            return
         # Apply softmax if we are sampling or if we are generating log probabilities
         if self.do_sample or self.return_logprobs:
             probs = nn.functional.softmax(scores[0], dim=-1)  # shape [num_logits, vocab_size]
