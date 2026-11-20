@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
 from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, quantized_experts
 
 
 if is_torch_available():
@@ -130,7 +130,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             FP8GroupedLinear,
             FP8Linear,
         )
-        from ..integrations.moe import use_experts_implementation
 
         config = self.quantization_config
         if config.dequantize:
@@ -146,15 +145,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
             new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
         elif name.endswith(".experts"):
-            has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
-            experts_class = use_experts_implementation(
-                experts_class=FP8Experts,
-                experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
-                has_bias=has_bias,
-                has_gate=has_gate,
-            )
-            experts_config = getattr(module, "config", self.text_config)
-            new_module = experts_class(experts_config, has_bias=has_bias, has_gate=has_gate, **kwargs)
+            new_module = quantized_experts(module, FP8Experts, ALL_FP8_EXPERTS_FUNCTIONS, self.text_config, **kwargs)
         elif type(module) is nn.Linear:
             new_module = FP8Linear(module.in_features, module.out_features, has_bias=module.bias is not None, **kwargs)
         elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:

@@ -27,7 +27,7 @@ from ..utils.import_utils import (
 )
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface
-from .mxfp4 import FP4_VALUES
+from .mxfp4 import dequantize_mxfp4
 
 
 if is_torch_available():
@@ -133,8 +133,7 @@ class NVFP4Linear(nn.Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        # Weight-only (W4A16): the weight is dequantized in each forward, the activations stay in full precision
-        self.weight_only = weight_only
+        self.weight_only = weight_only  # W4A16: the weight is dequantized in each forward
 
         # The BF16 placeholder matches the source checkpoint before the load-time conversion replaces it with
         # packed uint8 weights. Four FP8 scale bytes are packed into each int32 entry in the swizzled layout.
@@ -190,8 +189,6 @@ class NVFP4Experts(nn.Module):
 
         self.config = config
         self.has_gate = has_gate
-        # Weight-only (W4A16): each hit expert's weights are dequantized in its forward, the activations stay in full
-        # precision
         self.weight_only = weight_only
 
         self.act_fn = ACT2FN[getattr(config, "hidden_activation", None) or config.hidden_act]
@@ -445,15 +442,8 @@ class NVFP4Dequantize(ConversionOps):
 
 
 def dequantize_nvfp4(packed: torch.Tensor, scales: torch.Tensor, scale_2) -> torch.Tensor:
-    """
-    Dense float32 `(out_features, in_features)`: `fp4 * scales * scale_2`, two e2m1 values per byte, low nibble
-    first
-    """
-    values = torch.tensor(FP4_VALUES, device=packed.device)
-    weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
-    weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
-    scales = scales.view(_FP8_DTYPE).float().unsqueeze(-1)
-    return (weight * scales * scale_2).flatten(1)
+    """Dense float32 `(out_features, in_features)`: `fp4 * scales * scale_2`"""
+    return dequantize_mxfp4(packed, scales.view(_FP8_DTYPE), torch.float32, SF_VEC_SIZE) * scale_2
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:

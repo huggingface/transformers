@@ -186,6 +186,11 @@ class LoadStateDictConfig:
     device_mesh: "DeviceMeshLike | None" = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
+    # An engine owning its params (e.g. vLLM): `get_sharding_op(target, param, converter, source_pattern)` returns the
+    # op sharding each source on read (default: the DTensor placements), and params are filled in place
+    # (`load_in_place`: True copies, a callable `(param, value)` loads, e.g. deferring an online quantization)
+    get_sharding_op: Callable | None = None
+    load_in_place: bool | Callable = False
     disable_mmap: bool | None = None
 
     @property

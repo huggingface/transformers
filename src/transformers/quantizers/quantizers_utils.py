@@ -23,6 +23,17 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
     return module, tensor_name
 
 
+def quantized_experts(module, experts_class, experts_interface, config, **kwargs):
+    """`experts_class`, dispatching to `experts_interface`, in place of the experts `module`"""
+    from ..integrations.moe import use_experts_implementation
+
+    flags = {"has_gate": getattr(module, "has_gate", True), "has_bias": getattr(module, "has_bias", False)}
+    experts_class = use_experts_implementation(
+        experts_class=experts_class, experts_interface=experts_interface, **flags
+    )
+    return experts_class(getattr(module, "config", config), **flags, **kwargs)
+
+
 def should_convert_module(full_name, patterns: list[str] | None = None):
     if patterns is None:
         return True

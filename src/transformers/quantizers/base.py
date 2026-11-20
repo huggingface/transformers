@@ -219,9 +219,7 @@ class HfQuantizer(ABC):
         """
         replaced, swapped = set(), ()
         for name, module in list(model.named_modules()):
-            if name.startswith(swapped):  # inside a module already swapped
-                continue
-            if not module._parameters:  # containers are never swapped
+            if name.startswith(swapped) or not module._parameters:  # inside a swapped module, or a container
                 continue
 
             quantizer = self.get_quantizer(f"{name}.")
@@ -391,9 +389,20 @@ class HfQuantizer(ABC):
         """
         return {}
 
+    # An engine with its own kernels (e.g. vLLM) takes the checkpoint's tensors as they are: no load op, no
+    # `checkpoint_renames`. Only the model's conversions run
+    load_serialized = False
+
+    # The load op runs on each of the format's tensors before the model's ops (e.g. a layout an engine repacks per
+    # expert, before the experts merge), as a dequantization does
+    load_before_model_ops = False
+
+    # A requantization: the load op dequantizes before the model's ops, `get_quantize_ops` quantizes after them
+    requantize = False
+
     def get_load_operation(self):
         """The op loading this checkpoint: its dequantization if the config asks for it, else its deserialization"""
-        if not self.pre_quantized:
+        if not self.pre_quantized or self.load_serialized:
             return None
         dequantize = getattr(self.quantization_config, "dequantize", False)
         return self.get_load_operations().get("dequantize" if dequantize else "deserialize")
@@ -402,8 +411,7 @@ class HfQuantizer(ABC):
         """General converters: a param's serialized names load together. Their ops are set per param, by the plan"""
         from ..core_model_loading import WeightConverter, _IdentityOp
 
-        # Only to read a checkpoint this format can load (it has a load op). Nothing is converted back on save: a
-        # dequantized model saves unquantized.
+        # Nothing is converted back on save: a dequantized model saves unquantized.
         # TODO: quantize back on save (each format's dequantize reversed). Needs what was dequantized on load per param
         # (module and layout, e.g. `modules_to_convert`, per-tensor vs block scales): the config alone can't say
         if self.get_load_operation() is None:
