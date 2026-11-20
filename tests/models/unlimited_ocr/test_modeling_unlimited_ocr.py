@@ -59,43 +59,41 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
     text_config_class = UnlimitedOcrTextConfig
     vision_config_class = UnlimitedOcrVisionConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("num_image_tokens", 7)
-        kwargs.setdefault("image_token_id", 1)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("hidden_size", 128)
-        kwargs.setdefault("intermediate_size", 256)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("tie_word_embeddings", False)
-        kwargs.setdefault("bos_token_id", 2)
-        kwargs.setdefault("eos_token_id", 3)
-        kwargs.setdefault("pad_token_id", 4)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", 64)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("sliding_window", 4)
-
-        kwargs.setdefault("vision_sam_hidden_size", 32)
-        kwargs.setdefault("vision_sam_output_channels", 16)
-        kwargs.setdefault("vision_sam_image_size", 16)
-        kwargs.setdefault("vision_sam_patch_size", 2)
-        kwargs.setdefault("vision_sam_hidden_act", "gelu")
-        kwargs.setdefault("vision_sam_mlp_ratio", 4.0)
-        kwargs.setdefault("vision_sam_mlp_dim", 128)
-        kwargs.setdefault("vision_sam_window_size", 4)
-        kwargs.setdefault("vision_sam_global_attn_indexes", [1])
-        kwargs.setdefault("vision_sam_downsample_channels", [32, 64])
-
-        kwargs.setdefault("vision_encoder_hidden_size", 64)
-        kwargs.setdefault("vision_encoder_intermediate_size", 128)
-        kwargs.setdefault("vision_encoder_rms_norm_eps", 1.0)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "num_image_tokens": 7,
+        "image_token_id": 1,
+        "image_size": 16,
+        "hidden_size": 128,
+        "intermediate_size": 256,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "tie_word_embeddings": False,
+        "bos_token_id": 2,
+        "eos_token_id": 3,
+        "pad_token_id": 4,
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 64,
+        "num_experts_per_tok": 2,
+        "sliding_window": 4,
+        "vision_sam_hidden_size": 32,
+        "vision_sam_output_channels": 16,
+        "vision_sam_image_size": 16,
+        "vision_sam_patch_size": 2,
+        "vision_sam_hidden_act": "gelu",
+        "vision_sam_mlp_ratio": 4.0,
+        "vision_sam_mlp_dim": 128,
+        "vision_sam_window_size": 4,
+        "vision_sam_global_attn_indexes": [1],
+        "vision_sam_downsample_channels": [32, 64],
+        "vision_encoder_hidden_size": 64,
+        "vision_encoder_intermediate_size": 128,
+        "vision_encoder_rms_norm_eps": 1.0,
+    }
 
 
 @require_torch

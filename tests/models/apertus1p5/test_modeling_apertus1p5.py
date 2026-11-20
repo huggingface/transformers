@@ -117,6 +117,10 @@ class Apertus1p5Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(outputs.loss, expected_loss)
 
     @unittest.skip("The vision tokenizer does not record intermediate outputs")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
+    @unittest.skip("The vision tokenizer does not record intermediate outputs")
     def test_get_image_features_hidden_states(self):
         pass
 
@@ -210,6 +214,10 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
             padding_mask=padding_mask,
         )
         torch.testing.assert_close(expanded["input_values"], input_values[[0, 1, 0, 1, 2, 2]])
+
+    @unittest.skip("The tester has no image in input dict")
+    def test_multimodal_outputs_are_returned(self):
+        pass
 
     @unittest.skip("The audio tokenizer does not record intermediate outputs")
     def test_get_audio_features_hidden_states(self):

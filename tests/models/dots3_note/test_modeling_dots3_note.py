@@ -50,26 +50,31 @@ class Dots3NoteTextModelTester(CausalLMModelTester):
     base_model_class = Dots3NoteTextModel
     causal_lm_class = Dots3NoteForCausalLM
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 256)
-        super().__init__(parent=parent, **kwargs)
-        self.q_lora_rank = 16
-        self.kv_lora_rank = 16
-        self.qk_rope_head_dim = self.head_dim // 2
-        self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
-        self.v_head_dim = self.head_dim
-        self.layer_types = ["indexed_attention", "sliding_attention"] * (self.num_hidden_layers // 2)
-        self.sliding_window = self.max_position_embeddings
-        self.per_layer_config = {}
-        self.index_head_dim = 32
-        self.index_topk = 4
-        self.n_routed_experts = 4
-        self.n_shared_experts = 1
-        self.num_experts_per_tok = 2
-        self.moe_intermediate_size = 64
-        self.shared_experts_intermediate_size = 16
+    small_config_overrides = {
+        "head_dim": 16,
+        "hidden_size": 64,
+        "intermediate_size": 256,
+        "q_lora_rank": 16,
+        "kv_lora_rank": 16,
+        "per_layer_config": {},
+        "index_head_dim": 32,
+        "index_topk": 4,
+        "n_routed_experts": 4,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 64,
+        "shared_experts_intermediate_size": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["qk_rope_head_dim"] = values["head_dim"] // 2
+        values["qk_nope_head_dim"] = values["head_dim"] - values["qk_rope_head_dim"]
+        values["v_head_dim"] = values["head_dim"]
+        values["layer_types"] = ["indexed_attention", "sliding_attention"] * (values["num_hidden_layers"] // 2)
+        values["sliding_window"] = values["max_position_embeddings"]
+        return values
 
 
 @require_torch
@@ -101,47 +106,52 @@ class Dots3NoteVision2TextModelTester(VLMModelTester):
     config_class = Dots3NoteConfig
     conditional_generation_class = Dots3NoteForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 7)
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("audio_token_id", 5)
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("seq_length", 16)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("moe_intermediate_size", 64)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("num_local_experts", 2)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("adapter_in_dim", 64)
-        kwargs.setdefault("adapter_out_dim", 64)
-        kwargs.setdefault("adapter_merge_size", 2)
-        kwargs.setdefault("audio_feature_size", 8)
-        kwargs.setdefault("audio_hop_length", 4)
-        kwargs.setdefault("audio_downsample_hidden_size", 4)
-        kwargs.setdefault("audio_adapter_input_size", 64)
-        kwargs.setdefault("text_intermediate_size", 256)
-        kwargs.setdefault("text_num_key_value_heads", kwargs["num_attention_heads"])
-        kwargs.setdefault("text_q_lora_rank", 16)
-        kwargs.setdefault("text_kv_lora_rank", 16)
-        kwargs.setdefault("text_head_dim", 16)
-        kwargs.setdefault("text_qk_rope_head_dim", 8)
-        kwargs.setdefault("text_qk_nope_head_dim", 8)
-        kwargs.setdefault("text_v_head_dim", 16)
-        kwargs.setdefault("text_layer_types", ["indexed_attention", "sliding_attention"])
-        kwargs.setdefault("text_mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("text_per_layer_config", {})
-        kwargs.setdefault("text_index_head_dim", 32)
-        kwargs.setdefault("text_index_topk", 4)
-        kwargs.setdefault("text_n_routed_experts", 4)
-        kwargs.setdefault("text_shared_experts_intermediate_size", 16)
-        super().__init__(parent, **kwargs)
-        self.encoder_seq_length = self.seq_length
+    small_config_overrides = {
+        "batch_size": 7,
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "audio_token_id": 5,
+        "image_size": 8,
+        "patch_size": 2,
+        "num_image_tokens": 4,
+        "seq_length": 16,
+        "hidden_size": 64,
+        "intermediate_size": 64,
+        "moe_intermediate_size": 64,
+        "num_attention_heads": 4,
+        "spatial_merge_size": 2,
+        "mlp_layer_types": ["dense", "sparse"],
+        "num_local_experts": 2,
+        "num_experts_per_tok": 2,
+        "adapter_in_dim": 64,
+        "adapter_out_dim": 64,
+        "adapter_merge_size": 2,
+        "audio_feature_size": 8,
+        "audio_hop_length": 4,
+        "audio_downsample_hidden_size": 4,
+        "audio_adapter_input_size": 64,
+        "text_intermediate_size": 256,
+        "text_q_lora_rank": 16,
+        "text_kv_lora_rank": 16,
+        "text_head_dim": 16,
+        "text_qk_rope_head_dim": 8,
+        "text_qk_nope_head_dim": 8,
+        "text_v_head_dim": 16,
+        "text_layer_types": ["indexed_attention", "sliding_attention"],
+        "text_mlp_layer_types": ["dense", "sparse"],
+        "text_per_layer_config": {},
+        "text_index_head_dim": 32,
+        "text_index_topk": 4,
+        "text_n_routed_experts": 4,
+        "text_shared_experts_intermediate_size": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("text_num_key_value_heads", values["num_attention_heads"])
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
 
     @property
     def _special_token_ids(self):
@@ -168,46 +178,51 @@ class Dots3NoteAudio2TextModelTester(ALMModelTester):
     audio_mask_key = "chunk_sample_lengths"
     conditional_generation_class = Dots3NoteForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("audio_token_id", 5)
-        kwargs.setdefault("feat_seq_length", 16)
-        kwargs.setdefault("num_mel_bins", 8)
-        kwargs.setdefault("feature_size", 8)
-        kwargs.setdefault("hop_length", 4)
-        kwargs.setdefault("downsample_hidden_size", 4)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("adapter_input_size", 64)
-        kwargs.setdefault("adapter_out_dim", 64)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("vision_patch_size", 2)
-        kwargs.setdefault("vision_spatial_merge_size", 2)
-        kwargs.setdefault("vision_adapter_in_dim", 64)
-        kwargs.setdefault("vision_adapter_merge_size", 2)
-        kwargs.setdefault("vision_mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("vision_num_local_experts", 2)
-        kwargs.setdefault("vision_num_experts_per_tok", 2)
-        kwargs.setdefault("text_intermediate_size", 256)
-        kwargs.setdefault("text_moe_intermediate_size", 64)
-        kwargs.setdefault("text_num_key_value_heads", kwargs["num_attention_heads"])
-        kwargs.setdefault("text_q_lora_rank", 16)
-        kwargs.setdefault("text_kv_lora_rank", 16)
-        kwargs.setdefault("text_qk_rope_head_dim", 8)
-        kwargs.setdefault("text_qk_nope_head_dim", 8)
-        kwargs.setdefault("text_v_head_dim", 16)
-        kwargs.setdefault("text_layer_types", ["indexed_attention", "sliding_attention"])
-        kwargs.setdefault("text_mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("text_per_layer_config", {})
-        kwargs.setdefault("text_index_head_dim", 32)
-        kwargs.setdefault("text_index_topk", 4)
-        kwargs.setdefault("text_n_routed_experts", 4)
-        kwargs.setdefault("text_num_experts_per_tok", 2)
-        kwargs.setdefault("text_shared_experts_intermediate_size", 16)
-        kwargs.setdefault("text_initializer_range", 0.02)
-        kwargs.setdefault("text_tie_word_embeddings", False)
-        super().__init__(parent, **kwargs)
-        self.encoder_seq_length = self.seq_length
+    small_config_overrides = {
+        "audio_token_id": 5,
+        "feat_seq_length": 16,
+        "num_mel_bins": 8,
+        "feature_size": 8,
+        "hop_length": 4,
+        "downsample_hidden_size": 4,
+        "hidden_size": 64,
+        "adapter_input_size": 64,
+        "adapter_out_dim": 64,
+        "num_attention_heads": 2,
+        "head_dim": 16,
+        "intermediate_size": 64,
+        "vision_patch_size": 2,
+        "vision_spatial_merge_size": 2,
+        "vision_adapter_in_dim": 64,
+        "vision_adapter_merge_size": 2,
+        "vision_mlp_layer_types": ["dense", "sparse"],
+        "vision_num_local_experts": 2,
+        "vision_num_experts_per_tok": 2,
+        "text_intermediate_size": 256,
+        "text_moe_intermediate_size": 64,
+        "text_q_lora_rank": 16,
+        "text_kv_lora_rank": 16,
+        "text_qk_rope_head_dim": 8,
+        "text_qk_nope_head_dim": 8,
+        "text_v_head_dim": 16,
+        "text_layer_types": ["indexed_attention", "sliding_attention"],
+        "text_mlp_layer_types": ["dense", "sparse"],
+        "text_per_layer_config": {},
+        "text_index_head_dim": 32,
+        "text_index_topk": 4,
+        "text_n_routed_experts": 4,
+        "text_num_experts_per_tok": 2,
+        "text_shared_experts_intermediate_size": 16,
+        "text_initializer_range": 0.02,
+        "text_tie_word_embeddings": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("text_num_key_value_heads", values["num_attention_heads"])
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
 
     def create_audio_mask(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -269,6 +284,10 @@ class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
 
     @unittest.skip("Generation from pre-encoded images is covered by Dots3NoteVision2TextModelTest")
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    @unittest.skip("Image features are covered by Dots3NoteVision2TextModelTest")
+    def test_multimodal_outputs_are_returned(self):
         pass
 
     def _image_features_prepare_config_and_inputs(self):

@@ -50,8 +50,13 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
     config_class = LlavaNextConfig
     conditional_generation_class = LlavaNextForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("num_patches_per_image", 2)
+    small_config_overrides = {
+        "num_patches_per_image": 2,
+        "image_token_id": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
         # Compute num_image_tokens from LlavaNext's pack_image_features logic
         image_size = kwargs.get("image_size", 8)
         patch_size = kwargs.get("patch_size", 4)
@@ -59,8 +64,7 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
         height = width = image_size // patch_size
         grid_tokens = height * (width + 1)
         kwargs.setdefault("num_image_tokens", tokens_per_patch + grid_tokens)
-        kwargs.setdefault("image_token_id", 3)
-        super().__init__(parent, **kwargs)
+        return super().get_small_config_defaults(**kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models

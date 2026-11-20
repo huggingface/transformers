@@ -49,18 +49,23 @@ class MossTranscribeDiarizeModelTester(ALMModelTester):
     text_config_class = Qwen3Config
     audio_config_class = MossTranscribeDiarizeAudioConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("feat_seq_length", 128)
-        kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
-        kwargs.setdefault("hidden_size", 16)
-        kwargs.setdefault("intermediate_size", 32)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("audio_merge_size", 4)
-        kwargs.setdefault("audio_token_id", 0)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "feat_seq_length": 128,
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "audio_merge_size": 4,
+        "audio_token_id": 0,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("max_source_positions", (values["feat_seq_length"] - 1) // 2 + 1)
+        return values
 
     def _prepare_modality_inputs(self, input_ids, config):
         num_audio_tokens = torch.full((self.batch_size,), 8, dtype=torch.long, device=torch_device)

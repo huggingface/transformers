@@ -26,7 +26,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -737,10 +737,7 @@ class JanusModel(JanusPreTrainedModel, MultimodalMixin):
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
 
-        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
-            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -800,7 +797,6 @@ class JanusModel(JanusPreTrainedModel, MultimodalMixin):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -816,13 +812,7 @@ class JanusModel(JanusPreTrainedModel, MultimodalMixin):
             **kwargs,
         )
 
-        return JanusBaseModelOutputWithPast(
-            last_hidden_state=lm_output.last_hidden_state,
-            cache=lm_output.cache,
-            hidden_states=lm_output.hidden_states,
-            attentions=lm_output.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return JanusBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, MultimodalMixin, GenerationMixin):
@@ -889,7 +879,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, MultimodalMixin, Gener
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     def decode_image_tokens(self, image_tokens: torch.Tensor):

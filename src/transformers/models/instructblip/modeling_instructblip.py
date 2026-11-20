@@ -26,7 +26,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1154,10 +1154,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Multimod
         image_features = self.language_projection(query_output)
         vision_outputs.pooler_output = image_features
 
-        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
-            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):

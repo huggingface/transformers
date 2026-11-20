@@ -18,6 +18,7 @@ import unittest
 from transformers.testing_utils import is_torch_available, require_torch, tooslow
 
 from ...generation.test_utils import torch_device
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -35,50 +36,34 @@ if is_torch_available():
 
 
 @require_torch
-class CpmAntModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=8,
-        is_training=True,
-        use_token_type_ids=False,
-        use_input_mask=False,
-        use_labels=False,
-        use_mc_token_ids=False,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        num_buckets=32,
-        max_distance=128,
-        prompt_length=8,
-        prompt_types=8,
-        segment_types=8,
-        init_std=0.02,
-        return_dict=True,
-    ):
+class CpmAntModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 8,
+        "is_training": True,
+        "use_token_type_ids": False,
+        "use_input_mask": False,
+        "use_labels": False,
+        "use_mc_token_ids": False,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "num_buckets": 32,
+        "max_distance": 128,
+        "prompt_length": 8,
+        "prompt_types": 8,
+        "segment_types": 8,
+        "init_std": 0.02,
+        "return_dict": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.num_buckets = num_buckets
-        self.max_distance = max_distance
-        self.prompt_length = prompt_length
-        self.prompt_types = prompt_types
-        self.segment_types = segment_types
-        self.init_std = init_std
-        self.return_dict = return_dict
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = {}
@@ -134,6 +119,8 @@ class CpmAntModelTester:
 
 @require_torch
 class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = CpmAntModelTester
+
     all_model_classes = (CpmAntModel, CpmAntForCausalLM) if is_torch_available() else ()
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
     all_generative_model_classes = ()
