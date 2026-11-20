@@ -123,6 +123,7 @@ class PagedAttentionCache:
         distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
         model_supports_logits_to_keep: bool = False,
+        do_sample: bool = False,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -135,6 +136,7 @@ class PagedAttentionCache:
             dtype: Data type of the activation and the cache (for now, these are the same)
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
+            do_sample: Whether next tokens are sampled, which holds more fp32 copies of the logits at once than argmax
         """
         self.config = config
         self.dtype = dtype
@@ -191,6 +193,7 @@ class PagedAttentionCache:
             bytes_per_block=bytes_per_block,
             attn_types=list(self.cache_allocators.keys()),
             model_supports_logits_to_keep=model_supports_logits_to_keep,
+            do_sample=do_sample,
         ).infer_max_batch_tokens_and_num_sectors()
 
         # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
@@ -552,6 +555,7 @@ class PagedAttentionMemoryHandler:
         bytes_per_block: int,
         attn_types: list[str],
         model_supports_logits_to_keep: bool = False,
+        do_sample: bool = False,
     ) -> None:
         """Initialize the memory handler with the model configuration, the continuous batching configuration, the data
         type of the activation and the cache, and the sector geometry computed by the PagedAttentionCache."""
@@ -560,6 +564,7 @@ class PagedAttentionMemoryHandler:
         self.cache_dtype = dtype
         self.activation_dtype = dtype
         self.model_supports_logits_to_keep = model_supports_logits_to_keep
+        self.do_sample = do_sample
 
         self.bytes_per_sector = bytes_per_sector
         self.tokens_per_sector = tokens_per_sector
@@ -633,14 +638,18 @@ class PagedAttentionMemoryHandler:
     @property
     def fixed_overhead_bytes(self) -> int:
         """Reservations that scale with neither batch tokens nor cache size: the trash sectors and, when the model
-        slices hidden states with logits_to_keep, the LM head peak of the per-request logit rows."""
+        slices hidden states with logits_to_keep, the LM head and sampling peak of the per-request logit rows."""
         overhead = self.trash_bytes
         if self.model_supports_logits_to_keep:
             a = self.activation_dtype.itemsize
+            f = torch.float32.itemsize
             # 1024 mirrors FALLBACK_DEFAULTS["max_requests_per_batch"] in initialization.py (import would be circular)
             max_logit_rows = self.cb_config.max_requests_per_batch or 1024
-            lm_head_row = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
-            overhead += max_logit_rows * lm_head_row
+            # Per logit row, the peak is either the cast to fp32 (the logits are live in both dtypes) or the fp32 copies
+            # the sampler holds at once: the logits, their softmax when sampling or returning logprobs, and the noise
+            # torch.multinomial draws when sampling
+            num_fp32_copies = 3 if self.do_sample else 2 if self.cb_config.return_logprobs else 1
+            overhead += max_logit_rows * self.config.vocab_size * max(a + f, num_fp32_copies * f)
         return overhead
 
     def attention_mask_bytes(self, max_batch_tokens: int, num_sectors: int) -> int:
