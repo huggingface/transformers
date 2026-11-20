@@ -510,6 +510,9 @@ class ContinuousBatchingIOs:
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
         if self.mtp_mode:
+            # a placeholder token (-1) must never reach an embedding lookup: fail on the host, not on the device
+            if min(input_ids) < 0 or min(mtp_shift_ids) < 0:
+                raise RuntimeError("CB_MTP prototype: a request was scheduled with a placeholder token")
             self.mtp_shift_ids[: len(mtp_shift_ids)] = to_tensor(mtp_shift_ids)
             self.mtp_src[: len(mtp_src)] = to_tensor(mtp_src)
             self.mtp_has_draft[: len(mtp_has_draft)] = to_tensor(mtp_has_draft)
