@@ -187,6 +187,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("flex_olmo", "FlexOlmoModel"),
+        ("flexglue", "FlexGlueModel"),
         ("flint", "FlintModel"),
         ("florence2", "Florence2Model"),
         ("fnet", "FNetModel"),
@@ -2093,6 +2094,7 @@ MODEL_FOR_KEYPOINT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_KEYPOINT_MATCHING_MAPPING_NAMES = OrderedDict(
     [
         ("efficientloftr", "EfficientLoFTRForKeypointMatching"),
+        ("flexglue", "FlexGlueForKeypointMatching"),
         ("lightglue", "LightGlueForKeypointMatching"),
         ("superglue", "SuperGlueForKeypointMatching"),
     ]

@@ -1,0 +1,1118 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import math
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+from huggingface_hub.dataclasses import strict
+from torch import nn
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, ImageInput, PILImageResampling, SizeDict
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import ModelOutput, TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig
+from ..cohere.modeling_cohere import apply_rotary_pos_emb
+from ..dinov3_convnext.modeling_dinov3_convnext import DINOv3ConvNextLayerNorm
+from ..llama.modeling_llama import eager_attention_forward
+from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
+from ..superglue.image_processing_superglue import SuperGlueImageProcessor
+
+
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="ETH-CVG/flexglue")
+@strict
+class FlexGlueConfig(PreTrainedConfig):
+    r"""
+    backbone_config (`Union[dict, PreTrainedConfig]`, *optional*, defaults to `DINOv3ConvNextConfig`):
+        The configuration of the backbone, a DINOv3 ConvNeXt-B returning the features of its four stages.
+    neck_hidden_size (`int`, *optional*, defaults to 512):
+        The number of channels of the neck that fuses the backbone stages into a stride-8 feature map.
+    feature_dim (`int`, *optional*, defaults to 256):
+        The number of channels of the stride-8 feature map returned by the neck.
+    search_dim (`int`, *optional*, defaults to 64):
+        The dimension of the features correlated by the match heads to find correspondences.
+    offset_hidden_size (`int`, *optional*, defaults to 256):
+        The hidden size of the offset heads which regress the sub-cell position of each correspondence.
+    offset_num_bins (`int`, *optional*, defaults to 16):
+        The number of bins of the soft-argmax of the offset heads.
+    offset_max_cells (`float`, *optional*, defaults to 1.0):
+        The maximum offset predicted by the offset heads, in feature cells.
+    filter_threshold (`float`, *optional*, defaults to 0.1):
+        The minimum confidence of a match.
+    max_distance_px (`float`, *optional*, defaults to 3.0):
+        The maximum cycle error of a match, in pixels of the model input. With `sparse_matching=True`, the maximum
+        distance of the mutual nearest neighbors. `None` disables the check.
+    min_covisibility (`float`, *optional*, defaults to 0.0):
+        All the matches of a pair of images whose covisibility score is below this value are rejected.
+    remove_border_px (`float`, *optional*, defaults to 0.0):
+        Matches closer than this to the image border, in pixels of the model input, are rejected.
+    sparse_matching (`bool`, *optional*, defaults to `False`):
+        When keypoints are given, whether to match them with mutual nearest neighbors (as LightGlue does) instead of
+        concatenating the correspondences predicted in both directions.
+    coarse_stride (`int`, *optional*, defaults to 8):
+        The pitch of the dense grid of correspondences when no keypoints are given, in pixels of the model input.
+    max_num_samples (`int`, *optional*, defaults to 5000):
+        The maximum number of matches sampled from the dense grids when no keypoints are given.
+    kde_balance (`bool`, *optional*, defaults to `True`):
+        Whether to spread the sampled matches over the images with a kernel density estimate (as RoMa v2 does)
+        instead of drawing them by confidence.
+    query_chunk_size (`int`, *optional*, defaults to 4096):
+        The number of points processed at once by the match heads, which bounds the memory. `None` processes all the
+        points at once.
+
+    Examples:
+        ```python
+        >>> from transformers import FlexGlueConfig, FlexGlueForKeypointMatching
+
+        >>> # Initializing a FlexGlue style configuration
+        >>> configuration = FlexGlueConfig()
+
+        >>> # Initializing a model from the FlexGlue style configuration
+        >>> model = FlexGlueForKeypointMatching(configuration)
+
+        >>> # Accessing the model configuration
+        >>> configuration = model.config
+        ```
+    """
+
+    model_type = "flexglue"
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dinov3_convnext",
+            init_kwargs={
+                "depths": [3, 3, 27, 3],
+                "hidden_sizes": [128, 256, 512, 1024],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
+
+    backbone_config: dict | PreTrainedConfig | None = None
+    neck_hidden_size: int = 512
+    feature_dim: int = 256
+    hidden_size: int = 512
+    num_hidden_layers: int = 9
+    num_attention_heads: int = 8
+    hidden_act: str = "gelu"
+    attention_dropout: float | int = 0.0
+    attention_bias: bool = True
+    layer_norm_eps: float = 1e-5
+    search_dim: int = 64
+    offset_hidden_size: int = 256
+    offset_num_bins: int = 16
+    offset_max_cells: float = 1.0
+    filter_threshold: float = 0.1
+    max_distance_px: float | None = 3.0
+    min_covisibility: float = 0.0
+    remove_border_px: float = 0.0
+    sparse_matching: bool = False
+    coarse_stride: int = 8
+    max_num_samples: int = 5000
+    kde_balance: bool = True
+    query_chunk_size: int | None = 4096
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        self.intermediate_size = 2 * self.hidden_size
+        self.num_key_value_heads = self.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_attention_heads")
+        if self.neck_hidden_size % 4 != 0:
+            raise ValueError("neck_hidden_size must be divisible by 4")
+        if self.coarse_stride <= 0:
+            raise ValueError("coarse_stride must be a positive integer")
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of FlexGlue keypoint matching models. Without input keypoints, `keypoints` holds the sampled
+    points of both images and the `k`-th point of the first image matches the `k`-th point of the second image. With
+    input keypoints, `keypoints` holds the input keypoints (`sparse_matching=True`) or the keypoints of both images
+    concatenated with the points predicted for them in the other image (`sparse_matching=False`).
+    """
+)
+@dataclass
+class FlexGlueKeypointMatchingOutput(ModelOutput):
+    r"""
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
+        Loss computed during training.
+    matches (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
+        Index of the point matched in the other image, -1 if unmatched.
+    matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
+        Scores of the predicted matches, 0 if unmatched.
+    keypoints (`torch.Tensor` of shape `(batch_size, 2, num_matches, 2)`):
+        Relative (x, y) coordinates of the points that `matches` indexes, in [0, 1].
+    mask (`torch.IntTensor` of shape `(batch_size, 2, num_matches)`):
+        Mask indicating which values in `matches`, `matching_scores` and `keypoints` are matching information.
+    covisibility_score (`torch.Tensor` of shape `(batch_size,)`):
+        Probability that the two images of each pair show the same place.
+    dense_correspondences (`torch.Tensor` of shape `(batch_size, 2, grid_height, grid_width, 2)`, *optional*):
+        Relative (x, y) coordinates in the other image of the correspondence of each cell of the dense grid of each
+        image, returned when no keypoints are given.
+    dense_confidence (`torch.Tensor` of shape `(batch_size, 2, grid_height, grid_width)`, *optional*):
+        Confidence of the dense correspondences, 0 where they fail the covisibility, filter, border or cycle checks,
+        returned when no keypoints are given.
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of each transformer layer) of shape `(batch_size * 2,
+        num_cells, hidden_size)`, returned when `output_hidden_states=True` is passed or when
+        `config.output_hidden_states=True`.
+    attentions (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for each self and cross attention) of shape `(batch_size * 2, num_heads,
+        num_cells, num_cells)`, returned when `output_attentions=True` is passed or when
+        `config.output_attentions=True`.
+    """
+
+    loss: torch.FloatTensor | None = None
+    matches: torch.Tensor | None = None
+    matching_scores: torch.Tensor | None = None
+    keypoints: torch.Tensor | None = None
+    mask: torch.Tensor | None = None
+    covisibility_score: torch.Tensor | None = None
+    dense_correspondences: torch.Tensor | None = None
+    dense_confidence: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+
+
+class FlexGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    pass
+
+
+class FlexGlueImageProcessor(SuperGlueImageProcessor):
+    valid_kwargs = FlexGlueImageProcessorKwargs
+    size = {"height": 512, "width": 512}
+    do_grayscale = AttributeError()
+    do_normalize = True
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+
+    def __init__(self, **kwargs: Unpack[FlexGlueImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[FlexGlueImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: PILImageResampling | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size=size, resample=resample)
+            processed_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        # Stack each pair of images into a single tensor
+        image_pairs = [torch.stack(processed_images[i : i + 2], dim=0) for i in range(0, len(processed_images), 2)]
+        return BatchFeature(data={"pixel_values": image_pairs}, tensor_type=return_tensors)
+
+
+class FlexGlueImageProcessorPil(SuperGlueImageProcessorPil):
+    valid_kwargs = FlexGlueImageProcessorKwargs
+    size = {"height": 512, "width": 512}
+    do_grayscale = AttributeError()
+    do_normalize = True
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+
+    def __init__(self, **kwargs: Unpack[FlexGlueImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[FlexGlueImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: PILImageResampling | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        all_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample)
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor)
+            if do_normalize:
+                image = self.normalize(image=image, mean=image_mean, std=image_std)
+            all_images.append(image)
+
+        # Convert back the flattened list of images into a list of pairs of images.
+        image_pairs = [all_images[i : i + 2] for i in range(0, len(all_images), 2)]
+        return BatchFeature(data={"pixel_values": image_pairs}, tensor_type=return_tensors)
+
+
+def cell_centers(height: int, width: int, scale: tuple[float, float], device=None) -> torch.Tensor:
+    """Normalized (x, y) centers `(height * width, 2)` of a grid, divided by the (x, y) scale, in [-1, 1]."""
+    y, x = torch.meshgrid(torch.arange(height, device=device), torch.arange(width, device=device), indexing="ij")
+    xy = torch.stack([(x + 0.5) / scale[0], (y + 0.5) / scale[1]], -1)
+    return xy.flatten(0, 1) * 2 - 1
+
+
+def sample_features(features: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
+    """Bilinearly sample `(batch_size, channels, height, width)` features at normalized `(batch_size, N, 2)` points."""
+    output = nn.functional.grid_sample(
+        features, points[:, None], mode="bilinear", padding_mode="border", align_corners=False
+    )
+    return output[:, :, 0].transpose(1, 2)
+
+
+def sorted_entmax15_threshold(sorted_logits: torch.Tensor) -> torch.Tensor:
+    """Exact 1.5-entmax threshold from logits sorted in descending order."""
+    rho = torch.arange(1, sorted_logits.shape[-1] + 1, device=sorted_logits.device, dtype=sorted_logits.dtype)
+    mean = sorted_logits.cumsum(-1) / rho
+    mean_sq = sorted_logits.square().cumsum(-1) / rho
+    tau = mean - ((1 - rho * (mean_sq - mean.square())) / rho).clamp_min(0).sqrt()
+    support = (tau <= sorted_logits).sum(-1, keepdim=True)
+    return tau.gather(-1, support - 1)
+
+
+def entmax15_window_readout(
+    logits: torch.Tensor, grid: torch.Tensor, height: int, width: int, radius: int = 1, top_k: int = 512
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Expected position `(batch_size, N, 2)` and probability mass `(batch_size, N)` of the 1.5-entmax distribution of the
+    logits, read in a window around their maximum.
+    """
+    if logits.shape[-1] > top_k:  # maximum and threshold from the same sorted top-k
+        top_values, top_indices = logits.topk(top_k, dim=-1)
+        max_value, max_index = top_values[..., :1], top_indices[..., :1]
+        tau = sorted_entmax15_threshold((top_values - max_value) / 2)
+    else:
+        max_value, max_index = logits.max(-1, keepdim=True)
+        tau = sorted_entmax15_threshold(((logits - max_value) / 2).sort(-1, descending=True).values)
+    scaled_logits = (logits - max_value) / 2
+    offsets = torch.arange(-radius, radius + 1, device=logits.device)
+    neighbor_y = (max_index // width)[..., None] + offsets[:, None]
+    neighbor_x = (max_index % width)[..., None] + offsets[None, :]
+    inside = ((neighbor_y >= 0) & (neighbor_y < height) & (neighbor_x >= 0) & (neighbor_x < width)).flatten(-2)
+    neighbor_index = (neighbor_y.clamp(0, height - 1) * width + neighbor_x.clamp(0, width - 1)).flatten(-2)
+    probability = (scaled_logits.gather(-1, neighbor_index) - tau).clamp_min(0).square()
+    position = (probability[..., None] * grid[neighbor_index]).sum(-2) / probability.sum(-1, keepdim=True)
+    # border cells that were clamped count once
+    return position, (probability * inside).sum(-1)
+
+
+def squared_distances(points0: torch.Tensor, points1: torch.Tensor) -> torch.Tensor:
+    """Squared distances `(batch_size, M, N)` of `(batch_size, M, D)` and `(batch_size, N, D)` points."""
+    return sum((points0[..., i, None] - points1[..., i][:, None]).square() for i in range(points0.shape[-1]))
+
+
+def mutual_nearest_neighbors(distances: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mutual nearest neighbors of a `(batch_size, M, N)` distance matrix, -1 if not mutual."""
+    matches0, matches1 = distances.argmin(2), distances.argmin(1)
+    mutual0 = torch.arange(matches0.shape[1], device=matches0.device) == matches1.gather(1, matches0)
+    mutual1 = torch.arange(matches1.shape[1], device=matches1.device) == matches0.gather(1, matches1)
+    return torch.where(mutual0, matches0, -1), torch.where(mutual1, matches1, -1)
+
+
+def inside_border(points: torch.Tensor, width: int, height: int, border: float) -> torch.Tensor:
+    """Whether pixel points `(..., 2)` lie at least `border` pixels inside a `(width, height)` image."""
+    size = points.new_tensor([width, height])
+    return ((points > border) & (points < size - border)).all(-1)
+
+
+def lattice_kde(points: torch.Tensor, weights: torch.Tensor, std: float) -> torch.Tensor:
+    """
+    Weighted gaussian kernel density estimate `(batch_size, N)` of `(batch_size, N, D)` points in [-1, 1] at
+    themselves. The points are splatted to a lattice, which is blurred and read back, at a cost independent of N.
+    """
+    batch_size, num_points, dim = points.shape
+    pitch = std / 2
+    size = math.ceil(2 / pitch) + 2
+    lattice_points = ((points.float() + 1) / pitch).clamp(0, size - 1 - 1e-4)
+    base, fraction = lattice_points.floor().long(), lattice_points.frac()
+    corners = torch.cartesian_prod(*[torch.arange(2, device=points.device)] * dim)
+    strides = size ** torch.arange(dim - 1, -1, -1, device=points.device)
+    index = ((base[:, :, None] + corners) * strides).sum(-1).flatten(1)
+    tent = torch.where(corners.bool(), fraction[:, :, None], 1 - fraction[:, :, None]).prod(-1)
+    lattice = lattice_points.new_zeros(batch_size, size**dim)
+    lattice.scatter_add_(1, index, (tent * weights[..., None].float()).flatten(1))
+    # the splat and read tents each add pitch^2 / 6 to the variance
+    kernel_std = math.sqrt(std**2 - pitch**2 / 3)
+    radius = math.ceil(3 * kernel_std / pitch)
+    offsets = torch.arange(-radius, radius + 1, device=points.device) * pitch
+    kernel = (std / kernel_std * torch.exp(-(offsets**2) / (2 * kernel_std**2))).view(1, 1, -1)
+    lattice = lattice.view(batch_size, *[size] * dim)
+    for axis in range(1, dim + 1):
+        moved = lattice.movedim(axis, -1)
+        moved = nn.functional.conv1d(moved.reshape(-1, 1, size), kernel, padding=radius).view(moved.shape)
+        lattice = moved.movedim(-1, axis)
+    lattice = lattice.reshape(batch_size, -1)
+    return (lattice.gather(1, index).view_as(tent) * tent).sum(-1)
+
+
+def kde_weights(
+    correspondences0: torch.Tensor,
+    correspondences1: torch.Tensor,
+    scores: torch.Tensor,
+    num_samples: int,
+    std: float = 0.1,
+    min_density: float = 5e-4,
+    expansion: int = 4,
+) -> torch.Tensor:
+    """Balanced sampling weights `(batch_size, N)` of the valid (score > 0) cells of both dense grids, as RoMa v2."""
+    valid = (scores > 0).float()
+    pool = valid.sum(1).clamp(max=expansion * num_samples)
+    scale = pool / valid.sum(1).clamp_min(1)
+    min_support = (min_density * pool)[:, None]
+    points = []
+    for i, grid in enumerate((correspondences0, correspondences1)):
+        height, width = grid.shape[1:3]
+        sources = cell_centers(height, width, scale=(width, height), device=grid.device).to(grid.dtype)
+        pair = [sources.expand(grid.shape[0], -1, -1), grid.flatten(1, 2)]
+        points.append(torch.cat([pair[i], pair[1 - i]], -1))  # (x0, x1), normalized
+    density = lattice_kde(torch.cat(points, 1), valid, std) * scale[:, None]
+    balance = torch.where(density < min_support, 1e-7, 1 / (density + 1))
+    return balance * valid
+
+
+class FlexGlueLayerNorm(DINOv3ConvNextLayerNorm):
+    pass
+
+
+class FlexGlueNeckMLP(nn.Module):
+    """Residual block of the neck: a 2-layer MLP of 1x1 convolutions."""
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__()
+        hidden_size = config.neck_hidden_size
+        self.layer_norm = FlexGlueLayerNorm(hidden_size, eps=config.layer_norm_eps, data_format="channels_first")
+        self.fc1 = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+        self.activation = nn.GELU()
+        self.fc2 = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return self.fc2(hidden_states)
+
+
+class FlexGlueNeck(nn.Module):
+    """
+    Fuses the four backbone stages into a stride-8 feature map: the stride-4 stage goes through a convolution and a
+    pixel unshuffle, the coarser stages are projected and bilinearly upsampled.
+    """
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__()
+        fine_channels, *coarse_channels = config.backbone_config.hidden_sizes
+        hidden_size, eps = config.neck_hidden_size, config.layer_norm_eps
+        stem_channels = hidden_size // 4
+        self.stem_input_norm = FlexGlueLayerNorm(fine_channels, eps=eps, data_format="channels_first")
+        self.stem_conv = nn.Conv2d(fine_channels, stem_channels, kernel_size=3, padding=1)
+        self.stem_output_norm = FlexGlueLayerNorm(stem_channels, eps=eps, data_format="channels_first")
+        self.stem_activation = nn.GELU()
+        self.fine_projection = nn.Conv2d(4 * stem_channels, hidden_size, kernel_size=1)
+        self.coarse_norms = nn.ModuleList(
+            [FlexGlueLayerNorm(channels, eps=eps, data_format="channels_first") for channels in coarse_channels]
+        )
+        self.coarse_projections = nn.ModuleList(
+            [nn.Conv2d(channels, hidden_size, kernel_size=1, bias=False) for channels in coarse_channels]
+        )
+        self.mlp = FlexGlueNeckMLP(config)
+        self.output_projection = nn.Conv2d(hidden_size, config.feature_dim, kernel_size=1)
+        self.output_norm = FlexGlueLayerNorm(config.feature_dim, eps=eps, data_format="channels_first")
+
+    def forward(self, feature_maps: tuple[torch.Tensor, ...]) -> torch.Tensor:
+        fine_features, *coarse_features = feature_maps
+        height, width = coarse_features[0].shape[-2:]
+        stem = self.stem_activation(self.stem_output_norm(self.stem_conv(self.stem_input_norm(fine_features))))
+        hidden_states = self.fine_projection(nn.functional.pixel_unshuffle(stem, 2))
+        for norm, projection, features in zip(self.coarse_norms, self.coarse_projections, coarse_features):
+            features = projection(norm(features))  # a 1x1 convolution commutes with the bilinear upsampling
+            if features.shape[-2:] != (height, width):
+                features = nn.functional.interpolate(features, (height, width), mode="bilinear", align_corners=False)
+            hidden_states = hidden_states + features
+        hidden_states = hidden_states + self.mlp(hidden_states)
+        return self.output_norm(self.output_projection(hidden_states))
+
+
+class FlexGluePositionalEncoder(nn.Module):
+    """Learnable Fourier features of the normalized cell centers, used as rotary position embeddings."""
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__()
+        self.projector = nn.Linear(2, config.head_dim // 2, bias=False)
+
+    def forward(self, points: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        embeddings = self.projector(points).repeat_interleave(2, dim=-1)
+        return torch.cos(embeddings), torch.sin(embeddings)
+
+
+class FlexGlueSelfAttention(nn.Module):
+    """Multi-headed self attention with query and key layer norms and rotary position embeddings."""
+
+    def __init__(self, config: FlexGlueConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.num_key_value_groups = 1
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.q_norm = nn.LayerNorm(self.head_dim, eps=config.layer_norm_eps)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, self.num_heads, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
+
+
+class FlexGlueCrossAttention(nn.Module):
+    """
+    Bidirectional multi-headed cross attention between the two images of each pair, with shared query and key
+    projections and a shared layer norm on them.
+    """
+
+    def __init__(self, config: FlexGlueConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.num_key_value_groups = 1
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
+        self.qk_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.qk_norm = nn.LayerNorm(self.head_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        hidden_shape = (batch_size, seq_len, self.num_heads, self.head_dim)
+
+        query_states = self.qk_norm(self.qk_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        # The keys and values of each image are the queries and values of the other image of the pair:
+        # (image0, image1) -> (image1, image0)
+        def swap_images(states: torch.Tensor) -> torch.Tensor:
+            return states.reshape(-1, 2, *states.shape[1:]).flip(1).reshape(states.shape)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            swap_images(query_states),
+            swap_images(value_states),
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(batch_size, seq_len, -1).contiguous()
+        return self.o_proj(attn_output), attn_weights
+
+
+class FlexGlueMLP(nn.Module):
+    """Update of the tokens from their concatenation with the attention messages."""
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__()
+        self.fc1 = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.layer_norm = nn.LayerNorm(config.intermediate_size, eps=config.layer_norm_eps)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        return self.fc2(hidden_states)
+
+
+class FlexGlueTransformerLayer(GradientCheckpointingLayer):
+    def __init__(self, config: FlexGlueConfig, layer_idx: int):
+        super().__init__()
+        self.self_attention = FlexGlueSelfAttention(config, layer_idx)
+        self.self_message_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_mlp = FlexGlueMLP(config)
+        self.cross_attention = FlexGlueCrossAttention(config, layer_idx)
+        self.cross_message_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.cross_mlp = FlexGlueMLP(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        message, _ = self.self_attention(hidden_states, position_embeddings=position_embeddings, **kwargs)
+        hidden_states = hidden_states + self.self_mlp(torch.cat([hidden_states, self.self_message_norm(message)], -1))
+        message, _ = self.cross_attention(hidden_states, **kwargs)
+        hidden_states = hidden_states + self.cross_mlp(
+            torch.cat([hidden_states, self.cross_message_norm(message)], -1)
+        )
+        return hidden_states
+
+
+class FlexGlueProjectionMLP(nn.Module):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, eps: float):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.layer_norm = nn.LayerNorm(hidden_dim, eps=eps)
+        self.activation = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.activation(self.layer_norm(self.fc1(hidden_states)))
+        return self.fc2(hidden_states)
+
+
+class FlexGlueOffsetHead(nn.Module):
+    """Sub-cell offset of a correspondence, as a soft-argmax over bins spanning +- `offset_max_cells` cells."""
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__()
+        hidden_size, offset_hidden_size, eps = config.hidden_size, config.offset_hidden_size, config.layer_norm_eps
+        self.num_bins = config.offset_num_bins
+        self.max_cells = config.offset_max_cells
+        self.query_encoder = FlexGlueProjectionMLP(hidden_size, offset_hidden_size, offset_hidden_size, eps)
+        self.match_encoder = FlexGlueProjectionMLP(hidden_size, offset_hidden_size, offset_hidden_size, eps)
+        # the last bin of each axis is not used
+        self.head = FlexGlueProjectionMLP(2 * offset_hidden_size, 2 * offset_hidden_size, 2 * (self.num_bins + 2), eps)
+
+    def forward(self, query_features: torch.Tensor, match_features: torch.Tensor, height: int, width: int):
+        hidden_states = torch.cat([self.query_encoder(query_features), self.match_encoder(match_features)], -1)
+        logits = self.head(hidden_states).unflatten(-1, (2, self.num_bins + 2))[..., : self.num_bins + 1]
+        bins = torch.arange(self.num_bins + 1, device=logits.device, dtype=logits.dtype)
+        delta = ((logits.softmax(-1) * bins).sum(-1) / self.num_bins - 0.5) * 2 * self.max_cells
+        return torch.stack([delta[..., 0] * 2 / width, delta[..., 1] * 2 / height], -1)
+
+
+class FlexGlueMatchHead(nn.Module):
+    """
+    Finds the correspondence of query points in the feature map of the other image: the query features are correlated
+    with the other feature map, read out with a windowed 1.5-entmax and refined with a regressed offset.
+    """
+
+    def __init__(self, config: FlexGlueConfig, has_cross_context: bool = True):
+        super().__init__()
+        self.query_chunk_size = config.query_chunk_size
+        self.temperature = nn.Parameter(torch.tensor(10.0))
+        self.search_projection = nn.Linear(config.hidden_size, config.search_dim)
+        # the head of the raw features sees no cross-view context: no matchability and no covisibility
+        self.matchability = nn.Linear(config.hidden_size, 1) if has_cross_context else None
+        self.offset_head = FlexGlueOffsetHead(config)
+        self.covisibility = nn.Linear(config.hidden_size, 1) if has_cross_context else None
+
+    def forward(
+        self, points: torch.Tensor, query_features: torch.Tensor, target_features: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Normalized `(batch_size, N, 2)` points of the query feature maps -> their normalized correspondences in the
+        target feature maps and their confidence `(batch_size, N)`.
+        """
+        search = nn.functional.normalize(self.search_projection(target_features.flatten(2).mT), dim=-1)
+        if self.query_chunk_size is None:
+            return self._match_points(points, query_features, target_features, search)
+        # chunks bound the size of the (batch_size, query_chunk_size, height * width) logits
+        chunks = [
+            self._match_points(chunk, query_features, target_features, search)
+            for chunk in points.split(self.query_chunk_size, dim=1)
+        ]
+        correspondences, confidence = zip(*chunks)
+        return torch.cat(correspondences, 1), torch.cat(confidence, 1)
+
+    def _match_points(
+        self, points: torch.Tensor, query_features: torch.Tensor, target_features: torch.Tensor, search: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        height, width = target_features.shape[-2:]
+        query = sample_features(query_features, points)
+        logits = nn.functional.normalize(self.search_projection(query), dim=-1) @ search.mT * self.temperature
+        grid = cell_centers(height, width, scale=(width, height), device=logits.device).to(logits.dtype)
+        correspondences, window_mass = entmax15_window_readout(logits, grid, height, width)
+        match = sample_features(target_features, correspondences)
+        correspondences = correspondences + self.offset_head(query, match, height, width)
+        if self.matchability is None:
+            return correspondences, window_mass
+        matchability = torch.sigmoid(self.matchability(query).squeeze(-1))
+        return correspondences, matchability * window_mass
+
+
+@auto_docstring
+class FlexGluePreTrainedModel(PreTrainedModel):
+    config: FlexGlueConfig
+    base_model_prefix = "flexglue"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": FlexGlueTransformerLayer,
+        "attentions": [FlexGlueSelfAttention, FlexGlueCrossAttention],
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module) -> None:
+        super()._init_weights(module)
+        if isinstance(module, FlexGlueMatchHead):
+            init.constant_(module.temperature, 10.0)
+
+
+class FlexGlueEncoder(FlexGluePreTrainedModel):
+    """Transformer refining the stride-8 feature maps of both images of each pair jointly."""
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__(config)
+        self.input_projection = nn.Linear(config.feature_dim, config.hidden_size)
+        self.positional_encoder = FlexGluePositionalEncoder(config)
+        self.layers = nn.ModuleList(
+            [FlexGlueTransformerLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
+        )
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(self, features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        r"""
+        features (`torch.Tensor` of shape `(batch_size * 2, feature_dim, height, width)`):
+            The stride-8 feature maps of both images of each pair, from the neck.
+        """
+        feature_height, feature_width = features.shape[-2:]
+        longest_side = max(feature_height, feature_width)
+        centers = cell_centers(
+            feature_height, feature_width, scale=(longest_side, longest_side), device=features.device
+        )
+        cos, sin = self.positional_encoder(centers.to(features.dtype))
+        position_embeddings = (cos[None], sin[None])
+
+        hidden_states = self.input_projection(features.flatten(2).mT)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, position_embeddings=position_embeddings, **kwargs)
+
+        hidden_states = hidden_states.mT.unflatten(-1, (feature_height, feature_width))
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+@auto_docstring(
+    custom_intro="""
+    FlexGlue model taking pairs of images as inputs and outputting the stride-8 features of both images, refined
+    jointly by the transformer layers.
+    """
+)
+class FlexGlueModel(FlexGluePreTrainedModel):
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__(config)
+        self.backbone = load_backbone(config)
+        self.neck = FlexGlueNeck(config)
+        self.encoder = FlexGlueEncoder(config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self, pixel_values: torch.Tensor, labels: torch.LongTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutput:
+        r"""
+        Returns:
+            `BaseModelOutput` whose `last_hidden_state` of shape `(batch_size * 2, hidden_size, height // 8, width //
+            8)` holds the features of both images of each pair, after the transformer layers.
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> import torch
+        >>> from PIL import Image
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+
+        >>> url = "https://raw.githubusercontent.com/cvg/FlexGlue/main/assets/berlin1.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> url = "https://raw.githubusercontent.com/cvg/FlexGlue/main/assets/berlin2.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> processor = AutoImageProcessor.from_pretrained("ETH-CVG/flexglue")
+        >>> model = AutoModel.from_pretrained("ETH-CVG/flexglue")
+
+        >>> inputs = processor([image1, image2], return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ```"""
+        if labels is not None:
+            raise ValueError("FlexGlue is not trainable, no labels should be provided.")
+        if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
+            raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
+
+        batch_size, _, channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
+        features = self.neck(self.backbone(pixel_values).feature_maps)
+        return self.encoder(features, **kwargs)
+
+
+@auto_docstring(
+    custom_intro="""
+    FlexGlue model taking pairs of images, and optionally keypoints, as inputs and outputting their matches.
+    """
+)
+class FlexGlueForKeypointMatching(FlexGluePreTrainedModel):
+    """
+    FlexGlue matches images through dense features: a DINOv3 ConvNeXt with a neck encodes each image into a stride-8
+    feature map, a transformer refines the feature maps of both images jointly, and match heads find the
+    correspondence of each query point in the other image by correlation. A covisibility head tells whether the two
+    images show the same place at all, which rejects look-alike pairs.
+
+    Without keypoints, FlexGlue predicts dense correspondences on a grid of both images and samples matches from them.
+    With keypoints, it predicts the correspondence of each keypoint in the other image, and either concatenates the
+    predictions of both directions or matches the keypoints with mutual nearest neighbors (`sparse_matching=True`).
+
+    The correspondence ids use -1 to indicate non-matching points.
+
+    Philipp Lindenberger, Paul-Edouard Sarlin, Ondrej Miksik and Marc Pollefeys. FlexGlue: Sparse-to-Dense Feature
+    Matching and Visual Disambiguation. arXiv 2026. https://huggingface.co/papers/2610.32976
+    """
+
+    def __init__(self, config: FlexGlueConfig):
+        super().__init__(config)
+        self.flexglue = FlexGlueModel(config)
+        # heads[k] reads the features after k transformer layers, heads[0] the raw features
+        self.heads = nn.ModuleList(
+            [FlexGlueMatchHead(config, has_cross_context=k > 0) for k in range(config.num_hidden_layers + 1)]
+        )
+        self.post_init()
+
+    def _covisibility_score(self, features: torch.Tensor) -> torch.Tensor:
+        """Covisibility score `(batch_size,)` of the pairs of `(batch_size * 2, hidden_size, h, w)` features."""
+        covisibility = self.heads[-1].covisibility
+        if covisibility is None:  # raw features: no covisibility evidence
+            return features.new_ones(features.shape[0] // 2)
+        tokens = features.flatten(2).mT.reshape(features.shape[0] // 2, -1, features.shape[1])
+        return torch.sigmoid(covisibility(tokens)).mean((1, 2))
+
+    def _cycle_error(self, points: torch.Tensor, back_points: torch.Tensor, width: int, height: int) -> torch.Tensor:
+        """Distance in pixels of the input between normalized points and the points mapped back to their image."""
+        scale = points.new_tensor([width, height]) / 2
+        return ((back_points - points) * scale).norm(dim=-1)
+
+    def _match_dense(
+        self,
+        query_features: torch.Tensor,
+        target_features: torch.Tensor,
+        covisible: torch.Tensor,
+        height: int,
+        width: int,
+    ) -> dict[str, torch.Tensor]:
+        """Gated dense correspondences of both images of each pair, and the matches sampled from them."""
+        config = self.config
+        if height % config.coarse_stride or width % config.coarse_stride:
+            raise ValueError(f"coarse_stride {config.coarse_stride} must divide the image size {(height, width)}.")
+        grid_height, grid_width = height // config.coarse_stride, width // config.coarse_stride
+        num_images = query_features.shape[0]
+        sources = cell_centers(grid_height, grid_width, scale=(grid_width, grid_height), device=query_features.device)
+        sources = sources.to(query_features.dtype).expand(num_images, -1, -1)
+        correspondences, confidence = self.heads[-1](sources, query_features, target_features)
+
+        size = sources.new_tensor([width, height])
+        valid = covisible.repeat_interleave(2)[:, None] & (confidence >= config.filter_threshold)
+        valid &= inside_border((sources + 1) / 2 * size, width, height, config.remove_border_px)
+        valid &= inside_border((correspondences + 1) / 2 * size, width, height, config.remove_border_px)
+        if config.max_distance_px:
+            # map the correspondences back with the dense grid of the other image
+            grids = correspondences.unflatten(1, (grid_height, grid_width)).permute(0, 3, 1, 2)
+            back_points = sample_features(self._swap_images(grids), correspondences)
+            valid &= self._cycle_error(sources, back_points, width, height) < config.max_distance_px
+        confidence = torch.where(valid, confidence, 0)
+
+        # sample the matches of both directions: (source, correspondence) for image 0 and the reverse for image 1
+        batch_size = num_images // 2
+        sources, correspondences, confidence = (
+            t.unflatten(0, (batch_size, 2)) for t in (sources, correspondences, confidence)
+        )
+        points0 = torch.cat([sources[:, 0], correspondences[:, 1]], 1)
+        points1 = torch.cat([correspondences[:, 0], sources[:, 1]], 1)
+        scores = confidence.flatten(1)
+        weights = scores
+        if config.kde_balance:
+            weights = kde_weights(
+                correspondences[:, 0].unflatten(1, (grid_height, grid_width)),
+                correspondences[:, 1].unflatten(1, (grid_height, grid_width)),
+                scores,
+                config.max_num_samples,
+            )
+        num_samples = min(config.max_num_samples, weights.shape[1])
+        indices = torch.multinomial(weights.clamp_min(1e-12), num_samples, replacement=False)
+        points0, points1 = (p.gather(1, indices[..., None].expand(-1, -1, 2)) for p in (points0, points1))
+        scores = scores.gather(1, indices)
+        return {
+            "keypoints": torch.stack([points0, points1], 1),
+            "scores": scores,
+            "valid": scores > config.filter_threshold,
+            "dense_correspondences": (correspondences.unflatten(2, (grid_height, grid_width)) + 1) / 2,
+            "dense_confidence": confidence.unflatten(2, (grid_height, grid_width)),
+        }
+
+    def _match_keypoints(
+        self,
+        keypoints: torch.Tensor,
+        query_features: torch.Tensor,
+        target_features: torch.Tensor,
+        covisible: torch.Tensor,
+        height: int,
+        width: int,
+    ) -> dict[str, torch.Tensor]:
+        """Matches of the keypoints of both images, in normalized coordinates."""
+        config = self.config
+        batch_size, _, num_keypoints, _ = keypoints.shape
+        points = keypoints.reshape(batch_size * 2, num_keypoints, 2).to(query_features.dtype) * 2 - 1
+        correspondences, confidence = self.heads[-1](points, query_features, target_features)
+
+        size = points.new_tensor([width, height])
+        valid = covisible.repeat_interleave(2)[:, None]
+        valid = valid & inside_border((points + 1) / 2 * size, width, height, config.remove_border_px)
+        valid &= inside_border((correspondences + 1) / 2 * size, width, height, config.remove_border_px)
+        cycle = not config.sparse_matching and config.max_distance_px
+        if cycle:
+            back_points, back_confidence = self.heads[-1](correspondences, target_features, query_features)
+            valid &= self._cycle_error(points, back_points, width, height) < config.max_distance_px
+            # geometric mean of the forward and backward confidences
+            confidence = (confidence * back_confidence).sqrt()
+
+        points, correspondences, confidence, valid = (
+            t.unflatten(0, (batch_size, 2)) for t in (points, correspondences, confidence, valid)
+        )
+        if not config.sparse_matching:
+            points0 = torch.cat([points[:, 0], correspondences[:, 1]], 1)
+            points1 = torch.cat([correspondences[:, 0], points[:, 1]], 1)
+            scores = torch.where(valid, confidence, 0).flatten(1)
+            return {
+                "keypoints": torch.stack([points0, points1], 1),
+                "scores": scores,
+                "valid": scores > config.filter_threshold,
+            }
+
+        # mutual nearest neighbors on the distances of the correspondences in both images, in pixels of the input
+        points_px, correspondences_px = (points + 1) / 2 * size, (correspondences + 1) / 2 * size
+        query = torch.cat([correspondences_px[:, 0], points_px[:, 0]], -1)
+        target = torch.cat([points_px[:, 1], correspondences_px[:, 1]], -1)
+        matches0, matches1 = mutual_nearest_neighbors(squared_distances(query, target))
+        matches, scores, valids = [], [], []
+        for i, (matches_i, own, other) in enumerate(((matches0, query, target), (matches1, target, query))):
+            index = matches_i.clamp(0)
+            other = other.gather(1, index[..., None].expand(-1, -1, 4))
+            # mean distance in both images between a keypoint and the correspondence of its match
+            distance = 0.5 * (
+                (own[..., :2] - other[..., :2]).norm(dim=-1) + (own[..., 2:] - other[..., 2:]).norm(dim=-1)
+            )
+            score = (confidence[:, i] * confidence[:, 1 - i].gather(1, index)).sqrt()
+            valid_i = (matches_i > -1) & (score >= config.filter_threshold)
+            valid_i &= valid[:, i] & valid[:, 1 - i].gather(1, index)
+            if config.max_distance_px:
+                valid_i &= distance < config.max_distance_px
+            matches.append(torch.where(valid_i, matches_i, -1))
+            scores.append(torch.where(valid_i, score, 0))
+            valids.append(valid_i)
+        return {
+            "keypoints": points,
+            "scores": torch.stack(scores, 1),
+            "valid": torch.stack(valids, 1),
+            "matches": torch.stack(matches, 1),
+        }
+
+    @staticmethod
+    def _swap_images(tensor: torch.Tensor) -> torch.Tensor:
+        """(image0, image1) -> (image1, image0) for each pair of a `(batch_size * 2, ...)` tensor."""
+        return tensor.reshape(-1, 2, *tensor.shape[1:]).flip(1).reshape(tensor.shape)
+
+    @auto_docstring
+    @can_return_tuple
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        keypoints: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> FlexGlueKeypointMatchingOutput:
+        r"""
+        keypoints (`torch.Tensor` of shape `(batch_size, 2, num_keypoints, 2)`, *optional*):
+            Relative (x, y) coordinates in [0, 1] of keypoints to match in both images of each pair, with the center of
+            the top-left pixel at `(0.5 / width, 0.5 / height)`. Without keypoints, matches are sampled from dense
+            correspondences.
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModelForKeypointMatching
+        >>> import torch
+        >>> from PIL import Image
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+
+        >>> url = "https://raw.githubusercontent.com/cvg/FlexGlue/main/assets/berlin1.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> url = "https://raw.githubusercontent.com/cvg/FlexGlue/main/assets/berlin2.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
+
+        >>> processor = AutoImageProcessor.from_pretrained("ETH-CVG/flexglue")
+        >>> model = AutoModelForKeypointMatching.from_pretrained("ETH-CVG/flexglue")
+
+        >>> inputs = processor(images, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        >>> image_sizes = [[(image.height, image.width) for image in images]]
+        >>> matches = processor.post_process_keypoint_matching(outputs, image_sizes, threshold=0.2)
+        ```"""
+        if labels is not None:
+            raise ValueError("FlexGlue is not trainable, no labels should be provided.")
+
+        height, width = pixel_values.shape[-2:]
+        model_outputs = self.flexglue(pixel_values, **kwargs)
+        features = model_outputs.last_hidden_state
+        covisibility_score = self._covisibility_score(features)
+        covisible = covisibility_score >= self.config.min_covisibility
+        target_features = self._swap_images(features)
+
+        if keypoints is None:
+            predictions = self._match_dense(features, target_features, covisible, height, width)
+        else:
+            if keypoints.ndim != 4 or keypoints.shape[1] != 2 or keypoints.shape[-1] != 2:
+                raise ValueError("keypoints must be a 4D tensor of shape (batch_size, 2, num_keypoints, 2)")
+            predictions = self._match_keypoints(keypoints, features, target_features, covisible, height, width)
+
+        scores, valid = predictions["scores"], predictions["valid"]
+        if "matches" in predictions:
+            matches = predictions["matches"]
+        else:  # the k-th point of the first image matches the k-th point of the second image
+            indices = torch.arange(scores.shape[-1], device=scores.device)
+            matches = torch.where(valid, indices, -1)[:, None].expand(-1, 2, -1)
+            scores, valid = torch.where(valid, scores, 0)[:, None].expand(-1, 2, -1), valid[:, None].expand(-1, 2, -1)
+
+        return FlexGlueKeypointMatchingOutput(
+            matches=matches,
+            matching_scores=scores,
+            keypoints=(predictions["keypoints"] + 1) / 2,
+            mask=torch.ones_like(valid, dtype=torch.int),
+            covisibility_score=covisibility_score,
+            dense_correspondences=predictions.get("dense_correspondences"),
+            dense_confidence=predictions.get("dense_confidence"),
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
+        )
+
+
+__all__ = [
+    "FlexGlueConfig",
+    "FlexGlueImageProcessor",
+    "FlexGlueImageProcessorPil",
+    "FlexGluePreTrainedModel",
+    "FlexGlueModel",
+    "FlexGlueForKeypointMatching",
+]
