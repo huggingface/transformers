@@ -626,13 +626,6 @@ class Kolibri1_1Model(Kolibri1_1PreTrainedModel):
         self.norm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Kolibri1_1RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        # Layers reading the K/V of another layer don't use their own key/value weights, if a checkpoint has them.
-        # Parent models collect these patterns from their children in their own `post_init`
-        self._keys_to_ignore_on_load_unexpected = {
-            rf"layers\.{i}\.self_attn\.(k_proj|v_proj|k_norm)\."
-            for i, layer in enumerate(self.layers)
-            if layer.self_attn.is_kv_shared_layer
-        }
 
         # Initialize weights and apply final processing
         self.post_init()

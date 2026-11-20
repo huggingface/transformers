@@ -113,8 +113,6 @@ class Kolibri1_1Config(Kolibri1Config):
             self.layer_types = [
                 "indexed_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
-        # Checkpoints list the layers with an indexer as "full_attention", like the full-attention layers of Kolibri 1
-        self.layer_types = ["indexed_attention" if t == "full_attention" else t for t in self.layer_types]
         if self.mlp_only_layers is None:
             self.mlp_only_layers = [i for i in (0, 1) if i < self.num_hidden_layers]
         indexed_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "indexed_attention"]
@@ -489,16 +487,6 @@ class Kolibri1_1PreTrainedModel(Kolibri1PreTrainedModel):
 
 
 class Kolibri1_1Model(Kolibri1Model):
-    def __init__(self, config: Kolibri1_1Config):
-        super().__init__(config)
-        # Layers reading the K/V of another layer don't use their own key/value weights, if a checkpoint has them.
-        # Parent models collect these patterns from their children in their own `post_init`
-        self._keys_to_ignore_on_load_unexpected = {
-            rf"layers\.{i}\.self_attn\.(k_proj|v_proj|k_norm)\."
-            for i, layer in enumerate(self.layers)
-            if layer.self_attn.is_kv_shared_layer
-        }
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

@@ -139,8 +139,6 @@ class Kolibri1_1Config(PreTrainedConfig):
             self.layer_types = [
                 "indexed_attention" if (i + 1) % 5 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
-        # Checkpoints list the layers with an indexer as "full_attention", like the full-attention layers of Kolibri 1
-        self.layer_types = ["indexed_attention" if t == "full_attention" else t for t in self.layer_types]
         if self.mlp_only_layers is None:
             self.mlp_only_layers = [i for i in (0, 1) if i < self.num_hidden_layers]
         indexed_layers = [i for i, layer_type in enumerate(self.layer_types) if layer_type == "indexed_attention"]

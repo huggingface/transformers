@@ -13,12 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Kolibri1_1 model."""
 
-import tempfile
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
-from safetensors.torch import load_file, save_file
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator_memory, slow, torch_device
@@ -99,12 +97,11 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(decode_logits, full_logits[:, input_ids.shape[1] - 1 : -1], rtol=1e-5, atol=1e-5)
 
     def test_invalid_layouts(self):
-        # Checkpoints list the layers with an indexer as "full_attention"
-        kwargs = {"num_hidden_layers": 4, "layer_types": ["sliding_attention", "full_attention"] * 2}
+        kwargs = {"num_hidden_layers": 4, "layer_types": ["sliding_attention", "indexed_attention"] * 2}
         # Valid without the overrides below
-        self.assertEqual(Kolibri1_1Config(**kwargs).layer_types, ["sliding_attention", "indexed_attention"] * 2)
+        Kolibri1_1Config(**kwargs)
         invalid = [
-            ({"layer_types": ["sliding_attention", "full_attention", "linear_attention", "full_attention"]}, "Unsupported layer types"),
+            ({"layer_types": ["sliding_attention", "full_attention"] * 2}, "Unsupported layer types"),
             ({"index_layers": [3]}, "first indexed-attention layer must be an indexer"),
             ({"index_layers": [3, 1]}, "`index_layers` must be increasing indexed-attention layers"),
             ({"index_layers": [1, 2]}, "`index_layers` must be increasing indexed-attention layers"),
@@ -238,22 +235,6 @@ class Kolibri1_1ModelTest(CausalLMModelTest, unittest.TestCase):
         # Queries that see no more keys than the budget attend to all of them, the others drop keys
         torch.testing.assert_close(sparse_logits[:, :budget], dense_logits[:, :budget])
         self.assertFalse(torch.allclose(sparse_logits[:, budget:], dense_logits[:, budget:]))
-
-    def test_shared_kv_checkpoint_weights_are_ignored(self):
-        # Checkpoints exported from training keep the unused key/value projections of K/V-sharing layers
-        config = self.model_tester.get_config()
-        for model_class, prefix in ((Kolibri1_1Model, ""), (Kolibri1_1ForCausalLM, "model.")):
-            with self.subTest(model_class.__name__), tempfile.TemporaryDirectory() as tmp_dir:
-                model_class(config).save_pretrained(tmp_dir)
-                state_dict = load_file(f"{tmp_dir}/model.safetensors")
-                for name in ("k_proj.weight", "v_proj.weight"):
-                    state_dict[f"{prefix}layers.2.self_attn.{name}"] = state_dict[
-                        f"{prefix}layers.1.self_attn.{name}"
-                    ].clone()
-                save_file(state_dict, f"{tmp_dir}/model.safetensors", metadata={"format": "pt"})
-                _, loading_info = model_class.from_pretrained(tmp_dir, output_loading_info=True)
-                self.assertEqual(loading_info["unexpected_keys"], set())
-                self.assertEqual(loading_info["missing_keys"], set())
 
     def test_masked_tokens_stay_out_of_sparse_layers(self):
         # Masked tokens inside the prompt leave gaps in the keys a query sees, unlike padding at either end
