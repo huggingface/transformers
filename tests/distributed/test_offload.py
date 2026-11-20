@@ -86,7 +86,8 @@ class ExpertsOffloadTest(unittest.TestCase):
             store.pin_layers = 1
             torch.testing.assert_close(self.generate(model), self.expected)
             pool = store.pool_of[store.order[0]]
-            self.assertTrue(pool.complete(store.order[0], 8))
+            self.assertTrue(pool.complete(store.order[0]))
+            self.assertFalse(store.pool_of[store.order[1]].complete(store.order[1]))
             self.assertEqual(store.pool_of[store.order[1]].num_slots, 3)
 
     def test_streamed_embedding_rows(self):

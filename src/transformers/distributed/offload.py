@@ -38,8 +38,10 @@ from __future__ import annotations
 
 import bisect
 import fnmatch
+import itertools
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING
@@ -95,6 +97,7 @@ class _Pool:
         self.banks = None
         self.cache: OrderedDict[tuple[str, int], int] = OrderedDict()  # (layer, expert) -> slot, coldest first
         self.free = list(range(num_slots))
+        self.owner = None  # the layer of a pinned pool (exclusive), see `complete`
 
     def materialize(self, device):
         if self.banks is None:
@@ -138,9 +141,9 @@ class _Pool:
         self.dirty.add(key[0])
         return slot
 
-    def complete(self, layer, num_experts) -> bool:
+    def complete(self, layer) -> bool:
         """Every expert of `layer` is resident and can never be evicted (its own pool, see `pin_layers`)."""
-        return self.num_slots == num_experts and len(self.cache) == num_experts
+        return self.owner == layer and not self.free
 
 
 class ExpertsOffloadStore:
@@ -162,10 +165,12 @@ class ExpertsOffloadStore:
         self.device = torch.device(device)
         if self.device.type == "cuda" and self.device.index is None:
             self.device = torch.device("cuda", torch.cuda.current_device())
-        # disk -> RAM -> VRAM on CUDA: reads land in host memory, then pinned, then copy on their own stream so they
-        # overlap compute. On MPS (unified memory) the loader's `pread` slices already land on the device.
-        self.read_device = torch.device("cpu") if self.device.type == "cuda" else self.device
-        self.copy_stream = torch.cuda.Stream(self.device) if self.device.type == "cuda" else None
+        # CUDA: safetensors' prefetch loader (chunked parallel reads into a pinned pool, async copies to the device).
+        # MPS (unified memory): the loader's `pread` slices land on the device directly.
+        if self.device.type == "cuda" and not hasattr(safe_open, "prefetch"):
+            raise ImportError(
+                "Streaming experts on CUDA needs safetensors' prefetch loader: `pip install 'safetensors>=0.9'`"
+            )
         self.cache_bytes = cache_bytes
         self.lookahead = lookahead
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload")
@@ -219,15 +224,11 @@ class ExpertsOffloadStore:
     def allocate(self):
         """Split `cache_bytes - resident_bytes` between the expert layouts, in proportion to their layer count.
 
-        A layout is what a read returns (e.g. quantized on the fly), so one expert of each kind of layer is read."""
-        layouts, probes = {}, {}
+        Checkpoints are in the transformers format, so a layer's meta params are exactly what its reads return."""
+        layouts = {}
         for name, module in self.layers.items():
-            kind = (type(module), tuple(getattr(module, p).shape for p in self.params[name]))
-            if kind not in probes:
-                tensors, _ = self._read(name, 0)
-                probes[kind] = {p: (tuple(t.shape), t.dtype) for p, t in tensors.items()}
-            layouts.setdefault(repr(probes[kind]), (probes[kind], []))[1].append(name)
-        self.reads = 0
+            layout = {p: (tuple(getattr(module, p).shape[1:]), getattr(module, p).dtype) for p in self.params[name]}
+            layouts.setdefault(repr(layout), (layout, []))[1].append(name)
         budget = self.cache_bytes - self.resident_bytes
         # Pinned layers: an exclusive pool each, of all their experts
         for name in self.order[: self.pin_layers]:
@@ -235,6 +236,7 @@ class ExpertsOffloadStore:
             names = next(names for _, names in layouts.values() if name in names)
             names.remove(name)
             pool = _Pool(layout, self.layers[name].num_experts, self.policy)
+            pool.owner = name
             budget -= pool.num_slots * sum(
                 torch.Size(shape).numel() * dtype.itemsize for shape, dtype in layout.values()
             )
@@ -267,57 +269,32 @@ class ExpertsOffloadStore:
 
         module_name = target_name.rpartition(".")[0]
         if module_name in self.embeddings:
-            self.row_readers[module_name] = _RowReader(reads, self.read_device)
+            self.row_readers[module_name] = _RowReader(reads, "cpu" if self.device.type == "cuda" else self.device)
             return
         self.readers.setdefault(module_name, []).append(_ExpertReader(target_name, mapping, reads, hf_quantizer))
 
     def _read(self, layer, expert):
-        """One expert's device tensors and the event their copy records (None when they were read on the device)."""
+        """One expert's rows, read with `pread` straight to the device (MPS, CPU)."""
         self.reads += 1
-        out = {}
-        for reader in self.readers[layer]:
-            tensors = [
-                (slice_[...] if rows is None else slice_[rows]).to(self.read_device, dtype)
-                for slice_, rows, dtype, _ in reader.sources(expert)
-            ]
-            out.update(reader.assemble(tensors))
-        if self.copy_stream is None:
-            return out, None
-        with torch.cuda.stream(self.copy_stream):
-            out = {name: tensor.pin_memory().to(self.device, non_blocking=True) for name, tensor in out.items()}
-            copied = torch.cuda.Event()
-            copied.record(self.copy_stream)
-        return out, copied
+        return {
+            reader.param: slice_[rows].to(self.device, dtype)[0]
+            for reader in self.readers[layer]
+            for slice_, rows, dtype, _ in reader.sources(expert)
+        }
 
-    def fetch(self, layer, expert):
-        """Start reading one expert (once); returns its Future."""
-        key = (layer, expert)
-        if key not in self.pending:
-            self.pending[key] = self.executor.submit(self._read, layer, expert)
-        return self.pending[key]
-
-    def prefetch(self, layer, experts):
+    def fetch(self, layer, experts):
+        """Start reading the `experts` of `layer` that are neither resident nor already being read; returns the
+        Futures of all of `experts` that are not resident. On CUDA one prefetch plan covers the batch."""
         cache = self.pool_of[layer].cache
-        self.fetch_many(layer, [e for e in experts if (layer, e) not in cache])
-
-    @property
-    def use_prefetch(self) -> bool:
-        """safetensors' prefetch loader (chunked parallel reads into a pinned pool, async copies): CUDA only."""
-        return self.device.type == "cuda" and self.key_files is not None and hasattr(safe_open, "prefetch")
-
-    def fetch_many(self, layer, experts):
-        """Start reading `experts` of `layer` (each once); returns their Futures. On CUDA one prefetch plan per file
-        covers them all."""
-        new = [e for e in dict.fromkeys(experts) if (layer, e) not in self.pending]
-        if new and self.use_prefetch:
+        new = [e for e in dict.fromkeys(experts) if (layer, e) not in self.pending and (layer, e) not in cache]
+        if self.device.type == "cuda" and new:
             futures = {e: Future() for e in new}
-            for e, future in futures.items():
-                self.pending[(layer, e)] = future
+            self.pending.update({(layer, e): future for e, future in futures.items()})
             self.executor.submit(self._prefetch_batch, layer, futures)
         else:
             for e in new:
-                self.fetch(layer, e)
-        return [self.pending[(layer, e)] for e in experts]
+                self.pending[(layer, e)] = self.executor.submit(self._read, layer, e)
+        return [self.pending[(layer, e)] for e in experts if (layer, e) in self.pending]
 
     def _handle(self, file):
         if file not in self.handles:
@@ -344,6 +321,8 @@ class ExpertsOffloadStore:
             self._mark("loaders_started", layer, loaders=len(loaders))
             taken = {}
             for expert, future in futures.items():
+                if future.cancelled():  # a guess its layer did not pick: not handed out
+                    continue
                 self.reads += 1
                 out = {}
                 self._mark("take_start", layer, expert=expert)
@@ -354,10 +333,10 @@ class ExpertsOffloadStore:
                         index = taken.get((file, key), 0)
                         taken[(file, key)] = index + 1
                         tensors.append(loaders[(index, file)].take(key).to(dtype))
-                    out.update(reader.assemble(tensors))
+                    out[reader.param] = tensors[0][0]
                 self._mark("take_end", layer, expert=expert, bytes=sum(t.nbytes for t in out.values()))
                 if not future.cancelled():
-                    future.set_result((out, None))
+                    future.set_result(out)
             for loader in loaders.values():
                 loader.close()
         except BaseException as error:
@@ -381,24 +360,20 @@ class ExpertsOffloadStore:
         module.num_experts = pool.num_slots
         module._is_expert_parallel = True
         if name in self.order[: self.pin_layers]:  # pinned: all its experts now, never a miss after
-            futures = self.fetch_many(name, range(module.offload_num_experts))
+            futures = self.fetch(name, range(module.offload_num_experts))
             for expert, future in enumerate(futures):
                 self._install(pool, pool.slot_for((name, expert), ()), future)
                 self.pending.pop((name, expert), None)
             self._refresh_tables(pool)
 
     def _install(self, pool, slot, future):
-        """Copy a read expert into `slot` once its read (and host-to-device copy) is done."""
+        """Copy a read expert into `slot` once its read is done (one device copy per param)."""
         start = time.perf_counter()
         self._mark("wait_start")
-        tensors, copied = future.result()
+        tensors = future.result()
         self.wait_seconds += time.perf_counter() - start
         self._mark("wait_end")
-        if copied is not None:  # the device waits for the copy, the host does not
-            torch.cuda.current_stream(self.device).wait_event(copied)
         for param, tensor in tensors.items():
-            if copied is not None:  # allocated on the copy stream, freed after this stream used it
-                tensor.record_stream(torch.cuda.current_stream(self.device))
             pool.banks[param][slot].copy_(tensor, non_blocking=True)
 
     def _refresh_tables(self, pool):
@@ -413,7 +388,7 @@ class ExpertsOffloadStore:
     def misses_pass(self, name, module, original_forward, hidden_states, top_k_index, top_k_weights, output):
         pool = self.pool_of[name]
         num_experts = module.offload_num_experts
-        if pool.complete(name, num_experts):
+        if pool.complete(name):
             self.hits += top_k_index.numel()
             return
         # 1. One host copy (pass 1 is already queued, the device works meanwhile): routing + next layers' guesses
@@ -446,13 +421,13 @@ class ExpertsOffloadStore:
             experts=len(experts),
             covered=sum((name, e) in self.pending for e in misses),
         )
-        futures = self.fetch_many(name, misses)
+        futures = self.fetch(name, misses)
         # 2. Reads for the next layers overlap this layer's compute
         for index, next_name in enumerate(guessed):
             guesses = routes[(index + 1) * top_k_index.numel() : (index + 2) * top_k_index.numel()]
-            self.prefetch(next_name, torch.unique(guesses).tolist())
+            self.fetch(next_name, torch.unique(guesses).tolist())
         if not decode and ahead:  # a prompt routes to nearly every expert: read the whole next layer
-            self.prefetch(ahead[0], range(self.layers[ahead[0]].offload_num_experts))
+            self.fetch(ahead[0], range(self.layers[ahead[0]].offload_num_experts))
         # 3. Install the misses as their reads land, as many as fit at a time, and add their routes
         while misses:
             batch = []
@@ -495,8 +470,9 @@ class ExpertsOffloadLayer(TensorParallelLayer):
     def install_forward(self, module, store):
         original_forward = module.forward
         name = next(n for n, m in store.layers.items() if m is module)
-        handle = len(_LAYERS)
-        _LAYERS.append((store, name, module, original_forward))
+        handle = next(_HANDLES)
+        module.offload_store, module.offload_name, module.offload_experts_forward = store, name, original_forward
+        _LAYERS[handle] = module
         setup = torch.compiler.disable(store.setup_layer)
 
         def offload_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
@@ -518,7 +494,8 @@ class ExpertsOffloadLayer(TensorParallelLayer):
         return module
 
 
-_LAYERS: list = []  # op handle -> (store, module name, module, its experts forward)
+_HANDLES = itertools.count()
+_LAYERS = weakref.WeakValueDictionary()  # op handle -> experts module (weak: models free their pools)
 
 
 def _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs):
@@ -560,8 +537,10 @@ def experts_offload_misses(
 ) -> None:
     """Add the routes to non-resident experts into `output`, after reading and installing them (`state`: the slot
     table and pool banks it writes). Also starts the reads of the next layers."""
-    store, name, module, original_forward = _LAYERS[handle]
-    store.misses_pass(name, module, original_forward, hidden_states, top_k_index, top_k_weights, output)
+    module = _LAYERS[handle]
+    module.offload_store.misses_pass(
+        module.offload_name, module, module.offload_experts_forward, hidden_states, top_k_index, top_k_weights, output
+    )
 
 
 @experts_offload_misses.register_fake
@@ -589,9 +568,6 @@ class _ExpertReader:
     def sources(self, expert) -> list[tuple]:
         """`(slice, rows, dtype, checkpoint key)` of the expert's row."""
         return [(self.bank, slice(expert, expert + 1), self.dtype, self.key)]
-
-    def assemble(self, tensors) -> dict[str, torch.Tensor]:
-        return {self.param: tensors[0][0]}
 
 
 class _RowReader:
