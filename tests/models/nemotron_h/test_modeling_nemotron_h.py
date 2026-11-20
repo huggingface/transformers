@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -47,82 +48,56 @@ if is_torch_available():
     from transformers.cache_utils import DummyLayer
 
 
-class NemotronHModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        layers_block_type=["linear_attention", "moe", "linear_attention", "full_attention", "moe"],
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        head_dim=32,
-        intermediate_size=40,
-        moe_intermediate_size=40,
-        moe_shared_expert_intermediate_size=40,
-        mlp_hidden_act="relu2",
-        mamba_hidden_act="silu",
-        max_position_embeddings=512,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
+class NemotronHModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "layers_block_type": ["linear_attention", "moe", "linear_attention", "full_attention", "moe"],
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "intermediate_size": 40,
+        "moe_intermediate_size": 40,
+        "moe_shared_expert_intermediate_size": 40,
+        "mlp_hidden_act": "relu2",
+        "mamba_hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
         # Mamba-specific params
-        ssm_state_size=16,
-        mamba_num_heads=8,
-        mamba_n_groups=8,
-        mamba_head_dim=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=64,
+        "ssm_state_size": 16,
+        "mamba_num_heads": 8,
+        "mamba_n_groups": 8,
+        "mamba_head_dim": 16,
+        "mamba_d_conv": 4,
+        "mamba_expand": 2,
+        "mamba_chunk_size": 64,
         # MoE params
-        n_routed_experts=8,
-        n_shared_experts=1,
-        num_experts_per_tok=2,
-    ):
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.layers_block_type = layers_block_type
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # num_hidden_layers is now derived from layers_block_type length
-        self.num_hidden_layers = len(layers_block_type)
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.intermediate_size = intermediate_size
-        self.moe_intermediate_size = moe_intermediate_size
-        self.moe_shared_expert_intermediate_size = moe_shared_expert_intermediate_size
-        self.mlp_hidden_act = mlp_hidden_act
-        self.mamba_hidden_act = mamba_hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-
-        # Mamba params
-        self.ssm_state_size = ssm_state_size
-        self.mamba_num_heads = mamba_num_heads
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_head_dim = mamba_head_dim
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
-
-        # MoE params
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.num_experts_per_tok = num_experts_per_tok
+        values["num_hidden_layers"] = len(values["layers_block_type"])
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -412,6 +387,8 @@ class NemotronHModelTest(
     ExpertParallelTesterMixin,
     unittest.TestCase,
 ):
+    model_tester_class = NemotronHModelTester
+
     all_model_classes = (
         (
             NemotronHModel,

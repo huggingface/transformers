@@ -447,7 +447,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     config: Llama4Config
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True

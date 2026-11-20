@@ -195,6 +195,8 @@ jobs:
         # cap it.  4096 tokens keeps the KV cache well under 1 GB.
         # Applied to both sglang.test.test_utils and sglang.test.runners because
         # SRTRunner imports popen_launch_server directly into its own namespace.
+        # Also make empty_gpu_cache() a no-op without an accelerator: it calls torch.accelerator.empty_cache(),
+        # which raises on CPU (e.g. in the VLM tests' tearDownClass).
         run: |
           cat > test/conftest.py << 'CONFTEST'
           def pytest_configure(config):
@@ -212,6 +214,11 @@ jobs:
                   return _orig(model, base_url, timeout, *args, other_args=other_args, **kwargs)
 
               _tu.popen_launch_server = _patched
+
+              import torch
+
+              if torch.accelerator.current_accelerator() is None:
+                  _tu.empty_gpu_cache = lambda: None
 
               try:
                   import sglang.test.runners as _runners

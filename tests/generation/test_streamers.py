@@ -67,6 +67,25 @@ class StreamerTester(unittest.TestCase):
 
         self.assertEqual(streamer_text, greedy_text)
 
+    def test_text_streamer_streams_text_without_spaces(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = "Supercalifragilistic<br>expialidocious done"
+        token_ids = tokenizer(text, add_special_tokens=False).input_ids
+        streamer = TextIteratorStreamer(tokenizer)
+
+        printed = ""
+        for i, token_id in enumerate(token_ids):
+            streamer.put(torch.tensor([token_id]))
+            printed += streamer.text_queue.get_nowait()
+            decoded = tokenizer.decode(token_ids[: i + 1])
+            if "<" not in decoded:
+                self.assertEqual(printed, decoded)  # letters stream without waiting for a space
+            elif " " not in decoded:
+                self.assertNotIn("<", printed)  # symbols wait for the next space
+        streamer.end()
+        printed += streamer.text_queue.get_nowait()
+        self.assertEqual(printed, text)
+
     def test_iterator_streamer_matches_non_streaming(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)

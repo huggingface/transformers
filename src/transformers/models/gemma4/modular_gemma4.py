@@ -1260,7 +1260,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
         "Gemma4VisionPatchEmbedder",
         "Gemma4AudioLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
 

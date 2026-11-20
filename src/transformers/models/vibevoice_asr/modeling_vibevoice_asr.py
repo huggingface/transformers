@@ -241,7 +241,6 @@ class VibeVoiceAsrPreTrainedModel(PreTrainedModel):
     _no_split_modules = None
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True

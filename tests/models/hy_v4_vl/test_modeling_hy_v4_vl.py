@@ -74,15 +74,12 @@ class HYV4VLVisionText2TextModelTester(VLMModelTester):
         "vision_num_hidden_layers": 2,
         "vision_hidden_act": "gelu",
         "vision_max_image_size": 64,
+        # The vision output projects into the text width (hidden_size).
+        "vision_out_hidden_size": 48,
+        # image_size // patch_size (VLMModelTester's 4), and its square.
+        "grid_hw": 4,
+        "num_image_patches": 16,
     }
-
-    @classmethod
-    def get_small_config_defaults(cls, **kwargs):
-        values = super().get_small_config_defaults(**kwargs)
-        values.setdefault("vision_out_hidden_size", values["hidden_size"])
-        values["grid_hw"] = values["image_size"] // values["patch_size"]
-        values["num_image_patches"] = values["grid_hw"] ** 2
-        return values
 
     @property
     def _special_token_ids(self):
