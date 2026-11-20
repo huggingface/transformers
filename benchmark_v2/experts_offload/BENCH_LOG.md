@@ -28,3 +28,6 @@ transformers format), dense layers bf16 unless noted.
 
 **Qwen3-30B-A3B (stepping stone, not the goal):** 79.47 tok/s sustained on Metal, quantized, through `generate`, quality kept (ppl +0.5% vs bf16 always-on, compile -0.2%). **The goal is Qwen3.8-Flash-Next: not met yet.**
 Reproduce: `PYTHONPATH=src python verify_generate.py ArthurZ/Qwen3-30B-A3B-metal-experts-4bit 4g32c` (M3 Max 30-core GPU, 96 GB, torch 2.15.0, kernels 0.18.2).
+| 14 | 2026-11-20 | regression check after the NaN fix: MetalExperts `torch.where` sentinel mask | 54.42 | 49.59 | - | where() in MetalExperts broke compiled decode (152 extra aten::copy_/token); reverted to the weight product, NaN-safety kept by zero-initialized pools |
+| 15 | 2026-11-20 | #13 config, current code (`verify_generate.py ... 4g32c`) | **88.26** | **81.98** | - | Qwen3-30B-A3B stepping stone; greedy == eager 27/128 (bf16 fusion numerics) |
+| 16 | 2026-11-20 | `bench_generate_overhead.py`: StaticCache `cumulative_length` created on the device instead of `.to(device)` (was a sync per layer on MPS) | step 12.27 -> 11.67 ms | - | - | per-generate overhead 70.9 -> 53.4 ms (10-token prompt, 1 new token) |
