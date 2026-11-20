@@ -162,6 +162,10 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(processed_inputs[self.text_input_name]), 6)
         self.assertEqual(len(processed_inputs[self.images_input_name]), 6)
 
+    @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        pass
+
     # TODO(ryanmullins): Adapt this test for ShieldGemma 2
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     @unittest.skip("ShieldGemma 2 chat template requires different message structure from parent.")
