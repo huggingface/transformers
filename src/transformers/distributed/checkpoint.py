@@ -467,9 +467,18 @@ class _SafetensorsWriter:
 
 
 def consolidate_distributed_checkpoint(
-    checkpoint_dir: str | os.PathLike, output_dir: str | os.PathLike | None = None
+    checkpoint_dir: str | os.PathLike,
+    output_dir: str | os.PathLike | None = None,
+    max_shard_size: int | str = "50GB",
 ) -> None:
-    """Consolidate rank-local safetensors files. Call from a single process or rank."""
+    """
+    Merge the rank-local safetensors files of a distributed checkpoint into regular safetensors files of at most
+    `max_shard_size` each. Call from a single process or rank.
+
+    The tensors are copied as they are stored in the checkpoint, in the format the model uses in memory: the weight
+    conversions applied by `from_pretrained` (e.g. fused MoE experts) are not reverted. To get the original format,
+    load the checkpoint with `from_pretrained` and save it with `save_pretrained` instead.
+    """
     if not _check_distributed_checkpointing_available() or not is_torch_greater_or_equal("2.9"):
         raise OSError(
             "Consolidating a distributed checkpoint requires `torch>=2.9` with `torch.distributed` available."
@@ -481,11 +490,21 @@ def consolidate_distributed_checkpoint(
         output_dir = checkpoint_dir
 
     metadata = HuggingFaceStorageReader(str(checkpoint_dir)).read_metadata()
+    # Plan the files on meta tensors with the global shapes, like `save_pretrained` does.
+    meta_state_dict = {
+        name: torch.empty(entry.size, dtype=entry.properties.dtype, device="meta")
+        for name, entry in metadata.state_dict_metadata.items()
+    }
+    files = split_torch_state_dict_into_shards(meta_state_dict, max_shard_size=max_shard_size).filename_to_tensors
+    # Output file indices start at 1.
+    fqn_to_index_mapping = {name: index for index, names in enumerate(files.values(), start=1) for name in names}
+
     os.makedirs(output_dir, exist_ok=True)
     consolidate_safetensors_files(
         input_dir=str(checkpoint_dir),
         output_dir=str(output_dir),
-        fqn_to_index_mapping=dict.fromkeys(metadata.state_dict_metadata, 1),
+        fqn_to_index_mapping=fqn_to_index_mapping,
+        num_threads=len(files),  # one thread per output file
     )
 
 
