@@ -284,6 +284,7 @@ loss.backward()
 ```
 
 - Give the voice as a recording or latents, not a cache.
+- The processor tokenizes the transcript as it is, as the original's training does: the text preparation of generation (capitalization, final punctuation) does not apply. The original drops the final period with probability 0.3, so that unpunctuated text stays in distribution.
 - For classifier-free guidance, drop the `audio` or `text` item of the `user` turn (the original drops each with probability 0.2).
 - Precomputed latents go in `processor_kwargs={"audio_prompt_latents": [...], "labels": [...]}`, with empty `{"type": "audio"}` items as placeholders.
 - Original recipe: AdamW, `learning_rate=2e-5` (2e-4 for a new language), `adam_beta2=0.95`, `weight_decay=0.1`, `max_grad_norm=1.0`, 1000 warmup steps then constant, EMA of the weights (decay 0.999).
