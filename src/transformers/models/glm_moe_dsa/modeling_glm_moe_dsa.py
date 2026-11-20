@@ -50,6 +50,20 @@ import os as _glue_os
 _GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "0") == "1"  # F.rms_norm: 1 kernel instead of 8
 _GLUE_ROPE = _glue_os.environ.get("GLUE_ROPE", "0") == "1"  # rotary written in place: 4 kernels per tensor instead of 7
 _GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "0") == "1"  # no group selection when there is a single group
+# cache writes of the prototype kept out of torch.compile graphs, like `PagedAttentionCache.update` upstream: traced, an
+# in-place write into a view of the cache pool is functionalized into a copy of the whole view
+_GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") == "1"
+
+
+@torch.compiler.disable
+def _glue_write_latents(kv_latent_cache, rotated_key_cache, write_index, k_pass, k_rot):
+    kv_latent_cache.index_copy_(0, write_index, k_pass)
+    rotated_key_cache.index_copy_(0, write_index, k_rot)
+
+
+@torch.compiler.disable
+def _glue_update_indexer(cache, k, layer_idx):
+    return cache.update_indexer(k, layer_idx)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -360,7 +374,10 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
     q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
     k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [1, M, D]
-    keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
+    if _GLUE_OPAQUE_CACHE_WRITE:
+        keys = _glue_update_indexer(cache, k, indexer.layer_idx)[0]
+    else:
+        keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
 
     num_tokens, device = q.shape[0], q.device
     tok = torch.arange(num_tokens, device=device)
@@ -396,8 +413,14 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
     read_index = kwargs["read_index"][allocator.index]  # [N] physical rows of the packed context (past + new)
     write_index = kwargs["write_index"][allocator.index]  # [M]
     kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
-    kv_latent_cache.index_copy_(0, write_index, k_pass.reshape(-1, module.kv_lora_rank))
-    rotated_key_cache.index_copy_(0, write_index, k_rot.reshape(-1, module.qk_rope_head_dim))
+    if _GLUE_OPAQUE_CACHE_WRITE:
+        _glue_write_latents(
+            kv_latent_cache, rotated_key_cache, write_index, k_pass.reshape(-1, module.kv_lora_rank),
+            k_rot.reshape(-1, module.qk_rope_head_dim),
+        )
+    else:
+        kv_latent_cache.index_copy_(0, write_index, k_pass.reshape(-1, module.kv_lora_rank))
+        rotated_key_cache.index_copy_(0, write_index, k_rot.reshape(-1, module.qk_rope_head_dim))
     allocator._last_indices[module.layer_idx] = (read_index, write_index)
     if read_index.numel() == 0:  # CB skips the read-back when the batch has no past: the context is the new tokens
         read_index = write_index
