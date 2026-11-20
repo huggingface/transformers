@@ -998,6 +998,40 @@ def retrieve_available_artifacts():
     return _available_artifacts
 
 
+def aggregate_hf_cache_usage(artifact_dirs: list[str]) -> dict:
+    """
+    Aggregate the `hf_cache_usage.txt` files (one `<size>\t<path>` line per file under `/mnt/cache` opened by the tests
+    of a job) of the given artifact directories. Entries are grouped by the first 2 levels of the path relative to the
+    cache, i.e. by Hub repository for `hub/models--org--name/...`, and sorted by size.
+    """
+    usage = {}
+    for artifact_dir in artifact_dirs:
+        with open(os.path.join(artifact_dir, "hf_cache_usage.txt"), encoding="utf-8") as fp:
+            for line in fp:
+                size, path = line.rstrip("\n").split("\t", 1)
+                parts = path.removeprefix("/mnt/cache/").split("/")
+                entry, file = ("/".join(parts[:2]), "/".join(parts[2:])) if len(parts) > 2 else (parts[0], parts[-1])
+                usage.setdefault(entry, {"files": {}, "artifacts": set()})
+                usage[entry]["files"][file] = int(size)
+                usage[entry]["artifacts"].add(artifact_dir)
+
+    entries = {
+        entry: {
+            "size": sum(info["files"].values()),
+            "files": dict(sorted(info["files"].items())),
+            "artifacts": sorted(info["artifacts"]),
+        }
+        for entry, info in usage.items()
+    }
+    entries = dict(sorted(entries.items(), key=lambda x: x[1]["size"], reverse=True))
+
+    return {
+        "total_size": sum(info["size"] for info in entries.values()),
+        "artifacts": sorted(artifact_dirs),
+        "entries": entries,
+    }
+
+
 def prepare_reports(title, header, reports, to_truncate=True):
     report = ""
 
@@ -1560,6 +1594,25 @@ if __name__ == "__main__":
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
+
+    # Files under the HF cache (`/mnt/cache`) opened by the tests (traced with `strace` in the test jobs)
+    hf_cache_usage_dirs = [d for d in os.listdir() if os.path.isfile(os.path.join(d, "hf_cache_usage.txt"))]
+    if hf_cache_usage_dirs:
+        hf_cache_usage = aggregate_hf_cache_usage(hf_cache_usage_dirs)
+        print(
+            f"HF cache usage: {len(hf_cache_usage['entries'])} entries, {hf_cache_usage['total_size'] / 1024**3:.2f} GiB "
+            f"opened by {len(hf_cache_usage_dirs)} job(s)."
+        )
+        with open(f"ci_results_{job_name}/hf_cache_usage.json", "w", encoding="UTF-8") as fp:
+            json.dump(hf_cache_usage, fp, indent=4, ensure_ascii=False)
+
+        api.upload_file(
+            path_or_fileobj=f"ci_results_{job_name}/hf_cache_usage.json",
+            path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/hf_cache_usage.json",
+            repo_id=report_repo_id,
+            repo_type="dataset",
+            token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        )
 
     prev_workflow_run_id = None
     other_workflow_run_ids = []
