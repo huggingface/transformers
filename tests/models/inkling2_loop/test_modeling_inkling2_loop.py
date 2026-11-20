@@ -84,25 +84,28 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
         base_model_class = Inkling2LoopTextModel
         causal_lm_class = Inkling2LoopForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 4
-        self.layer_types = ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"]
-        self.n_layers_per_attn_res_block = 1
-        self.loop_layer_index_start = 1
-        self.loop_layer_index_end = 3
-        self.loop_num_passes = 3
-        self.loop_gate_rank = 8
-
-        self.swa_num_attention_heads = self.num_attention_heads
-        self.swa_num_key_value_heads = self.num_key_value_heads
-        self.swa_head_dim = self.head_dim
-        self.n_routed_experts = 8
-        self.unpadded_vocab_size = self.vocab_size
-
+    small_config_overrides = {
+        "num_hidden_layers": 4,
+        "layer_types": ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"],
+        "n_layers_per_attn_res_block": 1,
+        "loop_layer_index_start": 1,
+        "loop_layer_index_end": 3,
+        "loop_num_passes": 3,
+        "loop_gate_rank": 8,
+        "n_routed_experts": 8,
         # hidden states are recorded at every layer visit (4 layers + 2 more passes through the 2 loop layers) and
         # for the embeddings
-        self.expected_num_hidden_layers = 4 + 2 * 2 + 1
+        "expected_num_hidden_layers": 4 + 2 * 2 + 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["swa_num_attention_heads"] = values["num_attention_heads"]
+        values["swa_num_key_value_heads"] = values["num_key_value_heads"]
+        values["swa_head_dim"] = values["head_dim"]
+        values["unpadded_vocab_size"] = values["vocab_size"]
+        return values
 
 
 @require_torch
@@ -144,29 +147,34 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
     vision_config_class = Inkling2VisionConfig
     conditional_generation_class = Inkling2LoopForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("posemb_grid_size", 4)
-        kwargs.setdefault("projection_hidden_dim", 32)
-        kwargs.setdefault("text_num_hidden_layers", 4)
-        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"])
-        kwargs.setdefault("n_layers_per_attn_res_block", 1)
-        kwargs.setdefault("loop_layer_index_start", 1)
-        kwargs.setdefault("loop_layer_index_end", 3)
-        kwargs.setdefault("loop_num_passes", 3)
-        kwargs.setdefault("loop_gate_rank", 8)
-        kwargs.setdefault("expected_num_hidden_layers", 4 + 2 * 2 + 1)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("swa_num_attention_heads", 2)
-        kwargs.setdefault("swa_num_key_value_heads", 2)
-        kwargs.setdefault("swa_head_dim", 16)
-        super().__init__(parent, **kwargs)
-        self.text_hidden_size = self.hidden_size
-        self.unpadded_vocab_size = self.vocab_size
+    small_config_overrides = {
+        "image_token_id": 4,
+        "patch_size": 2,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 4,
+        "posemb_grid_size": 4,
+        "projection_hidden_dim": 32,
+        "text_num_hidden_layers": 4,
+        "layer_types": ["hybrid_sliding", "hybrid_sliding", "hybrid", "hybrid_sliding"],
+        "n_layers_per_attn_res_block": 1,
+        "loop_layer_index_start": 1,
+        "loop_layer_index_end": 3,
+        "loop_num_passes": 3,
+        "loop_gate_rank": 8,
+        "expected_num_hidden_layers": 4 + 2 * 2 + 1,
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 8,
+        "swa_num_attention_heads": 2,
+        "swa_num_key_value_heads": 2,
+        "swa_head_dim": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["text_hidden_size"] = values["hidden_size"]
+        values["unpadded_vocab_size"] = values["vocab_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
