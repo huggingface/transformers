@@ -114,8 +114,6 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
     loop_num_passes: int = 3
     loop_gate_rank: int = 64
 
-    # TODO: check tp/ep plans
-
     def __post_init__(self, **kwargs):
         if (loop_config := kwargs.get("loop_config")) is not None:
             self.loop_layer_index_start = loop_config.get("core_start", self.loop_layer_index_start)
