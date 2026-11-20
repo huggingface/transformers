@@ -325,6 +325,12 @@ def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
     return torch.get_device_module().use_mem_pool(mem_pool)
 
 
+def synchronize_device(device: torch.device) -> None:
+    """Blocks until all the work queued on the device, on any of its streams, is done. Does nothing on CPU."""
+    if device.type != "cpu":
+        torch.accelerator.synchronize(device)
+
+
 def pop_peak_memory(device: torch.device) -> tuple[int, int] | None:
     """Returns the memory allocated on the device and its peak since the previous call, then restarts the peak tracking.
     Returns None if the peak is not tracked, eg. on CPU or on MPS before torch 2.13."""
