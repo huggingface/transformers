@@ -1694,7 +1694,7 @@ class ContinuousBatchingConfig:
         num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
-            Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
+            Maximum number of tokens in a batch. Defaults to 8192 when `None`.
         max_memory_percent (`float`, *optional*):
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9, or 0.6 on MPS and CPU where memory is shared with the host.

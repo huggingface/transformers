@@ -1180,7 +1180,6 @@ class ContinuousBatchingManager:
         update_cb_config_after_cache_creation(
             cb_config=self.continuous_batching_config,
             num_blocks=paged_attention_cache.num_blocks,
-            max_batch_tokens=paged_attention_cache.max_batch_tokens,
         )
 
         # Disable the decode path if the model has sliding window attention (TODO)

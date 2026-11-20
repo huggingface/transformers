@@ -549,14 +549,12 @@ class PagedAttentionMemoryHandler:
     """Determines the max batch tokens (M) and number of cache sectors (S) for the paged attention cache, given the
     available GPU memory.
 
-    M is fixed upfront: it comes from the config, or defaults to 8192. Every input tensor (IO buffers and activation
+    M is fixed upfront by the resolved config. Every input tensor (IO buffers and activation
     peaks) scales linearly with M, so the memory they occupy is then known, and the rest of the available memory is
     turned into cache sectors. Each sector costs its cache bytes plus the linear per-cache-token tensors it entails
     (cache reads and read indices). The attention masks, which depend on both M and S, are planned for last: once S
     is decided, we remove as many sectors as needed to pay for them.
     """
-
-    _default_max_batch_tokens = 8192
 
     def __init__(
         self,
@@ -698,12 +696,10 @@ class PagedAttentionMemoryHandler:
 
     def infer_max_batch_tokens_and_num_sectors(self) -> tuple[int, int]:
         """Infers max_batch_tokens and num_sectors based on the available memory. Max batch tokens comes from the
-        config or a default of 8192. Unless the number of sectors is also fixed by the config, the memory left once
+        resolved config. Unless the number of sectors is also fixed by the config, the memory left once
         the M-proportional tensors are paid for becomes cache sectors, minus the sectors removed to pay for the
         attention masks."""
         max_batch_tokens = self.cb_config.max_batch_tokens
-        if max_batch_tokens is None:
-            max_batch_tokens = self._default_max_batch_tokens
 
         num_sectors = self.num_sectors_from_config()
         if num_sectors is None:

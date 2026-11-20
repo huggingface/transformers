@@ -30,6 +30,7 @@ from .utils import WorkloadHints, get_accelerator_graph_name, logger
 
 
 FALLBACK_DEFAULTS = {
+    "max_batch_tokens": 8192,
     "max_requests_per_batch": 1024,
     "max_blocks_per_request": 32,
     "q_padding_interval_size": 64,
@@ -114,8 +115,12 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
 
 def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
     """Fills any remaining unset/sentinel attribute with a fallback default."""
+    if cb_config.max_batch_tokens is None:
+        cb_config.max_batch_tokens = FALLBACK_DEFAULTS["max_batch_tokens"]
     if cb_config.max_requests_per_batch is None:
         cb_config.max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
+    # A batch cannot hold more requests than it has tokens
+    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, cb_config.max_batch_tokens)
     if cb_config.max_blocks_per_request is None:
         cb_config.max_blocks_per_request = FALLBACK_DEFAULTS["max_blocks_per_request"]
     if cb_config.q_padding_interval_size == 0:
@@ -315,17 +320,10 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, device: torc
             cb_config.max_memory_percent = 0.9
 
 
-def update_cb_config_after_cache_creation(
-    cb_config: ContinuousBatchingConfig,
-    num_blocks: int,
-    max_batch_tokens: int,
-) -> None:
+def update_cb_config_after_cache_creation(cb_config: ContinuousBatchingConfig, num_blocks: int) -> None:
     """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
     # Memoize concrete values
     cb_config.num_blocks = num_blocks
-    cb_config.max_batch_tokens = max_batch_tokens
-    # Cap the number of max requests per batch to the max tokens per batch
-    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
     # TODO: add a cap based on the cache size to the number of concurrent requests if it's usefull
 
 
