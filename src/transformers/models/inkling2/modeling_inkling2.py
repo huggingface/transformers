@@ -422,11 +422,27 @@ class Inkling2DynamicShortConvolution(nn.Module):
         return hidden_states.to(input_dtype)
 
 
+class Inkling2QueryProjection(nn.Module):
+    """Returns query states of the attention layers."""
+
+    def __init__(self, config: Inkling2TextConfig, num_heads: int, head_dim: int, log_scaling: bool):
+        super().__init__()
+        self.head_dim = head_dim
+        self.linear = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)
+        self.norm = (
+            Inkling2LogScaledL2Clip(config, num_heads, head_dim, config.qk_l2_clip_threshold)
+            if log_scaling
+            else Inkling2ScaledL2Clip(num_heads, head_dim, config.qk_l2_clip_threshold)
+        )
+
+    def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        states = self.linear(hidden_states)
+        states = states.view(*states.shape[:-1], -1, self.head_dim)
+        return self.norm(states, position_ids).transpose(1, 2)
+
+
 class Inkling2KeyValueProjection(nn.Module):
-    """
-    Key or value states of the attention layers: projection followed by a short convolution. With `dynamic=True` the
-    convolution is a dynamic short convolution whose weights are computed from the same input as the projection.
-    """
+    """Returns key or value states of the attention layers."""
 
     def __init__(
         self,
@@ -435,9 +451,11 @@ class Inkling2KeyValueProjection(nn.Module):
         head_dim: int,
         layer_idx: int,
         conv_idx: int,
+        is_key: bool,
         dynamic: bool = False,
     ):
         super().__init__()
+        self.head_dim = head_dim
         self.linear = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)
         self.sconv = (
             Inkling2DynamicShortConvolution(
@@ -451,6 +469,11 @@ class Inkling2KeyValueProjection(nn.Module):
             if dynamic
             else Inkling2ShortConvolution(num_heads * head_dim, config.sconv_kernel_size, layer_idx, conv_idx=conv_idx)
         )
+        self.norm = (
+            Inkling2L2Clip(config.qk_l2_clip_threshold)
+            if is_key
+            else Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
+        )
 
     def forward(
         self,
@@ -461,7 +484,11 @@ class Inkling2KeyValueProjection(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         states = self.linear(hidden_states)
-        return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
+        states = self.sconv(
+            states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+        )
+        states = states.view(*states.shape[:-1], -1, self.head_dim)
+        return self.norm(states).transpose(1, 2)
 
 
 class Inkling2GatedOutputProjection(nn.Module):
@@ -539,19 +566,15 @@ class Inkling2SlidingAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.q_proj = Inkling2QueryProjection(config, self.num_heads, self.head_dim, log_scaling=False)
         self.k_proj = Inkling2KeyValueProjection(
-            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0, is_key=True
         )
         self.v_proj = Inkling2KeyValueProjection(
-            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1, is_key=False
         )
         self.o_proj = Inkling2GatedOutputProjection(config, self.num_heads, self.head_dim)
-        self.q_norm = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
-        self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.relative_position_bias = Inkling2RelativePositionBias(
             config, self.num_heads, self.rel_extent, log_scaling=False
         )
@@ -584,19 +607,14 @@ class Inkling2SlidingAttention(nn.Module):
         key_hidden_states = hidden_states if key_hidden_states is None else key_hidden_states
         value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_proj(hidden_states, kwargs["position_ids"])
         key_states = self.k_proj(
             key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
-        ).view(hidden_shape)
+        )
         value_states = self.v_proj(
             value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
-        ).view(hidden_shape)
-
-        query_states = self.q_norm(query_states).transpose(1, 2)
-        key_states = self.k_norm(key_states).transpose(1, 2)
-        value_states = self.v_norm(value_states).transpose(1, 2)
+        )
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
@@ -641,19 +659,15 @@ class Inkling2FullAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
+        self.q_proj = Inkling2QueryProjection(config, self.num_heads, self.head_dim, log_scaling=True)
         self.k_proj = Inkling2KeyValueProjection(
-            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0, dynamic=True
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0, is_key=True, dynamic=True
         )
         self.v_proj = Inkling2KeyValueProjection(
-            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1, dynamic=True
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1, is_key=False, dynamic=True
         )
         self.o_proj = Inkling2GatedOutputProjection(config, self.num_heads, self.head_dim)
-        self.q_norm = Inkling2LogScaledL2Clip(config, self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
-        self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.relative_position_bias = Inkling2RelativePositionBias(
             config, self.num_heads, self.rel_extent, log_scaling=True
         )
@@ -684,19 +698,14 @@ class Inkling2FullAttention(nn.Module):
         """
         cache_layer_idx = self.layer_idx + cache_offset
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_proj(hidden_states, kwargs["position_ids"])
         key_states = self.k_proj(
             key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
-        ).view(hidden_shape)
+        )
         value_states = self.v_proj(
             value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
-        ).view(hidden_shape)
-
-        query_states = self.q_norm(query_states, kwargs["position_ids"]).transpose(1, 2)
-        key_states = self.k_norm(key_states).transpose(1, 2)
-        value_states = self.v_norm(value_states).transpose(1, 2)
+        )
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)

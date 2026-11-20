@@ -367,7 +367,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
-            WeightRenaming(source_patterns=r"self_attn\.wq_du", target_patterns=r"self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wq_du", target_patterns=r"self_attn.q_proj.linear"),
             WeightRenaming(source_patterns=r"self_attn\.wk_dv", target_patterns=r"self_attn.k_proj.linear"),
             WeightRenaming(source_patterns=r"self_attn\.wv_dv", target_patterns=r"self_attn.v_proj.linear"),
             WeightRenaming(source_patterns=r"self_attn\.k_sconv\.", target_patterns=r"self_attn.k_proj.sconv."),
@@ -378,7 +378,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"self_attn\.wr_du", target_patterns=r"self_attn.relative_position_bias.linear"
             ),
-            WeightRenaming(source_patterns=r"self_attn\.q_l2_clip\.", target_patterns=r"self_attn.q_norm."),
+            WeightRenaming(source_patterns=r"self_attn\.q_l2_clip\.", target_patterns=r"self_attn.q_proj.norm."),
             WeightRenaming(
                 source_patterns=r"self_attn\.rel_l2_clip\.", target_patterns=r"self_attn.relative_position_bias.norm."
             ),
