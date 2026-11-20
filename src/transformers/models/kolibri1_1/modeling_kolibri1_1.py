@@ -484,7 +484,6 @@ class Kolibri1_1SparseMoeBlock(nn.Module):
 
 class Kolibri1_1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
-        # Not the parent's `__init__`, which would build the experts of the dense MLP layers only to discard them
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Kolibri1_1Attention(config=config, layer_idx=layer_idx)

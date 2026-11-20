@@ -26,13 +26,9 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
-from ..kolibri1.configuration_kolibri1 import Kolibri1Config
 from ...utils.deprecation import deprecate_kwarg
+from ..kolibri1.configuration_kolibri1 import Kolibri1Config
 from ..kolibri1.modeling_kolibri1 import (
-    Kolibri1Attention,
-    Kolibri1DecoderLayer,
     Kolibri1ForCausalLM,
     Kolibri1MLP,
     Kolibri1Model,
@@ -323,9 +319,9 @@ class Kolibri1_1Indexer(nn.Module):
         return self.select_tokens(query_states, key_states, visible, index_pool).unsqueeze(1), index_pool
 
 
-class Kolibri1_1Attention(Kolibri1Attention):
+class Kolibri1_1Attention(nn.Module):
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
-        nn.Module.__init__(self)
+        super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
@@ -352,6 +348,7 @@ class Kolibri1_1Attention(Kolibri1Attention):
 
         self.indexer = None if self.is_sliding else Kolibri1_1Indexer(config, layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -431,10 +428,9 @@ class Kolibri1_1SparseMoeBlock(Kolibri1SparseMoeBlock):
     pass
 
 
-class Kolibri1_1DecoderLayer(Kolibri1DecoderLayer):
+class Kolibri1_1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Kolibri1_1Config, layer_idx: int):
-        # Not the parent's `__init__`, which would build the experts of the dense MLP layers only to discard them
-        GradientCheckpointingLayer.__init__(self)
+        super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = Kolibri1_1Attention(config=config, layer_idx=layer_idx)
         if layer_idx in config.mlp_only_layers:
@@ -446,6 +442,7 @@ class Kolibri1_1DecoderLayer(Kolibri1DecoderLayer):
         self.post_self_attn_layernorm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_mlp_layernorm = Kolibri1_1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
