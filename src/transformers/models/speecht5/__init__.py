@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -32,5 +31,35 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_speecht5": {
+                "SpeechT5Config",
+                "SpeechT5HifiGanConfig",
+            },
+            "feature_extraction_speecht5": {
+                "SpeechT5FeatureExtractor",
+            },
+            "processing_speecht5": {
+                "SpeechT5Processor",
+            },
+        },
+        frozenset({"sentencepiece"}): {
+            "tokenization_speecht5": {
+                "SpeechT5Tokenizer",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_speecht5": {
+                "SpeechT5ForSpeechToSpeech",
+                "SpeechT5ForSpeechToText",
+                "SpeechT5ForTextToSpeech",
+                "SpeechT5HifiGan",
+                "SpeechT5Model",
+                "SpeechT5PreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

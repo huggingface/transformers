@@ -43,7 +43,10 @@ class CheckInitsTest(unittest.TestCase):
                 module.parent.mkdir(parents=True)
                 module.write_text(f'__all__ = ["{export}"]\n', encoding="utf-8")
             with patch.object(check_inits, "MODELS_INIT_PATH", init):
-                self.assertEqual(check_inits.get_import_structure(), {"bert": {"configuration_bert"}})
+                _, import_structure_per_model = check_inits.get_import_structures()
+                self.assertEqual(
+                    import_structure_per_model, {"bert": {frozenset(): {"configuration_bert": {"BertConfig"}}}}
+                )
 
     def test_generation_preserves_license_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -60,6 +63,10 @@ class CheckInitsTest(unittest.TestCase):
                     "init_path": init,
                     "import_lines": ["from .configuration_example import *"],
                     "module_names": ["configuration_example"],
+                    "import_structure": {
+                        frozenset({"torch"}): {"modeling_example": {"ExampleModel", "ExamplePreTrainedModel"}},
+                        frozenset(): {"configuration_example": {"ExampleConfig"}},
+                    },
                 }
                 generated = check_inits.generate_init(**kwargs)
 
@@ -74,7 +81,6 @@ class CheckInitsTest(unittest.TestCase):
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -82,8 +88,22 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_example": {
+                "ExampleConfig",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_example": {
+                "ExampleModel",
+                "ExamplePreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)
 """
                 self.assertEqual(expected, generated)
 

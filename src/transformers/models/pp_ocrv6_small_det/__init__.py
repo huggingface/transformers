@@ -20,7 +20,6 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
@@ -29,5 +28,20 @@ if TYPE_CHECKING:
 else:
     import sys
 
+    _import_structure = {
+        frozenset(): {
+            "configuration_pp_ocrv6_small_det": {
+                "PPOCRV6SmallDetConfig",
+            },
+        },
+        frozenset({"torch"}): {
+            "modeling_pp_ocrv6_small_det": {
+                "PPOCRV6SmallDetForObjectDetection",
+                "PPOCRV6SmallDetModel",
+                "PPOCRV6SmallDetPreTrainedModel",
+            },
+        },
+    }
+
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, _import_structure, module_spec=__spec__)

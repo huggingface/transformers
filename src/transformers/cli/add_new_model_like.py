@@ -623,6 +623,10 @@ def _add_new_model_like_internal(
         ["python", "utils/modular_model_converter.py", new_lowercase_name], cwd=repo_path, stdout=subprocess.DEVNULL
     )
 
+    # 11. Regenerate the inits, which contain the import structure of each model. This has to come after the modular
+    # conversion, since the import structure is read from the generated files.
+    subprocess.run(["python", "utils/check_inits.py", "--fix_and_overwrite"], cwd=repo_path, stdout=subprocess.DEVNULL)
+
 
 def get_user_field(
     question: str,
