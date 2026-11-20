@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import threading
 from abc import ABC, abstractmethod
 from collections import deque
@@ -18,6 +19,14 @@ from collections import deque
 from .cache import PagedAttentionCache
 from .requests import FutureRequestState, RequestState, RequestStatus
 from .utils import logger
+
+
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_PREFILLS_APART=<n>: the FIFO scheduler
+# never mixes decoding requests with requests that still have a prompt to prefill. While some requests decode, it runs
+# decode-only batches (which take the block table path) and, every n decode-only batches at most, one batch with only
+# the waiting or prefilling requests. Unset: today's behaviour, where one waiting request turns the batch into a varlen
+# batch for every request in it.
+_PROTO_PREFILLS_APART = int(os.environ.get("CB_PROTO_PREFILLS_APART", "-1"))
 
 
 class Scheduler(ABC):
@@ -52,6 +61,7 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
+        self._proto_decode_only_batches = 0  # PROTOTYPE: decode-only batches since the last prefill-only one
         # Active requests that failed cache allocation in the last scheduled batch w/ the length that was denied
         self.starved_requests: list[tuple[RequestState, int]] = []
 
@@ -333,6 +343,21 @@ class FIFOScheduler(Scheduler):
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
+        # PROTOTYPE: prefills apart from decodes
+        if _PROTO_PREFILLS_APART >= 0 and priority_states and second_priority_states:
+            if self._proto_decode_only_batches >= _PROTO_PREFILLS_APART:
+                self._proto_decode_only_batches = 0
+                prefill_batch = self._process_candidates(
+                    second_priority_states, token_budget, cache_budget, request_ids_to_remove_from_waiting
+                )
+                if prefill_batch[0]:
+                    self._cleanup_waiting_queue(request_ids_to_remove_from_waiting)
+                    scheduled_requests, _, decode_fast_path, num_q_tokens, max_kv_read = prefill_batch
+                    return scheduled_requests, decode_fast_path, num_q_tokens, max_kv_read
+                # Nothing could be admitted (cache full): the decoding requests run instead
+            else:
+                self._proto_decode_only_batches += 1
+            candidates = priority_states
         scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read = (
             self._process_candidates(
                 candidates,
