@@ -70,6 +70,18 @@ class KimiLinearConfig(DeepseekV3Config):
     """
 
     model_type = "kimi_linear"
+    # Attention stays replicated: `layers.*.self_attn` is latent attention on some layers and delta attention on others
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
     attribute_map = {
         "max_position_embeddings": "model_max_length",
         "norm_topk_prob": "moe_renormalize",
