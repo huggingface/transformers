@@ -13,6 +13,7 @@
 # limitations under the License.
 import atexit
 import contextlib
+import functools
 import os
 import re
 import threading
@@ -108,6 +109,35 @@ class _FastReduceScope(threading.local):
 
 
 _FAST_REDUCE_THREAD = _FastReduceScope()
+
+
+@contextlib.contextmanager
+def _fast_reduce_on_this_thread(enabled: bool = True):
+    """[gap2 prototype] Lets the calling thread use the fast TP all-reduce for the duration of the block: for the
+    engine's own forwards run by another thread while the engine thread is not running (`warmup()`)."""
+    was_enabled = _FAST_REDUCE_THREAD.enabled
+    _FAST_REDUCE_THREAD.enabled = enabled or was_enabled
+    try:
+        yield
+    finally:
+        _FAST_REDUCE_THREAD.enabled = was_enabled
+
+
+def with_fast_tp_all_reduce(fn):
+    """[gap2 prototype] For a method `fn(self, model, ...)` that runs the engine's forward from a thread other than
+    the engine's while the engine is not running: the warm-up that captures the engine's CUDA graphs ahead
+    (`ModelRunner.run_one_warmup`, reached by `ContinuousBatchingManager.warmup()` and by harnesses that call it
+    directly). Creates the workspace if needed (a collective: every TP rank warms up at the same point) and lets the
+    call reduce through the fast path, so the graphs it captures are the ones the engine thread would capture."""
+
+    @functools.wraps(fn)
+    def wrapper(self, model, *args, **kwargs):
+        if is_torch_distributed_available() and dist.is_initialized():
+            prime_fast_tp_all_reduce(model.config.hidden_size, model.dtype, model.device)
+        with _fast_reduce_on_this_thread():
+            return fn(self, model, *args, **kwargs)
+
+    return wrapper
 
 
 if is_torch_distributed_available():
