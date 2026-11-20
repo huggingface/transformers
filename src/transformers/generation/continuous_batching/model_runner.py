@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import time
 from collections.abc import Callable
 
@@ -32,6 +33,13 @@ from .utils import (
     pad_to_pow2,
     stream_context,
 )
+
+
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_SAMPLER=one_buffer: sample with an
+# exponential race on the logits (argmax of logits - log(E), E ~ Exp(1)) and compute the logprob of the chosen token as
+# logit - logsumexp, through a single fp32 buffer of the logits' shape, instead of the fp32 cast, softmax and multinomial
+# (three fp32 copies). Only used when there is no logit processor.
+_PROTO_SAMPLER = os.environ.get("CB_PROTO_SAMPLER", "")
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -198,6 +206,9 @@ class ModelRunner:
         logits_indices = batch_data["logits_indices"]  # shape [num_logits]
         if "logits_to_keep" not in batch_data:
             logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
+        if _PROTO_SAMPLER == "one_buffer" and not self.logit_processor.do_processing:
+            self._proto_sample_one_buffer(logits[0], output_ids)
+            return
         # Convert to fp32 to match generate
         logits = logits.float()  # shape [1, num_logits, vocab_size]
 
@@ -216,6 +227,30 @@ class ModelRunner:
 
         # Sample next tokens
         self._sample(scores, output_ids)
+
+    def _proto_sample_one_buffer(self, logits: torch.Tensor, output_ids: torch.Tensor) -> None:
+        """PROTOTYPE: next tokens (and maybe their logprobs) from the logits in the model dtype, shape
+        [num_logits, vocab_size], with at most one fp32 buffer of that shape."""
+        buffer = None
+        if self.do_sample:
+            buffer = torch.empty(logits.shape, dtype=torch.float32, device=logits.device).exponential_()
+            torch.sub(logits, buffer.log_(), out=buffer)  # logits + Gumbel noise, in fp32
+            next_tokens = torch.argmax(buffer, dim=-1, keepdim=True)  # shape [num_logits, 1]
+        else:
+            next_tokens = torch.argmax(logits, dim=-1, keepdim=True)  # shape [num_logits, 1]
+        if self.return_logprobs:
+            if buffer is None:
+                buffer = torch.empty(logits.shape, dtype=torch.float32, device=logits.device)
+            buffer.copy_(logits)
+            max_logits = buffer.amax(dim=-1, keepdim=True)
+            sum_exp = buffer.sub_(max_logits).exp_().sum(dim=-1)
+            chosen = logits.gather(dim=1, index=next_tokens).squeeze(-1).float()
+            logprobs = chosen - max_logits.squeeze(-1) - sum_exp.log()  # shape [num_logits]
+        next_tokens = next_tokens.squeeze(-1)  # shape [num_logits]
+        tokens = next_tokens.size(0)
+        output_ids[0, :tokens].copy_(next_tokens)
+        if self.return_logprobs:
+            output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
 
     def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
         """Private method to sample next tokens from the scores."""

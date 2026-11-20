@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 from functools import partial
 from itertools import repeat
 from typing import TypedDict
@@ -22,7 +23,7 @@ from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
-from .cache_allocators import FULL_ATTENTION, INDEXED_ATTENTION, SLIDING_ATTENTION
+from .cache_allocators import FULL_ATTENTION, INDEXED_ATTENTION, SLIDING_ATTENTION, FullAttentionCacheAllocator
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
@@ -35,6 +36,48 @@ from .utils import (
     pad_to_pow2,
     stream_context,
 )
+
+
+# --- PROTOTYPES of the engine work package (bench only, all off by default) ---------------------------------------
+# CB_PROTO_DEVICE_INDEX=1: the read index of full-attention-like allocators is expanded on the device from the block
+# ids of the requests (O(requests x blocks) host work) instead of built token by token on the host. "check" also
+# builds the host version and asserts both are equal.
+_PROTO_DEVICE_INDEX = os.environ.get("CB_PROTO_DEVICE_INDEX", "0")
+# CB_PROTO_SKIP_MASK_MAX_Q=<n>: the attention mask is neither reset nor built for batches of at most n query tokens.
+# Only valid with a model that does not read the mask on such batches (the GLM prototype with the per-query indexer).
+_PROTO_SKIP_MASK_MAX_Q = int(os.environ.get("CB_PROTO_SKIP_MASK_MAX_Q", "0"))
+# CB_PROTO_DEVICE_MASK=1: the attention mask is built by one broadcasted comparison on the device instead of one
+# fill_ + triu_ per request. "check" also builds the per-request version and asserts both are equal.
+_PROTO_DEVICE_MASK = os.environ.get("CB_PROTO_DEVICE_MASK", "0")
+
+
+def _proto_build_attention_mask_on_device(
+    attention_mask: torch.Tensor,  # [1, 1, M, N + M], only [:q_len, :k_len] is written
+    cumulative_seqlens_q: list[int],
+    cumulative_seqlens_k: list[int],
+    q_len: int,
+    k_len: int,
+    arange: torch.Tensor,
+) -> None:
+    """Same mask as `_reset_static_tensors` + `build_attention_mask` (no sliding window), from the cumulative
+    sequence lengths alone: a query attends a key when both belong to the same request and the key is not after it."""
+    device = attention_mask.device
+    num_requests = len(cumulative_seqlens_q) - 1
+    cu_q = torch.tensor(cumulative_seqlens_q, dtype=torch.int64, device=device)
+    cu_k = torch.tensor(cumulative_seqlens_k, dtype=torch.int64, device=device)
+    q_pos, k_pos = arange[:q_len], arange[:k_len]
+    q_req = torch.searchsorted(cu_q[1:], q_pos, right=True)  # num_requests for the padding tokens
+    k_req = torch.searchsorted(cu_k[1:], k_pos, right=True)
+    q_req_real = q_req.clamp(max=num_requests - 1)
+    past = (cu_k[1:] - cu_k[:-1]) - (cu_q[1:] - cu_q[:-1])  # cached tokens of each request
+    last_visible = past[q_req_real] + (q_pos - cu_q[q_req_real])  # per query, as an offset in its request's keys
+    k_offset = k_pos - cu_k[k_req.clamp(max=num_requests - 1)]
+    q_req = q_req.masked_fill(q_req == num_requests, -1)  # padding queries see nothing
+    allowed = q_req[:, None] == k_req[None, :]
+    allowed &= k_offset[None, :] <= last_visible[:, None]
+    block = attention_mask[0, 0, :q_len, :k_len]
+    block.fill_(torch.finfo(attention_mask.dtype).min)
+    block.masked_fill_(allowed, 0)
 
 
 class PagedAttentionArgs(TypedDict):
@@ -222,6 +265,8 @@ class ContinuousBatchingIOs:
             pin_memory=pin_memory,
         )
         # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
+        if _PROTO_DEVICE_INDEX != "0" or _PROTO_DEVICE_MASK != "0":
+            self._proto_arange = torch.arange(self.read_index_storage.size(-1), dtype=torch.int64, device=self.device)
 
     def _transfer_inputs(
         self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
@@ -279,7 +324,7 @@ class ContinuousBatchingIOs:
         for layer_type in self.cumulative_seqlens_k:
             self.max_length_k[layer_type] = 0
             self.total_seqlen_k[layer_type] = 0
-            if self.attention_mask is not None:
+            if self.attention_mask is not None and (full_reset or not self._proto_skip_mask_work()):
                 self.attention_mask[layer_type][:, :, :q_len, : q_len + kv_len].fill_(
                     torch.finfo(self.model_dtype).min
                 )
@@ -294,6 +339,33 @@ class ContinuousBatchingIOs:
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
             self._reset_read_and_write_indices(q_len, kv_len)
+
+    def _proto_skip_mask_work(self) -> bool:
+        """PROTOTYPE: True when the per-step mask reset and build are skipped (mask not read by the model, or built
+        in one go on the device, which also resets it)."""
+        if 0 < self.num_q_tokens <= _PROTO_SKIP_MASK_MAX_Q:
+            return True
+        return _PROTO_DEVICE_MASK == "1" and getattr(self.config, "sliding_window", None) is None
+
+    def _proto_expand_read_index(
+        self, group: int, allocator, blocks: list[int], block_starts: list[int], cumulative_seqlens_k: list[int]
+    ) -> int:
+        """PROTOTYPE: writes the read index of an allocator group on the device, from the block ids of the requests
+        (flattened, with the offset of each request's first block) and their cumulative key lengths. Returns its size.
+        Token `o` of a request lives at row `block[o // page] * stride + o % page`."""
+        num_tokens = cumulative_seqlens_k[-1]
+        if num_tokens > self.read_index_storage.size(-1) or len(block_starts) != len(cumulative_seqlens_k) - 1:
+            raise RuntimeError("Inconsistent inputs for the device-side read index expansion")
+        cu_k = torch.tensor(cumulative_seqlens_k, dtype=torch.int64, device=self.device)
+        blocks_t = torch.tensor(blocks, dtype=torch.int64, device=self.device)
+        starts_t = torch.tensor(block_starts, dtype=torch.int64, device=self.device)
+        position = self._proto_arange[:num_tokens]
+        request = torch.searchsorted(cu_k[1:], position, right=True)
+        offset = position - cu_k[request]
+        page = allocator.tokens_per_page
+        rows = blocks_t[starts_t[request] + offset // page] * allocator.block_physical_stride + offset % page
+        self.read_index_storage[group, :num_tokens] = rows
+        return num_tokens
 
     def _reset_read_and_write_indices(self, q_len: int, kv_len: int) -> None:
         """Resets each allocator's row of the index storages to its own trash indices."""
@@ -382,6 +454,16 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
+        # PROTOTYPE: groups whose read index is expanded on the device only accumulate the block ids of the requests
+        allocators = list(self.cache.cache_allocators.values())
+        proto_device_index = (
+            _PROTO_DEVICE_INDEX != "0"
+            and read_index is not None
+            and all(type(a).get_read_indices is FullAttentionCacheAllocator.get_read_indices for a in allocators)
+        )
+        proto_blocks = [[] for _ in range(num_attn_types)]
+        proto_block_starts = [[] for _ in range(num_attn_types)]
+        host_read_index = read_index if (not proto_device_index or _PROTO_DEVICE_INDEX == "check") else None
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -411,8 +493,17 @@ class ContinuousBatchingIOs:
                 self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
-                    state.request_id, past_length, query_length, read_index, write_index
+                    state.request_id, past_length, query_length, host_read_index, write_index
                 )
+                if proto_device_index:
+                    for group, allocator in enumerate(allocators):
+                        num_blocks = -(-(past_length + query_length) // allocator.tokens_per_page)
+                        request_blocks = allocator.block_table[state.request_id]
+                        # Host-side bound check: the device expansion indexes these lists without one
+                        if len(request_blocks) < num_blocks:
+                            raise RuntimeError(f"Request {state.request_id} holds fewer blocks than its length needs")
+                        proto_block_starts[group].append(len(proto_blocks[group]))
+                        proto_blocks[group].extend(request_blocks[:num_blocks])
 
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if future_state.has_new_token:
@@ -432,7 +523,21 @@ class ContinuousBatchingIOs:
         self.total_seqlen_q = cumulative_seqlens_q[-1]
 
         # If needed, build the attention mask with the un-padded sequence lengths
-        if self.attention_mask is not None:
+        proto_device_mask = _PROTO_DEVICE_MASK != "0" and getattr(self.config, "sliding_window", None) is None
+        if self.attention_mask is not None and proto_device_mask and not 0 < self.num_q_tokens <= _PROTO_SKIP_MASK_MAX_Q:
+            k_len = self.num_q_tokens + self.max_kv_read
+            for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
+                if _PROTO_DEVICE_MASK == "check":
+                    build_attention_mask(self.attention_mask[layer_type], cumulative_seqlens_q, layer_type_seqlens_k, 1)
+                    expected = self.attention_mask[layer_type][0, 0, : self.num_q_tokens, :k_len].clone()
+                _proto_build_attention_mask_on_device(
+                    self.attention_mask[layer_type], cumulative_seqlens_q, layer_type_seqlens_k,
+                    self.num_q_tokens, k_len, self._proto_arange,
+                )
+                if _PROTO_DEVICE_MASK == "check":
+                    built = self.attention_mask[layer_type][0, 0, : self.num_q_tokens, :k_len]
+                    assert torch.equal(built, expected), "device-built attention mask differs from the per-request one"
+        elif self.attention_mask is not None and not self._proto_skip_mask_work():
             for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
                 sliding_window = (
                     getattr(self.config, "sliding_window", None) if layer_type == "sliding_attention" else 1
@@ -476,7 +581,17 @@ class ContinuousBatchingIOs:
             for i, group_write_indices in enumerate(write_index):
                 self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
-            if read_index is not None:
+            if read_index is not None and proto_device_index:
+                for i, allocator in enumerate(allocators):
+                    seqlens_k = cumulative_seqlens_k[allocator.layer_type][: self.num_request_in_batch + 1]
+                    self.true_read_sizes[i] = self._proto_expand_read_index(
+                        i, allocator, proto_blocks[i], proto_block_starts[i], seqlens_k
+                    )
+                    if _PROTO_DEVICE_INDEX == "check":
+                        expected = to_index_tensor(read_index[i])
+                        built = self.read_index_storage[i, : self.true_read_sizes[i]]
+                        assert torch.equal(built, expected), "device-built read index differs from the host one"
+            elif read_index is not None:
                 for i, group_read_indices in enumerate(read_index):
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
