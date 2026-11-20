@@ -41,6 +41,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -54,14 +55,15 @@ if is_vision_available():
     from PIL import Image
 
 
-class JanusVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_index=0,
-        seq_length=25,
-        initializer_range=0.02,
-        text_config={
+class JanusVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
+        "image_token_index": 0,
+        "seq_length": 25,
+        "initializer_range": 0.02,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -84,8 +86,8 @@ class JanusVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -104,36 +106,32 @@ class JanusVisionText2TextModelTester:
             "vision_feature_select_strategy": "default",
             "vision_feature_layer": -1,
         },
-        use_cache=False,
-        vq_num_embeds=12,
-        vq_embed_dim=12,
-        vq_channel_multiplier=[1, 1],
-    ):
-        self.parent = parent
-        self.initializer_range = initializer_range
-        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_index = image_token_index
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["num_image_tokens"]
-        self.use_cache = use_cache
-
+        "use_cache": False,
         # vq model params
-        self.vq_num_embeds = vq_num_embeds
-        self.vq_embed_dim = vq_embed_dim
-        self.vq_channel_multiplier = vq_channel_multiplier
+        "vq_num_embeds": 12,
+        "vq_embed_dim": 12,
+        "vq_channel_multiplier": [1, 1],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["batch_size"] = 3
+        values["num_channels"] = vision_config["num_channels"]
+        values["image_size"] = vision_config["image_size"]
+        values["num_image_tokens"] = vision_config["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_vq_config(self):
         return {
@@ -190,6 +188,8 @@ class JanusVisionText2TextModelTester:
 
 @require_torch
 class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = JanusVisionText2TextModelTester
+
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -310,31 +310,31 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                             pass
 
 
-class JanusVQModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        is_training=False,
-        initializer_range=0.02,
-        image_size=30,
-        num_embeds=12,
-        base_channels=32,  # we have a GroupNorm of 32 groups, so can't do less
-        embed_dim=12,
-        channel_multiplier=[1, 2],
-        patch_size=2,
-        scope=None,
-    ):
+class JanusVQModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 5,
+        "is_training": False,
+        "initializer_range": 0.02,
+        "image_size": 30,
+        "num_embeds": 12,
+        "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
+        "embed_dim": 12,
+        "channel_multiplier": [1, 2],
+        "patch_size": 2,  # only used to derive num_patches
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_patches"] = values["image_size"] // values.pop("patch_size")
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.initializer_range = initializer_range
-        self.image_size = image_size
-        self.base_channels = base_channels
-        self.num_embeds = num_embeds
-        self.embed_dim = embed_dim
-        self.channel_multiplier = channel_multiplier
-        self.num_patches = image_size // patch_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
@@ -363,6 +363,8 @@ class JanusVQModelTester:
 
 @require_torch
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = JanusVQModelTester
+
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
 
     has_attentions = False

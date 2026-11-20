@@ -42,6 +42,7 @@ from transformers.utils import is_torch_available, is_torch_xpu_available, is_to
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -167,56 +168,37 @@ def prepare_whisper_inputs_dict(
 
 
 @require_torch
-class WhisperModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden_layers
-        seq_length=60,
-        is_training=True,
-        use_labels=False,
-        vocab_size=200,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        max_target_positions=40,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-        num_mel_bins=80,
-        decoder_start_token_id=85,
-        num_conv_layers=1,
-        suppress_tokens=None,
-    ):
+class WhisperModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden_layers
+        "seq_length": 60,
+        "is_training": True,
+        "use_labels": False,
+        "vocab_size": 200,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "input_channels": 1,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 30,
+        "max_target_positions": 40,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
+        "num_mel_bins": 80,
+        "decoder_start_token_id": 85,
+        "num_conv_layers": 1,
+        "suppress_tokens": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.num_conv_layers = num_conv_layers
-        self.suppress_tokens = suppress_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -367,6 +349,8 @@ class WhisperModelTester:
 
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = WhisperModelTester
+
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -3111,52 +3095,35 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-class WhisperEncoderModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden layers
-        seq_length=60,
-        is_training=True,
-        use_labels=True,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        num_mel_bins=80,
-        num_conv_layers=1,
-        suppress_tokens=None,
-        classifier_proj_size=4,
-        num_labels=2,
-        is_encoder_decoder=False,
-        is_decoder=False,
-    ):
+class WhisperEncoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden layers
+        "seq_length": 60,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "input_channels": 1,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 30,
+        "num_mel_bins": 80,
+        "num_conv_layers": 1,
+        "suppress_tokens": None,
+        "classifier_proj_size": 4,
+        "num_labels": 2,
+        "is_encoder_decoder": False,
+        "is_decoder": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.num_conv_layers = num_conv_layers
-        self.suppress_tokens = suppress_tokens
-        self.classifier_proj_size = classifier_proj_size
-        self.num_labels = num_labels
-        self.is_encoder_decoder = is_encoder_decoder
-        self.is_decoder = is_decoder
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return WhisperConfig(
@@ -3219,6 +3186,8 @@ class WhisperEncoderModelTester:
 
 @require_torch
 class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = WhisperEncoderModelTester
+
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
 
@@ -3304,54 +3273,37 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class WhisperStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden layers
-        is_training=True,
-        use_labels=False,
-        vocab_size=200,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        max_target_positions=40,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-        num_mel_bins=80,
-        decoder_start_token_id=85,
-        num_conv_layers=1,
-        suppress_tokens=None,
-    ):
+class WhisperStandaloneDecoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden layers
+        # The standalone decoder tests only run inference.
+        "is_training": False,
+        "use_labels": False,
+        "vocab_size": 200,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "input_channels": 1,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 30,
+        "max_target_positions": 40,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
+        "num_mel_bins": 80,
+        "decoder_start_token_id": 85,
+        "num_conv_layers": 1,
+        "suppress_tokens": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.num_conv_layers = num_conv_layers
-        self.suppress_tokens = suppress_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -3485,12 +3437,14 @@ class WhisperStandaloneDecoderModelTester:
 
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = WhisperStandaloneDecoderModelTester
+
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
     is_encoder_decoder = False
     test_missing_keys = False
 
     def setUp(self):
-        self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = WhisperStandaloneDecoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
     def test_config(self):

@@ -40,16 +40,13 @@ class ZayaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = ZayaModel
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(
-            parent=parent,
-            num_hidden_layers=2,
-            moe_intermediate_size=32,
-            num_experts_per_tok=1,
-            layer_types=["hybrid", "hybrid_sliding"],
-            sliding_window=64,
-            **kwargs,
-        )
+    small_config_overrides = {
+        "num_hidden_layers": 2,
+        "moe_intermediate_size": 32,
+        "num_experts_per_tok": 1,
+        "layer_types": ["hybrid", "hybrid_sliding"],
+        "sliding_window": 64,
+    }
 
 
 @require_torch

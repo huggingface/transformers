@@ -100,7 +100,7 @@ _deps = [
     "optuna",
     "packaging>=20.0",
     "parameterized>=0.9",  # older version of parameterized cause pytest collection to fail on .expand
-    "peft>=0.20.0",
+    "peft>=0.22.0",
     "phonemizer",
     "protobuf",
     "psutil",

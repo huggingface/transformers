@@ -187,8 +187,6 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
 
         if mm_encoder_outputs.get("image") is not None:
             patch_embeddings = mm_encoder_outputs["image"].pooler_output
-            if patch_embeddings is None:
-                patch_embeddings = mm_encoder_outputs["image"].last_hidden_state
             patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings

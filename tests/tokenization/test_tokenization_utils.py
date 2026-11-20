@@ -285,6 +285,25 @@ class TokenizerUtilsTest(unittest.TestCase):
                 decoded_sent = tokenizer.decode(pad_id, skip_special_tokens=False)
                 self.assertEqual(decoded_sent, "[PAD]")
 
+    def test_batch_decode_empty_batch(self):
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+
+        # An empty batch has no sequences, so there is nothing to decode (a single empty sequence is not a batch)
+        self.assertEqual(tokenizer.batch_decode([]), [])
+        self.assertEqual(tokenizer.batch_decode(np.zeros((0, 5), dtype=np.int64)), [])
+        # Empty sequences inside a non-empty batch are still decoded one by one
+        self.assertEqual(tokenizer.batch_decode([[], []]), ["", ""])
+        self.assertEqual(tokenizer.batch_decode(np.zeros((2, 0), dtype=np.int64)), ["", ""])
+
+    @require_torch
+    def test_batch_decode_empty_batch_pt(self):
+        import torch
+
+        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
+
+        self.assertEqual(tokenizer.batch_decode(torch.zeros((0, 5), dtype=torch.long)), [])
+        self.assertEqual(tokenizer.batch_decode(torch.zeros((2, 0), dtype=torch.long)), ["", ""])
+
     @require_torch
     def test_padding_accepts_tensors_pt(self):
         import torch

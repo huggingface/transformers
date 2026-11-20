@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import ModelOutput, logging
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -54,66 +55,55 @@ if is_torch_available():
     )
 
 
-class EmbeddingGemma2TextModelTester:
+class EmbeddingGemma2TextModelTester(ModelTesterConfigMixin):
     """Builds a tiny `EmbeddingGemma2TextConfig` and matching text-only inputs."""
 
     config_class = EmbeddingGemma2TextConfig
     if is_torch_available():
         base_model_class = EmbeddingGemma2TextModel
 
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=False,
-        vocab_size=99,
-        hidden_size=32,
-        intermediate_size=37,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        head_dim=8,
-        max_position_embeddings=512,
-        sliding_window=4,
-        hidden_size_per_layer_input=16,
-        embedding_dim=24,
-        pad_token_id=0,
-        initializer_range=0.02,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.sliding_window = sliding_window
-        self.hidden_size_per_layer_input = hidden_size_per_layer_input
-        self.embedding_dim = embedding_dim
-        self.pad_token_id = pad_token_id
-        self.initializer_range = initializer_range
-
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": False,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "intermediate_size": 37,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 512,
+        "sliding_window": 4,
+        "hidden_size_per_layer_input": 16,
+        "embedding_dim": 24,
+        "pad_token_id": 0,
+        "initializer_range": 0.02,
         # Both attention flavours are exercised; the last layer is always forced to `full_attention`.
-        self.layer_types = ["sliding_attention", "full_attention"]
+        "layer_types": ["sliding_attention", "full_attention"],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Gemma 4 (and therefore EmbeddingGemma 2) uses a wider `head_dim` on the full attention layers.
         # Without an explicit override the config falls back to `global_head_dim=512`, which would blow
         # up the size of this tiny model.
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
+        values["per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for layer_idx, layer_type in enumerate(values["layer_types"])
             if layer_type == "full_attention"
         }
-        self.encoder_seq_length = seq_length
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return EmbeddingGemma2TextConfig(
@@ -150,6 +140,8 @@ class EmbeddingGemma2TextModelTester:
 class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
     # EmbeddingGemma 2 is an encoder: there is no `ForCausalLM` / `ForConditionalGeneration`, hence no
     # `GenerationTesterMixin` and no generative classes.
+    model_tester_class = EmbeddingGemma2TextModelTester
+
     all_model_classes = (EmbeddingGemma2TextModel,) if is_torch_available() else ()
     all_generative_model_classes = ()
 
@@ -167,21 +159,20 @@ class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class EmbeddingGemma2ModelTester:
+class EmbeddingGemma2ModelTester(ModelTesterConfigMixin):
     """Builds a tiny composite config: text backbone + reused Gemma 4 vision and audio towers."""
 
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        video_token_id=7,
-        audio_token_id=8,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
+    defaults = {}
+    small_config_overrides = {
+        "mm_tokens_per_image": 2,
+        "image_token_id": 4,
+        "video_token_id": 7,
+        "audio_token_id": 8,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "seq_length": 25,
+        "is_training": True,
+        "vision_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -196,7 +187,7 @@ class EmbeddingGemma2ModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        audio_config={
+        "audio_config": {
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -204,32 +195,34 @@ class EmbeddingGemma2ModelTester:
             "output_proj_dims": 32,
             "subsampling_conv_channels": [8, 8],
         },
-    ):
+        "batch_size": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # Mirrored from the text backbone's config, built from the text tester's defaults.
+        text_values = EmbeddingGemma2TextModelTester.get_small_config_defaults()
+        for key in (
+            "pad_token_id",
+            "num_hidden_layers",
+            "vocab_size",
+            "hidden_size",
+            "embedding_dim",
+            "num_attention_heads",
+        ):
+            values[key] = text_values[key]
+        values["num_channels"] = values["vision_config"]["num_channels"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.audio_token_id = audio_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.llm_tester = EmbeddingGemma2TextModelTester(self.parent)
         self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.audio_config = audio_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
-
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.embedding_dim = self.text_config.embedding_dim
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
 
     def get_config(self):
         return EmbeddingGemma2Config(
@@ -291,6 +284,8 @@ class EmbeddingGemma2ModelTester:
 @require_torch
 class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     # No generative classes: EmbeddingGemma 2 only ever produces embeddings.
+    model_tester_class = EmbeddingGemma2ModelTester
+
     all_model_classes = (EmbeddingGemma2Model,) if is_torch_available() else ()
     all_generative_model_classes = ()
     additional_model_inputs = ["image_position_ids"]
