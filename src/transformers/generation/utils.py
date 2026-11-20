@@ -3029,6 +3029,7 @@ class GenerationMixin(ContinuousMixin):
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
+
         # 9. Call generation mode
         result = decoding_method(
             self,
