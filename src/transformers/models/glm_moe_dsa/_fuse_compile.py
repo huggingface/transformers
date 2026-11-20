@@ -167,9 +167,12 @@ def _layer_fn():
     key = (MODE, DYNAMIC, FULLGRAPH)
     if key not in _compiled:
         mode = {"default": "default", "max": "max-autotune-no-cudagraphs"}[MODE]
-        # static shapes: one artifact per layer kind and padded batch size, more than dynamo's default of 8 per frame
-        torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, 64)
-        _compiled[key] = torch.compile(_decode_layer, mode=mode, dynamic=DYNAMIC, fullgraph=FULLGRAPH)
+        # Static shapes: one artifact per layer kind and padded batch size, more than dynamo's default of 8 per frame.
+        # The limit is passed per region: `torch._dynamo.config` overrides are thread-local and every CB manager runs
+        # its own engine thread, so a value set in one thread is not seen by the next manager's.
+        _compiled[key] = torch.compile(
+            _decode_layer, mode=mode, dynamic=DYNAMIC, fullgraph=FULLGRAPH, recompile_limit=64
+        )
     return _compiled[key]
 
 
