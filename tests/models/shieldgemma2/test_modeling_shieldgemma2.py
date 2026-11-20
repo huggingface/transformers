@@ -52,32 +52,38 @@ class ShieldGemma2ModelTester(VLMModelTester):
         base_model_class = Gemma3Model
         conditional_generation_class = Gemma3ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 7)
-        kwargs.setdefault("seq_length", 8)
-        kwargs.setdefault("vocab_size", 99)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("sliding_window", 8)
-        kwargs.setdefault("layer_types", ["sliding_attention", "full_attention"])
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("mm_tokens_per_image", 4)
-        kwargs.setdefault("num_image_tokens", kwargs["mm_tokens_per_image"])
-        kwargs.setdefault("image_token_id", 0)
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("pad_token_id", 1)
-        kwargs.setdefault("eos_token_id", 2)
-        kwargs.setdefault("bos_token_id", 3)
-        kwargs.setdefault("yes_token_index", 4)
-        kwargs.setdefault("no_token_index", 5)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "batch_size": 7,
+        "seq_length": 8,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "sliding_window": 8,
+        "layer_types": ["sliding_attention", "full_attention"],
+        "image_size": 8,
+        "patch_size": 4,
+        "num_channels": 3,
+        "mm_tokens_per_image": 4,
+        "image_token_id": 0,
+        "tie_word_embeddings": True,
+        "pad_token_id": 1,
+        "eos_token_id": 2,
+        "bos_token_id": 3,
+        "yes_token_index": 4,
+        "no_token_index": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if "num_image_tokens" not in kwargs:
+            values["num_image_tokens"] = values["mm_tokens_per_image"]
+        return values
 
     @property
     def _special_token_ids(self):

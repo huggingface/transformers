@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -45,14 +46,16 @@ if is_vision_available():
     from transformers.image_utils import load_image
 
 
-class LightOnOcrVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_index=10,
-        spatial_merge_size=2,
-        seq_length=7,
-        text_config={
+class LightOnOcrVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "image_token_index": 10,
+        "spatial_merge_size": 2,
+        "seq_length": 7,
+        "batch_size": 3,
+        "num_channels": 3,
+        "text_config": {
             "model_type": "qwen3",
             "seq_length": 7,
             "is_training": True,
@@ -83,8 +86,8 @@ class LightOnOcrVisionText2TextModelTester:
             "attention_dropout": 0.0,
             "head_dim": 8,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "image_size": 112,
             "patch_size": 14,
             "num_channels": 3,
@@ -98,31 +101,33 @@ class LightOnOcrVisionText2TextModelTester:
             "initializer_range": 0.02,
             "rope_theta": 10000.0,
         },
-    ):
-        self.parent = parent
-        self.image_token_index = image_token_index
-        self.spatial_merge_size = spatial_merge_size
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        vision_config = values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
         # Image size must be divisible by patch_size
-        self.image_size = vision_config["image_size"]
-        self.patch_size = vision_config["patch_size"]
+        values["image_size"] = vision_config["image_size"]
+        values["patch_size"] = vision_config["patch_size"]
         # Number of patches after patch conv
-        num_patches = (self.image_size // self.patch_size) ** 2
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
         # After spatial merging, number of tokens is reduced by spatial_merge_size**2
-        self.num_image_tokens = num_patches // (self.spatial_merge_size**2)
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        values["num_image_tokens"] = num_patches // (values["spatial_merge_size"] ** 2)
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return LightOnOcrConfig(
@@ -175,6 +180,8 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     """
     Model tester for `LightOnOcrForConditionalGeneration`.
     """
+
+    model_tester_class = LightOnOcrVisionText2TextModelTester
 
     all_model_classes = (
         (

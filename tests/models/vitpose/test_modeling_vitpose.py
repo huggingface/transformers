@@ -23,6 +23,7 @@ from transformers import VitPoseBackboneConfig, VitPoseConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -38,56 +39,43 @@ if is_torchvision_available():
     from transformers import VitPoseImageProcessor
 
 
-class VitPoseModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=[16 * 8, 12 * 8],
-        patch_size=[8, 8],
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        use_flip_pairs=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        num_labels=2,
-        scale_factor=4,
-        out_indices=[-1],
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.use_flip_pairs = use_flip_pairs
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scale_factor = scale_factor
-        self.out_indices = out_indices
-        self.scope = scope
+class VitPoseModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": [128, 96],  # [16 * 8, 12 * 8]
+        "patch_size": [8, 8],
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "use_flip_pairs": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "num_labels": 2,
+        "scale_factor": 4,
+        "out_indices": [-1],
+        "scope": None,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in VitPose, the seq length equals the number of patches
-        num_patches = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
-        self.seq_length = num_patches
+        image_size, patch_size = values["image_size"], values["patch_size"]
+        values["seq_length"] = (image_size[0] // patch_size[0]) * (image_size[1] // patch_size[1])
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
@@ -167,6 +155,8 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as VitPose does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = VitPoseModelTester
 
     all_model_classes = (VitPoseForPoseEstimation,) if is_torch_available() else ()
 
