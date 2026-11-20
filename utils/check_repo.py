@@ -801,7 +801,9 @@ def find_tested_models(test_file: str) -> set[str]:
     # Same as above, but for ALMModelTester. Audio-LMs typically only set `conditional_generation_class`
     # (no base_model_class). `GraniteSpeechModelTester` is listed because `GraniteSpeechPlusForConditionalGenerationModelTester`
     # uses `ALMModelTester` indirectly through it; in the future we may want to resolve inheritance properly.
-    audio_class_match = re.search(r"class \w+\((?:ALMModelTester|GraniteSpeechModelTester)\)", content)
+    audio_class_match = re.search(
+        r"class \w+\((?:ALMModelTester|GraniteSpeechModelTester|Lfm3AudioModelTester)\)", content
+    )
     if audio_class_match is not None:
         audio_content = content[audio_class_match.start() :]
         for test_class_type in [

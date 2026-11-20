@@ -73,6 +73,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],  # Used via the `input_size` property
     "NemotronAsrStreamingEncoderConfig": ["num_mel_bins"],  # Used via the `subsampling_out_hidden_size` property
     "Lfm3AudioAudioConfig": ["num_mel_bins"],  # Same as `NemotronAsrStreamingEncoderConfig`
+    "Lfm3OmniAudioConfig": ["num_mel_bins"],  # Same as `NemotronAsrStreamingEncoderConfig`
     "Gemma4UnifiedAudioConfig": ["audio_embed_dim"],  # Used as meta data for other attributes/properties
     "Gemma4UnifiedVisionConfig": [
         "patch_size",
@@ -130,6 +131,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     # Read by `generation_lfm3_audio.py`: the interleaved block sizes and the depth decoder's reveal schedule
     "Lfm3AudioConfig": ["interleaved_n_audio", "interleaved_n_text", "maskgit_schedule"],
+    "Lfm3OmniConfig": ["interleaved_n_audio", "interleaved_n_text", "maskgit_schedule"],
     # Same as `PocketTTSConfig`: read by the inherited `generation_pocket_tts.py` and by `loss/loss_lsd.py`
     "GradiumPhononTTSConfig": [
         "frame_rate",
