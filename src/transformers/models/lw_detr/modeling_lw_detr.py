@@ -304,7 +304,6 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
         "attentions": LwDetrViTAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -959,7 +958,6 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         "hidden_states": LwDetrDecoderLayer,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 

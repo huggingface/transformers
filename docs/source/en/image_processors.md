@@ -165,7 +165,7 @@ Typically, images are augmented (to increase performance) and then preprocessed 
 
 This guide uses the torchvision [transforms](https://pytorch.org/vision/stable/transforms.html) module for augmentation.
 
-Start by loading a small sample of the [food101](https://hf.co/datasets/food101) dataset.
+Start by loading a small sample of the [food101](https://hf.co/datasets/ethz/food101) dataset.
 
 ```py
 from datasets import load_dataset

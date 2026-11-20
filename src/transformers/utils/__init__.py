@@ -119,6 +119,7 @@ from .import_utils import (
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
+    is_audio_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
@@ -219,6 +220,7 @@ from .import_utils import (
     is_sinq_available,
     is_sklearn_available,
     is_soundfile_available,
+    is_soxr_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -246,6 +248,7 @@ from .import_utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
+    is_torch_supa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -352,5 +355,8 @@ def get_available_devices() -> frozenset[str]:
 
     if is_torch_musa_available():
         devices.add("musa")
+
+    if is_torch_supa_available():
+        devices.add("supa")
 
     return frozenset(devices)

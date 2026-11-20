@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, global_rng, ids_tensor, random_attention_mask
 from ...test_processing_common import url_to_local_path
@@ -45,89 +46,95 @@ if is_torch_available():
     import torch
 
 
-class HiggsAudioV2ModelTester:
+class HiggsAudioV2ModelTester(ModelTesterConfigMixin):
     base_model_class = HiggsAudioV2Model
     causal_lm_class = HiggsAudioV2ForConditionalGeneration
 
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=14,
-        audio_seq_length=10,
-        is_training=True,
-        main_input_name_for_generation="audio_input_ids",
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="silu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=500000.0,
-        rope_scaling={
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 14,
+        "audio_seq_length": 10,
+        "is_training": True,
+        "main_input_name_for_generation": "audio_input_ids",
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "rms_norm_eps": 1e-05,
+        "use_cache": True,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "pretraining_tp": 1,
+        "tie_word_embeddings": False,
+        "rope_theta": 500000.0,
+        "rope_scaling": {
             "factor": 32.0,
             "high_freq_factor": 4.0,
             "low_freq_factor": 1.0,
             "original_max_position_embeddings": 8192,
             "rope_type": "llama3",
         },
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=16,
-        num_codebooks=2,
-    ):
+        "attention_bias": False,
+        "attention_dropout": 0.0,
+        "mlp_bias": False,
+        "head_dim": 16,
+        "num_codebooks": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["codebook_size"] = values["hidden_size"] // values["num_codebooks"]
+        values["audio_token_id"] = values["vocab_size"] - 1
+        values["audio_bos_token_id"] = values["vocab_size"] - 2
+        values["audio_delay_token_id"] = values["vocab_size"] - 3
+        values["audio_stream_bos_id"] = values["hidden_size"] // values["num_codebooks"] - 1
+        values["audio_stream_eos_id"] = values["hidden_size"] // values["num_codebooks"] - 2
+        # the model config is built from these keys, which are also set as attributes
+        config_keys = (
+            "vocab_size",
+            "hidden_size",
+            "intermediate_size",
+            "num_hidden_layers",
+            "num_attention_heads",
+            "num_key_value_heads",
+            "hidden_act",
+            "max_position_embeddings",
+            "initializer_range",
+            "rms_norm_eps",
+            "use_cache",
+            "pad_token_id",
+            "bos_token_id",
+            "eos_token_id",
+            "pretraining_tp",
+            "tie_word_embeddings",
+            "rope_theta",
+            "rope_scaling",
+            "attention_bias",
+            "attention_dropout",
+            "mlp_bias",
+            "head_dim",
+            "num_codebooks",
+            "codebook_size",
+            "audio_token_id",
+            "audio_bos_token_id",
+            "audio_delay_token_id",
+            "audio_stream_bos_id",
+            "audio_stream_eos_id",
+        )
+        values["config_kwargs"] = {key: values[key] for key in config_keys}
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.audio_seq_length = audio_seq_length
-        self.is_training = is_training
-        self.main_input_name_for_generation = main_input_name_for_generation
-
-        self.config_kwargs = {
-            "vocab_size": vocab_size,
-            "hidden_size": hidden_size,
-            "intermediate_size": intermediate_size,
-            "num_hidden_layers": num_hidden_layers,
-            "num_attention_heads": num_attention_heads,
-            "num_key_value_heads": num_key_value_heads,
-            "hidden_act": hidden_act,
-            "max_position_embeddings": max_position_embeddings,
-            "initializer_range": initializer_range,
-            "rms_norm_eps": rms_norm_eps,
-            "use_cache": use_cache,
-            "pad_token_id": pad_token_id,
-            "bos_token_id": bos_token_id,
-            "eos_token_id": eos_token_id,
-            "pretraining_tp": pretraining_tp,
-            "tie_word_embeddings": tie_word_embeddings,
-            "rope_theta": rope_theta,
-            "rope_scaling": rope_scaling,
-            "attention_bias": attention_bias,
-            "attention_dropout": attention_dropout,
-            "mlp_bias": mlp_bias,
-            "head_dim": head_dim,
-            "num_codebooks": num_codebooks,
-            "codebook_size": hidden_size // num_codebooks,
-            "audio_token_id": vocab_size - 1,
-            "audio_bos_token_id": vocab_size - 2,
-            "audio_delay_token_id": vocab_size - 3,
-            "audio_stream_bos_id": hidden_size // num_codebooks - 1,
-            "audio_stream_eos_id": hidden_size // num_codebooks - 2,
-        }
-
-        # also set them as attributes
-        for key, value in self.config_kwargs.items():
+        for key, value in self.get_small_config_defaults(**kwargs).items():
             setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
@@ -187,6 +194,8 @@ class HiggsAudioV2ModelTester:
 
 @require_torch
 class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = HiggsAudioV2ModelTester
+
     all_model_classes = (HiggsAudioV2ForConditionalGeneration, HiggsAudioV2Model) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-speech": HiggsAudioV2ForConditionalGeneration} if is_torch_available() else {}
 
@@ -387,7 +396,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.assertTrue(torch.isfinite(outputs.loss))
 
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
@@ -419,10 +428,10 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -443,7 +452,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[1]
             new_audio_input_ids_len = outputs_cached.audio_sequences.shape[1]
             inputs["input_ids"] = outputs_cached.sequences
@@ -473,7 +482,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
 
 class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):

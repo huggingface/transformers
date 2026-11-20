@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_xlnet import XLNetConfig
 
 
@@ -629,7 +630,6 @@ class XLNetPreTrainedModel(PreTrainedModel):
     config: XLNetConfig
     base_model_prefix = "transformer"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
@@ -1232,11 +1232,20 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_mems=None, is_first_iteration=False, **kwargs
-    ):
-        # Overwritten -- this model has unique input preparation
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        # Non standard cache name, so need to override here
+        if "mems" in outputs:
+            model_kwargs["mems"] = outputs.mems
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def prepare_inputs_for_generation(self, input_ids, cache=None, use_mems=None, is_first_iteration=False, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1247,7 +1256,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
 
-        if past_key_values:
+        if kwargs.get("mems"):
             input_ids = torch.cat([input_ids[:, -offset:], dummy_token], dim=1)
         else:
             input_ids = torch.cat([input_ids, dummy_token], dim=1)
@@ -1273,8 +1282,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         }
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past_key_values:
-            model_inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
+        if kwargs.get("mems"):
+            model_inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in kwargs.get("mems"))
 
         # Attention mask is computed on the fly on XLNetModel.forward()
         kwargs.pop("attention_mask", None)

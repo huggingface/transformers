@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -49,50 +50,42 @@ if is_torch_available():
     )
 
 
-class Nemotron3DiarizationModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=256,
-        is_training=False,
-        num_mel_bins=8,
-        subsampling_factor=8,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=32,
-        speaker_hidden_size=8,
-        num_speakers=4,
-        speaker_cache_length=8,
-        fifo_length=4,
-        streaming_chunk_length=64,
-        chunk_right_context=0,
-        speaker_cache_update_period=4,
-    ):
-        # the tiny model uses the same FIFO sizes offline and streaming, so that the two modes can be compared
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.num_mel_bins = num_mel_bins
-        self.subsampling_factor = subsampling_factor
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.speaker_hidden_size = speaker_hidden_size
-        self.num_speakers = num_speakers
-        self.speaker_cache_length = speaker_cache_length
-        self.fifo_length = fifo_length
+class Nemotron3DiarizationModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    # the tiny model uses the same FIFO sizes offline and streaming, so that the two modes can be compared
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 256,
+        "is_training": False,
+        "num_mel_bins": 8,
+        "subsampling_factor": 8,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 32,
+        "speaker_hidden_size": 8,
+        "num_speakers": 4,
+        "speaker_cache_length": 8,
+        "fifo_length": 4,
         # named `streaming_chunk_length` because `chunk_length` has a different meaning for `ModelTesterMixin`
-        self.streaming_chunk_length = streaming_chunk_length
-        self.chunk_right_context = chunk_right_context
-        self.speaker_cache_update_period = speaker_cache_update_period
+        "streaming_chunk_length": 64,
+        "chunk_right_context": 0,
+        "speaker_cache_update_period": 4,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # A single streaming step: the whole input fits in one chunk, so recorded hidden states and attentions have the
         # encoder frame count as sequence length.
-        self.encoder_seq_length = seq_length // subsampling_factor
-        self.key_length = self.encoder_seq_length
+        values["encoder_seq_length"] = values["seq_length"] // values["subsampling_factor"]
+        values["key_length"] = values["encoder_seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Nemotron3DiarizationConfig(
@@ -149,6 +142,8 @@ class Nemotron3DiarizationModelTester:
 
 @require_torch
 class Nemotron3DiarizationModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Nemotron3DiarizationModelTester
+
     all_model_classes = (
         (Nemotron3DiarizationModel, Nemotron3DiarizationForAudioFrameClassification) if is_torch_available() else ()
     )

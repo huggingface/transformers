@@ -19,6 +19,7 @@ import re
 import types
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from enum import Enum
 from functools import lru_cache, partial
@@ -60,14 +61,14 @@ BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 # Extracts the Args: block from the docstring
-args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+args_re = re.compile(r"\n\s*Args:\n(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
 # Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
 (?:^|\n)  # Match the start of the args block, or a newline
-\s*(\w+):\s*  # Capture the argument name and strip spacing
+([ \t]*)(\w+)(?:[ \t]*\([^()\n]*\))?:\s*  # Capture the indentation and the argument name, skip a "(type)"
 (.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
-(?=\n\s*\w+:|\Z)  # Stop when you hit the next argument or the end of the block
+(?=\n(?!\1[ \t])[ \t]*\w+(?:[ \t]*\([^()\n]*\))?:|\Z)  # Stop at the next "name:" not indented deeper, or the end
 """,
     re.DOTALL | re.VERBOSE,
 )
@@ -272,14 +273,14 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
 
     # Clean and store the sections
     description = description_match.group(1).strip() if description_match else None
-    docstring_args = args_match.group(1).strip() if args_match else None
+    docstring_args = args_match.group(1) if args_match else None
     returns = returns_match.group(1).strip() if returns_match else None
 
     # Parsing the arguments into a dictionary
     if docstring_args is not None:
         docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
         matches = args_split_re.findall(docstring_args)
-        args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
+        args_dict = {match[1]: re.sub(r"\s*\n+\s*", " ", match[2].strip()) for match in matches}
     else:
         args_dict = {}
 
@@ -578,8 +579,7 @@ def _cached_compile_jinja_template(chat_template):
             # The class is only initiated by jinja.
             super().__init__(environment)
             environment.extend(activate_tracker=self.activate_tracker)
-            self._rendered_blocks = None
-            self._generation_indices = None
+            self._tracking = ContextVar("assistant_tracker", default=None)
 
         def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
             lineno = next(parser.stream).lineno
@@ -589,28 +589,26 @@ def _cached_compile_jinja_template(chat_template):
         @jinja2.pass_eval_context
         def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
             rv = caller()
-            if self.is_active():
+            if (tracking := self._tracking.get()) is not None:
                 # Only track generation indices if the tracker is active
-                start_index = len("".join(self._rendered_blocks))
+                rendered_blocks, generation_indices = tracking
+                start_index = len("".join(rendered_blocks))
                 end_index = start_index + len(rv)
-                self._generation_indices.append((start_index, end_index))
+                generation_indices.append((start_index, end_index))
             return rv
 
         def is_active(self) -> bool:
-            return self._rendered_blocks is not None or self._generation_indices is not None
+            return self._tracking.get() is not None
 
         @contextmanager
         def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
+            if self.is_active():
+                raise ValueError("AssistantTracker should not be reused before closed")
+            token = self._tracking.set((rendered_blocks, generation_indices))
             try:
-                if self.is_active():
-                    raise ValueError("AssistantTracker should not be reused before closed")
-                self._rendered_blocks = rendered_blocks
-                self._generation_indices = generation_indices
-
                 yield
             finally:
-                self._rendered_blocks = None
-                self._generation_indices = None
+                self._tracking.reset(token)
 
     if version.parse(jinja2.__version__) < version.parse("3.1.6"):
         # Older versions have known sandbox escapes, and chat templates from the Hub are untrusted code
@@ -686,6 +684,44 @@ def _alias_reasoning_fields(chat: ChatType) -> ChatType:
                 message = {"thinking": reasoning, **message, "reasoning_content": reasoning}
         aliased_chat.append(message)
     return aliased_chat
+
+
+def _message_objects_to_dicts(value: Any) -> Any:
+    # Unlike `_plain_template_data`, this leaves media (images, arrays, tensors) untouched, because processors still
+    # need to load them from the content blocks after this runs.
+    if isinstance(value, Mapping):
+        return {key: _message_objects_to_dicts(item) for key, item in value.items()}
+    elif isinstance(value, list):
+        return [_message_objects_to_dicts(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_message_objects_to_dicts(item) for item in value)
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # We don't use `dataclasses.asdict()` here because it deep-copies everything, including any media in the fields
+        return {
+            field.name: _message_objects_to_dicts(getattr(value, field.name)) for field in dataclasses.fields(value)
+        }
+    elif callable(getattr(value, "model_dump", None)):
+        # Pydantic models, like the messages returned by the OpenAI SDK
+        return _message_objects_to_dicts(value.model_dump())
+    else:
+        # Strings, numbers and media are returned as-is
+        return value
+
+
+def _normalize_chat_messages(conversation: Any) -> list[dict]:
+    # First, convert message objects (and any objects nested inside them, like tool calls or content blocks) to dicts.
+    # We do this before anything else touches the chat, because control token sanitization and media loading
+    # only know how to walk dicts and lists.
+    messages = _message_objects_to_dicts(getattr(conversation, "messages", conversation))
+    normalized_messages = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
+        # Next, drop the keys whose value is None. Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`,
+        # but many chat templates crash or produce wrong output (e.g. rendering literal "None") on them, while they
+        # handle a missing key.
+        normalized_messages.append({key: value for key, value in message.items() if value is not None})
+    return normalized_messages
 
 
 def _plain_template_data(value: Any) -> Any:

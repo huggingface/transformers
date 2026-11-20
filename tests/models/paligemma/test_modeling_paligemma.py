@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -43,18 +44,18 @@ if is_torch_available():
     import torch
 
 
-class PaliGemmaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
-        seq_length=25,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        projection_dim=64,
-        text_config={
+class PaliGemmaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
+        "image_token_index": 0,
+        "projector_hidden_act": "gelu",
+        "seq_length": 25,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "projection_dim": 64,
+        "text_config": {
             "model_type": "gemma",
             "seq_length": 128,
             "is_training": True,
@@ -79,8 +80,8 @@ class PaliGemmaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -97,32 +98,27 @@ class PaliGemmaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        use_cache=False,
-    ):
+        "use_cache": False,
+        "batch_size": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["num_channels"] = values["vision_config"]["num_channels"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.projection_dim = projection_dim
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-        self.use_cache = use_cache
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PaliGemmaConfig(
@@ -177,6 +173,8 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     """
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
+
+    model_tester_class = PaliGemmaVisionText2TextModelTester
 
     all_model_classes = (
         (
