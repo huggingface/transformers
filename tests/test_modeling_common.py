@@ -1781,8 +1781,12 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
-                pre_hook_mock = unittest.mock.Mock(return_value=None)
-                checkpointing_layer.register_forward_pre_hook(pre_hook_mock)
+                # record whether gradients are on at each call of the layer: only those calls are checkpointed (HrmText
+                # runs some of its layers under `torch.no_grad()`)
+                grad_enabled_calls = []
+                checkpointing_layer.register_forward_pre_hook(
+                    lambda *_: grad_enabled_calls.append(torch.is_grad_enabled())
+                )
                 # count the runs of the forward that the layer hands to the checkpoint function
                 checkpoint_func = checkpointing_layer._gradient_checkpointing_func
                 forward_mock = unittest.mock.Mock()
@@ -1803,7 +1807,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
                     # forward more than once.
                     self.assertGreater(forward_mock.call_count, 1)
-                    self.assertEqual(pre_hook_mock.call_count, checkpoint_mock.call_count)
+                    self.assertEqual(sum(grad_enabled_calls), checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
