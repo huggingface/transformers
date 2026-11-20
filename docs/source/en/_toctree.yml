@@ -945,6 +945,8 @@
         title: RWKV
       - local: model_doc/sarvam_mla
         title: SarvamMLA
+      - local: model_doc/sarvam_moe
+        title: SarvamMoE
       - local: model_doc/seed_oss
         title: Seed-Oss
       - local: model_doc/smollm3
