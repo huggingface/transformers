@@ -611,12 +611,15 @@ class _RowReader:
         return torch.cat(out)
 
 
-def _streamed_embedding_forward(store, name, module):
+def _streamed_embedding_forward(store, name, module, model_dtype):
+    # Rows come out in the compute dtype: the embedding's own, unless it is a quantized (e.g. FP8) one, then the model's
+    weight = module.weight
+    dtype = weight.dtype if weight.is_floating_point() and weight.element_size() > 1 else model_dtype
+
     @torch.compiler.disable
     def forward(input_ids):
         unique, inverse = torch.unique(input_ids.reshape(-1), return_inverse=True)
-        # In the dtype of the embedding it replaces, whatever the checkpoint's (e.g. FP8 rows dequantized in float32)
-        rows = store.row_readers[name].read(unique.tolist()).to(store.device, module.weight.dtype)
+        rows = store.row_readers[name].read(unique.tolist()).to(store.device, dtype)
         return rows[inverse].view(*input_ids.shape, -1)
 
     return forward
@@ -650,7 +653,7 @@ def apply_experts_offload(model: nn.Module, patterns: list[str], device, cache_b
         ):
             store.embeddings[name] = module
             store.params[name] = ["weight"]
-            module.forward = _streamed_embedding_forward(store, name, module)
+            module.forward = _streamed_embedding_forward(store, name, module, model.dtype)
     if not store.layers and not store.embeddings:
         raise ValueError(f"No experts module or embedding matches {patterns}")
     # Tied params (e.g. `lm_head.weight`) are not tied yet on the meta model: count them once

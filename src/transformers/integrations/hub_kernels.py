@@ -1023,12 +1023,19 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         applicable_params = tuple(inspect.signature(implementation).parameters)
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
+        # On MPS the original packages (FLA, causal-conv1d) don't run: use our Metal kernels, never the torch loop
+        from .metal_linear_attention import METAL_IMPLEMENTATIONS
+
+        metal_implementation = METAL_IMPLEMENTATIONS.get(func_name) if torch.backends.mps.is_available() else None
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
             # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
+
+            if metal_implementation is not None and args[0].device.type == "mps":
+                return metal_implementation(*args, **kwargs)
 
             if not is_new_implementation and (
                 kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None
