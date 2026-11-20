@@ -39,6 +39,9 @@ from transformers import (
     FeatureExtractionMixin,
     ImageProcessingMixin,
     LlamaTokenizer,
+    LlavaOnevisionImageProcessor,
+    LlavaOnevisionImageProcessorPil,
+    LlavaOnevisionProcessor,
     LlavaOnevisionVideoProcessor,
     LlavaProcessor,
     ProcessorMixin,
@@ -58,6 +61,8 @@ from transformers.testing_utils import (
     is_staging_test,
     require_scipy,
     require_tokenizers,
+    require_torchvision,
+    require_vision,
 )
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
@@ -620,6 +625,29 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # Verify they are different types
             self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
             self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessor)
+
+    @require_torchvision
+    @require_vision
+    def test_processor_from_pretrained_with_sub_processor_kwargs(self):
+        # LlavaOnevisionVideoProcessor has no PIL backend, so `backend="pil"` has to reach the image processor only
+        processor = LlavaOnevisionProcessor(
+            image_processor=LlavaOnevisionImageProcessor(),
+            tokenizer=LlamaTokenizer.from_pretrained(SAMPLE_VOCAB_LLAMA),
+            video_processor=LlavaOnevisionVideoProcessor(),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+
+            loaded_processor = AutoProcessor.from_pretrained(tmp_dir, image_processor_kwargs={"backend": "pil"})
+            self.assertIsInstance(loaded_processor.image_processor, LlavaOnevisionImageProcessorPil)
+            self.assertIsInstance(loaded_processor.video_processor, LlavaOnevisionVideoProcessor)
+
+            with self.assertRaisesRegex(ValueError, "feature_extractor_kwargs"):
+                AutoProcessor.from_pretrained(tmp_dir, feature_extractor_kwargs={"sampling_rate": 16000})
+            with self.assertRaisesRegex(ValueError, "image_processor_kwargs"):
+                AutoProcessor.from_pretrained(
+                    tmp_dir, image_processor=processor.image_processor, image_processor_kwargs={"backend": "pil"}
+                )
 
 
 @is_staging_test

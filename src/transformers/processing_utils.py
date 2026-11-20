@@ -1834,7 +1834,9 @@ class ProcessorMixin(PushToHubMixin):
             **kwargs
                 Additional keyword arguments passed along to both
                 [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
-                [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
+                [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Keyword arguments for a single
+                sub-processor go in `<attribute>_kwargs`, such as `image_processor_kwargs={"backend": "pil"}`, and
+                override the shared ones for that sub-processor.
         """
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
@@ -1963,9 +1965,25 @@ class ProcessorMixin(PushToHubMixin):
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
+
+        # `<attribute>_kwargs` go to that sub-processor only, on top of the shared kwargs
+        sub_processor_kwargs = {name: kwargs.pop(f"{name}_kwargs", None) or {} for name in sub_processors}
+        unknown = [
+            f"{name}_kwargs" for name in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys() if kwargs.pop(f"{name}_kwargs", None)
+        ]
+        if unknown:
+            raise ValueError(
+                f"{cls.__name__} has no sub-processor for {unknown}. Its sub-processors are {sub_processors}."
+            )
+        for name, value in sub_processor_kwargs.items():
+            if value and kwargs.get(name) is not None:
+                raise ValueError(f"Pass either `{name}` or `{name}_kwargs`, not both.")
+
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
+            own_kwargs = sub_processor_kwargs[sub_processor_type]
+            loading_kwargs = {**kwargs, **own_kwargs}
 
             if (
                 "tokenizer" in sub_processor_type
@@ -1975,11 +1993,11 @@ class ProcessorMixin(PushToHubMixin):
                     from .tokenization_utils_tokenizers import TokenizersBackend
 
                     tokenizer = TokenizersBackend.from_pretrained(
-                        pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                        pretrained_model_name_or_path, subfolder=subfolder, **loading_kwargs
                     )
                 else:
                     tokenizer = cls._load_tokenizer_from_pretrained(
-                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **loading_kwargs
                     )
                 args.append(tokenizer)
             elif is_primary:
@@ -1994,7 +2012,7 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    pretrained_model_name_or_path, subfolder=subfolder, **loading_kwargs
                 )
                 args.append(sub_processor)
 
@@ -2012,7 +2030,13 @@ class ProcessorMixin(PushToHubMixin):
                             f"Config keys: {list(sub_processor_config.keys())}"
                         )
                     processor_class = cls.get_possibly_dynamic_module(class_name)
-                    sub_processor = processor_class(**sub_processor_config)
+                    for key in ("backend", "use_fast"):
+                        if key in own_kwargs:
+                            raise ValueError(
+                                f"`{key}` can't be set in `{sub_processor_type}_kwargs`: `{sub_processor_type}` is "
+                                "built from `processor_config.json`, not through an auto class."
+                            )
+                    sub_processor = processor_class(**{**sub_processor_config, **own_kwargs})
                     args.append(sub_processor)
                 else:
                     raise ValueError(
