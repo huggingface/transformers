@@ -105,6 +105,7 @@ class Inkling2TextModelTest(CausalLMModelTest, unittest.TestCase):
     @require_causal_conv1d
     @require_torch_accelerator
     def test_padding_free_matches_separate_sequences(self):
+        """Tests that packed sequences do not leak through the causal_conv1 layers."""
         config = self.model_tester.get_config()
         model = Inkling2ForCausalLM(config).to(torch_device).eval()
         features = [{"input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9]}, {"input_ids": [10, 11, 12, 13, 14, 15, 16]}]
