@@ -303,7 +303,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["NemotronHBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -315,12 +314,9 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         "attentions": NemotronHAttention,
         "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-    ]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)

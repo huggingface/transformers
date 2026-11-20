@@ -46,21 +46,13 @@ class YoutuModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = YoutuModel
 
-    def __init__(
-        self,
-        parent,
-        kv_lora_rank=16,
-        q_lora_rank=32,
-        qk_rope_head_dim=32,
-        qk_nope_head_dim=32,
-        v_head_dim=32,
-    ):
-        super().__init__(parent=parent)
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_rope_head_dim": 32,
+        "qk_nope_head_dim": 32,
+        "v_head_dim": 32,
+    }
 
 
 @require_torch

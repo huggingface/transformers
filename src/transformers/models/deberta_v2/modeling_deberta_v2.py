@@ -681,7 +681,6 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)

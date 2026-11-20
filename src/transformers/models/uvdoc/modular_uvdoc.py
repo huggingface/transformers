@@ -471,7 +471,6 @@ class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
         "hidden_states": UVDocBridgeBlock,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         PreTrainedModel._init_weights(self, module)

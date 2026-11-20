@@ -39,14 +39,19 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeModelOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -56,52 +61,35 @@ from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vi
 from .configuration_inkling2 import Inkling2Config, Inkling2TextConfig, Inkling2VisionConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Inkling2 outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class Inkling2ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
+logger = logging.get_logger(__name__)
 
-    image_hidden_states: torch.Tensor | None = None
+
+@auto_docstring
+@dataclass
+class Inkling2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Inkling2 causal language model (or autoregressive) outputs.
-    """
-)
+
+@auto_docstring
 @dataclass
-class Inkling2CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
+class Inkling2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -421,10 +409,10 @@ class Inkling2SlidingAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.k_sconv = Inkling2ShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
-        )
+        ).to(dtype=torch.float32)
         self.v_sconv = Inkling2ShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-        )
+        ).to(dtype=torch.float32)
         self.rel_logits_proj = Inkling2RelativeLogits(config.d_rel, self.rel_extent)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
@@ -693,15 +681,15 @@ class Inkling2Experts(nn.Module):
 
 
 class Inkling2TopKRouter(nn.Module):
-    def __init__(self, config: Inkling2Config):
+    def __init__(self, config: Inkling2TextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # routing runs in fp32, as in the original
@@ -732,9 +720,8 @@ class Inkling2SparseMoeBlock(nn.Module):
 class Inkling2BlockAttentionResidual(nn.Module):
     def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
-        self.query = nn.Parameter(
-            torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
-        )
+        shape = (config.hidden_size,) if num_queries == 1 else (num_queries, config.hidden_size)
+        self.query = nn.Parameter(torch.zeros(*shape, dtype=torch.float32))
         self.norm = Inkling2UnweightedRMSNorm()
 
     def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -764,10 +751,10 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -821,10 +808,10 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -909,7 +896,6 @@ class Inkling2VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1161,7 +1147,6 @@ class Inkling2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Inkling2SlidingDecoderLayer", "Inkling2FullDecoderLayer", "Inkling2VisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     # The relative position bias flows through the attention interface as a `position_bias` (duh)
     # kwarg that only the eager path consumes; other backends need a score_mod/kernel
     _supports_flash_attn = False
@@ -1186,7 +1171,6 @@ class Inkling2PreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(Inkling2TopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.get_text_config().initializer_range
@@ -1610,7 +1594,8 @@ class Inkling2Model(Inkling2PreTrainedModel):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
             router_logits=outputs.router_logits,
         )
 
@@ -1732,7 +1717,8 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

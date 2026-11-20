@@ -93,7 +93,6 @@ class DeepseekV2Config(LlamaConfig):
     }
 
     model_type = "deepseek_v2"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_experts": "n_routed_experts",
     }
@@ -169,6 +168,7 @@ class DeepseekV2TopkRouter(Qwen2MoeTopKRouter):
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -224,7 +224,6 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 
 
 class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -398,8 +397,8 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
         "attentions": DeepseekV2Attention,
         "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
     }
+    _keep_in_fp32_modules_strict = ["gate.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2TopkRouter):
