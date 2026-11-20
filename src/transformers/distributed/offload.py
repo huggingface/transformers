@@ -615,7 +615,8 @@ def _streamed_embedding_forward(store, name, module):
     @torch.compiler.disable
     def forward(input_ids):
         unique, inverse = torch.unique(input_ids.reshape(-1), return_inverse=True)
-        rows = store.row_readers[name].read(unique.tolist()).to(store.device)
+        # In the dtype of the embedding it replaces, whatever the checkpoint's (e.g. FP8 rows dequantized in float32)
+        rows = store.row_readers[name].read(unique.tolist()).to(store.device, module.weight.dtype)
         return rows[inverse].view(*input_ids.shape, -1)
 
     return forward
