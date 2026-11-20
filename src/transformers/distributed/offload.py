@@ -450,7 +450,24 @@ def _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwa
         # Gathers only the routed slots: `grouped_mm` iterates every slot on the host where it has no device kernel
         # (sm < 90), and the pool has thousands of them
         return batched_mm_experts_forward(module, hidden_states, slots, top_k_weights)
-    return original_forward(hidden_states, slots, top_k_weights, **kwargs)
+    if not module.gate_up_proj.is_floating_point():  # quantized kernels index the pool directly
+        return original_forward(hidden_states, slots, top_k_weights, **kwargs)
+    # A prompt: the kernel over only the routed slots (a compact bank), not every slot of the pool
+    used, compact = torch.unique(slots, return_inverse=True)
+    used = used[used < module.num_experts]
+    if not used.numel():  # every route is a miss: pass 2 computes them
+        return torch.zeros_like(hidden_states)
+    banks = {name: getattr(module, name) for name in ("gate_up_proj", "down_proj")}
+    num_slots = module.num_experts
+    try:
+        for name, bank in banks.items():
+            setattr(module, name, bank[used])
+        module.num_experts = used.numel()  # sentinels (ids >= num_slots) sort last in `unique`: still >= used.numel()
+        return original_forward(hidden_states, compact, top_k_weights, **kwargs)
+    finally:
+        for name, bank in banks.items():
+            setattr(module, name, bank)
+        module.num_experts = num_slots
 
 
 @torch.library.custom_op(
