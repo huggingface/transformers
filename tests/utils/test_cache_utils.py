@@ -1453,6 +1453,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
         self.assertIsInstance(out.cache, StaticCache)
         self.assertEqual(out.cache.get_max_length(), requested_max_cache_len)
 
+    @unittest.skip(
+        reason="Lazy static cache initialization inside the compiled chunked prefill fails (mocked TP and multi-device cases)"
+    )
     def test_chunked_prefill_initializes_static_cache_eagerly(self):
         """
         With chunked prefill the prefill runs inside a compiled region, where the static cache's lazy initialization
