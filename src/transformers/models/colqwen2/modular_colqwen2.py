@@ -108,6 +108,8 @@ class ColQwen2Processor(ColPaliProcessor):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
+            if isinstance(text, str):
+                text = [text]
             text = [f"{self.query_prefix}{sample}{suffix}\n" for sample in text]
 
         model_inputs = ProcessorMixin.__call__(images=images, text=text, **output_kwargs)

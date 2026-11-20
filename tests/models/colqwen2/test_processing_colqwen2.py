@@ -127,6 +127,17 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch_feature["input_ids"], torch.Tensor)
         self.assertEqual(batch_feature["input_ids"].shape[0], len(queries))
 
+    def test_process_queries_single_string(self):
+        # A single query passed as a string is one query, not one query per character
+        query = "Is attention really all you need?"
+        processor = self.get_processor()
+
+        batch_feature = processor.process_queries(text=query, return_tensors="pt")
+        expected = processor.process_queries(text=[query], return_tensors="pt")
+
+        self.assertEqual(batch_feature["input_ids"].shape[0], 1)
+        self.assertEqual(batch_feature["input_ids"].tolist(), expected["input_ids"].tolist())
+
     # The following tests override the parent tests because ColQwen2Processor can only take one of images or text as input at a time.
 
     def _test_modality_processor_defaults_preserved_by_modality_kwargs(self, modality):
