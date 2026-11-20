@@ -277,9 +277,9 @@ class ExpertsOffloadStore:
         """One expert's rows, read with `pread` straight to the device (MPS, CPU)."""
         self.reads += 1
         return {
-            reader.param: slice_[rows].to(self.device, dtype)[0]
+            param: slice_[rows].to(self.device, dtype)[0]
             for reader in self.readers[layer]
-            for slice_, rows, dtype, _ in reader.sources(expert)
+            for param, slice_, rows, dtype, _ in reader.sources(expert)
         }
 
     def fetch(self, layer, experts):
@@ -309,16 +309,16 @@ class ExpertsOffloadStore:
             plans, where = {}, {}  # file -> {key: [rows]}; (key, position) -> (expert, param, dtype)
             for expert in futures:
                 for reader in self.readers[layer]:
-                    ((_, rows, dtype, key),) = reader.sources(expert)
-                    slices = plans.setdefault(self.key_files[key], {}).setdefault(key, [])
-                    where[(key, len(slices))] = (expert, reader.param, dtype)
-                    slices.append(rows)
+                    for param, _, rows, dtype, key in reader.sources(expert):
+                        slices = plans.setdefault(self.key_files[key], {}).setdefault(key, [])
+                        where[(key, len(slices))] = (expert, param, dtype)
+                        slices.append(rows)
             loaders = [
                 self._handle(file).prefetch(plan, device=str(self.device), threads=16) for file, plan in plans.items()
             ]
             self._mark("loaders_started", layer, loaders=len(loaders))
             outs = {expert: {} for expert in futures}
-            num_params = len(self.readers[layer])
+            num_params = sum(len(reader.banks) for reader in self.readers[layer])
             for loader in loaders:
                 for (key, position), tensor in loader:
                     expert, param, dtype = where[(key, position)]
@@ -540,25 +540,31 @@ def _(handle, hidden_states, top_k_index, top_k_weights, output, state) -> None:
 
 
 class _ExpertReader:
-    """One param of an experts module, read one expert at a time: expert `e` is row `e` of the checkpoint's stacked
-    bank (the transformers format), copied as is into a pool slot. Nothing is converted per read."""
+    """The params read for one target of an experts module, one expert at a time: expert `e` is row `e` of each of the
+    checkpoint's stacked banks (the transformers format), copied as is into a pool slot. Nothing is converted per read.
+    A target can carry several banks: a quantized param loads with its serialized companions (`down_proj`,
+    `down_proj_scales`, ...) through an identity converter."""
 
     def __init__(self, target_name, mapping, reads, hf_quantizer):
-        from ..core_model_loading import WeightConverter
+        from ..core_model_loading import WeightConverter, _IdentityOp
 
+        converts = isinstance(mapping, WeightConverter) and not all(
+            isinstance(op, _IdentityOp) for op in mapping.operations
+        )
         needs_quantization = hf_quantizer is not None and getattr(mapping, "quantization_operation", None) is not None
-        if isinstance(mapping, WeightConverter) or needs_quantization:
+        if converts or needs_quantization:
             raise ValueError(
                 f"Streamed experts read each expert as one row of a stacked bank, but `{target_name}` would have to be "
-                "converted (or quantized) on every read. Load the model once and save it in the transformers format: "
-                "`model.save_pretrained(path, save_original_format=False)`, then stream from `path`."
+                f"converted ({type(mapping).__name__}: {getattr(mapping, 'operations', None)}, quantize on load: "
+                f"{needs_quantization}) or quantized on every read. Load the model once and save it in the transformers "
+                "format: `model.save_pretrained(path, save_original_format=False)`, then stream from `path`."
             )
-        self.param = target_name.rpartition(".")[2]
-        ((self.bank, self.dtype, self.key),) = next(iter(reads.values()))
+        # (param, bank slice, dtype, checkpoint key) per bank
+        self.banks = [(key.rpartition(".")[2], bank, dtype, key) for ((bank, dtype, key),) in reads.values()]
 
     def sources(self, expert) -> list[tuple]:
-        """`(slice, rows, dtype, checkpoint key)` of the expert's row."""
-        return [(self.bank, slice(expert, expert + 1), self.dtype, self.key)]
+        """`(param, slice, rows, dtype, checkpoint key)` of the expert's row in each bank."""
+        return [(param, bank, slice(expert, expert + 1), dtype, key) for param, bank, dtype, key in self.banks]
 
 
 class _RowReader:

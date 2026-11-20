@@ -162,6 +162,59 @@ class MetalExpertsOffloadTest(unittest.TestCase):
             self.assertEqual(next(iter(store.pools.values())).layout["gate_up_proj"][1], torch.uint32)
             self.assertGreater(store.reads, 0)
 
+    def test_mixed_plan_streams_quantized_experts(self):
+        """A saved plan mixing Metal experts and FP8 elsewhere: experts load through an identity converter with their
+        scales, which still reads one row per bank."""
+        from safetensors.torch import save_file
+
+        from transformers.integrations.metal_quantization import _affine_quantize_tensor
+
+        torch.manual_seed(0)
+        config = Qwen3MoeConfig(
+            vocab_size=64,
+            hidden_size=128,
+            intermediate_size=128,
+            moe_intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            num_experts=8,
+            num_experts_per_tok=2,
+        )
+        model = Qwen3MoeForCausalLM(config)
+        state = {}
+        for key, value in model.state_dict().items():
+            if key.endswith(("experts.gate_up_proj", "experts.down_proj")):
+                experts, rows, columns = value.shape
+                packed, scales, biases = _affine_quantize_tensor(value.reshape(-1, columns).float(), 64, 4)
+                state[key] = packed.reshape(experts, rows, -1)
+                state[f"{key}_scales"] = scales.reshape(experts, rows, -1)
+                state[f"{key}_qbiases"] = biases.reshape(experts, rows, -1)
+            else:
+                state[key] = value.contiguous()
+        config.quantization_config = {
+            "*.mlp.experts": {"quant_method": "metal", "bits": 4, "group_size": 64},
+            "*": {
+                "quant_method": "fp8",
+                "activation_scheme": "dynamic",
+                "weight_block_size": [128, 128],
+                "modules_to_not_convert": ["lm_head"],
+            },
+        }
+        ids = torch.randint(0, 64, (1, 10), device="mps")
+        with tempfile.TemporaryDirectory() as path:
+            config.save_pretrained(path)
+            save_file(state, f"{path}/model.safetensors", metadata={"format": "pt"})
+            reference = Qwen3MoeForCausalLM.from_pretrained(path, device_map="mps", dtype=torch.float32)
+            streamed = Qwen3MoeForCausalLM.from_pretrained(
+                path, device_map={"": "mps", "experts": "disk"}, max_memory={"mps": 10 << 20}, dtype=torch.float32
+            )
+            with torch.no_grad():
+                expected = reference.generate(ids, max_new_tokens=6, do_sample=False)
+                torch.testing.assert_close(streamed.generate(ids, max_new_tokens=6, do_sample=False), expected)
+            self.assertGreater(streamed._experts_offload.reads, 0)
+
 
 @require_torch_gpu
 @require_triton()
