@@ -1534,6 +1534,65 @@ class ProcessorMixin(PushToHubMixin):
         return processor_dict, kwargs
 
     @classmethod
+    def from_args_and_dict(cls, args, processor_dict: dict[str, Any], **kwargs):
+        """
+        Instantiates a type of [`~processing_utils.ProcessingMixin`] from a Python dictionary of parameters.
+
+        Args:
+            processor_dict (`dict[str, Any]`):
+                Dictionary that will be used to instantiate the processor object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                [`~processing_utils.ProcessingMixin.to_dict`] method.
+            kwargs (`dict[str, Any]`):
+                Additional parameters from which to initialize the processor object.
+
+        Returns:
+            [`~processing_utils.ProcessingMixin`]: The processor object instantiated from those
+            parameters.
+        """
+
+        logger.warning_once(
+            "`ProcessorMixin.from_args_and_dict` is deprecated and will be removed in future versions. "
+            "Call `ProcessorMixin.from_dict` instead with keyword-only arguments!"
+        )
+
+        processor_dict = processor_dict.copy()
+        return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
+        # If we don't pop, some specific kwargs will raise a warning or error
+        for unused_kwarg in cls.get_attributes() + ["auto_map", "processor_class"]:
+            processor_dict.pop(unused_kwarg, None)
+
+        # override processor_dict with given kwargs
+        processor_dict.update(kwargs)
+
+        # check if there is an overlap between args and processor_dict
+        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
+
+        # validate both processor_dict and given kwargs
+        unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
+            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
+        )
+
+        # update args that are already in processor_dict to avoid duplicate arguments
+        args_to_update = {
+            i: valid_kwargs.pop(arg)
+            for i, arg in enumerate(accepted_args_and_kwargs)
+            if (arg in valid_kwargs and i < len(args))
+        }
+        args = [args_to_update.get(i, arg) for i, arg in enumerate(args)]
+
+        # instantiate processor with used (and valid) kwargs only
+        processor = cls(*args, **valid_kwargs)
+
+        logger.info(f"Processor {processor}")
+        if return_unused_kwargs:
+            return processor, unused_kwargs
+        else:
+            return processor
+
+    @classmethod
     def from_dict(cls, processor_dict: dict[str, Any], **kwargs):
         """
         Instantiates a type of [`~processing_utils.ProcessingMixin`] from a Python dictionary of parameters.
