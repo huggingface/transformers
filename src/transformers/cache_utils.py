@@ -117,7 +117,7 @@ class DynamicLayer(CacheLayerMixin):
         self.is_initialized = True
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, write: bool = True, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -125,10 +125,6 @@ class DynamicLayer(CacheLayerMixin):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
-            write (`bool`, *optional*, defaults to `True`):
-                If `False`, return the same states `update` would return, without modifying the cache. Lets a layer
-                attend over the cached past and its own tokens without caching them (e.g. a looped block where
-                only the last loop writes).
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
@@ -137,11 +133,9 @@ class DynamicLayer(CacheLayerMixin):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        keys = torch.cat([self.keys, key_states], dim=-2)
-        values = torch.cat([self.values, value_states], dim=-2)
-        if write:
-            self.keys, self.values = keys, values
-        return keys, values
+        self.keys = torch.cat([self.keys, key_states], dim=-2)
+        self.values = torch.cat([self.values, value_states], dim=-2)
+        return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
@@ -226,7 +220,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, write: bool = True, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -234,10 +228,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
-            write (`bool`, *optional*, defaults to `True`):
-                If `False`, return the same states `update` would return, without modifying the cache. Lets a layer
-                attend over the cached past and its own tokens without caching them (e.g. a looped block where
-                only the last loop writes).
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
@@ -246,15 +236,11 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
+        self.cumulative_length += key_states.shape[-2]
+
         # Compute the full states
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
         full_value_states = torch.cat([self.values, value_states], dim=-2)
-        if not write:
-            # Same visible states as below: the stored past holds at most `sliding_window - 1` tokens unless recording
-            num_visible = self.sliding_window - 1 + key_states.shape[-2]
-            return full_key_states[:, :, -num_visible:, :], full_value_states[:, :, -num_visible:, :]
-
-        self.cumulative_length += key_states.shape[-2]
         # Only cache the last `self.sliding_window - 1` tokens (or all of them if lower than that)
         if not self.record_past:
             self.keys = full_key_states[:, :, -self.sliding_window + 1 :, :]
@@ -473,23 +459,8 @@ class StaticLayer(CacheLayerMixin):
 
         self.is_initialized = True
 
-    def _index_copy(
-        self, cache_position: torch.Tensor, key_states: torch.Tensor, value_states: torch.Tensor, write: bool
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Write the states at `cache_position`, in-place if `write`, else into a copy of the buffers."""
-        # ponytail: `write=False` copies the whole static buffer, the price of keeping static shapes
-        keys, values = (self.keys, self.values) if write else (self.keys.clone(), self.values.clone())
-        try:
-            keys.index_copy_(2, cache_position, key_states)
-            values.index_copy_(2, cache_position, value_states)
-        except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
-            keys[:, :, cache_position] = key_states
-            values[:, :, cache_position] = value_states
-        return keys, values
-
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, write: bool = True, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -497,10 +468,6 @@ class StaticLayer(CacheLayerMixin):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
-            write (`bool`, *optional*, defaults to `True`):
-                If `False`, return the same states `update` would return, without modifying the cache. Lets a layer
-                attend over the cached past and its own tokens without caching them (e.g. a looped block where
-                only the last loop writes).
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
@@ -512,10 +479,19 @@ class StaticLayer(CacheLayerMixin):
         # Create a tensor to slice the static kv at the correct indices
         kv_length = key_states.shape[-2]
         cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-        if write:
-            # Note that has to be performed in-place, as we have a static address that we need to keep
-            self.cumulative_length.add_(kv_length)
-        return self._index_copy(cache_position, key_states, value_states, write)
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.add_(kv_length)
+
+        # Update the cache
+        try:
+            self.keys.index_copy_(2, cache_position, key_states)
+            self.values.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            # Fallback for devices like MPS where index_copy_ might not be supported.
+            self.keys[:, :, cache_position] = key_states
+            self.values[:, :, cache_position] = value_states
+
+        return self.keys, self.values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -569,7 +545,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         self.is_croppable = max_cache_len <= sliding_window
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, write: bool = True, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -577,10 +553,6 @@ class StaticSlidingWindowLayer(StaticLayer):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
-            write (`bool`, *optional*, defaults to `True`):
-                If `False`, return the same states `update` would return, without modifying the cache. Lets a layer
-                attend over the cached past and its own tokens without caching them (e.g. a looped block where
-                only the last loop writes).
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
@@ -592,9 +564,8 @@ class StaticSlidingWindowLayer(StaticLayer):
         kv_length = key_states.shape[-2]
         current_length = self.cumulative_length_int
         is_full = current_length >= self.max_cache_len
-        if write:
-            # Update it now that we saved the value above
-            self.cumulative_length_int += kv_length
+        # Update it now that we saved the value above
+        self.cumulative_length_int += kv_length
 
         if is_full:
             # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
@@ -608,8 +579,6 @@ class StaticSlidingWindowLayer(StaticLayer):
                 index = torch.tensor([-1], dtype=int, device=self.device)
                 new_keys[:, :, index] = key_states
                 new_values[:, :, index] = value_states
-                if not write:
-                    return new_keys, new_values
 
                 # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
                 self.keys.copy_(new_keys)
@@ -634,15 +603,20 @@ class StaticSlidingWindowLayer(StaticLayer):
             # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
             # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
             cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-            if write:
-                # Update the tensor version of the length in-place (we don't need to update it if we are already
-                # outside of this branch, as we don't need the tensor anymore)
-                self.cumulative_length.add_(kv_length)
-            # Very important to return the `self` tensors here when writing, as they have the static dynamo address
-            return self._index_copy(cache_position, key_states, value_states, write)
+            try:
+                self.keys.index_copy_(2, cache_position, key_states)
+                self.values.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                self.keys[:, :, cache_position] = key_states
+                self.values[:, :, cache_position] = value_states
 
-        if not write:
-            return full_key_states, full_value_states
+            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
+            # of this branch, as we don't need the tensor anymore)
+            self.cumulative_length.add_(kv_length)
+
+            # Very important to return the `self` tensors here, as they have the static dynamo address
+            return self.keys, self.values
+
         # We only cache the last `sliding_window` tokens
         self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
         self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
@@ -677,6 +651,16 @@ class StaticSlidingWindowLayer(StaticLayer):
         """
         # Note that this is only correct as long as we never went beyond the window, which `is_croppable` guarantees - otherwise the
         # evicted states cannot be recovered
+        if self.max_cache_len < self.cumulative_length_int != abs(tokens_to_remove):
+            # Beyond the window, the buffer holds one more state than the next `forward` attends to: the last token can
+            # be rolled back by shifting the states back, the evicted slot is never attended to
+            if abs(tokens_to_remove) != 1:
+                raise RuntimeError(
+                    "`StaticSlidingWindowLayer` can only remove its last token once the sliding window size was reached"
+                )
+            # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
+            self.keys.copy_(self.keys.roll(1, dims=-2))
+            self.values.copy_(self.values.roll(1, dims=-2))
         super().crop(tokens_to_remove)
         self.cumulative_length_int -= abs(tokens_to_remove)
 
@@ -840,7 +824,7 @@ class QuantizedLayer(BaseQuantizedLayer):
     def _quantize(self, tensor, axis): ...
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, write: bool = True, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -848,21 +832,17 @@ class QuantizedLayer(BaseQuantizedLayer):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
-            write (`bool`, *optional*, defaults to `True`):
-                If `False`, return the same states `update` would return, without modifying the cache. Lets a layer
-                attend over the cached past and its own tokens without caching them (e.g. a looped block where
-                only the last loop writes).
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
+        self.cumulative_length += key_states.shape[-2]
+
         # Lazy initialization
         if not self.is_initialized:
-            if write:
-                self.cumulative_length += key_states.shape[-2]
-                self.lazy_initialization(key_states, value_states)
-                self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
-                self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
+            self.lazy_initialization(key_states, value_states)
+            self._quantized_keys = self._quantize(key_states.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(value_states.contiguous(), axis=self.axis_value)
             return key_states, value_states
 
         dequant_keys = self._dequantize(self._quantized_keys)
@@ -872,10 +852,6 @@ class QuantizedLayer(BaseQuantizedLayer):
 
         keys_to_return = torch.cat([dequant_keys, self.keys, key_states], dim=-2)
         values_to_return = torch.cat([dequant_values, self.values, value_states], dim=-2)
-        if not write:
-            return keys_to_return, values_to_return
-
-        self.cumulative_length += key_states.shape[-2]
         residual_length = self.keys.shape[-2] if self.keys.dim() == 4 else 0
         if residual_length + key_states.shape[-2] >= self.residual_length:
             self._quantized_keys = self._quantize(keys_to_return.contiguous(), axis=self.axis_key)
@@ -1061,7 +1037,7 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
         return (quant_tensor.float() * scale).to(self.dtype)
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, write: bool = True, **kwargs
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -1069,31 +1045,26 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
-            write (`bool`, *optional*, defaults to `True`):
-                If `False`, return the same states `update` would return, without modifying the cache. Lets a layer
-                attend over the cached past and its own tokens without caching them (e.g. a looped block where
-                only the last loop writes).
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
+        self.cumulative_length += key_states.shape[-2]
+
         if not self.is_initialized:
-            if write:
-                self.cumulative_length += key_states.shape[-2]
-                self.lazy_initialization(key_states, value_states)
+            self.lazy_initialization(key_states, value_states)
             return key_states, value_states
 
         quantized_keys, key_scale = self._quantized_keys
         quantized_values, value_scale = self._quantized_values
         new_keys, _ = self._quantize(key_states, scale=key_scale)
         new_values, _ = self._quantize(value_states, scale=value_scale)
-        all_keys = (torch.cat([quantized_keys, new_keys], dim=-2), key_scale)
-        all_values = (torch.cat([quantized_values, new_values], dim=-2), value_scale)
-        if write:
-            self.cumulative_length += key_states.shape[-2]
-            self._quantized_keys, self._quantized_values = all_keys, all_values
+        self._quantized_keys = (torch.cat([quantized_keys, new_keys], dim=-2), key_scale)
+        self._quantized_values = (torch.cat([quantized_values, new_values], dim=-2), value_scale)
 
-        return self._dequantize(all_keys), self._dequantize(all_values)
+        keys_to_return = self._dequantize(self._quantized_keys)
+        values_to_return = self._dequantize(self._quantized_values)
+        return keys_to_return, values_to_return
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders the cache for beam search. The per-tensor scale lets the FP8 states be reordered as-is."""
@@ -1631,8 +1602,6 @@ class Cache:
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            write (`bool`, *optional*, defaults to `True`):
-                Forwarded to the layer: if `False`, return the states without modifying the cache.
 
         Return:
             A tuple containing the updated key and value states.

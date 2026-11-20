@@ -69,8 +69,8 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(torch.cat(logits, dim=1), full_logits, rtol=1e-4, atol=1e-4)
 
     def test_static_cache_matches_dynamic_with_loops(self):
-        # `last_loop` loops before the last read the cache with `update(..., write=False)`, which must match across
-        # cache types, also past the sliding window
+        # `last_loop` loops before the last write then roll back their states, which must match across cache types,
+        # also past the sliding window. Past the window, a static sliding layer can only roll back one token: decode
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_hidden_layers, config.layer_types, config.rope_parameters = 4, None, None
         config.n_input_layers, config.n_recurrent_layers, config.n_output_layers, config.n_recurrent_loops = 1, 2, 1, 3
@@ -83,7 +83,7 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
                 model = DoryForCausalLM(config).to(torch_device).eval()
                 dynamic, static = DynamicCache(config=config), StaticCache(config=config, max_cache_len=16)
                 with torch.no_grad():
-                    for start, end in ((0, 2), (2, 4), (4, 7), (7, 8), (8, 12)):
+                    for start, end in [(0, 6)] + [(i, i + 1) for i in range(6, 12)]:
                         expected = model(input_ids[:, start:end], cache=dynamic).logits
                         actual = model(input_ids[:, start:end], cache=static).logits
                         torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)

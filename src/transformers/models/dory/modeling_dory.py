@@ -236,7 +236,6 @@ class DoryAttention(nn.Module):
         attention_mask: torch.Tensor | None,
         cache: Cache | None = None,
         cache_offset: int = 0,
-        write_cache: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -257,11 +256,8 @@ class DoryAttention(nn.Module):
         query_states = query_states * query_scale.square()
 
         if cache is not None:
-            # `per_loop` loops past the first write to their own copy of this layer's cache, `last_loop` loops before
-            # the last only read it, see `DoryModel.forward`
-            key_states, value_states = cache.update(
-                key_states, value_states, self.layer_idx + cache_offset, write=write_cache
-            )
+            # Loops write to their own copy of this layer's cache, see `DoryModel.forward`
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx + cache_offset)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -476,7 +472,14 @@ class DoryModel(DoryPreTrainedModel):
         recurrent_end = recurrent_start + n_recurrent
         last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
 
-        if cache is not None and not last_loop_only and len(cache.layers) == self.config.num_hidden_layers:
+        recurrent_cache = None
+        if cache is not None and last_loop_only:
+            # Loops before the last write their states, then roll them back: only the last loop's states are kept
+            recurrent_cache = cache.layers[recurrent_start:recurrent_end]
+            for layer in recurrent_cache:
+                if hasattr(layer, "activate_past_recording"):
+                    layer.activate_past_recording()
+        elif cache is not None and len(cache.layers) == self.config.num_hidden_layers:
             # Loops 1, 2, ... write to copies of the recurrent cache layers, appended at the end
             cache.layers += [copy.deepcopy(c) for c in cache.layers[recurrent_start:recurrent_end] * (n_loops - 1)]
 
@@ -504,10 +507,11 @@ class DoryModel(DoryPreTrainedModel):
                     position_embeddings=position_embeddings[decoder_layer.attention_type],
                     cache=cache,
                     cache_offset=cache_offset,
-                    # `last_loop`: only the last loop writes, the earlier ones attend over the past without caching
-                    write_cache=not last_loop_only or loop_idx == n_loops - 1,
                     **kwargs,
                 )
+            if recurrent_cache is not None and loop_idx < n_loops - 1:
+                for layer in recurrent_cache:
+                    layer.crop(-inputs_embeds.shape[1])
 
         output_start = self.config.num_hidden_layers - self.config.n_output_layers
         for decoder_layer in self.layers[output_start:]:
