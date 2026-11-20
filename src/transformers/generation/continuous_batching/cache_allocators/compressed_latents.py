@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import torch
-import itertools
 
 from ....configuration_utils import PreTrainedConfig
 from .cache_pool import CachePool
@@ -43,10 +42,9 @@ class MLACacheAllocator(FullAttentionCacheAllocator):
     ) -> None:
         """Initializes the cache allocator for a group of MLA layers."""
         # Retrieve the kv_lora_rank and qk_rope_head_dim from the cache tensor metadata
+        mla_layers = (cache_tensor_meta[layer_idx] for layer_idx in layer_indices)
         kv_and_qk = {
-            (kv_pass_shape[-1], k_rot_shape[-1])
-            for (kv_pass_shape, _, _), (k_rot_shape, _, _)
-            in (cache_tensor_meta[layer_idx] for layer_idx in layer_indices)
+            (kv_pass_shape[-1], k_rot_shape[-1]) for (kv_pass_shape, _, _), (k_rot_shape, _, _) in mla_layers
         }
         if len(kv_and_qk) != 1:
             raise ValueError(f"kv_lora_rank and qk_rope_head_dim differ between layers: found {kv_and_qk}")

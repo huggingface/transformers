@@ -12,12 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import itertools
-
 import torch
 
 from ....configuration_utils import PreTrainedConfig
-from ..utils import find_head_dim
 from .cache_allocator import CacheAllocator
 from .cache_pool import CachePool
 
@@ -35,7 +32,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self,
         index: int,
         config: PreTrainedConfig,
-        cache_tensor_meta: dict[int, list[tuple[tuple[int, ...], torch.dtype, torch.device]]],
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
@@ -44,7 +41,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """Initializes the cache allocator for a group of full attention layers.
 
         Args:
-            - config: the configuration of the model, used to determine the number of bytes per token
+            - config: the configuration of the model, unused here but kept so all allocators share one constructor
             - cache_tensor_meta: the meta data of the cache tensors, formatted as layer_idx -> (shape, dtype, device)
             - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
             - page_size: the number of tokens per page
@@ -62,7 +59,10 @@ class FullAttentionCacheAllocator(CacheAllocator):
             if k_heads != v_heads or k_head_dim != v_head_dim:
                 raise RuntimeError(f"Shape of K and V heads differ: {k_shape = }, {v_shape = }")
             if heads_and_dims is not None and heads_and_dims != (k_heads, k_head_dim):
-                raise RuntimeError(f"Number of {k_heads = } is not the for all layers: {heads_and_dims = }")
+                raise RuntimeError(
+                    f"KV heads and head dim differ between layers: got {(k_heads, k_head_dim) = } for {layer_idx = }, "
+                    f"but {heads_and_dims = } for previous layers"
+                )
             heads_and_dims = (k_heads, k_head_dim)
         if heads_and_dims is None:
             raise RuntimeError("No KV heads and dim found")

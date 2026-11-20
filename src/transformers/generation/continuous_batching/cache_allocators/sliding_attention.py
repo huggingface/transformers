@@ -33,7 +33,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         self,
         index: int,
         config: PreTrainedConfig,
-        cache_tensor_meta: dict[int, list[tuple[tuple[int, ...], torch.dtype, torch.device]]],
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
@@ -42,7 +42,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         """Initializes the cache allocator for a group of sliding attention layers.
 
         Args:
-            - config: the configuration of the model, used to determine the number of bytes per token
+            - config: the configuration of the model, used to retrieve the sliding window
             - cache_tensor_meta: the meta data of the cache tensors, formatted as layer_idx -> (shape, dtype, device)
             - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
             - page_size: the number of tokens per page

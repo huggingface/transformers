@@ -126,9 +126,9 @@ class PagedAttentionCache:
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
         distributed_helper: DistributedHelper,
-        dtype: torch.dtype,
-        model_supports_logits_to_keep: bool,
         cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
+        dtype: torch.dtype = torch.float16,
+        model_supports_logits_to_keep: bool = False,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -138,6 +138,8 @@ class PagedAttentionCache:
             continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
+            cache_tensor_meta: Shape, dtype and device of the tensors each layer passes to `update`, as recorded by
+                `hook_cache_tensor_meta`. Formatted as layer_idx -> [(shape, dtype, device), ...]
             dtype: Data type of the activation and the cache (for now, these are the same)
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
@@ -740,11 +742,12 @@ class PagedAttentionMemoryHandler:
 
 
 class HookedDummyCache:
-
     def __init__(self) -> None:
         self.hooked = {}
 
-    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, kwargs: dict[str, Any]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         self.hooked[layer_idx] = [
             (key_states.shape, key_states.dtype, key_states.device),
             (value_states.shape, value_states.dtype, value_states.device),
@@ -771,4 +774,3 @@ def hook_cache_tensor_meta(
             cache=cache,
         )
     return cache.hooked
-
