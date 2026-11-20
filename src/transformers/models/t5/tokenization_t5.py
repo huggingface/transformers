@@ -109,10 +109,27 @@ class T5Tokenizer(TokenizersBackend):
             for i in range(extra_ids - 1, -1, -1):
                 self._vocab_scores.append((f"<extra_id_{i}>", 0.0))
 
+        # Original T5 puts `<unk>` at index 2. Other SentencePiece models loaded with
+        # this class (for example rinna GPT-2) put it elsewhere; the extractor passes
+        # `unk_id` from the model proto. Fall back to the piece matching `unk_token`.
+        unk_id = kwargs.pop("unk_id", None)
+        if unk_id is None:
+            unk_id = 2
+            unk_piece = str(unk_token)
+            scores = self._vocab_scores
+            if isinstance(scores, dict):
+                unk_id = scores.get(unk_piece, 2)
+            else:
+                for index, item in enumerate(scores):
+                    piece = item[0] if isinstance(item, (list, tuple)) else item
+                    if str(piece) == unk_piece:
+                        unk_id = index
+                        break
+
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
-                unk_id=2,
+                unk_id=unk_id,
                 byte_fallback=False,
             )
         )
