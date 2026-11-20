@@ -37,7 +37,6 @@ The experts module's own forward (any `experts_implementation`) runs on the pool
 from __future__ import annotations
 
 import bisect
-import copy
 import fnmatch
 import threading
 import time
@@ -571,34 +570,28 @@ def _(handle, hidden_states, top_k_index, top_k_weights, output, state) -> None:
 
 
 class _ExpertReader:
-    """How to read one expert of a target param: its checkpoint `sources` and how to `assemble` them.
-
-    A converter whose ops merge per-expert tensors (`MergeModulelist`, then e.g. `Concatenate`) is replayed on one
-    expert's tensors (and quantized on the fly if the plan says so); a renaming (the checkpoint already holds the
-    stacked bank) is the expert's row of the bank."""
+    """One param of an experts module, read one expert at a time: expert `e` is row `e` of the checkpoint's stacked
+    bank (the transformers format), copied as is into a pool slot. Nothing is converted per read."""
 
     def __init__(self, target_name, mapping, reads, hf_quantizer):
         from ..core_model_loading import WeightConverter
 
-        self.target_name = target_name
-        self.mapping = mapping if isinstance(mapping, WeightConverter) else None
-        self.reads = reads  # {source pattern: [(slice, dtype, checkpoint key), ...]}
-        self.hf_quantizer = hf_quantizer
+        needs_quantization = hf_quantizer is not None and getattr(mapping, "quantization_operation", None) is not None
+        if isinstance(mapping, WeightConverter) or needs_quantization:
+            raise ValueError(
+                f"Streamed experts read each expert as one row of a stacked bank, but `{target_name}` would have to be "
+                "converted (or quantized) on every read. Load the model once and save it in the transformers format: "
+                "`model.save_pretrained(path, save_original_format=False)`, then stream from `path`."
+            )
+        self.param = target_name.rpartition(".")[2]
+        ((self.bank, self.dtype, self.key),) = next(iter(reads.values()))
 
     def sources(self, expert) -> list[tuple]:
-        """`(slice, rows, dtype, checkpoint key)` per tensor to read, in pattern order."""
-        if self.mapping is None:
-            ((bank, dtype, key),) = next(iter(self.reads.values()))
-            return [(bank, slice(expert, expert + 1), dtype, key)]
-        return [(slices[expert][0], None, slices[expert][1], slices[expert][2]) for slices in self.reads.values()]
+        """`(slice, rows, dtype, checkpoint key)` of the expert's row."""
+        return [(self.bank, slice(expert, expert + 1), self.dtype, self.key)]
 
     def assemble(self, tensors) -> dict[str, torch.Tensor]:
-        if self.mapping is None:
-            return {self.target_name.rpartition(".")[2]: tensors[0][0]}
-        one = copy.copy(self.mapping)
-        one.collected_tensors = {pattern: [tensor] for pattern, tensor in zip(self.reads, tensors)}
-        out = one.convert(self.target_name, hf_quantizer=self.hf_quantizer)  # quantized on the fly if planned
-        return {name.rpartition(".")[2]: tensor[0] for name, tensor in out.items()}
+        return {self.param: tensors[0][0]}
 
 
 class _RowReader:

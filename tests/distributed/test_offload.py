@@ -69,7 +69,7 @@ class ExpertsOffloadTest(unittest.TestCase):
 
     def test_matches_eager_for_every_cache_size_and_lookahead(self):
         with tempfile.TemporaryDirectory() as path:
-            self.model.save_pretrained(path)  # per-expert checkpoint keys: replays the conversion mapping
+            self.model.save_pretrained(path, save_original_format=False)  # stacked banks: one row per expert
             for slots in (1, 5, 24):
                 for lookahead in (0, 1, 2):
                     with self.subTest(slots=slots, lookahead=lookahead):
@@ -81,7 +81,7 @@ class ExpertsOffloadTest(unittest.TestCase):
 
     def test_pinned_layers_stay_resident(self):
         with tempfile.TemporaryDirectory() as path:
-            self.model.save_pretrained(path)
+            self.model.save_pretrained(path, save_original_format=False)
             model, store = self.load(path, 8 + 3)  # layer 0 pinned (8 experts), 3 shared slots
             store.pin_layers = 1
             torch.testing.assert_close(self.generate(model), self.expected)
@@ -93,7 +93,7 @@ class ExpertsOffloadTest(unittest.TestCase):
         """An embedding on "disk" reads only the rows it looks up."""
         self.assertFalse(self.model.config.tie_word_embeddings)
         with tempfile.TemporaryDirectory() as path:
-            self.model.save_pretrained(path)
+            self.model.save_pretrained(path, save_original_format=False)
             model = Qwen3MoeForCausalLM.from_pretrained(
                 path,
                 device_map={"": "cpu", "experts": "disk", "embed_tokens": "disk"},
@@ -104,11 +104,17 @@ class ExpertsOffloadTest(unittest.TestCase):
 
     def test_lfu_matches_eager(self):
         with tempfile.TemporaryDirectory() as path:
-            self.model.save_pretrained(path)
+            self.model.save_pretrained(path, save_original_format=False)
             model, store = self.load(path, 5)
             store.policy = "lfu"  # pools are made at the first forward
             torch.testing.assert_close(self.generate(model), self.expected)
             self.assertTrue(any(pool.counts for pool in store.pools.values()))
+
+    def test_original_format_is_refused(self):
+        with tempfile.TemporaryDirectory() as path:
+            self.model.save_pretrained(path)  # per-expert keys: every read would need a conversion
+            with self.assertRaisesRegex(ValueError, "save_original_format=False"):
+                self.load(path, 5)
 
     def test_stacked_checkpoint(self):
         with tempfile.TemporaryDirectory() as path:
@@ -138,13 +144,15 @@ class MetalExpertsOffloadTest(unittest.TestCase):
             num_experts_per_tok=2,
         )
         ids = torch.randint(0, 64, (1, 12), device="mps")
-        quantization = MetalConfig(bits=4, group_size=64)
-        with tempfile.TemporaryDirectory() as path:
-            Qwen3MoeForCausalLM(config).save_pretrained(path)
-            kwargs = {"quantization_config": quantization, "dtype": torch.float32}
-            reference = Qwen3MoeForCausalLM.from_pretrained(path, device_map="mps", **kwargs)
+        plan = {"*.mlp.experts": MetalConfig(bits=4, group_size=64)}
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory() as path:
+            Qwen3MoeForCausalLM(config).save_pretrained(raw)
+            kwargs = {"quantization_config": plan, "dtype": torch.float32}
+            reference = Qwen3MoeForCausalLM.from_pretrained(raw, device_map="mps", **kwargs)
+            # Quantized once, saved in the transformers format, streamed from there: no work per read
+            reference.save_pretrained(path, save_original_format=False)
             streamed = Qwen3MoeForCausalLM.from_pretrained(
-                path, device_map={"": "mps", "experts": "disk"}, max_memory={"mps": 10 << 20}, **kwargs
+                path, device_map={"": "mps", "experts": "disk"}, max_memory={"mps": 10 << 20}, dtype=torch.float32
             )
             with torch.no_grad():
                 expected = reference.generate(ids, max_new_tokens=8, do_sample=False)
@@ -185,12 +193,14 @@ class TritonAffineExpertsTest(unittest.TestCase):
         )
         ids = torch.randint(0, 64, (1, 12), device="cuda")
         plan = {"*.mlp.experts": MetalConfig(bits=4, group_size=64)}
-        with tempfile.TemporaryDirectory() as path:
-            Qwen3MoeForCausalLM(config).save_pretrained(path)
+        with tempfile.TemporaryDirectory() as raw, tempfile.TemporaryDirectory() as path:
+            Qwen3MoeForCausalLM(config).save_pretrained(raw)
             kwargs = {"quantization_config": plan, "dtype": torch.float32}
-            reference = Qwen3MoeForCausalLM.from_pretrained(path, device_map="cuda", **kwargs)
+            reference = Qwen3MoeForCausalLM.from_pretrained(raw, device_map="cuda", **kwargs)
+            # Quantized once, saved in the transformers format, streamed from there: no work per read
+            reference.save_pretrained(path, save_original_format=False)
             streamed = Qwen3MoeForCausalLM.from_pretrained(
-                path, device_map={"": "cuda", "experts": "disk"}, max_memory={"cuda": 10 << 20}, **kwargs
+                path, device_map={"": "cuda", "experts": "disk"}, max_memory={"cuda": 10 << 20}, dtype=torch.float32
             )
             with torch.no_grad():
                 expected = reference.generate(ids, max_new_tokens=8, do_sample=False)
