@@ -346,10 +346,10 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             input_mel.append(mel)
             is_longer.append(longer)
 
-        if truncation == "fusion" and sum(is_longer) == 0:
-            # if no audio is longer than 10s, then randomly select one audio to be longer
-            rand_idx = np.random.randint(0, len(input_mel))
-            is_longer[rand_idx] = True
+        # `is_longer` describes the input: a clip that fits within `max_length_s` is padded and
+        # stacked four times (see `_get_input_mel`), it is not treated as long audio. Marking a
+        # random clip as longer here would route it through `feature_fusion` at inference time,
+        # which is neither what the reference implementation does nor reproducible run to run.
 
         if isinstance(input_mel[0], list):
             input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
