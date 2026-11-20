@@ -92,14 +92,16 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
         self.loop_layer_index_end = 3
         self.loop_num_passes = 3
         self.loop_gate_rank = 8
-        # hidden states are recorded at every layer visit (4 layers + 2 more passes through the 2 loop layers) and
-        # for the embeddings
-        self.expected_num_hidden_layers = 4 + 2 * 2 + 1
+
         self.swa_num_attention_heads = self.num_attention_heads
         self.swa_num_key_value_heads = self.num_key_value_heads
         self.swa_head_dim = self.head_dim
         self.n_routed_experts = 8
         self.unpadded_vocab_size = self.vocab_size
+
+        # hidden states are recorded at every layer visit (4 layers + 2 more passes through the 2 loop layers) and
+        # for the embeddings
+        self.expected_num_hidden_layers = 4 + 2 * 2 + 1
 
 
 @require_torch
@@ -108,6 +110,10 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("Attentions are returned per layer visit: the loop layers run several times per forward")
     def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
+    def test_reverse_loading_mapping(self):
         pass
 
     def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
@@ -119,10 +125,6 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
         return [(batch_size, kv_size, config.conv_kernel_size)] * 2 + [
             (batch_size, config.hidden_size, config.conv_kernel_size)
         ] * 2
-
-    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
-    def test_reverse_loading_mapping(self):
-        pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
@@ -177,12 +179,17 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
 class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2LoopVisionText2TextModelTester
 
+    # `last_hidden_state` holds `spatial_merge_size**2` patch states per `pixel_values` row plus a class token per image,
+    # but the common test expects one state per `pixel_values` row
+    skip_test_image_features_output_shape = True
+
     @unittest.skip("Attentions are returned per layer visit: the loop layers run several times per forward")
     def test_attention_outputs(self):
         pass
 
-    # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
-    skip_test_image_features_output_shape = True
+    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
+    def test_reverse_loading_mapping(self):
+        pass
 
     def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         check_loop_cache(self, batch_size, cache, seq_length, config, super()._check_cache_for_generate)
@@ -196,10 +203,6 @@ class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
         return [(batch_size, kv_size, config.conv_kernel_size)] * 2 + [
             (batch_size, config.hidden_size, config.conv_kernel_size)
         ] * 2
-
-    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
-    def test_reverse_loading_mapping(self):
-        pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
@@ -221,11 +224,6 @@ class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
 class Inkling2LoopIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     r"""Greedy completions and first-step logits of the reference implementation (sglang, one B200, experts
     dequantized to bfloat16) on the prompts of the Inkling2 integration tests.
-
-    The logits are sglang's, hence the loose tolerance: on Inkling2, Transformers' and sglang's first-step logits[:5]
-    differed by up to 1.0 (bfloat16 rounding, amplified through 48 layer visits). Replace them with Transformers' own
-    values and a 1e-4 tolerance once the implementation agrees with the reference. The text completion has a near tie
-    at its 9th token ("explanation", ahead of the runner-up by 0.12), where Transformers may legitimately diverge.
 
     Run from the repository root on a GPU with at least 80 GiB::
 

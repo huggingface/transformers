@@ -156,7 +156,8 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Inkling2VisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2VisionText2TextModelTester
-    # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
+    # `last_hidden_state` holds `spatial_merge_size**2` patch states per `pixel_values` row plus a class token per image,
+    # but the common test expects one state per `pixel_values` row
     skip_test_image_features_output_shape = True
 
     def _get_conv_state_shape(self, batch_size: int, config):
