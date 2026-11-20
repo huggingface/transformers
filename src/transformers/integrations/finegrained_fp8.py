@@ -696,6 +696,83 @@ def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:
     )
 
 
+# --- PROTOTYPE (bench only, not for upstream as is): routed-experts forwards for inference, off unless a flag is set ---
+# PROTO_EXPERTS_TRTLLM=1  flashinfer's TRT-LLM routed FP8 MoE, as vLLM calls it, on weights re-laid once at load
+# PROTO_EXPERTS_DECODE=1  Triton kernel pair with the dispatch fused, one program per (expert, N tile)
+# PROTO_EXPERTS_DECODE=fold  the same with one activation scale per (routed row, weight tile) in the first kernel
+# Both replace the `grouped_mm` and `batched_mm` forwards of `FP8Experts` when no gradient is needed.
+_PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
+_PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
+_PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "fold"
+
+
+def _proto_experts_supported(module: "FP8Experts") -> bool:
+    return (
+        module.has_gate
+        and module.block_size is not None
+        and tuple(module.block_size) == (128, 128)
+        and module.activation_scheme == "dynamic"
+        and _first_attr(module.config, "hidden_activation", "hidden_act") == "silu"
+        and module.gate_softcap is None
+        and module.swiglu_alpha is None
+        and module.limit is None
+        and module.gate_up_proj.dtype == _FP8_DTYPE
+        and module.gate_up_proj_scale_inv.dtype == torch.float32
+        and module.hidden_dim % 128 == 0
+        and module.gate_up_proj.shape[1] % 256 == 0
+    )
+
+
+def _proto_prepare_fp8_experts(model: nn.Module) -> None:
+    """Load-time half of `PROTO_EXPERTS_TRTLLM`: every rank re-lays its own shard of the expert weights for the
+    TRT-LLM kernels. The original parameters are kept (the default path, saving and training still see them)."""
+    if not _PROTO_EXPERTS_TRTLLM:
+        return
+    from ..distributed.parallel_utils import _use_local_dtensor_params
+    from . import _proto_fp8_experts as proto
+
+    prepared = 0
+    with torch.no_grad():
+        for module in model.modules():
+            if not isinstance(module, FP8Experts):
+                continue
+            with _use_local_dtensor_params(module):
+                if not _proto_experts_supported(module) or not proto.trtllm_supported(module.gate_up_proj.device):
+                    continue
+                module._proto_trtllm = proto.trtllm_prepare(
+                    module.gate_up_proj.detach(),
+                    module.gate_up_proj_scale_inv.detach(),
+                    module.down_proj.detach(),
+                    module.down_proj_scale_inv.detach(),
+                )
+                prepared += 1
+    logger.warning(f"PROTO_EXPERTS_TRTLLM: re-laid the weights of {prepared} FP8Experts modules for TRT-LLM")
+
+
+def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """The prototype forward selected by the flags, or `None` when the default path has to run."""
+    if self._is_expert_parallel or (torch.is_grad_enabled() and hidden_states.requires_grad):
+        return None
+    from . import _proto_fp8_experts as proto
+
+    if _PROTO_EXPERTS_TRTLLM and self._proto_trtllm is not None:
+        return proto.trtllm_experts_forward(
+            self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
+        )
+    if _PROTO_EXPERTS_DECODE and _proto_experts_supported(self):
+        return proto.decode_experts_forward(
+            hidden_states.contiguous(),
+            top_k_index.contiguous(),
+            top_k_weights.contiguous(),
+            self.gate_up_proj,
+            self.gate_up_proj_scale_inv,
+            self.down_proj,
+            self.down_proj_scale_inv,
+            fold=_PROTO_EXPERTS_DECODE_FOLD,
+        )
+    return None
+
+
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -709,6 +786,10 @@ def fp8_batched_mm_experts_forward(
         )
     if _can_use_fp8_fused_experts(self, hidden_states, top_k_index):
         return _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped=False)
+    if _PROTO_EXPERTS_TRTLLM or _PROTO_EXPERTS_DECODE:
+        proto_out = _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        if proto_out is not None:
+            return proto_out
 
     finegrained_fp8 = load_finegrained_fp8_kernel()
 
@@ -786,6 +867,10 @@ def fp8_grouped_mm_experts_forward(
         )
     if _can_use_fp8_fused_experts(self, hidden_states, top_k_index):
         return _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped=True)
+    if _PROTO_EXPERTS_TRTLLM or _PROTO_EXPERTS_DECODE:
+        proto_out = _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        if proto_out is not None:
+            return proto_out
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -884,6 +969,7 @@ def fp8_grouped_mm_experts_forward(
 class FP8Experts(nn.Module):
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
+    _proto_trtllm = None  # PROTO_EXPERTS_TRTLLM: this rank's weights in TRT-LLM's layout, built once at load
 
     def __init__(
         self,
