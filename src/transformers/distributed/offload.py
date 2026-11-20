@@ -41,10 +41,11 @@ import copy
 import fnmatch
 import time
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import torch
+from safetensors import safe_open
 
 from ..integrations.moe import batched_mm_experts_forward
 from ..utils import logging
@@ -173,6 +174,8 @@ class ExpertsOffloadStore:
         self.params: dict[str, list[str]] = {}  # module name -> its streamed params (per-expert, or `weight`)
         self.embeddings: dict[str, nn.Module] = {}  # streamed embeddings: only the looked-up rows are read
         self.row_readers: dict[str, _RowReader] = {}
+        self.key_files: dict[str, str] | None = None  # checkpoint key -> file, set by the loader
+        self.handles = {}  # file -> safe_open handle of the prefetch loaders
         self.order: list[str] = []
         self.readers: dict[str, list] = {}  # module name -> [read(expert) -> {param: tensor}]
         self.pools: dict[str, _Pool] = {}
@@ -255,37 +258,23 @@ class ExpertsOffloadStore:
         `{source pattern: [(slice, dtype), ...]}`. A converter whose ops merge per-expert tensors
         (`MergeModulelist`, then e.g. `Concatenate`) is replayed on one expert's tensors; a renaming (the checkpoint
         already holds the stacked bank) is sliced on its first dimension."""
-        from ..core_model_loading import WeightConverter
 
         module_name = target_name.rpartition(".")[0]
         if module_name in self.embeddings:
             self.row_readers[module_name] = _RowReader(reads, self.read_device)
             return
-        if isinstance(mapping, WeightConverter):
-
-            def read(expert):
-                one = copy.copy(mapping)
-                one.collected_tensors = {
-                    pattern: [lambda s=slices[expert]: s[0][...].to(self.read_device, s[1])]
-                    for pattern, slices in reads.items()
-                }
-                out = one.convert(target_name, hf_quantizer=hf_quantizer)  # quantized on the fly if planned
-                return {name.rpartition(".")[2]: tensor[0] for name, tensor in out.items()}
-        else:
-            ((bank, bank_dtype),) = next(iter(reads.values()))
-            param = target_name.rpartition(".")[2]
-
-            def read(expert):
-                return {param: bank[expert : expert + 1].to(self.read_device, bank_dtype)[0]}
-
-        self.readers.setdefault(module_name, []).append(read)
+        self.readers.setdefault(module_name, []).append(_ExpertReader(target_name, mapping, reads, hf_quantizer))
 
     def _read(self, layer, expert):
         """One expert's device tensors and the event their copy records (None when they were read on the device)."""
         self.reads += 1
         out = {}
-        for read in self.readers[layer]:
-            out.update(read(expert))
+        for reader in self.readers[layer]:
+            tensors = [
+                (slice_[...] if rows is None else slice_[rows]).to(self.read_device, dtype)
+                for slice_, rows, dtype, _ in reader.sources(expert)
+            ]
+            out.update(reader.assemble(tensors))
         if self.copy_stream is None:
             return out, None
         with torch.cuda.stream(self.copy_stream):
@@ -303,9 +292,67 @@ class ExpertsOffloadStore:
 
     def prefetch(self, layer, experts):
         cache = self.pool_of[layer].cache
-        for expert in experts:
-            if (layer, expert) not in cache:
-                self.fetch(layer, expert)
+        self.fetch_many(layer, [e for e in experts if (layer, e) not in cache])
+
+    @property
+    def use_prefetch(self) -> bool:
+        """safetensors' prefetch loader (chunked parallel reads into a pinned pool, async copies): CUDA only."""
+        return self.device.type == "cuda" and self.key_files is not None and hasattr(safe_open, "prefetch")
+
+    def fetch_many(self, layer, experts):
+        """Start reading `experts` of `layer` (each once); returns their Futures. On CUDA one prefetch plan per file
+        covers them all."""
+        new = [e for e in dict.fromkeys(experts) if (layer, e) not in self.pending]
+        if new and self.use_prefetch:
+            futures = {e: Future() for e in new}
+            for e, future in futures.items():
+                self.pending[(layer, e)] = future
+            self.executor.submit(self._prefetch_batch, layer, futures)
+        else:
+            for e in new:
+                self.fetch(layer, e)
+        return [self.pending[(layer, e)] for e in experts]
+
+    def _handle(self, file):
+        if file not in self.handles:
+            self.handles[file] = safe_open(file, framework="pt")
+        return self.handles[file]
+
+    def _prefetch_batch(self, layer, futures):
+        try:
+            # One loader per file (and per round when a key is wanted with several row ranges: stacked banks)
+            rounds = []  # [{file: {key: rows}}]
+            for expert in futures:
+                for reader in self.readers[layer]:
+                    for _, rows, _, key in reader.sources(expert):
+                        file = self.key_files[key]
+                        index = next(i for i, plan in enumerate(rounds + [{}]) if key not in plan.get(file, {}))
+                        if index == len(rounds):
+                            rounds.append({})
+                        rounds[index].setdefault(file, {})[key] = rows
+            loaders = {}
+            for index, plan in enumerate(rounds):
+                for file, keys in plan.items():
+                    loaders[(index, file)] = self._handle(file).prefetch(keys, device=str(self.device), threads=16)
+            taken = {}
+            for expert, future in futures.items():
+                self.reads += 1
+                out = {}
+                for reader in self.readers[layer]:
+                    tensors = []
+                    for _, rows, dtype, key in reader.sources(expert):
+                        file = self.key_files[key]
+                        index = taken.get((file, key), 0)
+                        taken[(file, key)] = index + 1
+                        tensors.append(loaders[(index, file)].take(key).to(dtype))
+                    out.update(reader.assemble(tensors))
+                future.set_result((out, None))
+            for loader in loaders.values():
+                loader.close()
+        except BaseException as error:
+            for future in futures.values():
+                if not future.done():
+                    future.set_exception(error)
 
     def setup_layer(self, name):
         """First call of a layer: size the pools, then swap its meta banks for the pool's (as buffers, so compile sees
@@ -323,7 +370,7 @@ class ExpertsOffloadStore:
         module.num_experts = pool.num_slots
         module._is_expert_parallel = True
         if name in self.order[: self.pin_layers]:  # pinned: all its experts now, never a miss after
-            futures = [self.fetch(name, e) for e in range(module.offload_num_experts)]
+            futures = self.fetch_many(name, range(module.offload_num_experts))
             for expert, future in enumerate(futures):
                 self._install(pool, pool.slot_for((name, expert), ()), future)
                 self.pending.pop((name, expert), None)
@@ -376,7 +423,7 @@ class ExpertsOffloadStore:
             if (name, e) in pool.cache:
                 pool.cache.move_to_end((name, e))
         pool.count([(name, e) for e in experts])
-        futures = [self.fetch(name, e) for e in misses]
+        futures = self.fetch_many(name, misses)
         # 2. Reads for the next layers overlap this layer's compute
         for index, next_name in enumerate(guessed):
             guesses = routes[(index + 1) * top_k_index.numel() : (index + 2) * top_k_index.numel()]
@@ -496,6 +543,37 @@ def _(handle, hidden_states, top_k_index, top_k_weights, output, state) -> None:
     return None
 
 
+class _ExpertReader:
+    """How to read one expert of a target param: its checkpoint `sources` and how to `assemble` them.
+
+    A converter whose ops merge per-expert tensors (`MergeModulelist`, then e.g. `Concatenate`) is replayed on one
+    expert's tensors (and quantized on the fly if the plan says so); a renaming (the checkpoint already holds the
+    stacked bank) is the expert's row of the bank."""
+
+    def __init__(self, target_name, mapping, reads, hf_quantizer):
+        from ..core_model_loading import WeightConverter
+
+        self.target_name = target_name
+        self.mapping = mapping if isinstance(mapping, WeightConverter) else None
+        self.reads = reads  # {source pattern: [(slice, dtype, checkpoint key), ...]}
+        self.hf_quantizer = hf_quantizer
+
+    def sources(self, expert) -> list[tuple]:
+        """`(slice, rows, dtype, checkpoint key)` per tensor to read, in pattern order."""
+        if self.mapping is None:
+            ((bank, dtype, key),) = next(iter(self.reads.values()))
+            return [(bank, slice(expert, expert + 1), dtype, key)]
+        return [(slices[expert][0], None, slices[expert][1], slices[expert][2]) for slices in self.reads.values()]
+
+    def assemble(self, tensors) -> dict[str, torch.Tensor]:
+        if self.mapping is None:
+            return {self.target_name.rpartition(".")[2]: tensors[0][0]}
+        one = copy.copy(self.mapping)
+        one.collected_tensors = {pattern: [tensor] for pattern, tensor in zip(self.reads, tensors)}
+        out = one.convert(self.target_name, hf_quantizer=self.hf_quantizer)  # quantized on the fly if planned
+        return {name.rpartition(".")[2]: tensor[0] for name, tensor in out.items()}
+
+
 class _RowReader:
     """Rows of a table the checkpoint stores as slices concatenated on dim 0 (one slice, or e.g. 128 shards)."""
 
@@ -503,7 +581,7 @@ class _RowReader:
         ((_, slices),) = reads.items()
         self.slices = list(slices)
         self.offsets = [0]
-        for slice_, _ in self.slices:
+        for slice_, *_ in self.slices:
             self.offsets.append(self.offsets[-1] + slice_.get_shape()[0])
         self.device = device
 
@@ -511,7 +589,7 @@ class _RowReader:
         out = []
         for row in rows:
             shard = bisect.bisect_right(self.offsets, row) - 1
-            slice_, dtype = self.slices[shard]
+            slice_, dtype, _ = self.slices[shard]
             local = row - self.offsets[shard]
             out.append(slice_[local : local + 1].to(self.device, dtype))
         return torch.cat(out)

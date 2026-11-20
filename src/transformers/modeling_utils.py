@@ -4571,6 +4571,7 @@ class PreTrainedModel(
                 merged_state_dict = state_dict
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
+                key_files = {}  # checkpoint key -> file, for streamed reads
                 for file in checkpoint_files:
                     if load_config.disable_mmap or _is_on_hf_mount(file):
                         with open(file, "rb") as _fh:
@@ -4593,6 +4594,9 @@ class PreTrainedModel(
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                        key_files[k] = file
+            if (experts_offload := getattr(model, "_experts_offload", None)) is not None:
+                experts_offload.key_files = key_files  # streamed reads may use safetensors' prefetch loader
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}

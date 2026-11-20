@@ -1763,7 +1763,7 @@ def convert_and_load_state_dict_in_model(
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
             if experts_offload is not None and experts_offload.owns(renamed_key):
-                mapping.add_tensor(renamed_key, original_key, source_pattern, (tensor, _dtype))
+                mapping.add_tensor(renamed_key, original_key, source_pattern, (tensor, _dtype, original_key))
                 continue
 
             # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in
