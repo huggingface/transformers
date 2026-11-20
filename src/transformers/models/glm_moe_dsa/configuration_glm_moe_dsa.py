@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -76,6 +78,16 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") == "1":
+        # [gap prototype] One all-reduce per MLP block: the routed experts, the shared experts and the dense MLP keep
+        # their partial sums, the block's output is all-reduced once (2 all-reduces per layer instead of 3).
+        base_model_tp_plan = {
+            **base_model_tp_plan,
+            "layers.*.mlp.experts": "moe_tp_experts_partial",
+            "layers.*.mlp.shared_experts.down_proj": "rowwise_partial",
+            "layers.*.mlp.down_proj": "rowwise_partial",
+            "layers.*.mlp": "all_reduce",
+        }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
