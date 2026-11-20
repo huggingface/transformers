@@ -582,6 +582,71 @@ def _decode_down_kernel(
 
 
 @triton.jit
+def _decode_down_tiles_kernel(
+    Inter,  # (S, I) e4m3, expert-sorted
+    InterScale,  # (S, I / 128) fp32
+    Perm,  # (S,) int32
+    ExpertStart,  # (E + 1,) int32
+    DownTiles,  # tensor descriptor of the (E * H, I) e4m3 weights, boxes of BLOCK_N rows x 128 columns
+    DownScale,  # (E, H / 128, I / 128) fp32
+    Weights,  # (S,) routing weight per flat (token, slot)
+    Out,  # (S, H) flat (token, slot) rows
+    stride_ds_e,
+    stride_ds_n,
+    HIDDEN_DIM: tl.constexpr,
+    INTERMEDIATE_DIM: tl.constexpr,
+    BLOCK_M: tl.constexpr,  # routed rows per tile (the dot's N)
+    BLOCK_N: tl.constexpr,  # weight rows per tile (the dot's M): 128 or 256
+    TILES: tl.constexpr,  # weight tiles walked by one program
+):
+    """The down kernel with one program per (expert, TILES weight tiles) instead of one per (expert, tile).
+
+    The reduction is short (I / 128 blocks, 2 on a TP8 rank), so a program per tile is mostly start-up: it finds its
+    expert's rows, loads their routing metadata, and stops after two weight loads. Walking several tiles in one
+    program pays that once and gives the loop enough iterations for the weight loads to be pipelined.
+    """
+    e = tl.program_id(0).to(tl.int64)
+    start = tl.load(ExpertStart + e)
+    end = tl.load(ExpertStart + e + 1)
+    if start >= end:
+        return
+    offs_k = tl.arange(0, 128)
+    first_n = tl.program_id(1) * (TILES * BLOCK_N)
+    w_row = tl.program_id(0) * HIDDEN_DIM + first_n
+    for m0 in range(start, end, BLOCK_M):
+        rows = m0 + tl.arange(0, BLOCK_M)
+        row_mask = rows < end
+        slot = tl.load(Perm + rows, mask=row_mask, other=0).to(tl.int64)
+        weight = tl.load(Weights + slot, mask=row_mask, other=0.0).to(tl.float32)
+        for t in range(0, TILES):
+            offs_n = first_n + t * BLOCK_N + tl.arange(0, BLOCK_N)
+            if BLOCK_N <= 128:
+                w_s_base = DownScale + e * stride_ds_e + ((first_n + t * BLOCK_N) // 128) * stride_ds_n
+            else:
+                w_s_base = DownScale + e * stride_ds_e + (offs_n // 128) * stride_ds_n
+            acc = tl.zeros((BLOCK_N, BLOCK_M), dtype=tl.float32)
+            for kb in tl.static_range(INTERMEDIATE_DIM // 128):
+                a = tl.load(
+                    Inter + (kb * 128 + offs_k)[:, None] + rows[None, :] * INTERMEDIATE_DIM,
+                    mask=row_mask[None, :],
+                    other=0.0,
+                )
+                a_s = tl.load(InterScale + rows * (INTERMEDIATE_DIM // 128) + kb, mask=row_mask, other=0.0)
+                w = DownTiles.load([w_row + t * BLOCK_N, kb * 128])
+                w_s = tl.load(w_s_base + kb)
+                if BLOCK_N <= 128:
+                    acc += tl.dot(w, a) * (a_s * w_s)[None, :]
+                else:
+                    acc += tl.dot(w, a) * w_s[:, None] * a_s[None, :]
+            acc = acc * weight[None, :]
+            tl.store(
+                Out + slot[None, :] * HIDDEN_DIM + offs_n[:, None],
+                acc.to(Out.dtype.element_ty),
+                mask=row_mask[None, :],
+            )
+
+
+@triton.jit
 def _topk_sum_kernel(
     Slots, ExpertIds, Out, H, NUM_TOP_K: tl.constexpr, NUM_EXPERTS: tl.constexpr, BLOCK_H: tl.constexpr
 ):
@@ -597,23 +662,28 @@ def _topk_sum_kernel(
 
 
 # Fixed configs, chosen offline on one B300 at the GLM-5.3 TP8 rank shapes (gap2/experts REPORT, jobs 460445, 460506,
-# 460524): no in-band autotune. Keyed on the mean number of routed rows per expert, which the shapes give without
-# reading anything back: (max mean rows per expert, routed rows per tile, num_warps of gate_up). The tile is sized so
-# that almost every expert fits in one (its weights are then read exactly once). Above the last entry the programs walk
-# their expert's rows in tiles of 64: still ahead of the hub's persistent schedule at 150-250 rows per expert.
+# 460524, 460685): no in-band autotune. Keyed on the mean number of routed rows per expert, which the shapes give
+# without reading anything back: (max mean rows per expert, routed rows per tile, num_warps of gate_up). The tile is
+# sized so that almost every expert fits in one (its weights are then read exactly once). Above the last entry the
+# programs walk their expert's rows in tiles of 64: still ahead of the hub's persistent schedule at 150-250 rows per
+# expert.
 DECODE_TILES = [(3, 8, 4), (10, 16, 4), (22, 32, 4)]
 DECODE_LARGEST_TILE = (64, 8)
 
 
-def decode_config(num_slots: int, num_experts: int, fold: bool = False):
+def decode_config(num_slots: int, num_experts: int, hidden: int, inter: int, fold: bool = False):
     """`(gate_up config, down config)` for this many routed slots. A config is (routed rows per tile, weight rows per
-    tile, num_warps, num_stages, variant)."""
+    tile, num_warps, num_stages, variant[, weight tiles per program])."""
     block_m, num_warps = DECODE_LARGEST_TILE
     for max_rows, tile_rows, tile_warps in DECODE_TILES:
         if num_slots <= max_rows * num_experts:
             block_m, num_warps = tile_rows, tile_warps
             break
-    return (block_m, 128, num_warps, 3, "fold" if fold else "tma"), (min(block_m, 16), 256, 4, 2, "tma")
+    gate_up_config = (block_m, 128, num_warps, 3, "fold" if fold else "tma")
+    if block_m == 8 and hidden % (6 * 128) == 0 and inter <= 512:
+        # a couple of rows per expert and a short reduction: 6 weight tiles per program (see the kernel's docstring)
+        return gate_up_config, (8, 128, 4, 2, "tma", 6)
+    return gate_up_config, (min(block_m, 16), 256, 4, 2, "tma")
 
 
 def decode_route(top_k_index, num_experts):
@@ -708,8 +778,22 @@ def decode_gate_up(hidden_states, perm, expert_start, gate_up, gate_up_scale, nu
 
 def decode_down(inter_q, inter_s, perm, expert_start, down, down_scale, top_k_weights, out_dtype, config):
     """`(S, hidden)`: every routed row's weighted expert output, in flat (token, slot) order."""
-    block_m, block_n, num_warps, num_stages, variant = (*config, "tma")[:5]
+    block_m, block_n, num_warps, num_stages = config[:4]
+    variant = config[4] if len(config) > 4 else "tma"
+    tiles = config[5] if len(config) > 5 else 1
     num_experts, hidden, inter = down.shape
+    if tiles > 1:
+        # one program per (expert, `tiles` weight tiles); the unrolled K loop is meant for short reductions
+        assert variant == "tma" and hidden % (tiles * block_n) == 0 and inter % 128 == 0 and inter // 128 <= 4
+        slots_out = torch.empty(perm.numel(), hidden, dtype=out_dtype, device=down.device)
+        _decode_down_tiles_kernel[(num_experts, hidden // (tiles * block_n))](
+            inter_q, inter_s, perm, expert_start,
+            TensorDescriptor.from_tensor(down.view(num_experts * hidden, inter), [block_n, 128]), down_scale,
+            top_k_weights, slots_out, down_scale.stride(0), down_scale.stride(1),
+            HIDDEN_DIM=hidden, INTERMEDIATE_DIM=inter, BLOCK_M=block_m, BLOCK_N=block_n, TILES=tiles,
+            num_warps=num_warps, num_stages=num_stages,
+        )  # fmt: skip
+        return slots_out
     assert hidden % block_n == 0 and inter % 128 == 0 and (block_n % 128 == 0 or 128 % block_n == 0)
     slots_out = torch.empty(perm.numel(), hidden, dtype=out_dtype, device=down.device)
     args = (
@@ -760,7 +844,9 @@ def decode_experts_forward(
     num_experts = gate_up.shape[0]
     num_top_k = top_k_index.shape[-1]
     if gate_up_config is None:
-        gate_up_config, down_config = decode_config(top_k_index.numel(), num_experts, fold)
+        gate_up_config, down_config = decode_config(
+            top_k_index.numel(), num_experts, hidden_states.shape[1], gate_up.shape[1] // 2, fold
+        )
     assert hidden_states.stride(1) == 1 and top_k_index.is_contiguous() and top_k_weights.is_contiguous()
     assert gate_up.stride(2) == 1 and down.stride(2) == 1 and gate_up_scale.stride(2) == 1 and down_scale.stride(2) == 1
     perm, expert_start = decode_route(top_k_index, num_experts)

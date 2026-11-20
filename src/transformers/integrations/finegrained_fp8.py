@@ -718,7 +718,6 @@ def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
             self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
         )
     if _PROTO_EXPERTS_DECODE and _proto_experts_supported(self):
-        config = proto.decode_config(top_k_index.numel(), self.num_experts, _PROTO_EXPERTS_DECODE_FOLD)
         return proto.decode_experts_forward(
             hidden_states.contiguous(),
             top_k_index.contiguous(),
@@ -727,7 +726,7 @@ def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
             self.gate_up_proj_scale_inv,
             self.down_proj,
             self.down_proj_scale_inv,
-            *config,
+            fold=_PROTO_EXPERTS_DECODE_FOLD,
         )
     return None
 
