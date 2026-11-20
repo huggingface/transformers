@@ -983,12 +983,10 @@ class WeightTransform:
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
-        if r"\1" in replacement:
-            # The index of the internal group we need to replace is the index of the matched named group as it comes
-            # inside that matched named group
-            replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
-            replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3): `\N` is the
+        # N-th group inside the matched named group
+        base = self.compiled_sources.groupindex[matching_group_name]
+        replacement = re.sub(r"\\(\d)", lambda ref: match_object.group(base + int(ref.group(1))) or "", replacement)
         renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key
