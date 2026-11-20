@@ -34,25 +34,31 @@ class Kolibri1_1ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Kolibri1_1Model
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # Covers all four sparse roles: an indexer and a reindexer, each producing its K/V or reading another layer's
-        self.num_hidden_layers = 5
-        self.layer_types = ["sliding_attention"] + ["indexed_attention"] * 4
-        self.index_layers = [1, 3]
-        self.kv_source_layers = [0, 1, 1, 1, 4]
+        "num_hidden_layers": 5,
+        "layer_types": [
+            "sliding_attention",
+            "indexed_attention",
+            "indexed_attention",
+            "indexed_attention",
+            "indexed_attention",
+        ],
+        "index_layers": [1, 3],
+        "kv_source_layers": [0, 1, 1, 1, 4],
         # Small budgets, so that keys are selected within the tester's sequence length
-        self.index_topk = 2
-        self.index_pool_size = 4
-        self.index_compression = 2
-        self.index_num_heads = 1
-        self.index_num_local_tokens = 2
-        self.index_num_sink_tokens = 1
+        "index_topk": 2,
+        "index_pool_size": 4,
+        "index_compression": 2,
+        "index_num_heads": 1,
+        "index_num_local_tokens": 2,
+        "index_num_sink_tokens": 1,
         # A dense MLP layer in front, like the checkpoints of Kolibri 1.1
-        self.mlp_only_layers = [0]
-        self.mlp_only_intermediate_size = 40
+        "mlp_only_layers": [0],
+        "mlp_only_intermediate_size": 40,
         # Two query heads per key head, so that the indexers can score keys with more than one head
-        self.num_key_value_heads = 1
+        "num_key_value_heads": 1,
+    }
 
 
 @require_torch
