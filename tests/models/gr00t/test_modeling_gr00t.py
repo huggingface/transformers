@@ -391,6 +391,13 @@ class Gr00tForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase
         pass
 
     @unittest.skip(
+        "The common test drops `attention_mask`, which GR00T requires (the processor always returns it), as in ColPali. "
+        "Compilation is covered by `test_training_compiled_action_head_step`"
+    )
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(
         "The backbone's final norm is unused by design and gets no gradient; "
         "covered by `test_training_gradients_reach_used_parameters`"
     )
