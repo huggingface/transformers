@@ -107,6 +107,9 @@ if is_torch_distributed_available():
     # pointers. A call that does not fit it (rows, dtype, layout) takes NCCL, on every rank alike.
     _TP_ALL_REDUCE = os.environ.get("HF_TP_ALL_REDUCE", "nccl")
     _TP_GROUP = None  # the TP process group, recorded by `apply_tensor_parallelism`
+    # Programmatic dependent launch, as vLLM launches these kernels. "0" is the configuration that was clean before
+    # flashinfer-ai/flashinfer#7782 fixed the fused kernel's cluster barrier (shipped in flashinfer 0.7.3).
+    _FLASHINFER_PDL = os.environ.get("HF_TP_FLASHINFER_PDL", "1") == "1"
     _FLASHINFER = {"workspace": None, "calls": {"flashinfer": 0, "flashinfer_fused": 0, "nccl": 0}}
 
     def _flashinfer_workspace(x, process_group):
@@ -169,7 +172,7 @@ if is_torch_distributed_available():
                 input=x2d,
                 workspace=workspace,
                 pattern=comm.AllReduceFusionPattern.kAllReduce,
-                launch_with_pdl=True,
+                launch_with_pdl=_FLASHINFER_PDL,
                 trigger_completion_at_end=x2d.shape[0] > 16,
             )
             _FLASHINFER["calls"]["flashinfer"] += 1
@@ -199,7 +202,7 @@ if is_torch_distributed_available():
                 input=x2d,
                 workspace=workspace,
                 pattern=comm.AllReduceFusionPattern.kARResidualRMSNorm,
-                launch_with_pdl=True,
+                launch_with_pdl=_FLASHINFER_PDL,
                 output=None,
                 residual_out=new_residual,
                 norm_out=normed,
