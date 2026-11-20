@@ -6,6 +6,7 @@ Two implementations of `FP8Experts.forward(hidden_states, top_k_index, top_k_wei
   The weights are re-laid once at load (`trtllm_prepare`, bytes only moved), the originals are kept. Blackwell only.
 - `PROTO_EXPERTS_DECODE=1`: a Triton kernel pair with the dispatch fused and a decode schedule: one program per
   (expert, N tile) walking that expert's routed rows. Candidate for `kernels-community/finegrained-fp8`.
+  `PROTO_EXPERTS_DECODE=fold` uses one activation scale per (routed row, weight tile) in the first kernel.
 
 This file imports only torch and triton so that the benchmarks can load it without transformers.
 """
@@ -20,35 +21,46 @@ from triton.tools.tensor_descriptor import TensorDescriptor
 
 FP8 = torch.float8_e4m3fn
 PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
-PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "1"
+PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
 CALLS = {"trtllm": 0, "decode": 0}  # host-side launches of each forward (a CUDA graph replay does not count)
 
 
 # ---- shared: per-token, per-128-group activation quant -----------------------------------------------------------------
 
 
+_QUANT_GROUPS = 16
+
+
 @triton.jit
-def _act_quant_kernel(X, Y, S, stride_x, stride_y, stride_s_m, stride_s_g, GROUP: tl.constexpr):
-    # one program = one row x one 128-wide group. Same recipe as vLLM's `per_token_group_quant_fp8`: amax floored at
-    # 1e-10, scale = amax / 448, values clamped to the e4m3 range
+def _act_quant_kernel(
+    X, Y, S, stride_x, stride_y, stride_s_m, stride_s_g, NUM_GROUPS, GROUPS: tl.constexpr, WRITE_Q: tl.constexpr
+):
+    # one program = one row x GROUPS 128-wide groups. Same recipe as vLLM's `per_token_group_quant_fp8`: amax floored
+    # at 1e-10, scale = amax / 448, values clamped to the e4m3 range
     m = tl.program_id(0).to(tl.int64)
-    g = tl.program_id(1)
-    cols = g * GROUP + tl.arange(0, GROUP)
-    x = tl.load(X + m * stride_x + cols).to(tl.float32)
-    s = tl.maximum(tl.max(tl.abs(x)), 1e-10) / 448.0
-    y = tl.minimum(tl.maximum(x / s, -448.0), 448.0)
-    tl.store(Y + m * stride_y + cols, y.to(Y.dtype.element_ty))
-    tl.store(S + m * stride_s_m + g * stride_s_g, s)
+    groups = tl.program_id(1) * GROUPS + tl.arange(0, GROUPS)
+    group_mask = groups < NUM_GROUPS
+    cols = groups[:, None] * 128 + tl.arange(0, 128)[None, :]
+    x = tl.load(X + m * stride_x + cols, mask=group_mask[:, None], other=0.0).to(tl.float32)
+    s = tl.maximum(tl.max(tl.abs(x), axis=1), 1e-10) / 448.0
+    if WRITE_Q:
+        y = tl.minimum(tl.maximum(x / s[:, None], -448.0), 448.0)
+        tl.store(Y + m * stride_y + cols, y.to(Y.dtype.element_ty), mask=group_mask[:, None])
+    tl.store(S + m * stride_s_m + groups * stride_s_g, s, mask=group_mask)
 
 
-def act_quant(x: torch.Tensor, scales_group_major: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
-    """x [M, K] -> (e4m3 [M, K], fp32 scales [M, K / 128], or [K / 128, M] with `scales_group_major`). One launch."""
+def act_quant(x: torch.Tensor, scales_group_major: bool = False, scales_only: bool = False):
+    """x [M, K] -> (e4m3 [M, K], fp32 scales [M, K / 128], or [K / 128, M] with `scales_group_major`). One launch.
+    `scales_only` skips the e4m3 values and returns `(None, scales)`."""
     assert x.dim() == 2 and x.stride(1) == 1 and x.shape[1] % 128 == 0
     m, k = x.shape
-    y = torch.empty(m, k, dtype=FP8, device=x.device)
     s = torch.empty((k // 128, m) if scales_group_major else (m, k // 128), dtype=torch.float32, device=x.device)
+    y = None if scales_only else torch.empty(m, k, dtype=FP8, device=x.device)
     stride_s_m, stride_s_g = (1, m) if scales_group_major else (k // 128, 1)
-    _act_quant_kernel[(m, k // 128)](x, y, s, x.stride(0), k, stride_s_m, stride_s_g, GROUP=128, num_warps=1)
+    _act_quant_kernel[(m, triton.cdiv(k // 128, _QUANT_GROUPS))](
+        x, s if scales_only else y, s, x.stride(0), k, stride_s_m, stride_s_g, k // 128,
+        GROUPS=_QUANT_GROUPS, WRITE_Q=not scales_only, num_warps=2,
+    )  # fmt: skip
     return y, s
 
 
@@ -584,26 +596,24 @@ def _topk_sum_kernel(
     tl.store(Out + t * H + offs_h, acc.to(Out.dtype.element_ty), mask=mask)
 
 
-# Fixed configs, chosen offline on one B300 at the GLM-5.3 TP8 rank shapes (gap2/experts REPORT, jobs 460214, 460299,
-# 460353): no in-band autotune. Keyed on the mean number of routed rows per expert, which the shapes give without
-# reading anything back: (max mean rows per expert, gate_up config, down config), each config being
-# (BLOCK_M, BLOCK_N, num_warps, num_stages).
-DECODE_CONFIGS = [
-    (4, (16, 32, 2, 3, "rows"), (16, 128, 2, 3, "rows")),
-    (16, (16, 128, 4, 3, "rows"), (16, 128, 2, 3, "rows")),
-    (48, (64, 64, 4, 3, "rows"), (32, 128, 2, 3, "rows")),
-]
-DECODE_MAX_SLOTS = 65536
+# Fixed configs, chosen offline on one B300 at the GLM-5.3 TP8 rank shapes (gap2/experts REPORT, jobs 460445, 460506,
+# 460524): no in-band autotune. Keyed on the mean number of routed rows per expert, which the shapes give without
+# reading anything back: (max mean rows per expert, routed rows per tile, num_warps of gate_up). The tile is sized so
+# that almost every expert fits in one (its weights are then read exactly once). Above the last entry the programs walk
+# their expert's rows in tiles of 64: still ahead of the hub's persistent schedule at 150-250 rows per expert.
+DECODE_TILES = [(3, 8, 4), (10, 16, 4), (22, 32, 4)]
+DECODE_LARGEST_TILE = (64, 8)
 
 
-def decode_config(num_slots: int, num_experts: int):
-    """The config for this many routed slots, or `None` when the decode schedule should not be used."""
-    if num_slots > DECODE_MAX_SLOTS:
-        return None
-    for max_rows, gate_up_config, down_config in DECODE_CONFIGS:
+def decode_config(num_slots: int, num_experts: int, fold: bool = False):
+    """`(gate_up config, down config)` for this many routed slots. A config is (routed rows per tile, weight rows per
+    tile, num_warps, num_stages, variant)."""
+    block_m, num_warps = DECODE_LARGEST_TILE
+    for max_rows, tile_rows, tile_warps in DECODE_TILES:
         if num_slots <= max_rows * num_experts:
-            return gate_up_config, down_config
-    return None
+            block_m, num_warps = tile_rows, tile_warps
+            break
+    return (block_m, 128, num_warps, 3, "fold" if fold else "tma"), (min(block_m, 16), 256, 4, 2, "tma")
 
 
 def decode_route(top_k_index, num_experts):
@@ -645,7 +655,7 @@ def decode_gate_up(hidden_states, perm, expert_start, gate_up, gate_up_scale, nu
         assert block_n == 128 and hidden % 128 == 0 and inter % 128 == 0 and hidden_states.stride(1) == 1
         inter_q = torch.empty(perm.numel(), inter, dtype=FP8, device=gate_up.device)
         inter_s = torch.empty(perm.numel(), inter // 128, dtype=torch.float32, device=gate_up.device)
-        _, x_s = act_quant(hidden_states)
+        _, x_s = act_quant(hidden_states, scales_only=True)
         _decode_gate_up_fold_kernel[(num_experts, inter // 128)](
             hidden_states, x_s, perm, expert_start,
             TensorDescriptor.from_tensor(gate_up.view(num_experts * two_i, hidden), [128, 128]), gate_up_scale,
@@ -742,6 +752,7 @@ def decode_experts_forward(
     gate_up_config=None,
     down_config=None,
     prequant: bool = True,
+    fold: bool = False,
 ):
     """Block-FP8 routed experts: route, activation quant, gate_up, (requant for narrow tiles), down, top-k sum.
     Returns `(num_tokens, hidden)` in the input dtype."""
@@ -749,7 +760,7 @@ def decode_experts_forward(
     num_experts = gate_up.shape[0]
     num_top_k = top_k_index.shape[-1]
     if gate_up_config is None:
-        gate_up_config, down_config = decode_config(top_k_index.numel(), num_experts)
+        gate_up_config, down_config = decode_config(top_k_index.numel(), num_experts, fold)
     assert hidden_states.stride(1) == 1 and top_k_index.is_contiguous() and top_k_weights.is_contiguous()
     assert gate_up.stride(2) == 1 and down.stride(2) == 1 and gate_up_scale.stride(2) == 1 and down_scale.stride(2) == 1
     perm, expert_start = decode_route(top_k_index, num_experts)

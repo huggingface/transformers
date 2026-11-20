@@ -657,9 +657,11 @@ class FP8GroupedLinear(FP8Linear):
 # --- PROTOTYPE (bench only, not for upstream as is): routed-experts forwards for inference, off unless a flag is set ---
 # PROTO_EXPERTS_TRTLLM=1  flashinfer's TRT-LLM routed FP8 MoE, as vLLM calls it, on weights re-laid once at load
 # PROTO_EXPERTS_DECODE=1  Triton kernel pair with the dispatch fused, one program per (expert, N tile)
+# PROTO_EXPERTS_DECODE=fold  the same with one activation scale per (routed row, weight tile) in the first kernel
 # Both replace the `grouped_mm` and `batched_mm` forwards of `FP8Experts` when no gradient is needed.
 _PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
-_PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "1"
+_PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
+_PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "fold"
 
 
 def _proto_experts_supported(module: "FP8Experts") -> bool:
@@ -716,10 +718,7 @@ def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
             self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
         )
     if _PROTO_EXPERTS_DECODE and _proto_experts_supported(self):
-        config = proto.decode_config(top_k_index.numel(), self.num_experts)
-        if config is None:
-            # prefill-sized batches keep the persistent schedule of the default path
-            return None
+        config = proto.decode_config(top_k_index.numel(), self.num_experts, _PROTO_EXPERTS_DECODE_FOLD)
         return proto.decode_experts_forward(
             hidden_states.contiguous(),
             top_k_index.contiguous(),
