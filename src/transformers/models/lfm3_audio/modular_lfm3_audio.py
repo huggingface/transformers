@@ -1104,11 +1104,9 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         if labels is not None:
             # mean over learned tokens, zero without any
             text_count = (labels[..., 1:] != -100).sum()
+            kwargs.setdefault("num_items_in_batch", text_count.clamp(min=1))
             text_loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                vocab_size=self.config.text_config.vocab_size,
-                num_items_in_batch=text_count.clamp(min=1),
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         if audio_labels is not None:
