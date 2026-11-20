@@ -282,6 +282,10 @@ class Dots3NoteAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip("Image features are covered by Dots3NoteVision2TextModelTest")
+    def test_multimodal_outputs_are_returned(self):
+        pass
+
     def _image_features_prepare_config_and_inputs(self):
         self.skipTest("Image features are covered by Dots3NoteVision2TextModelTest")
 
