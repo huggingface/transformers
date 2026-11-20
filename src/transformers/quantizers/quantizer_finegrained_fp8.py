@@ -140,10 +140,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             _disable_deepgemm_on_multi_device,
             _get_ue8m0_dtype,
             _proto_convert_fp8_linears,
+            _proto_prepare_fp8_experts,
         )
 
         _disable_deepgemm_on_multi_device(model)
         _proto_convert_fp8_linears(model)  # prototype, no-op unless PROTO_FP8_LINEAR is set
+        _proto_prepare_fp8_experts(model)  # prototype, no-op unless PROTO_EXPERTS_TRTLLM is set
         # MXFP8 checkpoints (e.g. Inkling2) save their ue8m0 scales as bytes
         if self.pre_quantized and self.quantization_config.scale_fmt == "ue8m0":
             for module in model.modules():
