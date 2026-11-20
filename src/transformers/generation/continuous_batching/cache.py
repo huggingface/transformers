@@ -27,6 +27,7 @@ from .cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from .distributed import DistributedHelper
@@ -153,18 +154,13 @@ class PagedAttentionCache:
             num_key_value_heads //= distributed_helper.tp_size
 
         # Construct the necessary cache allocator for each attention type
-        ca_kwargs = {
-            "num_key_value_heads": num_key_value_heads,
-            "config": config,
-            "cache_dtype": self.dtype,
-            "page_size": continuous_batching_config.page_size,
-            "allow_block_sharing": continuous_batching_config.allow_block_sharing,
-        }
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}
         for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(config).items()):
-            # Create the allocator and register it by name and indices
-            allocator = ATTN_TYPE_TO_ALLOCATOR[attn_type](index=index, layer_indices=layer_indices, **ca_kwargs)
+            # Create the allocator and register it by name and layers indices
+            allocator = self._create_allocator(
+                continuous_batching_config, attn_type, index, layer_indices, num_key_value_heads
+            )
             self.cache_allocators[attn_type] = allocator
             self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
 
@@ -178,9 +174,7 @@ class PagedAttentionCache:
         )
         # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
         # config attribute to and from bytes
-        bytes_per_block = config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
-            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
-        )
+        bytes_per_block = sum(ca.bytes_per_block for ca in self.cache_allocators.values())
 
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
             config=config,
@@ -226,6 +220,32 @@ class PagedAttentionCache:
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
+
+    def _create_allocator(
+        self,
+        continuous_batching_config: ContinuousBatchingConfig,
+        attn_type: str,
+        index: int,
+        layer_indices: list[int],
+        num_key_value_heads: int,
+    ) -> CacheAllocator:
+        """Creates the cache allocator for a given set of layers with the same attention type."""
+        # Catch a special case: MLA layers are created with the same attention type as full attention layers
+        if attn_type == FULL_ATTENTION and getattr(self.config, "kv_lora_rank", None) is not None:
+            allocator_class = MLACacheAllocator
+        else:
+            allocator_class = ATTN_TYPE_TO_ALLOCATOR[attn_type]
+
+        allocator = allocator_class(
+            index=index,
+            layer_indices=layer_indices,
+            num_key_value_heads=num_key_value_heads,
+            config=self.config,
+            cache_dtype=self.dtype,
+            page_size=continuous_batching_config.page_size,
+            allow_block_sharing=continuous_batching_config.allow_block_sharing,
+        )
+        return allocator
 
     def _infer_read_cache_limit(self) -> int | None:
         """The maximum number of tokens that can be read from the cache for a single request."""
@@ -589,6 +609,20 @@ class PagedAttentionMemoryHandler:
         self.available_memory = self.get_available_memory()
 
     @property
+    def kv_numel_at_peak(self) -> int:
+        """The number of elements one token takes in the key and value states at the attention peak."""
+        config = self.config
+        if getattr(config, "kv_lora_rank", None) is None:
+            return self.kv_heads_at_peak * find_head_dim(config)
+        # MLA layers read two latents back from the cache and expand them to heads: the projected keys and values,
+        # the keys completed with their rotated part and, for flash, the values padded to the key head dimension
+        qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        expanded_dim = config.qk_nope_head_dim + config.v_head_dim + qk_head_dim
+        if is_flash_attention_requested(config) and config.v_head_dim != qk_head_dim:
+            expanded_dim += qk_head_dim
+        return config.kv_lora_rank + config.qk_rope_head_dim + config.num_attention_heads * expanded_dim
+
+    @property
     def bytes_per_batch_token(self) -> int:
         """The memory cost of one batch token: its share of the IO tensors plus the largest activation peak, which is
         either the LM head peak (hidden states turned into fp32 logits) or the attention peak (hidden states, query
@@ -606,7 +640,7 @@ class PagedAttentionMemoryHandler:
             self.config.hidden_size  # hidden states, shape [M, hidden_size]
             + self.config.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
             + 2 * find_num_key_value_heads(self.config) * head_dim  # new K and V states
-            + self.kv_heads_at_peak * head_dim  # their copy in the K and V read back from the cache # TODO: optimize
+            + self.kv_numel_at_peak  # their copy in the K and V read back from the cache # TODO: optimize
         )
         io_bytes = self.io_multiplier * (
             7 * i  # bulk_input: [7, M] int32, packed as 7 rows
@@ -621,7 +655,7 @@ class PagedAttentionMemoryHandler:
     def bytes_per_cache_token(self) -> int:
         """The memory cost of one readable cache token beside the cache itself: the old key and value states read from
         the cache at the attention peak, plus its share of the read indices."""
-        kv_read_bytes = self.kv_heads_at_peak * find_head_dim(self.config) * self.activation_dtype.itemsize
+        kv_read_bytes = self.kv_numel_at_peak * self.activation_dtype.itemsize
         read_index_bytes = self.io_multiplier * self.num_groups * 8  # read_index: [num_groups, N + M] (N part, int64)
         return kv_read_bytes + read_index_bytes
 
