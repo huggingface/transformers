@@ -366,6 +366,18 @@ _PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
 # WP prefill (bench only): batches above 512 query tokens (prefill) also take the per-request path, so nothing reads
 # the engine's [M, N + M] mask any more and the indexer never scores a query against another request's keys
 _PROTO_PREFILL = _os.environ.get("PROTO_PREFILL", "0") == "1"
+# WP prefill (bench only): fp32 GEMMs on tensor cores (TF32). The fp32 GEMMs of this model (router, indexer scores) take
+# bf16 values cast to fp32, which TF32's 10-bit mantissa holds exactly, so only the summation order changes
+if _os.environ.get("PROTO_TF32", "0") == "1":
+    torch.backends.cuda.matmul.allow_tf32 = True
+# WP prefill (bench only): when a prefill batch has to score (some context longer than index_topk), one Triton launch
+# computes the masked scores of the packed batch (`integrations/_proto_mqa_kernels.py`) instead of gathering every
+# query's keys into [M, max_k, D] and scoring in fp32
+_PROTO_PREFILL_MQA = _os.environ.get("PROTO_PREFILL_MQA", "0") == "1"
+_PROTO_PREFILL_MQA_SORTED = _os.environ.get("PROTO_PREFILL_MQA_SORTED", "0") == "1"
+# WP prefill (bench only): give FlashMLA's sparse kernel the number of valid entries of every list (`topk_length`), so
+# its time follows the keys a query really attends to instead of the padded list width. Same output, bit for bit
+_PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "0") == "1"
 
 
 def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
@@ -405,14 +417,42 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     offs = torch.arange(max_k, device=device)
     pos = (k_start[:, None] + offs[None]).clamp(max=keys.shape[0] - 1)  # [M, max_k]
     visible = offs[None] < n_visible[:, None]
+    num_selected = min(indexer.index_topk, max_k)
+    # valid entries of each query's list; with PROTO_TOPK_LENGTH they are always the first ones of the list
+    lengths = n_visible.clamp(min=0, max=num_selected).to(torch.int32)
     if skip_scoring:
-        return pos, visible
+        return pos, visible, lengths
+    if _PROTO_PREFILL_MQA and seq_len > 512:
+        from ...integrations._proto_mqa_kernels import mqa_logits_masked
+
+        # each query sees the packed keys [lo, hi) of its own request; padded queries see nothing
+        lo = torch.where(real, k_start, 0).to(torch.int32)
+        hi = (lo + n_visible).to(torch.int32)
+        weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+        weights = weights * (indexer.n_heads**-0.5 * indexer.softmax_scale)
+        logits = mqa_logits_masked(q.contiguous(), keys, weights, lo, hi)  # [M, N], -inf outside [lo, hi)
+        index_scores = logits.gather(1, pos).masked_fill(~visible, float("-inf"))  # [M, max_k]
+        # the kernel takes an unordered list; PROTO_PREFILL_MQA_SORTED=1 keeps the order of the torch path (checks)
+        top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
+        return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
     scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys[pos].float()) * indexer.softmax_scale)
     weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
     index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
     index_scores = index_scores.masked_fill(~visible, float("-inf"))
-    top = index_scores.topk(min(indexer.index_topk, max_k), dim=-1).indices
-    return pos.gather(-1, top), visible.gather(-1, top)
+    top = index_scores.topk(num_selected, dim=-1).indices
+    return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
+
+
+def _proto_selected(pos, visible, top, n_visible, num_selected, lengths):
+    """Selected packed positions and their validity from the top-k of each query's window."""
+    positions, allowed = pos.gather(-1, top), visible.gather(-1, top)
+    if _PROTO_TOPK_LENGTH:
+        # a query that sees at most `num_selected` keys selects them all: list them in window order, so that the valid
+        # entries of every list are its first `lengths` ones (the top-k of a longer window has no invalid entry)
+        partial = (n_visible <= num_selected)[:, None]
+        positions = torch.where(partial, pos[:, :num_selected], positions)
+        allowed = torch.where(partial, visible[:, :num_selected], allowed)
+    return positions, allowed, lengths
 
 
 def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
@@ -458,7 +498,8 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
             topk_indices = (positions, allowed if allowed.dtype == torch.bool else allowed == 0)
     else:
         topk_indices = prev_topk_indices
-    positions, allowed = topk_indices
+    positions, allowed = topk_indices[0], topk_indices[1]
+    lengths = topk_indices[2] if _PROTO_TOPK_LENGTH and len(topk_indices) > 2 else None  # [M] int32, <= list width
     rows = torch.where(allowed, read_index[positions], -1).to(torch.int32)  # [M, topk]
     if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
         rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
@@ -474,7 +515,7 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
         (kv_latent_cache.stride(0), 0, 1),
     )
     out_latent = _flash_mla.flash_mla_sparse_fwd(
-        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank
+        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank, topk_length=lengths
     )[0][:, :num_heads]  # [M, H, kv_lora]
     attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv).reshape(batch_size, seq_length, -1)
     return module.o_proj(attn_output), None, topk_indices

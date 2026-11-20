@@ -658,6 +658,11 @@ class FP8GroupedLinear(FP8Linear):
 # entry points (routing, gate_up + SiLU + requant, down + weighting, top-k sum in 8 and 3 kernels) instead of doing
 # the routing and the combine in torch around two matmul kernels.
 _FP8_FUSED_EXPERTS = os.environ.get("HF_FP8_FUSED_EXPERTS", "0") == "1"
+# WP prefill (bench only): fused entry points only above this many routed rows per expert on average
+# (tokens * top_k > rows * num_experts, the criterion of WP experts' decode schedule, so the two cannot overlap). The
+# fused grouped kernel (one persistent program per SM) is 2.3x today's path at ~150 rows per expert (prefill) and no
+# better at 2 rows per expert (decode)
+_FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "0"))
 
 
 def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped: bool):
@@ -676,9 +681,10 @@ def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, 
     return out.to(hidden_states.dtype)
 
 
-def _can_use_fp8_fused_experts(self, hidden_states) -> bool:
+def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:
     return (
         _FP8_FUSED_EXPERTS
+        and top_k_index.numel() > _FP8_FUSED_EXPERTS_MIN_ROWS * self.num_experts
         and not (torch.is_grad_enabled() and hidden_states.requires_grad)
         and self.has_gate
         and self.gate_softcap is None
@@ -701,7 +707,7 @@ def fp8_batched_mm_experts_forward(
             "batched_mm experts dispatch does not support activation_scheme='static'. "
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
-    if _can_use_fp8_fused_experts(self, hidden_states):
+    if _can_use_fp8_fused_experts(self, hidden_states, top_k_index):
         return _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped=False)
 
     finegrained_fp8 = load_finegrained_fp8_kernel()
@@ -778,7 +784,7 @@ def fp8_grouped_mm_experts_forward(
             "grouped_mm experts dispatch does not support activation_scheme='static'. "
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
-    if _can_use_fp8_fused_experts(self, hidden_states):
+    if _can_use_fp8_fused_experts(self, hidden_states, top_k_index):
         return _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped=True)
 
     device = hidden_states.device
