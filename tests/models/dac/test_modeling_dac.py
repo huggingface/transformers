@@ -25,13 +25,16 @@ from parameterized import parameterized
 from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoProcessor, DacConfig, DacModel
 from transformers.testing_utils import (
+    get_json_expectation,
     is_torch_available,
     require_deterministic_for_xpu,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -43,42 +46,30 @@ if is_torch_available():
 
 @require_torch
 # Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTester with Encodec->Dac
-class DacModelTester:
+class DacModelTester(ModelTesterConfigMixin):
     # Ignore copy
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=1,
-        is_training=False,
-        intermediate_size=1024,
-        encoder_hidden_size=16,
-        downsampling_ratios=[2, 4, 4],
-        decoder_hidden_size=16,
-        n_codebooks=6,
-        codebook_size=512,
-        codebook_dim=4,
-        quantizer_dropout=0.0,
-        commitment_loss_weight=0.25,
-        codebook_loss_weight=1.0,
-        sample_rate=16000,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.intermediate_size = intermediate_size
-        self.sample_rate = sample_rate
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "num_channels": 1,
+        "is_training": False,
+        "intermediate_size": 1024,
+        "encoder_hidden_size": 16,
+        "downsampling_ratios": [2, 4, 4],
+        "decoder_hidden_size": 16,
+        "n_codebooks": 6,
+        "codebook_size": 512,
+        "codebook_dim": 4,
+        "quantizer_dropout": 0.0,
+        "commitment_loss_weight": 0.25,
+        "codebook_loss_weight": 1.0,
+        "sample_rate": 16000,
+    }
 
-        self.encoder_hidden_size = encoder_hidden_size
-        self.downsampling_ratios = downsampling_ratios
-        self.decoder_hidden_size = decoder_hidden_size
-        self.n_codebooks = n_codebooks
-        self.codebook_size = codebook_size
-        self.codebook_dim = codebook_dim
-        self.quantizer_dropout = quantizer_dropout
-        self.commitment_loss_weight = commitment_loss_weight
-        self.codebook_loss_weight = codebook_loss_weight
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         audio_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
@@ -123,6 +114,8 @@ class DacModelTester:
 @require_torch
 # Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTest with Encodec->Dac
 class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DacModelTester
+
     all_model_classes = (DacModel,) if is_torch_available() else ()
     is_encoder_decoder = True
 
@@ -304,15 +297,15 @@ https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_layer_
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/dac"
 
-with open(FIXTURES_DIR / "expected_integration.json") as f:
+with open(FIXTURES_DIR / "expected_integration.json", encoding="utf-8") as f:
     EXPECTED_INTEGRATION = json.load(f)
 
-with open(FIXTURES_DIR / "expected_integration_batch.json") as f:
+with open(FIXTURES_DIR / "expected_integration_batch.json", encoding="utf-8") as f:
     EXPECTED_INTEGRATION_BATCH = json.load(f)
 
 
 @slow
-@require_torch
+@require_torch_accelerator
 class DacIntegrationTest(unittest.TestCase):
     @parameterized.expand([(model_name,) for model_name in EXPECTED_INTEGRATION.keys()])
     @require_deterministic_for_xpu
@@ -352,7 +345,10 @@ class DacIntegrationTest(unittest.TestCase):
                 atol=1e-6,
             )
             torch.testing.assert_close(
-                quantizer_outputs[4].squeeze().item(), expected["quant_codebook_loss"], rtol=1e-4, atol=1e-4
+                quantizer_outputs[4].squeeze().item(),
+                get_json_expectation(expected["quant_codebook_loss"]),
+                rtol=1e-4,
+                atol=1e-4,
             )
 
             # compare decoder outputs

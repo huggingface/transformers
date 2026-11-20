@@ -24,6 +24,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -53,54 +54,37 @@ if is_vision_available():
     from transformers import ChineseCLIPProcessor
 
 
-class ChineseCLIPTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
+class ChineseCLIPTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -231,44 +215,38 @@ class ChineseCLIPTextModelTester:
         return config, inputs_dict
 
 
-class ChineseCLIPVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class ChineseCLIPVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -313,6 +291,8 @@ class ChineseCLIPVisionModelTester:
 
 @require_torch
 class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = ChineseCLIPTextModelTester
+
     all_model_classes = (ChineseCLIPTextModel,) if is_torch_available() else ()
     # ChineseCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
     model_split_percents = [0.5, 0.8, 0.9]
@@ -403,6 +383,8 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = ChineseCLIPVisionModelTester
+
     all_model_classes = (ChineseCLIPVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -456,18 +438,37 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class ChineseCLIPModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-        if text_kwargs is None:
-            text_kwargs = {}
-        if vision_kwargs is None:
-            vision_kwargs = {}
+class ChineseCLIPModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    # `text_kwargs` / `vision_kwargs` are forwarded to the sub-testers, not set as attributes
+    small_config_overrides = {
+        "text_kwargs": {"use_labels": False, "batch_size": 12},
+        "vision_kwargs": {"batch_size": 12},
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if values["text_kwargs"] is None:
+            values["text_kwargs"] = {}
+        if values["vision_kwargs"] is None:
+            values["vision_kwargs"] = {}
+        # need bs for batching_equivalence test
+        values["batch_size"] = ChineseCLIPTextModelTester.get_small_config_defaults(**values["text_kwargs"])[
+            "batch_size"
+        ]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
+        values = self.get_small_config_defaults(**kwargs)
+        text_kwargs, vision_kwargs = values.pop("text_kwargs"), values.pop("vision_kwargs")
+        for key, value in values.items():
+            setattr(self, key, value)
         self.text_model_tester = ChineseCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = ChineseCLIPVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         (
@@ -518,6 +519,8 @@ class ChineseCLIPModelTester:
 
 @require_torch
 class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ChineseCLIPModelTester
+
     all_model_classes = (ChineseCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ChineseCLIPModel} if is_torch_available() else {}
 
@@ -526,9 +529,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     additional_model_inputs = ["pixel_values"]
 
     def setUp(self):
-        text_kwargs = {"use_labels": False, "batch_size": 12}
-        vision_kwargs = {"batch_size": 12}
-        self.model_tester = ChineseCLIPModelTester(self, text_kwargs, vision_kwargs)
+        self.model_tester = ChineseCLIPModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -566,7 +567,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
 # We will verify our results on an image of Pikachu
 def prepare_img():
-    url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -600,7 +601,7 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         )
 
         probs = outputs.logits_per_image.softmax(dim=1)
-        expected_probs = torch.tensor([[1.2686e-03, 5.4499e-02, 6.7968e-04, 9.4355e-01]], device=torch_device)
+        expected_probs = torch.tensor([[9.7735e-04, 1.1008e-02, 4.4070e-04, 9.8757e-01]], device=torch_device)
 
         torch.testing.assert_close(probs, expected_probs, rtol=5e-3, atol=5e-3)
 

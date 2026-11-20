@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_processing_common import url_to_local_path
@@ -45,34 +46,27 @@ if is_torch_available():
     import torch
 
 
-class PPOCRV5MobileDetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=128,
-        num_channels=3,
-        num_stages=5,
-        is_training=False,
-        reduction=4,
-        hidden_act="hardswish",
-        layer_list_out_channels=[12, 24, 42, 360],
-        neck_out_channels=96,
-        kernel_list=[3, 2, 2],
-        interpolate_mode="nearest",
-    ):
+class PPOCRV5MobileDetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 128,
+        "num_channels": 3,
+        "num_stages": 5,
+        "is_training": False,
+        "reduction": 4,
+        "hidden_act": "hardswish",
+        "layer_list_out_channels": [12, 24, 42, 360],
+        "neck_out_channels": 96,
+        "kernel_list": [3, 2, 2],
+        "interpolate_mode": "nearest",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.is_training = is_training
-        self.reduction = reduction
-        self.hidden_act = hidden_act
-        self.layer_list_out_channels = layer_list_out_channels
-        self.neck_out_channels = neck_out_channels
-        self.kernel_list = kernel_list
-        self.interpolate_mode = interpolate_mode
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -129,6 +123,8 @@ class PPOCRV5MobileDetModelTester:
 
 @require_torch
 class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = PPOCRV5MobileDetModelTester
+
     all_model_classes = (PPOCRV5MobileDetForObjectDetection,) if is_torch_available() else ()
     pipeline_model_mapping = {"object-detection": PPOCRV5MobileDetForObjectDetection} if is_torch_available() else {}
 
@@ -237,7 +233,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
         )
         self.image = load_image(img_url)
 
@@ -267,10 +263,10 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[76, 550], [451, 539], [452, 576], [77, 587]],
-                [[11, 504], [518, 483], [520, 534], [13, 555]],
-                [[189, 452], [401, 445], [402, 482], [190, 490]],
-                [[38, 408], [488, 387], [490, 433], [40, 454]],
+                [[83, 362], [309, 362], [309, 433], [83, 433]],
+                [[82, 265], [266, 267], [265, 339], [81, 336]],
+                [[82, 173], [274, 177], [273, 244], [81, 240]],
+                [[87, 90], [577, 90], [577, 152], [87, 152]],
             ],
             dtype=torch.short,
             device=torch_device,
@@ -279,7 +275,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.8363, 0.8170, 0.8746, 0.8694]).to(torch_device)
+        expected_scores = torch.tensor([0.8882, 0.8907, 0.9146, 0.8886]).to(torch_device)
         self.assertEqual(len(results[0]["scores"]), 4)
         torch.testing.assert_close(
             torch.tensor(results[0]["scores"]).to(device=torch_device), expected_scores, rtol=2e-2, atol=2e-2

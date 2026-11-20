@@ -241,13 +241,12 @@ pipeline(
 
 - Această bibliotecă nu este un toolbox de block-uri pentru construirea rețelelor neuronale. Codul din fișierele modelelor nu este refactorizat cu mai multă abstractizare pentru ca cercetătorii să poată utiliza rapid fiecare dintre modele fără să aibă de-a face cu fișiere/abstractizări adiționale.
 - API-ul de antrenare este optimizat pentru utilizarea cu modele PyTorch oferite de Transformers. Pentru loop-uri generice de machine learning, utilizează o bibliotecă precum [Accelerate](https://huggingface.co/docs/accelerate).
-- [Script-urile de exemplu](https://github.com/huggingface/transformers/tree/main/examples) sunt doar *exemple*. S-ar putea ca acestea să nu funcționeze în toate cazurile și va trebui să adaptezi codul pentru ca acestea să funcționeze.
 
 ## 100 de proiecte folosind Transformers
 
 Transformers este mai mult decât un toolkit pentru utilizarea modelelor pre-antrenate, este o comunitate de proiecte construite în jurul acestuia și a Hub-ului Hugging Face. Vrem ca Transformers să ajute developerii, cercetătorii, studenții, profesorii, inginerii și pe toți ceilalți oameni să-și construiască propriile proiecte.
 
-Pentru a sărbători atingerea a 100,000 de stars pentru proiectul Transformers, am vrut să aducem comunitatea în centrul atenției prin pagina [awesome-transformers](./awesome-transformers.md) care este o listă de 100 de proiecte incredibile construite utilizând Transformers.
+Pentru a sărbători atingerea a 100,000 de stars pentru proiectul Transformers, am vrut să aducem comunitatea în centrul atenției prin pagina [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) care este o listă de 100 de proiecte incredibile construite utilizând Transformers.
 
 Dacă deții sau utilizezi un proiect și crezi că ar trebui să facă parte din listă, deschide un PR pentru a-l adăuga!
 

@@ -24,17 +24,19 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
     DeepseekV3Experts,
+    DeepseekV3ForCausalLM,
+    DeepseekV3Model,
     DeepseekV3MoE,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
-    LlamaForCausalLM,
-    LlamaModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -66,6 +68,7 @@ class Mistral4TopkRouter(DeepseekV2TopkRouter):
         del self.topk_method
         self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -101,13 +104,14 @@ class Mistral4MoE(DeepseekV3MoE):
 
 
 class Mistral4Attention(DeepseekV3Attention):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -133,8 +137,8 @@ class Mistral4Attention(DeepseekV3Attention):
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
@@ -158,6 +162,7 @@ class Mistral4Attention(DeepseekV3Attention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -187,7 +192,6 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Mistral4DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -197,11 +201,11 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,
         "attentions": Mistral4Attention,
+        "router_logits": OutputRecorder(Mistral4TopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = []
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Mistral4TopkRouter):
@@ -211,11 +215,11 @@ class Mistral4PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
-class Mistral4Model(LlamaModel):
+class Mistral4Model(DeepseekV3Model):
     pass
 
 
-class Mistral4ForCausalLM(LlamaForCausalLM):
+class Mistral4ForCausalLM(DeepseekV3ForCausalLM):
     pass
 
 

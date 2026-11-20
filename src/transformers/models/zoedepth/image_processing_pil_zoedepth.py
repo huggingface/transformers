@@ -33,7 +33,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
 
 
@@ -168,7 +168,6 @@ class ZoeDepthImageProcessorPil(PilBackend):
 
         torch_image = torch.from_numpy(image).unsqueeze(0)
         # TODO support align_corners=True in image_transforms.resize
-        requires_backends(self, "torch")
         resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
         mode = resample_to_mode[resample]
         resized_image = nn.functional.interpolate(
@@ -264,8 +263,6 @@ class ZoeDepthImageProcessorPil(PilBackend):
             `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
-
         predicted_depth = outputs.predicted_depth
 
         if (outputs_flipped is not None) and (predicted_depth.shape != outputs_flipped.predicted_depth.shape):

@@ -24,20 +24,18 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
-from ...image_utils import ImageInput
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
-from ..llava.processing_llava import LlavaProcessorKwargs
 from ..swin.modeling_swin import SwinDropPath
 
 
@@ -129,9 +127,9 @@ class Florence2Config(PreTrainedConfig):
     ```"""
 
     model_type = "florence2"
-    sub_configs = {
-        "text_config": AutoConfig,
+    sub_configs_defaults = {
         "vision_config": Florence2VisionConfig,
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bart"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -140,36 +138,12 @@ class Florence2Config(PreTrainedConfig):
     is_encoder_decoder: bool = True
     tie_word_embeddings: bool = True
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bart")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["bart"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Florence2VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-            self.vision_config = Florence2VisionConfig()
-
-        super().__post_init__(**kwargs)
-
-
-class Florence2ProcessorKwargs(LlavaProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
-
 
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
-    valid_processor_kwargs = Florence2ProcessorKwargs
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
 
     def __init__(
         self,
@@ -274,20 +248,6 @@ class Florence2Processor(ProcessorMixin):
             text = [self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token for sample in text]
 
         return images, text, None, None
-
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text)
-
-        if not isinstance(text, list) or not all(isinstance(token, str) for token in text):
-            raise ValueError("`text` must be a string or list of strings.")
-
-        if isinstance(images, list) and len(images) != len(text):
-            raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
@@ -1206,7 +1166,7 @@ class Florence2VisionBlock(nn.Module):
 
 @auto_docstring
 class Florence2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Florence2VisionConfig
+    config: Florence2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
@@ -1319,12 +1279,12 @@ class Florence2MultiModalProjector(nn.Module):
 @dataclass
 class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
     r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_image_tokens, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -1336,21 +1296,21 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
 @dataclass
 class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_image_tokens, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    image_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 class Florence2PreTrainedModel(LlavaPreTrainedModel):
-    config_class = Florence2Config
+    config: Florence2Config
     base_model_prefix = "model"
 
     _supports_attention_backend = False
@@ -1392,7 +1352,7 @@ class Florence2Model(LlavaModel):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
@@ -1402,17 +1362,18 @@ class Florence2Model(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
@@ -1447,7 +1408,7 @@ class Florence2Model(LlavaModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1455,14 +1416,14 @@ class Florence2Model(LlavaModel):
 
         return Florence2Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if encoder_outputs is None and pixel_values is not None else None,
         )
 
 
@@ -1475,6 +1436,9 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
+    # The Bart language model has no TP plan, so its shared embedding is never sharded: a head rule would gather
+    # full-vocab logits from every rank
+    _tp_plan = AttributeError()
 
     @auto_docstring
     def get_image_features(
@@ -1484,33 +1448,29 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
@@ -1545,7 +1505,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1553,9 +1513,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1570,7 +1529,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         return Florence2Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -1581,13 +1540,13 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         return self.model.get_placeholder_mask(
             input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
         )
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -1595,27 +1554,36 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
-        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
-        pixel_values = model_kwargs.pop("pixel_values", None)
+        if model_kwargs.get("encoder_outputs") is not None:
+            return model_kwargs
 
+        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+        if (image_outputs := model_kwargs.pop("mm_encoder_outputs", {}).get("image")) is not None:
+            if model_kwargs.get("pixel_values") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input images")
+
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
-            None, model_kwargs, model_input_name, generation_config
+        model_kwargs = self._prepare_text_encoder_decoder_kwargs_for_generation(
+            inputs_tensor=None,
+            model_kwargs=model_kwargs,
+            model_input_name=model_input_name,
+            generation_config=generation_config,
         )
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Florence2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Florence2Config",

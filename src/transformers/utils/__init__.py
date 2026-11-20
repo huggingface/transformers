@@ -94,6 +94,7 @@ from .hub import (
     hf_api,
     http_user_agent,
     list_repo_templates,
+    resolve_revision,
     try_to_load_from_cache,
 )
 from .import_utils import (
@@ -111,11 +112,14 @@ from .import_utils import (
     check_torch_load_is_safe,
     direct_transformers_import,
     enable_tf32,
+    get_current_accelerator,
+    get_device_type,
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
     is_apollo_torch_available,
     is_aqlm_available,
+    is_audio_available,
     is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
@@ -176,12 +180,14 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_nltk_available,
+    is_nncf_available,
     is_num2words_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
     is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -242,6 +248,7 @@ from .import_utils import (
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_optimi_available,
+    is_torch_supa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -250,6 +257,8 @@ from .import_utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     is_torchdistx_available,
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,
@@ -346,5 +355,8 @@ def get_available_devices() -> frozenset[str]:
 
     if is_torch_musa_available():
         devices.add("musa")
+
+    if is_torch_supa_available():
+        devices.add("supa")
 
     return frozenset(devices)

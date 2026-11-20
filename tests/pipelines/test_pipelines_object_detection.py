@@ -296,12 +296,14 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
         object_detector = pipeline("object-detection", model=model_id, threshold=threshold)
 
         outputs = object_detector(
-            "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/invoice_docquery_a.png"
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
-                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 200, "ymin": 322, "xmax": 351, "ymax": 344}},
+                {"score": 0.9994, "label": "I-ANSWER", "box": {"xmin": 200, "ymin": 322, "xmax": 351, "ymax": 344}},
+                {"score": 0.9994, "label": "I-ANSWER", "box": {"xmin": 200, "ymin": 322, "xmax": 351, "ymax": 344}},
+                {"score": 0.9994, "label": "I-ANSWER", "box": {"xmin": 200, "ymin": 322, "xmax": 351, "ymax": 344}},
             ],
         )

@@ -15,7 +15,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from tokenizers import normalizers
 
@@ -93,6 +92,8 @@ class Siglip2TextConfig(SiglipTextConfig):
 @strict
 class Siglip2VisionConfig(SiglipVisionConfig):
     r"""
+    vision_use_head ('bool', *optional*):
+        Whether to use a vision head module or not.
     num_patches (`int`, *optional*, defaults to 256):
         The number of patches in the image with the size of (`patch_size`, `patch_size`).
         The image is resized to fill maximum of this number of patches, and to preserve
@@ -172,52 +173,37 @@ class Siglip2VisionEmbeddings(nn.Module):
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
-        batch_size = spatial_shapes.shape[0]
-        embed_dim = positional_embeddings.shape[-1]
-        source_dtype = positional_embeddings.dtype
-
-        resulted_positional_embeddings = torch.empty(
-            (batch_size, max_length, embed_dim),
-            device=positional_embeddings.device,
-            dtype=source_dtype,
+        torch_compilable_check((spatial_shapes > 0).all(), "Resized positional embeddings must have a positive size.")
+        torch_compilable_check(
+            (spatial_shapes.prod(-1) <= max_length).all(), "Resized positional embeddings exceed max_length."
         )
+        grid_size = positional_embeddings.shape[0]
 
-        # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        # Each output position's row and column in its image, the padding positions taking the first one
+        sizes = spatial_shapes.float()[:, None]
+        positions = torch.arange(max_length, device=spatial_shapes.device, dtype=torch.float32)[None, :, None]
+        rows = torch.div(positions, sizes[..., 1:], rounding_mode="floor")
+        output_index = torch.cat([rows, positions - rows * sizes[..., 1:]], dim=-1)
+        output_index = output_index * (positions < sizes.prod(-1, keepdim=True))
 
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.to(torch.float32)
+        # The weights of `F.interpolate(mode="bilinear", align_corners=False, antialias=True)` along each axis
+        scale = grid_size / sizes
+        support = scale.clamp(min=1)
+        center = (output_index + 0.5) * scale - 0.5
+        source = torch.arange(grid_size, device=spatial_shapes.device, dtype=torch.float32)
+        weights = (1 - (source - center[..., None]).abs_().div_(support[..., None])).clamp_(min=0)
+        weights = weights / weights.sum(-1, keepdim=True)
 
-        for i in range(batch_size):
-            # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
-            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
-            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
-            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
+        # Resizing is linear: each output is the grid weighted by its row's and its column's weights
+        weights = (weights[..., 0, :, None] * weights[..., 1, None, :]).flatten(-2)
+        flat_embeddings = positional_embeddings.reshape(-1, positional_embeddings.shape[-1])
+        resized_embeddings = weights.to(flat_embeddings.device) @ flat_embeddings.float()
+        return resized_embeddings.to(positional_embeddings.dtype)
 
-            # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
-            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
-
-            # Cast to original dtype
-            resized_embeddings = resized_embeddings.to(source_dtype)
-
-            resulted_positional_embeddings[i, : height * width] = resized_embeddings
-            resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
-
-        return resulted_positional_embeddings
-
-    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor`):
+            pixel_values (`torch.Tensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
@@ -255,7 +241,7 @@ class Siglip2VisionModel(SiglipVisionModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -269,7 +255,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Siglip2VisionModel
@@ -363,7 +349,7 @@ class Siglip2Model(SiglipModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -406,7 +392,7 @@ class Siglip2Model(SiglipModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
@@ -426,7 +412,7 @@ class Siglip2Model(SiglipModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -517,10 +503,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -528,7 +510,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT

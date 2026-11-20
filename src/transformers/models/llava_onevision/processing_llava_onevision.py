@@ -20,25 +20,14 @@ import math
 from ...image_processing_utils import select_best_resolution
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-    }
-
-
 @auto_docstring
 class LlavaOnevisionProcessor(ProcessorMixin):
-    valid_processor_kwargs = LlavaOnevisionProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -181,8 +170,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LlavaOnevisionProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             size = (
@@ -204,7 +192,17 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 batch_num_image_tokens.append(num_image_tokens)
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
 
+        if video_sizes is not None:
+            patches_height_width = int(math.sqrt(self.num_image_tokens))
+            pooled_height_width = math.ceil(patches_height_width / 2)
+            num_video_tokens = [
+                (num_frames * pooled_height_width * pooled_height_width) + 1 for num_frames, _, _ in video_sizes
+            ]
+            vision_data.update({"num_video_tokens": num_video_tokens})
+
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LlavaOnevisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LlavaOnevisionProcessor"]

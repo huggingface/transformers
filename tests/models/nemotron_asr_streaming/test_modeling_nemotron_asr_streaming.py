@@ -239,7 +239,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         # NeMo `nvidia/nemotron-speech-streaming-en-0.6b` reference; HF matches it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_single_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
@@ -256,7 +256,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         # NeMo reference; all five HF transcripts match it exactly.
         # reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_batch_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             EXPECTED_TRANSCRIPTIONS = json.load(f)["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
@@ -283,7 +283,7 @@ class NemotronAsrStreamingForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/a395a94b508dd9f20d405c63b45ab8eb#file-reproducer_streaming_rnnt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_streaming.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             EXPECTED_TRANSCRIPTION = json.load(f)["transcription"]
         # The shorter streaming example emits a few words less than the full fixture reference.
         EXPECTED_TRANSCRIPTION = EXPECTED_TRANSCRIPTION[: -len(" of the")]

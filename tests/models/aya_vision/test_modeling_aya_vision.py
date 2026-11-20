@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -50,24 +51,24 @@ if is_torch_available():
     )
 
 
-class AyaVisionVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        vision_feature_layer=-1,
-        downsample_factor=2,
-        ignore_index=-100,
-        bos_token_id=0,
-        eos_token_id=0,
-        pad_token_id=0,
-        image_token_index=2,
-        num_channels=3,
-        image_size=64,
-        model_type="aya_vision",
-        is_training=True,
-        text_config={
+class AyaVisionVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "vision_feature_layer": -1,
+        "downsample_factor": 2,
+        "ignore_index": -100,
+        "bos_token_id": 0,
+        "eos_token_id": 0,
+        "pad_token_id": 0,
+        "image_token_index": 2,
+        "num_channels": 3,
+        "image_size": 64,
+        "model_type": "aya_vision",
+        "is_training": True,
+        "text_config": {
             "model_type": "cohere2",
             "vocab_size": 99,
             "hidden_size": 128,
@@ -82,7 +83,7 @@ class AyaVisionVisionText2TextModelTester:
             "eos_token_id": 0,
             "pad_token_id": 0,
         },
-        vision_config={
+        "vision_config": {
             "model_type": "siglip_vision_model",
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -92,29 +93,25 @@ class AyaVisionVisionText2TextModelTester:
             "patch_size": 8,
             "vision_use_head": False,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.image_token_index = image_token_index
-        self.model_type = model_type
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.vision_feature_layer = vision_feature_layer
-        self.downsample_factor = downsample_factor
-        self.is_training = is_training
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.image_seq_length = (image_size // (vision_config["patch_size"] * downsample_factor)) ** 2
-        self.seq_length = seq_length + self.image_seq_length
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["image_seq_length"] = (
+            values["image_size"] // (values["vision_config"]["patch_size"] * values["downsample_factor"])
+        ) ** 2
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return AyaVisionConfig(
@@ -154,6 +151,8 @@ class AyaVisionVisionText2TextModelTester:
 
 @require_torch
 class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = AyaVisionVisionText2TextModelTester
+
     all_model_classes = (
         (
             AyaVisionModel,
@@ -378,7 +377,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -409,9 +410,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
-                # 4-bit
-                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                (None, None): "Pine trees stand tall,\nMountain peaks touch the sky blue,\nPeaceful lake reflects.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -455,7 +454,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -468,13 +469,13 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                             ),
                         },
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                             ),
                         },
                         {
@@ -495,8 +496,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
-                ("cuda", 8): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                (None, None): "Pine trees stand tall,\nMountain peaks touch the sky blue,\nPeaceful lake reflects.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -511,8 +511,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
-                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
+                (None, None): 'The first image showcases the Statue of Liberty, a renowned monument located on Liberty Island in New York Harbor. Standing tall on',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_processing_common import url_to_local_path
@@ -45,34 +46,26 @@ if is_torch_available():
     import torch
 
 
-class PPOCRV6SmallDetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=128,
-        num_channels=3,
-        num_stages=4,
-        is_training=False,
-        reduction=4,
-        hidden_act="hardswish",
-        layer_list_out_channels=[16, 16, 16, 16],
-        neck_out_channels=16,
-        kernel_list=[3, 2, 2],
-        interpolate_mode="nearest",
-    ):
+class PPOCRV6SmallDetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 128,
+        "num_channels": 3,
+        "num_stages": 4,
+        "is_training": False,
+        "reduction": 4,
+        "hidden_act": "hardswish",
+        "layer_list_out_channels": [16, 16, 16, 16],
+        "neck_out_channels": 16,
+        "kernel_list": [3, 2, 2],
+        "interpolate_mode": "nearest",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.is_training = is_training
-        self.reduction = reduction
-        self.hidden_act = hidden_act
-        self.layer_list_out_channels = layer_list_out_channels
-        self.neck_out_channels = neck_out_channels
-        self.kernel_list = kernel_list
-        self.interpolate_mode = interpolate_mode
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -134,14 +127,10 @@ class PPOCRV6SmallDetModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
     test_inputs_embeds = False
     test_resize_embeddings = False
+    model_tester_class = PPOCRV6SmallDetModelTester
 
     def setUp(self):
-        self.model_tester = PPOCRV6SmallDetModelTester(
-            self,
-            batch_size=3,
-            is_training=False,
-            image_size=128,
-        )
+        self.model_tester = PPOCRV6SmallDetModelTester(self)
         self.config_tester = ConfigTester(
             self, config_class=PPOCRV6SmallDetConfig, has_text_modality=False, common_properties=[]
         )
@@ -236,7 +225,7 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
         )
         self.image = load_image(img_url)
 
@@ -273,10 +262,10 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[77, 551], [400, 541], [401, 576], [78, 586]],
-                [[21, 504], [517, 485], [519, 534], [23, 553]],
-                [[192, 453], [400, 445], [402, 483], [194, 491]],
-                [[35, 408], [487, 387], [489, 434], [37, 455]],
+                [[87, 358], [305, 358], [305, 412], [87, 412]],
+                [[87, 257], [260, 259], [260, 320], [86, 319]],
+                [[84, 164], [273, 168], [272, 231], [83, 228]],
+                [[85, 77], [576, 77], [576, 149], [85, 149]],
             ],
             dtype=torch.short,
             device=torch_device,

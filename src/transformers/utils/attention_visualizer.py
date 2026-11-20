@@ -13,7 +13,7 @@
 # limitations under the License.
 import io
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from ..masking_utils import create_causal_mask
@@ -218,7 +218,7 @@ class AttentionMaskVisualizer:
             config=model.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         if causal_mask is None:

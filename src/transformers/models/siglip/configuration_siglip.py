@@ -69,6 +69,9 @@ class SiglipTextConfig(PreTrainedConfig):
 @strict
 class SiglipVisionConfig(PreTrainedConfig):
     r"""
+    vision_use_head ('bool', *optional*):
+        Whether to use a vision head module or not.
+
     Example:
 
     ```python
@@ -97,6 +100,7 @@ class SiglipVisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
+    vision_use_head: bool = True
 
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
@@ -128,26 +132,14 @@ class SiglipConfig(PreTrainedConfig):
     ```"""
 
     model_type = "siglip"
-    sub_configs = {"text_config": SiglipTextConfig, "vision_config": SiglipVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SiglipVisionConfig,
+        "text_config": SiglipTextConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
     initializer_factor: float = 1.0
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = SiglipTextConfig()
-            logger.info("`text_config` is `None`. Initializing the `SiglipTextConfig` with default values.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = SiglipTextConfig(**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = SiglipVisionConfig()
-            logger.info("`vision_config` is `None`. initializing the `SiglipVisionConfig` with default values.")
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["SiglipConfig", "SiglipTextConfig", "SiglipVisionConfig"]

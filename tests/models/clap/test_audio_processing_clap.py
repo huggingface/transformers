@@ -95,6 +95,20 @@ class ClapAudioProcessingTest(AudioProcessingTestMixin, unittest.TestCase):
             output = processor(clips[:2], return_tensors="np")
             self.assertEqual(output["is_longer"].sum(), 1)
 
+    def test_padding_boolean(self):
+        # `padding=True` fills with the instance's `padding_mode`, like no padding argument or the
+        # legacy `padding="repeatpad"` spelling (ported from upstream #49960).
+        waveform = np.random.RandomState(0).randn(800).astype(np.float32)
+        for backend in self.audio_backends:
+            with self.subTest(backend=backend):
+                processor = self.audio_processing_class(backend=backend)
+                outputs = []
+                for kwargs in ({}, {"padding": True}, {"padding": "repeatpad"}):
+                    np.random.seed(0)
+                    outputs.append(processor(waveform, return_tensors="np", **kwargs)["audio_features"])
+                np.testing.assert_array_equal(outputs[1], outputs[0])
+                np.testing.assert_array_equal(outputs[1], outputs[2])
+
     def test_rejects_invalid_clap_workflow_options(self):
         waveform = np.ones(4800, dtype=np.float32)
         incompatible = (

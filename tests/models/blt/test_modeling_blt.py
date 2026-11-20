@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Blt model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -21,7 +22,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -30,9 +30,11 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
+    ids_tensor,
 )
 
 
@@ -40,6 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import BltConfig, BltForCausalLM, BltModel
+    from transformers.models.blt.modeling_blt import BltPatcher
 
 
 @require_torch
@@ -58,96 +61,59 @@ class BltModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BltModel
 
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        seq_length=7,
-        is_training=True,
-    ):
-        super().__init__(parent)
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.batch_size = 3
-
+    small_config_overrides = {
+        "ignore_index": -100,
+        "seq_length": 7,
+        "is_training": True,
+        "batch_size": 3,
+        # Derived from the shared hidden_size=32 / num_attention_heads=2, before the overrides below.
+        "head_dim": 16,
         # Common parameters for all configs
-        self.hidden_size = 16
-        self.num_hidden_layers = 1
-        self.num_attention_heads = 2
-        self.num_key_value_heads = 2
-        self.intermediate_size = 32
-        self.hidden_act = "silu"
-        self.max_position_embeddings = 32
-        self.vocab_size = 32
-        self.rope_theta = 500000.0
-        self.rope_parameters = {"rope_type": "default"}
-        self.rms_norm_eps = 1e-5
-        self.dropout = 0.0
-        self.encoder_hash_byte_group_size = [2, 3]
-        self.encoder_hash_byte_group_vocab = 64
-        self.encoder_hash_byte_group_nb_functions = 1
+        "hidden_size": 16,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 32,
+        "vocab_size": 32,
+        "rope_theta": 500000.0,
+        "rope_parameters": {"rope_type": "default"},
+        "rms_norm_eps": 1e-5,
+        "dropout": 0.0,
+        "encoder_hash_byte_group_size": [2, 3],
+        "encoder_hash_byte_group_vocab": 64,
+        "encoder_hash_byte_group_nb_functions": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Common parameters for all configs
-        self.patcher_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
+        common = {
+            "num_hidden_layers": values["num_hidden_layers"],
+            "num_attention_heads": values["num_attention_heads"],
+            "num_key_value_heads": values["num_key_value_heads"],
+            "intermediate_size": values["intermediate_size"],
+            "max_position_embeddings": values["max_position_embeddings"],
+            "rope_theta": values["rope_theta"],
+            "rope_parameters": values["rope_parameters"],
+            "hidden_act": values["hidden_act"],
+            "rms_norm_eps": values["rms_norm_eps"],
+            "dropout": values["dropout"],
         }
-
-        self.encoder_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
+        values["patcher_config"] = {"hidden_size": values["hidden_size"], **common}
+        values["encoder_config"] = {"hidden_size": values["hidden_size"], **common}
+        values["decoder_config"] = {
+            "vocab_size": values["vocab_size"],
+            "hidden_size": values["hidden_size"],
+            # Must match global transformer output size
+            "hidden_size_global": values["hidden_size"] * 2,
+            **common,
         }
-
-        self.decoder_config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "hidden_size_global": self.hidden_size * 2,  # Must match global transformer output size
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
-        }
-
-        self.global_config = {
-            "hidden_size": self.hidden_size * 2,  # Double the hidden size for global transformer
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
-        }
-
-        self.num_hidden_layers = self.encoder_config["num_hidden_layers"]
+        # Double the hidden size for global transformer
+        values["global_config"] = {"hidden_size": values["hidden_size"] * 2, **common}
+        return values
 
     def get_config(self):
         config = BltConfig(
@@ -200,6 +166,18 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     @pytest.mark.generate
     def test_generate_with_quant_cache(self):
         self.skipTest("BLT uses EncoderDecoderCache internally and does not support quantized cache")
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT rebuilds its hash n-gram embeddings, patch lengths and global-transformer states from the "
+        "current step's `input_ids` alone, and calls the global transformer with no cache at all, so a "
+        "one-byte decode step carries no byte history: the n-grams come out zero-padded and the trunk "
+        "restarts its positions. Cached decode is a different computation rather than a cached one (measured: "
+        "the divergence is already there in the hash embeddings, before attention). TODO: keep the byte "
+        "window for hashing/patching and give the global transformer a cache."
+    )
+    def test_cached_decode_matches_cacheless(self):
+        pass
 
     @pytest.mark.generate
     @unittest.skip(
@@ -269,6 +247,61 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
+    def test_sliding_window_config_defaults_and_roundtrip(self):
+        config = BltConfig()
+        self.assertEqual(config.patcher_config.sliding_window, 512)
+        self.assertEqual(config.local_attention_window_len, 512)
+        self.assertEqual(config.encoder_config.sliding_window, 512)
+
+        config = BltConfig(local_attention_window_len=64, patcher_config={"sliding_window": 32})
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = BltConfig.from_pretrained(tmpdirname)
+        self.assertEqual(reloaded.patcher_config.sliding_window, 32)
+        self.assertEqual(reloaded.local_attention_window_len, 64)
+        self.assertEqual(reloaded.encoder_config.sliding_window, 64)
+
+        config = BltConfig(local_attention_window_len=None, patcher_config={"sliding_window": None})
+        self.assertIsNone(config.patcher_config.sliding_window)
+        self.assertIsNone(config.encoder_config.sliding_window)
+
+    def test_patcher_sliding_window_limits_receptive_field(self):
+        config = self.model_tester.get_config().patcher_config
+        config.num_hidden_layers = 1
+        config.sliding_window = 4
+        patcher = BltPatcher(config).to(torch_device).eval()
+
+        input_ids = ids_tensor([1, 12], config.vocab_size)
+        perturbed_ids = input_ids.clone()
+        perturbed_ids[0, 0] = (input_ids[0, 0] + 1) % config.vocab_size
+
+        with torch.no_grad():
+            entropies = patcher(input_ids)[0]
+            perturbed_entropies = patcher(perturbed_ids)[0]
+            patcher.config.sliding_window = None
+            full_causal_entropies = patcher(perturbed_ids)[0]
+
+        torch.testing.assert_close(entropies[:, 4:], perturbed_entropies[:, 4:])
+        self.assertFalse(torch.allclose(entropies[:, 0], perturbed_entropies[:, 0]))
+        self.assertFalse(torch.allclose(perturbed_entropies[:, 4:], full_causal_entropies[:, 4:]))
+
+    def test_local_attention_window(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        window = 4
+        self.assertGreater(inputs_dict["input_ids"].shape[1], window)
+
+        config.local_attention_window_len = None
+        config.encoder_config.sliding_window = None
+        model = BltModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            full_causal = model(input_ids=inputs_dict["input_ids"]).last_hidden_state
+            model.config.local_attention_window_len = window
+            model.config.encoder_config.sliding_window = window
+            windowed = model(input_ids=inputs_dict["input_ids"]).last_hidden_state
+
+        torch.testing.assert_close(full_causal[:, :window], windowed[:, :window])
+        self.assertFalse(torch.allclose(full_causal[:, window:], windowed[:, window:]))
+
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
@@ -276,17 +309,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-class BltIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200

@@ -20,6 +20,7 @@ from transformers import AutoProcessor, CohereAsrConfig, CohereAsrForConditional
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     GenerationTesterMixin,
@@ -38,14 +39,14 @@ if is_torch_available():
     from transformers.models.parakeet.modeling_parakeet import ParakeetEncoderModelOutput
 
 
-class CohereAsrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=256,
-        is_training=False,
-        encoder_config={
+class CohereAsrModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 256,
+        "is_training": False,
+        "encoder_config": {
             "model_type": "parakeet_encoder",
             "hidden_size": 16,
             "intermediate_size": 32,
@@ -68,45 +69,46 @@ class CohereAsrModelTester:
             "max_position_embeddings": 5000,
             "scale_input": False,
         },
-        decoder_start_token_id=85,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.encoder_config = encoder_config
-        self.decoder_start_token_id = decoder_start_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-
+        "decoder_start_token_id": 85,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
         # Decoder defaults
-        self.vocab_size = 147
-        self.hidden_size = 16
-        self.intermediate_size = 32
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 2
-        self.num_key_value_heads = 2
-        self.head_dim = 8
+        "vocab_size": 147,
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Derived from encoder_config for test assertions
-        self.num_mel_bins = encoder_config["num_mel_bins"]
-        self.encoder_hidden_size = encoder_config["hidden_size"]
-        self.encoder_num_hidden_layers = encoder_config["num_hidden_layers"]
-        self.encoder_num_attention_heads = encoder_config["num_attention_heads"]
-        self.encoder_seq_length = self.get_encoder_output_length(seq_length)
-        self.decoder_seq_length = 1
-        self.decoder_key_length = 1
-        self.key_length = self.encoder_seq_length
+        encoder_config = values["encoder_config"]
+        values["num_mel_bins"] = encoder_config["num_mel_bins"]
+        values["encoder_hidden_size"] = encoder_config["hidden_size"]
+        values["encoder_num_hidden_layers"] = encoder_config["num_hidden_layers"]
+        values["encoder_num_attention_heads"] = encoder_config["num_attention_heads"]
+        values["encoder_seq_length"] = cls.get_encoder_output_length(encoder_config, values["seq_length"])
+        values["decoder_seq_length"] = 1
+        values["decoder_key_length"] = 1
+        values["key_length"] = values["encoder_seq_length"]
+        return values
 
-    def get_encoder_output_length(self, input_length):
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @staticmethod
+    def get_encoder_output_length(encoder_config, input_length):
         """Compute the encoder output length after subsampling convolutions."""
-        num_layers = int(math.log2(self.encoder_config["subsampling_factor"]))
-        kernel_size = self.encoder_config["subsampling_conv_kernel_size"]
-        stride = self.encoder_config["subsampling_conv_stride"]
+        num_layers = int(math.log2(encoder_config["subsampling_factor"]))
+        kernel_size = encoder_config["subsampling_conv_kernel_size"]
+        stride = encoder_config["subsampling_conv_stride"]
         add_pad = (kernel_size - 1) // 2 * 2 - kernel_size
         length = input_length
         for _ in range(num_layers):
@@ -154,6 +156,8 @@ class CohereAsrModelTester:
 
 @require_torch
 class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = CohereAsrModelTester
+
     all_model_classes = (CohereAsrModel, CohereAsrForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (CohereAsrForConditionalGeneration,)
     pipeline_model_mapping = (
@@ -182,10 +186,10 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         config = self.model_tester.get_config()
         config.pad_token_id = self.model_tester.pad_token_id
+        torch.manual_seed(0)
         model = CohereAsrForConditionalGeneration(config).to(torch_device).eval()
         vocab_size = config.vocab_size
 
-        torch.manual_seed(0)
         bsz, enc_len, dec_len = 2, 10, 6
         enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
         encoder_outputs = ParakeetEncoderModelOutput(

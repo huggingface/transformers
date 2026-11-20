@@ -21,7 +21,7 @@ import glob
 import json
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from git import Repo
@@ -180,15 +180,15 @@ def get_list_of_models_to_deprecate(
     max_num_models=-1,
 ):
     if thresh_date is None:
-        thresh_date = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year - 1)
+        thresh_date = datetime.now(UTC).replace(year=datetime.now(UTC).year - 1)
     else:
-        thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=UTC)
 
     models_dir = PATH_TO_REPO / "src/transformers/models"
     model_paths = get_list_of_repo_model_paths(models_dir=models_dir)
 
     if use_cache and os.path.exists("models_info.json"):
-        with open("models_info.json", "r") as f:
+        with open("models_info.json", "r", encoding="utf-8") as f:
             models_info = json.load(f)
         # Convert datetimes back to datetime objects
         for model, info in models_info.items():
@@ -273,7 +273,7 @@ def get_list_of_models_to_deprecate(
         # Make datetimes serializable
         for model, info in models_info.items():
             info["first_commit_datetime"] = info["first_commit_datetime"].isoformat()
-        with open("models_info.json", "w") as f:
+        with open("models_info.json", "w", encoding="utf-8") as f:
             json.dump(models_info, f, indent=4)
 
     print("\nFinding models to deprecate:")

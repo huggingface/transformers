@@ -1,9 +1,17 @@
+import json
+import tempfile
 import unittest
 import warnings
 from dataclasses import dataclass
 
-from transformers.convert_slow_tokenizer import SpmConverter
-from transformers.testing_utils import get_tests_dir
+from transformers import AutoTokenizer, TokenizersBackend
+from transformers.convert_slow_tokenizer import SentencePieceExtractor, SpmConverter
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers.utils import is_sentencepiece_available
+
+
+if is_sentencepiece_available():
+    import sentencepiece as spm
 
 
 @dataclass
@@ -37,3 +45,147 @@ class ConvertSlowTokenizerTest(unittest.TestCase):
             " which is not implemented in the fast tokenizers.",
             str(w[0].message),
         )
+
+    def test_spm_precompiled_charsmap_empty_is_none(self):
+        # If the `precompiled_charsmap` is empty (`b""`), it should be converted to `None` and complete conversion successfully.
+        spm_model_file = get_tests_dir("fixtures/test_sentencepiece.model")
+        extractor = SentencePieceExtractor(spm_model_file)
+        extractor.proto.normalizer_spec.precompiled_charsmap = b""
+        kwargs = extractor.extract(model_type=None)
+        self.assertIsNone(kwargs["_spm_precompiled_charsmap"])
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(f"{tmp_dir}/spiece.model", "wb") as f:
+                f.write(extractor.proto.SerializeToString())
+            with open(f"{tmp_dir}/config.json", "w", encoding="utf-8") as f:
+                json.dump({"model_type": "t5"}, f)
+
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertGreater(len(tokenizer("Hello, world!")["input_ids"]), 1)
+
+
+@require_sentencepiece
+@require_tokenizers
+class SentencePieceModelConversionTest(unittest.TestCase):
+    """`TokenizersBackend` built from a bare `tokenizer.model` should encode and decode like SentencePiece."""
+
+    corpus = [
+        "Hello world, this is a test of the tokenizer.",
+        "    def f(x):\n        return x + 1  # comment",
+        "数字 12345 和中文文本，还有更多的中文。",
+        "foo_bar__baz qux",
+    ] * 50
+    texts = [
+        "Hello  world\n__x 12<reserve_0>3",
+        " leading space",
+        "trailing   ",
+        "\n\n    indented\tcode",
+        "中文 text 123",
+        "__init__",
+        "🤗 unseen characters",
+        "",
+        "a__b __c",
+        "x<reserve_0> y",
+        "<reserve_0>z",
+        "hi\nthere \n x",
+        "end <reserve_0>",
+        "  two leading",
+    ]
+
+    def _train(self, tmp_dir, **kwargs):
+        kwargs.setdefault("byte_fallback", True)
+        kwargs.setdefault("vocab_size", 400)
+        spm.SentencePieceTrainer.train(
+            sentence_iterator=iter(self.corpus),
+            model_prefix=f"{tmp_dir}/tokenizer",
+            model_type="bpe",
+            normalization_rule_name="identity",
+            minloglevel=2,
+            **kwargs,
+        )
+        return spm.SentencePieceProcessor(model_file=f"{tmp_dir}/tokenizer.model")
+
+    def test_matches_sentencepiece(self):
+        configs = {
+            # User-defined pieces are never merged, and only the start of the text gets the dummy prefix
+            "dummy_prefix_user_defined": {
+                "add_dummy_prefix": True,
+                "remove_extra_whitespaces": False,
+                "allow_whitespace_only_pieces": True,
+                "split_digits": True,
+                "user_defined_symbols": ["__", "<reserve_0>", "\n"],
+            },
+            "no_dummy_prefix_user_defined": {
+                "add_dummy_prefix": False,
+                "remove_extra_whitespaces": False,
+                "user_defined_symbols": ["__", "<reserve_0>", "\n"],
+            },
+            "remove_extra_whitespaces": {"add_dummy_prefix": True, "remove_extra_whitespaces": True},
+            # Without byte fallback the decoder has no `Fuse`, so only the start of the text may lose its space
+            "no_byte_fallback": {"add_dummy_prefix": True, "byte_fallback": False, "vocab_size": 200},
+        }
+        for name, kwargs in configs.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as tmp_dir:
+                sp = self._train(tmp_dir, **kwargs)
+                tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+                for text in self.texts:
+                    ids = sp.encode(text)
+                    if sp.unk_id() in ids:  # unseen characters without byte fallback decode differently
+                        continue
+                    self.assertEqual(tokenizer.encode(text, add_special_tokens=False), ids, text)
+                    self.assertEqual(tokenizer.decode(ids), sp.decode(ids), text)
+
+    def test_user_defined_whitespace_pieces_marked_unnormalized(self):
+        # Like Gemma: no dummy prefix, whitespace-only user-defined pieces that the config lists as `normalized=False`.
+        # Like InternLM3: a special user-defined token that overlaps another user-defined piece ("'<").
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sp = self._train(
+                tmp_dir,
+                add_dummy_prefix=False,
+                remove_extra_whitespaces=False,
+                allow_whitespace_only_pieces=True,
+                user_defined_symbols=["▁▁", "▁▁▁", "▁▁▁▁", "'<", "<|im_start|>"],
+            )
+            added_tokens_decoder = {
+                str(sp.piece_to_id(piece)): {"content": piece, "normalized": False, "special": False}
+                for piece in ["▁▁", "▁▁▁", "▁▁▁▁"]
+            }
+            added_tokens_decoder[str(sp.piece_to_id("<|im_start|>"))] = {
+                "content": "<|im_start|>",
+                "normalized": False,
+                "special": True,
+            }
+            with open(f"{tmp_dir}/tokenizer_config.json", "w", encoding="utf-8") as f:
+                json.dump({"added_tokens_decoder": added_tokens_decoder}, f)
+
+            tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+            for text in ["trailing   ", "  indented\n    code", "hi  there"]:
+                self.assertEqual(tokenizer.encode(text, add_special_tokens=False), sp.encode(text), text)
+            # Special tokens are split from the raw text first, as the remote tokenizers do
+            self.assertIn("<|im_start|>", tokenizer.tokenize("'<|im_start|>'"))
+
+    def test_legacy_controls_prefix_after_added_tokens(self):
+        # legacy (the default) prefixes every chunk between added tokens, like `sp_model.encode` per chunk
+        for legacy, expected in [(True, ["<a>", "▁x"]), (False, ["<a>", "x"])]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sp = self._train(tmp_dir, control_symbols=["<a>"])
+                added_tokens_decoder = {str(sp.piece_to_id("<a>")): {"content": "<a>", "special": True}}
+                with open(f"{tmp_dir}/tokenizer_config.json", "w", encoding="utf-8") as f:
+                    json.dump({"added_tokens_decoder": added_tokens_decoder, "legacy": legacy}, f)
+                tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+                self.assertEqual(tokenizer.tokenize("<a>x")[:2], expected, f"legacy={legacy}")
+
+    def test_added_tokens_decoder_can_swap_pieces(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sp = self._train(tmp_dir, control_symbols=["<a>", "<b>"])
+            a_id, b_id = sp.piece_to_id("<a>"), sp.piece_to_id("<b>")
+            added_tokens_decoder = {
+                str(a_id): {"content": "<b>", "special": True},
+                str(b_id): {"content": "<a>", "special": True},
+            }
+            with open(f"{tmp_dir}/tokenizer_config.json", "w", encoding="utf-8") as f:
+                json.dump({"added_tokens_decoder": added_tokens_decoder}, f)
+
+            tokenizer = TokenizersBackend.from_pretrained(tmp_dir)
+            self.assertEqual(tokenizer.convert_tokens_to_ids(["<a>", "<b>"]), [b_id, a_id])
+            self.assertEqual(tokenizer.encode("<a>x<b>", add_special_tokens=False)[::2], [b_id, a_id])

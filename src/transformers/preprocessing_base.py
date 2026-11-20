@@ -19,7 +19,7 @@ from copy import deepcopy
 from typing import Any, TypeVar
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
@@ -36,7 +36,7 @@ from .utils import (
     requires_backends,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, hf_api, resolve_revision
 
 
 logger = logging.get_logger(__name__)
@@ -514,7 +514,14 @@ class PreprocessingMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -544,7 +551,7 @@ class PreprocessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -591,6 +598,15 @@ class PreprocessingMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", cls._subfolder_default)
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         # Allow overriding the config filename via a kwarg (e.g. image_processor_filename)
         if cls._config_filename_kwarg is not None:

@@ -41,7 +41,9 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -77,48 +79,33 @@ def _config_zero_init(config):
     return configs_no_init
 
 
-class MoshiDecoderTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,  # need batch_size != num_hidden_layers
-        seq_length=7,
-        is_training=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="silu",
-        rms_norm_eps=0.001,
-        ffn_dim=32,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=100,
-        pad_token_id=25,
-        num_codebooks=4,
-        audio_encoder_type="mimi",
-        attn_implementation="eager",
-    ):
+class MoshiDecoderTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 4,  # need batch_size != num_hidden_layers
+        "seq_length": 7,
+        "is_training": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 4,
+        "hidden_act": "silu",
+        "rms_norm_eps": 0.001,
+        "ffn_dim": 32,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 100,
+        "pad_token_id": 25,
+        "num_codebooks": 4,
+        "audio_encoder_type": "mimi",
+        "attn_implementation": "eager",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.rms_norm_eps = rms_norm_eps
-        self.ffn_dim = ffn_dim
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.pad_token_id = pad_token_id
-        self.num_codebooks = num_codebooks
-        self.audio_encoder_type = audio_encoder_type
-        self.attn_implementation = attn_implementation
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -154,6 +141,8 @@ class MoshiDecoderTester:
 
 @require_torch
 class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MoshiDecoderTester
+
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
 
     test_resize_embeddings = True
@@ -370,93 +359,55 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         super().test_save_load()
 
 
-class MoshiTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,  # need batch_size != num_hidden_layers
-        seq_length=7,
-        is_training=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        intermediate_size=4,
-        hidden_act="silu",
-        rms_norm_eps=0.001,
-        ffn_dim=32,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=100,
-        pad_token_id=25,
-        bos_token_id=25,
-        num_codebooks=4,
-        audio_encoder_type="mimi",
-        attn_implementation="eager",
-        depth_hidden_size=16,
-        depth_num_hidden_layers=2,
-        depth_max_position_embeddings=5,
-        depth_num_attention_heads=8,
-        depth_ffn_dim=16,
-        depth_sliding_window=4,
-        mimi_intermediate_size=40,
-        mimi_hidden_size=32,
-        mimi_num_filters=8,
-        mimi_num_residual_layers=1,
-        mimi_upsampling_ratios=[8, 4],
-        mimi_codebook_size=64,
-        mimi_vector_quantization_hidden_dimension=64,
-        mimi_codebook_dim=64,
-        mimi_upsample_groups=32,
-        mimi_num_hidden_layers=2,
-        mimi_num_attention_heads=2,
-        mimi_num_key_value_heads=2,
-        mimi_sliding_window=3,
-        sampling_rate=800,
-    ):
+class MoshiTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 4,  # need batch_size != num_hidden_layers
+        "seq_length": 7,
+        "is_training": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 4,
+        "hidden_act": "silu",
+        "rms_norm_eps": 0.001,
+        "ffn_dim": 32,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 100,
+        "pad_token_id": 25,
+        "bos_token_id": 25,
+        "num_codebooks": 4,
+        "attn_implementation": "eager",
+        "depth_hidden_size": 32,
+        "depth_num_hidden_layers": 2,
+        "depth_max_position_embeddings": 5,
+        "depth_num_attention_heads": 2,
+        "depth_ffn_dim": 16,
+        "depth_sliding_window": 4,
+        "audio_encoder_type": "mimi",
+        "mimi_intermediate_size": 40,
+        "mimi_hidden_size": 32,
+        "mimi_num_filters": 8,
+        "mimi_num_residual_layers": 1,
+        "mimi_upsampling_ratios": [8, 4],
+        "mimi_codebook_size": 64,
+        "mimi_vector_quantization_hidden_dimension": 64,
+        "mimi_codebook_dim": 64,
+        "mimi_upsample_groups": 32,
+        "mimi_num_hidden_layers": 2,
+        "mimi_num_attention_heads": 2,
+        "mimi_num_key_value_heads": 2,
+        "mimi_sliding_window": 3,
+        "sampling_rate": 800,
+        "num_hidden_states_types": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.rms_norm_eps = rms_norm_eps
-        self.ffn_dim = ffn_dim
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.num_codebooks = num_codebooks
-        self.attn_implementation = attn_implementation
-        self.depth_hidden_size = depth_hidden_size
-        self.depth_num_hidden_layers = depth_num_hidden_layers
-        self.depth_max_position_embeddings = depth_max_position_embeddings
-        self.depth_num_attention_heads = depth_num_attention_heads
-        self.depth_ffn_dim = depth_ffn_dim
-        self.depth_sliding_window = depth_sliding_window
-
-        self.audio_encoder_type = audio_encoder_type
-        self.mimi_intermediate_size = mimi_intermediate_size
-        self.mimi_hidden_size = mimi_hidden_size
-        self.mimi_num_filters = mimi_num_filters
-        self.mimi_num_residual_layers = mimi_num_residual_layers
-        self.mimi_upsampling_ratios = mimi_upsampling_ratios
-        self.mimi_codebook_size = mimi_codebook_size
-        self.mimi_vector_quantization_hidden_dimension = mimi_vector_quantization_hidden_dimension
-        self.mimi_codebook_dim = mimi_codebook_dim
-        self.mimi_upsample_groups = mimi_upsample_groups
-        self.mimi_num_hidden_layers = mimi_num_hidden_layers
-        self.mimi_num_attention_heads = mimi_num_attention_heads
-        self.mimi_num_key_value_heads = mimi_num_key_value_heads
-        self.mimi_sliding_window = mimi_sliding_window
-        self.sampling_rate = sampling_rate
-
-        self.num_hidden_states_types = 2
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self, batch_size=None):
         batch_size = self.batch_size if batch_size is None else batch_size
@@ -530,6 +481,8 @@ class MoshiTester:
 
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = MoshiTester
+
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     # training is not supported yet for Moshi
     test_resize_embeddings = False
@@ -586,7 +539,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         )
 
     @unittest.skip(reason="Continuing from past key values is not straightforward as we're dealing with 3 inputs")
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
@@ -819,6 +772,31 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_model_base_model_prefix(self):
         pass
 
+    def flash_attn_from_config(self, attn_implementation, test_fwd_in_train=True):
+        """Overriden for additional input that is needed"""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config = self._prepare_config_headdim(config, 16)
+
+            model = model_class._from_config(
+                config,
+                attn_implementation=attn_implementation,
+                dtype=torch.bfloat16,
+            ).to(torch_device)
+
+            model.train(test_fwd_in_train)
+
+            # Moshi requires audio codes
+            model(**inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                reloaded = model_class.from_pretrained(tmp_dir)
+                self.assertNotEqual(
+                    reloaded.config._attn_implementation,
+                    attn_implementation,
+                )
+
 
 def place_dict_on_device(dict_to_place, device):
     for key in dict_to_place:
@@ -828,14 +806,14 @@ def place_dict_on_device(dict_to_place, device):
 
 
 @require_torch
-class MoshiIntegrationTests(unittest.TestCase):
+class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshiko")
+        return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshika")
 
     @cached_property
     def tokenizer(self):
-        return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+        return AutoTokenizer.from_pretrained("kmhf/hf-moshika")
 
     def _load_datasample(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -889,6 +867,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].item())
         self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].tolist())
 
+    @unittest.skip(reason="`kmhf/hf-moshiko` is no longer on the Hub, see #50016")
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
         model = MoshiForConditionalGeneration.from_pretrained(
@@ -903,6 +882,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         # eager equivalence is not as strict as sdpa.
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
+    @unittest.skip(reason="`kmhf/hf-moshiko` is no longer on the Hub, see #50016")
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
         model = MoshiForConditionalGeneration.from_pretrained(
@@ -924,6 +904,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
+    @unittest.skip(reason="`kmhf/hf-moshiko` is no longer on the Hub, see #50016")
     @slow
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):

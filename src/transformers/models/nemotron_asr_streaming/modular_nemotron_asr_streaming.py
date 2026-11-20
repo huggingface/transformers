@@ -14,17 +14,20 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal
 
+import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...audio_processing_utils import BaseAudioProcessor
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import AudioKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -32,7 +35,8 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
@@ -300,19 +304,18 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 
         - 1 for tokens that are **not masked**,
         - 0 for tokens that are **masked**.
-    past_key_values (`Cache`, *optional*):
+    cache (`Cache`, *optional*):
         Updated attention K/V sliding-window cache from the encoder. Pass to the next chunk call.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
         Unified streaming cache backing the subsampling Conv2d layers and the conformer depthwise Conv1d.
     """
 
     attention_mask: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None
 
 
 class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, cached_frames: int | None = None):
         # `cached_frames` is the number of cached left-context frames (0 offline). This Transformer-XL
         # style relative encoding spans the full key length `L = current chunk + cached_frames`, with
@@ -324,23 +327,14 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositio
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 
@@ -397,16 +391,17 @@ class NemotronAsrStreamingEncoderConvolutionModule(FastSpeech2ConformerConvoluti
 class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
     """
     Multi-head attention with relative positional encoding.
-    The only difference with `ParakeetEncoderAttention` is the addition of the `past_key_values`.
+    The only difference with `ParakeetEncoderAttention` is the addition of the `cache`.
     See `ParakeetEncoderAttention`, and https://huggingface.co/papers/2312.17279 for more details
     """
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -417,8 +412,8 @@ class NemotronAsrStreamingEncoderAttention(ParakeetEncoderAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         total_key_length = key_states.shape[2]
 
@@ -552,13 +547,14 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
         super().__init__(config, layer_idx)
         self.conv = NemotronAsrStreamingEncoderConvolutionModule(config, layer_idx=layer_idx)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         all_masked_rows: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -571,7 +567,7 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
             hidden_states=normalized_hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = hidden_states + attn_output
@@ -639,12 +635,13 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         output_attention_mask: bool = True,
         use_cache: bool | None = None,
         padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None,
@@ -652,7 +649,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        past_key_values (`Cache`, *optional*):
+        cache (`Cache`, *optional*):
             Sliding-window K/V cache (`DynamicCache` built from `config.sliding_window`) for cache-aware
             streaming attention.
         output_attention_mask (`bool`, *optional*, defaults to `True`):
@@ -684,8 +681,8 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         ```
         """
         if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache(config=self.config)
+            if cache is None:
+                cache = DynamicCache(config=self.config)
 
             if padding_cache is None:
                 padding_cache = NemotronAsrStreamingEncoderCausalConvPaddingCache()
@@ -695,7 +692,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
 
         seq_length = inputs_embeds.shape[1]
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -707,7 +704,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=output_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
             and_mask_function=chunked_limited_mask_function(*self._resolve_attn_context(num_lookahead_tokens)),
         )
@@ -719,9 +716,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
             else:
                 all_masked_rows = torch.all(attention_mask == 0.0, dim=-1)
 
-        cached_frames = (
-            past_key_values.get_mask_sizes(seq_length, 0)[0] - seq_length if past_key_values is not None else 0
-        )
+        cached_frames = cache.get_mask_sizes(seq_length, 0)[0] - seq_length if cache is not None else 0
         position_embeddings = self.encode_positions(inputs_embeds, cached_frames=cached_frames)
 
         inputs_embeds = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
@@ -734,7 +729,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
@@ -745,7 +740,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
                     attention_mask=attention_mask,
                     all_masked_rows=all_masked_rows,
                     position_embeddings=position_embeddings,
-                    past_key_values=past_key_values,
+                    cache=cache,
                     padding_cache=padding_cache,
                     use_cache=use_cache,
                     **kwargs,
@@ -754,7 +749,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         return NemotronAsrStreamingEncoderModelOutput(
             last_hidden_state=hidden_states,
             attention_mask=output_mask.int() if output_mask is not None and output_attention_mask else None,
-            past_key_values=past_key_values,
+            cache=cache,
             padding_cache=padding_cache,
         )
 
@@ -775,7 +770,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
 @dataclass
 class NemotronAsrStreamingRNNTOutput(ParakeetRNNTOutput):
     r"""
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
@@ -783,7 +778,7 @@ class NemotronAsrStreamingRNNTOutput(ParakeetRNNTOutput):
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: NemotronAsrStreamingEncoderCausalConvPaddingCache | None = None
 
 
@@ -883,17 +878,108 @@ class NemotronAsrStreamingForRNNT(
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
         )
+
+
+def _round_to_dtype(array, dtype: str):
+    """`array` rounded to `dtype` (round to nearest even) and back to float32, on the host. numpy has no
+    bfloat16, so its rounding is done on the float32 bits; the result matches `torch.Tensor.to(dtype).float()`.
+    Elementwise ops keep the memory layout, which the mel matmul's accumulation order depends on."""
+    array = np.asarray(array, dtype=np.float32)
+    if dtype == "float32":
+        return array
+    if dtype == "float16":
+        return array.astype(np.float16).astype(np.float32)
+    bits = array.view(np.uint32)
+    rounded = (bits + np.uint32(0x7FFF) + ((bits >> np.uint32(16)) & np.uint32(1))) & np.uint32(0xFFFF0000)
+    return rounded.astype(np.uint32).view(np.float32)
+
+
+class NemotronAsrStreamingAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    center (`bool`, *optional*):
+        Per-call override of `spectrogram_config.stft_config.center`. Streaming centers the first chunk (and offline
+        audio), and not the later chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
+        reproduces, frame for frame, the features a single `center=True` pass over the whole utterance yields.
+    is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+        Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio is then
+        zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the whole
+        utterance reaches past the audio at most, so that this frame is kept rather than dropped.
+    mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+        Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+        precision (`"bfloat16"` for Nemotron 3.5 Transcribe): both are then rounded to that dtype once, so the log-mel
+        features match the original front end; the spectrogram itself is always computed in float32.
+    """
+
+    center: bool | None
+    is_last_audio_chunk: bool | None
+    mel_filters_dtype: Literal["float32", "bfloat16", "float16"]
 
 
 class NemotronAsrStreamingAudioProcessor(ParakeetAudioProcessor):
     # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
     # standardization. Override the inherited recipe explicitly.
     feature_normalization = None
-    # The streaming encoder consumes log-mel frames; extraction is not optional.
-    frozen_options = ("do_extract_spectrogram",)
+    # The streaming encoder consumes log-mel frames; extraction is not optional. The mel bank is rounded at
+    # construction, so its precision is a property of the checkpoint, not of a call.
+    frozen_options = ("do_extract_spectrogram", "mel_filters_dtype")
+
+    # Call-only streaming options: `None` leaves `spectrogram_config` as configured and keeps them out of `to_dict`.
+    center = None
+    is_last_audio_chunk = None
+    mel_filters_dtype = "float32"
+    valid_kwargs = NemotronAsrStreamingAudioProcessorKwargs
+
+    def _set_attributes(self, **kwargs):
+        BaseAudioProcessor._set_attributes(self, **kwargs)
+        if self.mel_filters_dtype != "float32" and getattr(self, "mel_filters", None) is not None:
+            self.mel_filters = _round_to_dtype(self.mel_filters, self.mel_filters_dtype)
+
+    def _standardize_kwargs(self, **kwargs):
+        kwargs = BaseAudioProcessor._standardize_kwargs(self, **kwargs)
+        center, spectrogram_config = kwargs.get("center"), kwargs.get("spectrogram_config")
+        if center is not None and spectrogram_config is not None and spectrogram_config.stft_config.center != center:
+            stft_config = replace(spectrogram_config.stft_config, center=center)
+            kwargs["spectrogram_config"] = replace(spectrogram_config, stft_config=stft_config)
+        return kwargs
+
+    def _device_window(self, audio, stft_cfg):
+        window = BaseAudioProcessor._device_window(self, audio, stft_cfg)
+        if self.mel_filters_dtype == "float32":
+            return window
+        return self.ops.asarray(_round_to_dtype(self.ops.to_numpy(window), self.mel_filters_dtype), like=audio)
+
+    def _frame_count(self, lengths, stft_cfg):
+        if not stft_cfg.center:
+            # uncentered frames are `n_fft` samples long (the window sits centred in the FFT buffer)
+            return (lengths + 2 * stft_cfg.pad - stft_cfg.n_fft) // stft_cfg.hop_length + 1
+        return BaseAudioProcessor._frame_count(self, lengths, stft_cfg)
+
+    @staticmethod
+    def _last_chunk_padding(stft_cfg, is_last_audio_chunk) -> int:
+        """Zeros appended to the last uncentered chunk: the last frame a `center=True` pass counts reaches up to
+        `n_fft // 2 - hop_length` past the audio."""
+        if is_last_audio_chunk and not stft_cfg.center:
+            return stft_cfg.n_fft // 2 - stft_cfg.hop_length
+        return 0
+
+    def _compute_batched_features(
+        self, audio, *, audio_ranges, spectrogram_config, is_last_audio_chunk=None, **kwargs
+    ):
+        num_padding = self._last_chunk_padding(spectrogram_config.stft_config, is_last_audio_chunk)
+        if num_padding:
+            # Appended before the spectrogram, but the waveform preemphasis zeroes every sample past
+            # `audio_ranges`: the padding stays zero, as when padded after the preemphasis.
+            audio = self.ops.pad(audio, 0, num_padding)
+        features = self.spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
+        audio_lengths = self._lengths_from_ranges(audio_ranges) + num_padding
+        return features, self._valid_frame_counts(audio_lengths, spectrogram_config)
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, is_last_audio_chunk=None, **kwargs) -> int:
+        padded_length += self._last_chunk_padding(spectrogram_config.stft_config, is_last_audio_chunk)
+        return BaseAudioProcessor._padded_frame_count(self, padded_length, spectrogram_config, **kwargs)
 
     def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")

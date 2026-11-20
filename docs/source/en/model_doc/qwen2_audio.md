@@ -45,20 +45,16 @@ The abstract from the paper is the following:
 ### Inference
 
 ```python
-from io import BytesIO
-from urllib.request import urlopen
-
-import librosa
-
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+from transformers.audio_utils import load_audio
 
 
 model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True, device_map="auto")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B", trust_remote_code=True)
 
 prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
-url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-Audio/glass-breaking-151256.mp3"
-audio, sr = librosa.load(BytesIO(urlopen(url).read()), sr=processor.audio_processor.sampling_rate)
+url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
+audio = load_audio(url, sampling_rate=processor.audio_processor.sampling_rate)
 inputs = processor(text=prompt, audio=audio, return_tensors="pt").to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -83,12 +79,8 @@ In the following, we demonstrate how to use `Qwen2-Audio-7B-Instruct` for the in
 In the voice chat mode, users can freely engage in voice interactions with Qwen2-Audio without text input:
 
 ```python
-from io import BytesIO
-from urllib.request import urlopen
-
-import librosa
-
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+from transformers.audio_utils import load_audio
 
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
@@ -96,11 +88,11 @@ model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-
 
 conversation = [
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/voice_sample.wav"},
     ]},
     {"role": "assistant", "content": "Yes, the speaker is female and in her twenties."},
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/mandarin_voxcpm_zh.wav"},
     ]},
 ]
 text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
@@ -109,10 +101,7 @@ for message in conversation:
     if isinstance(message["content"], list):
         for ele in message["content"]:
             if ele["type"] == "audio":
-                audios.append(librosa.load(
-                    BytesIO(urlopen(ele['audio_url']).read()),
-                    sr=processor.audio_processor.sampling_rate)[0]
-                )
+                audios.append(load_audio(ele['audio_url'], sampling_rate=processor.audio_processor.sampling_rate))
 
 inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
@@ -128,12 +117,8 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 In the audio analysis, users could provide both audio and text instructions for analysis:
 
 ```python
-from io import BytesIO
-from urllib.request import urlopen
-
-import librosa
-
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+from transformers.audio_utils import load_audio
 
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
@@ -142,7 +127,7 @@ model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-
 conversation = [
     {'role': 'system', 'content': 'You are a helpful assistant.'},
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
         {"type": "text", "text": "What's that sound?"},
     ]},
     {"role": "assistant", "content": "It is the sound of glass shattering."},
@@ -151,7 +136,7 @@ conversation = [
     ]},
     {"role": "assistant", "content": "Stay alert and cautious, and check if anyone is hurt or if there is any damage to property."},
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac"},
         {"type": "text", "text": "What does the person say?"},
     ]},
 ]
@@ -161,11 +146,7 @@ for message in conversation:
     if isinstance(message["content"], list):
         for ele in message["content"]:
             if ele["type"] == "audio":
-                audios.append(
-                    librosa.load(
-                        BytesIO(urlopen(ele['audio_url']).read()),
-                        sr=processor.audio_processor.sampling_rate)[0]
-                )
+                audios.append(load_audio(ele['audio_url'], sampling_rate=processor.audio_processor.sampling_rate))
 
 inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
@@ -181,12 +162,8 @@ response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_
 We also support batch inference:
 
 ```python
-from io import BytesIO
-from urllib.request import urlopen
-
-import librosa
-
 from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+from transformers.audio_utils import load_audio
 
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
@@ -194,19 +171,19 @@ model = Qwen2AudioForConditionalGeneration.from_pretrained("Qwen/Qwen2-Audio-7B-
 
 conversation1 = [
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
         {"type": "text", "text": "What's that sound?"},
     ]},
     {"role": "assistant", "content": "It is the sound of glass shattering."},
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"},
         {"type": "text", "text": "What can you hear?"},
     ]}
 ]
 
 conversation2 = [
     {"role": "user", "content": [
-        {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/1272-128104-0000.flac"},
+        {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/mr_quiller.flac"},
         {"type": "text", "text": "What does the person say?"},
     ]},
 ]
@@ -221,11 +198,7 @@ for conversation in conversations:
         if isinstance(message["content"], list):
             for ele in message["content"]:
                 if ele["type"] == "audio":
-                    audios.append(
-                        librosa.load(
-                            BytesIO(urlopen(ele['audio_url']).read()),
-                            sr=processor.audio_processor.sampling_rate)[0]
-                    )
+                    audios.append(load_audio(ele['audio_url'], sampling_rate=processor.audio_processor.sampling_rate))
 
 inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs['input_ids'] = inputs['input_ids'].to(model.device)

@@ -42,7 +42,7 @@ alt="drawing" width="600"/>
 <small> Idefics2 architecture. Taken from the <a href="https://huggingface.co/papers/2405.02246">original paper.</a> </small>
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
-The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2).
+The original code can be found [here](https://huggingface.co/HuggingFaceM4/idefics2-8b).
 
 ## Usage tips
 
@@ -144,7 +144,7 @@ Do note that when training Idefics2 on multi-turn conversations between a user a
 
 ## Model optimizations: Flash Attention
 
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../attention_interface#set-an-attention-backend), which is a faster implementation of the attention mechanism used inside the model.
+The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../kernel_doc/loading_kernels#attention-kernels), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 

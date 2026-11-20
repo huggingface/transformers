@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -48,52 +49,41 @@ if is_torch_available():
     )
 
 
-class FSMTModelTester:
-    def __init__(
-        self,
-        parent,
-        src_vocab_size=99,
-        tgt_vocab_size=99,
-        langs=["ru", "en"],
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        use_labels=False,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="relu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        bos_token_id=0,
-        pad_token_id=1,
-        eos_token_id=2,
-    ):
-        self.parent = parent
-        self.src_vocab_size = src_vocab_size
-        self.tgt_vocab_size = tgt_vocab_size
-        self.langs = langs
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        torch.manual_seed(0)
+class FSMTModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "src_vocab_size": 99,
+        "tgt_vocab_size": 99,
+        "langs": ["ru", "en"],
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "use_labels": False,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 4,
+        "hidden_act": "relu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "bos_token_id": 0,
+        "pad_token_id": 1,
+        "eos_token_id": 2,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # hack needed for modeling_common tests - despite not really having this attribute in this model
-        self.vocab_size = self.src_vocab_size
+        values["vocab_size"] = values["src_vocab_size"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+        torch.manual_seed(0)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.src_vocab_size).clamp(
@@ -149,6 +139,7 @@ def prepare_fsmt_inputs_dict(
 
 @require_torch
 class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FSMTModelTester
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -495,10 +486,6 @@ class FSMTModelIntegrationTests(unittest.TestCase):
 
         src_text = text[src]
         tgt_text = text[tgt]
-        # To make `test_translation_pipeline_0_en_ru` pass in #38904. When translating it back to `en`, we get
-        # `Machine learning is fine, isn't it?`.
-        if (src, tgt) == ("en", "ru"):
-            tgt_text = "Машинное обучение - это прекрасно, не так ли?"
 
         tokenizer = self.get_tokenizer(mname)
         model = self.get_model(mname)

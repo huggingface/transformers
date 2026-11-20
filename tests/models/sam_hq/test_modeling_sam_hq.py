@@ -27,7 +27,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
@@ -40,10 +40,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SamHQModel, SamHQProcessor
-
-
-if is_vision_available():
-    pass
 
 
 class SamHQVisionModelTester:
@@ -773,7 +769,7 @@ def prepare_image():
 
 
 def prepare_dog_img():
-    img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
+    img_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png"
     raw_image = load_test_image(img_url).convert("RGB")
     return raw_image
 

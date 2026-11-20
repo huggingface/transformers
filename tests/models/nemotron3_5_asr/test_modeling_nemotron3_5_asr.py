@@ -22,6 +22,7 @@ from threading import Thread
 from transformers import is_datasets_available, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
@@ -45,55 +46,43 @@ if is_torch_available():
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/nemotron3_5_asr"
 
 
-class Nemotron3_5AsrForRNNTModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        seq_length=256,
-        num_mel_bins=80,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=256,
-        subsampling_factor=8,
-        subsampling_conv_channels=32,
-        vocab_size=128,
-        decoder_hidden_size=32,
-        num_decoder_layers=1,
-        hidden_act="relu",
-        max_symbols_per_step=5,
-        pad_token_id=2,
-        num_prompts=8,
-        prompt_intermediate_size=16,
-        default_prompt_id=3,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_mel_bins = num_mel_bins
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.subsampling_factor = subsampling_factor
-        self.subsampling_conv_channels = subsampling_conv_channels
-        self.vocab_size = vocab_size
-        self.decoder_hidden_size = decoder_hidden_size
-        self.num_decoder_layers = num_decoder_layers
-        self.hidden_act = hidden_act
-        self.max_symbols_per_step = max_symbols_per_step
-        self.pad_token_id = pad_token_id
-        self.num_prompts = num_prompts
-        self.default_prompt_id = default_prompt_id
-        self.prompt_intermediate_size = prompt_intermediate_size
-        self.is_training = is_training
+class Nemotron3_5AsrForRNNTModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        self.blank_token_id = vocab_size - 1
-        self.output_seq_length = seq_length // subsampling_factor
-        self.seq_length = seq_length
-        self.encoder_seq_length = self.output_seq_length
+    small_config_overrides = {
+        "batch_size": 4,
+        "seq_length": 256,
+        "num_mel_bins": 80,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 256,
+        "subsampling_factor": 8,
+        "subsampling_conv_channels": 32,
+        "vocab_size": 128,
+        "decoder_hidden_size": 32,
+        "num_decoder_layers": 1,
+        "hidden_act": "relu",
+        "max_symbols_per_step": 5,
+        "pad_token_id": 2,
+        "num_prompts": 8,
+        "prompt_intermediate_size": 16,
+        "default_prompt_id": 3,
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["blank_token_id"] = values["vocab_size"] - 1
+        values["output_seq_length"] = values["seq_length"] // values["subsampling_factor"]
+        values["encoder_seq_length"] = values["output_seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         encoder_config = NemotronAsrStreamingEncoderConfig(
@@ -154,6 +143,8 @@ class Nemotron3_5AsrForRNNTModelTester:
 
 @require_torch
 class Nemotron3_5AsrForRNNTModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Nemotron3_5AsrForRNNTModelTester
+
     all_model_classes = (Nemotron3_5AsrForRNNT,) if is_torch_available() else ()
     pipeline_model_mapping = {"automatic-speech-recognition": Nemotron3_5AsrForRNNT} if is_torch_available() else {}
 
@@ -301,7 +292,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
     def test_model_integration(self):
         # reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_single_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_single.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             expected = json.load(f)
 
         samples = self._load_datasamples(1)
@@ -336,7 +327,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
     def test_model_integration_batched(self):
         # reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_batch_rnnt-py
         RESULTS_PATH = FIXTURES_DIR / "expected_results_batch.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             expected = json.load(f)
 
         samples = self._load_datasamples(5)
@@ -391,7 +382,7 @@ class Nemotron3_5AsrForRNNTIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/7e28529787b376b909008109be313ed7#file-reproducer_streaming_rnnt-py
         """
         RESULTS_PATH = FIXTURES_DIR / "expected_results_streaming.json"
-        with open(RESULTS_PATH) as f:
+        with open(RESULTS_PATH, encoding="utf-8") as f:
             expected = json.load(f)
         right = expected["att_context_size"][1]
 

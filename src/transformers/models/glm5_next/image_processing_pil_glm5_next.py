@@ -50,8 +50,8 @@ class Glm5NextImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
     patch_expand_factor: int
 
-    min_image_tokens: int
-    max_image_tokens: int
+    min_image_tokens: int | None
+    max_image_tokens: int | None
 
 
 def smart_resize(

@@ -18,7 +18,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import replace
+from typing import Literal
+
+import numpy as np
+
 from ...audio_processing_utils import BaseAudioProcessor
+from ...processing_utils import AudioKwargs
+
+
+class NemotronAsrStreamingAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    center (`bool`, *optional*):
+        Per-call override of `spectrogram_config.stft_config.center`. Streaming centers the first chunk (and offline
+        audio), and not the later chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
+        reproduces, frame for frame, the features a single `center=True` pass over the whole utterance yields.
+    is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+        Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio is then
+        zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the whole
+        utterance reaches past the audio at most, so that this frame is kept rather than dropped.
+    mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+        Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+        precision (`"bfloat16"` for Nemotron 3.5 Transcribe): both are then rounded to that dtype once, so the log-mel
+        features match the original front end; the spectrogram itself is always computed in float32.
+    """
+
+    center: bool | None
+    is_last_audio_chunk: bool | None
+    mel_filters_dtype: Literal["float32", "bfloat16", "float16"]
+
+
+def _round_to_dtype(array, dtype: str):
+    """`array` rounded to `dtype` (round to nearest even) and back to float32, on the host. numpy has no
+    bfloat16, so its rounding is done on the float32 bits; the result matches `torch.Tensor.to(dtype).float()`.
+    Elementwise ops keep the memory layout, which the mel matmul's accumulation order depends on."""
+    array = np.asarray(array, dtype=np.float32)
+    if dtype == "float32":
+        return array
+    if dtype == "float16":
+        return array.astype(np.float16).astype(np.float32)
+    bits = array.view(np.uint32)
+    rounded = (bits + np.uint32(0x7FFF) + ((bits >> np.uint32(16)) & np.uint32(1))) & np.uint32(0xFFFF0000)
+    return rounded.astype(np.uint32).view(np.float32)
 
 
 class NemotronAsrStreamingAudioProcessor(BaseAudioProcessor):
@@ -53,8 +94,64 @@ class NemotronAsrStreamingAudioProcessor(BaseAudioProcessor):
     # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
     # standardization. Override the inherited recipe explicitly.
     feature_normalization = None
-    # The streaming encoder consumes log-mel frames; extraction is not optional.
-    frozen_options = ("do_extract_spectrogram",)
+    # The streaming encoder consumes log-mel frames; extraction is not optional. The mel bank is rounded at
+    # construction, so its precision is a property of the checkpoint, not of a call.
+    frozen_options = ("do_extract_spectrogram", "mel_filters_dtype")
+
+    # Call-only streaming options: `None` leaves `spectrogram_config` as configured and keeps them out of `to_dict`.
+    center = None
+    is_last_audio_chunk = None
+    mel_filters_dtype = "float32"
+    valid_kwargs = NemotronAsrStreamingAudioProcessorKwargs
+
+    def _set_attributes(self, **kwargs):
+        super()._set_attributes(**kwargs)
+        if self.mel_filters_dtype != "float32" and getattr(self, "mel_filters", None) is not None:
+            self.mel_filters = _round_to_dtype(self.mel_filters, self.mel_filters_dtype)
+
+    def _standardize_kwargs(self, **kwargs):
+        kwargs = super()._standardize_kwargs(**kwargs)
+        center, spectrogram_config = kwargs.get("center"), kwargs.get("spectrogram_config")
+        if center is not None and spectrogram_config is not None and spectrogram_config.stft_config.center != center:
+            stft_config = replace(spectrogram_config.stft_config, center=center)
+            kwargs["spectrogram_config"] = replace(spectrogram_config, stft_config=stft_config)
+        return kwargs
+
+    def _device_window(self, audio, stft_cfg):
+        window = super()._device_window(audio, stft_cfg)
+        if self.mel_filters_dtype == "float32":
+            return window
+        return self.ops.asarray(_round_to_dtype(self.ops.to_numpy(window), self.mel_filters_dtype), like=audio)
+
+    def _frame_count(self, lengths, stft_cfg):
+        if not stft_cfg.center:
+            # uncentered frames are `n_fft` samples long (the window sits centred in the FFT buffer)
+            return (lengths + 2 * stft_cfg.pad - stft_cfg.n_fft) // stft_cfg.hop_length + 1
+        return super()._frame_count(lengths, stft_cfg)
+
+    @staticmethod
+    def _last_chunk_padding(stft_cfg, is_last_audio_chunk) -> int:
+        """Zeros appended to the last uncentered chunk: the last frame a `center=True` pass counts reaches up to
+        `n_fft // 2 - hop_length` past the audio."""
+        if is_last_audio_chunk and not stft_cfg.center:
+            return stft_cfg.n_fft // 2 - stft_cfg.hop_length
+        return 0
+
+    def _compute_batched_features(
+        self, audio, *, audio_ranges, spectrogram_config, is_last_audio_chunk=None, **kwargs
+    ):
+        num_padding = self._last_chunk_padding(spectrogram_config.stft_config, is_last_audio_chunk)
+        if num_padding:
+            # Appended before the spectrogram, but the waveform preemphasis zeroes every sample past
+            # `audio_ranges`: the padding stays zero, as when padded after the preemphasis.
+            audio = self.ops.pad(audio, 0, num_padding)
+        features = self.spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
+        audio_lengths = self._lengths_from_ranges(audio_ranges) + num_padding
+        return features, self._valid_frame_counts(audio_lengths, spectrogram_config)
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, is_last_audio_chunk=None, **kwargs) -> int:
+        padded_length += self._last_chunk_padding(spectrogram_config.stft_config, is_last_audio_chunk)
+        return super()._padded_frame_count(padded_length, spectrogram_config, **kwargs)
 
     def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
         features = output.pop("audio_features")

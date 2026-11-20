@@ -46,21 +46,13 @@ class YoutuModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = YoutuModel
 
-    def __init__(
-        self,
-        parent,
-        kv_lora_rank=16,
-        q_lora_rank=32,
-        qk_rope_head_dim=32,
-        qk_nope_head_dim=32,
-        v_head_dim=32,
-    ):
-        super().__init__(parent=parent)
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_rope_head_dim": 32,
+        "qk_nope_head_dim": 32,
+        "v_head_dim": 32,
+    }
 
 
 @require_torch
@@ -149,10 +141,18 @@ class YoutuIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+                ],
+                ("cuda", 8): [
+                    "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+                    "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, fries, and even on my pizza. I also love it on my french fries. I love it on my french fries. I love it",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -164,9 +164,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=False, dynamic=True)
+        # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )

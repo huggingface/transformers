@@ -24,6 +24,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModelForImageTextToText
 from .configuration_shieldgemma2 import ShieldGemma2Config
 
@@ -71,22 +72,23 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs,
+        **kwargs,
     ) -> ShieldGemma2ImageClassifierOutputWithNoAttention:
         r"""
         Returns:
@@ -113,7 +115,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             labels=labels,
@@ -122,7 +124,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
         logits = outputs.logits
         selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]

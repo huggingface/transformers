@@ -3,16 +3,26 @@ from contextlib import contextmanager
 from types import ModuleType
 from unittest.mock import DEFAULT, MagicMock, patch
 
+import pytest
 from packaging.version import parse as parse_version
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, run_test_using_subprocess
+from transformers import logging
+from transformers.testing_utils import (
+    CaptureLogger,
+    LoggingLevel,
+    require_torch,
+    require_torchvision,
+    run_test_using_subprocess,
+)
 from transformers.utils.import_utils import (
     _candidate_distribution_names,
     _is_package_available,
+    _LazyModule,
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_torchcodec_usable,
 )
 
 
@@ -60,6 +70,32 @@ def test_is_package_available_edge_cases():
             assert _is_package_available(pkg_name, return_version=True) == expected
 
 
+def test_lazy_module_error_points_to_debug_log():
+    logger = logging.get_logger("transformers.utils.import_utils")
+    lazy_module = _LazyModule(
+        "transformers.test_lazy_module",
+        __file__,
+        {"broken_module": ["BrokenObject"]},
+    )
+
+    original_error = RuntimeError("simulated broken dependency")
+
+    with CaptureLogger(logger) as captured_logs:
+        with LoggingLevel(logging.DEBUG), patch.object(lazy_module, "_get_module", side_effect=original_error):
+            try:
+                lazy_module.BrokenObject
+            except ModuleNotFoundError as error:
+                assert "Could not import module 'BrokenObject'" in str(error)
+                assert "Set the logging verbosity to DEBUG for the original import error." in str(error)
+                assert "simulated broken dependency" not in str(error)
+                assert (
+                    "Original import error for 'BrokenObject': simulated broken dependency"
+                    in captured_logs.io.getvalue()
+                )
+            else:
+                raise AssertionError("Expected ModuleNotFoundError")
+
+
 def test_is_package_available_unmapped_distribution_does_not_import():
     """A package missing from `packages_distributions()` must be versioned from metadata, not by importing it.
 
@@ -70,17 +106,17 @@ def test_is_package_available_unmapped_distribution_does_not_import():
 
     with (
         patch("transformers.utils.import_utils.importlib.util.find_spec", return_value=object()),
-        patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {}),
+        patch("transformers.utils.import_utils._package_distribution_mapping", return_value={}),
         patch("transformers.utils.import_utils.importlib.metadata.version", return_value="1.2.3") as version,
         patch("transformers.utils.import_utils.importlib.import_module") as import_module,
     ):
         assert _is_package_available(pkg_name, return_version=True) == (True, "1.2.3")
-        version.assert_called_once_with(pkg_name.replace("_", "-"))
+        version.assert_called_once_with(pkg_name)
         import_module.assert_not_called()
 
 
 def test_candidate_distribution_names():
-    with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", {"PIL": ["pillow"]}):
+    with patch("transformers.utils.import_utils._package_distribution_mapping", return_value={"PIL": ["pillow"]}):
         # A mapped import name prefers its distribution, but keeps the import name as a fallback.
         assert _candidate_distribution_names("PIL") == ["pillow", "PIL"]
         # An unmapped import name falls back on itself, normalized first, without duplicates.
@@ -125,9 +161,12 @@ def mock_flash_attn_env(
     try:
         with (
             patch("transformers.utils.import_utils._is_package_available", side_effect=fake_is_package_available),
-            patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", fake_distribution_mapping),
+            patch(
+                "transformers.utils.import_utils._package_distribution_mapping", return_value=fake_distribution_mapping
+            ),
             patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda_available),
             patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=False),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=False),
             patch("transformers.utils.import_utils.is_kernels_available", return_value=kernels_available),
             patch.dict(sys.modules, {"kernels": fake_kernels_module}),
         ):
@@ -390,3 +429,121 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
         return x + 1 if helper(*args) else x - 1
 
     run(torch.zeros(3))  # a graph break inside the helper would raise here
+
+
+@run_test_using_subprocess
+def test_legacy_module_aliases_are_served_on_demand():
+    """
+    Deprecated module paths (`transformers.tokenization_utils_fast`, `transformers.models.x.image_processing_x_fast`,
+    ...) are served by a `sys.meta_path` finder and must not be pre-registered in `sys.modules`: tools that scan
+    `sys.modules` and probe attributes (unittest's `assertWarns`, `pickle`, `inspect`) would otherwise trigger imports
+    of optional heavy dependencies. Regression test for https://github.com/huggingface/transformers/issues/48966.
+    """
+    import unittest
+    import warnings
+
+    import transformers
+    from transformers.utils import import_utils
+
+    finders = [f for f in sys.meta_path if isinstance(f, import_utils._LegacyModuleAliasFinder)]
+    assert len(finders) == 1
+    finder = finders[0]
+    pre_registered = [name for name in sys.modules if finder.resolve(name) is not None]
+    assert pre_registered == [], f"legacy module paths pre-registered in sys.modules: {pre_registered}"
+    assert not any(name.startswith("image_processing_") for name in vars(transformers))
+
+    # Scanning `sys.modules` (what `assertWarns` does on entry) must not import anything.
+    modules_before = len(sys.modules)
+    with unittest.TestCase().assertWarns(UserWarning):
+        warnings.warn("probe", UserWarning)
+    assert len(sys.modules) == modules_before
+
+    # Legacy paths still work, as thin shims over the replacement module.
+    from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+
+    assert PreTrainedTokenizerFast is transformers.PreTrainedTokenizerFast
+    shim = sys.modules["transformers.tokenization_utils_fast"]
+    assert shim is transformers.tokenization_utils_fast
+    assert shim.__spec__.loader is finder
+    assert "PreTrainedTokenizerFast" in vars(shim)
+    # Module metadata is the shim's own, so attribute probes behave like on any other module.
+    assert getattr(shim, "__warningregistry__", None) is None
+    assert getattr(shim, "does_not_exist", None) is None
+
+    with pytest.raises(ModuleNotFoundError):
+        import transformers.models.aria.image_processing_nope_fast  # noqa: F401
+
+
+@require_torchvision
+def test_legacy_fast_image_processor_module_alias():
+    """`models/x/image_processing_x_fast.py` became `models/x/image_processing_x.py`; the old path is an alias."""
+    import transformers.models.aria.image_processing_aria_fast as legacy_module
+    from transformers.models.aria.image_processing_aria import AriaImageProcessor
+    from transformers.models.aria.image_processing_aria_fast import AriaImageProcessorFast  # legacy class name
+
+    assert AriaImageProcessorFast is AriaImageProcessor
+    assert legacy_module.AriaImageProcessor is AriaImageProcessor
+    assert legacy_module.__all__ == ["AriaImageProcessor"]
+
+    # Only paths that actually existed are aliased.
+    with pytest.raises(ModuleNotFoundError):
+        import transformers.models.aria.image_processing_pil_aria_fast  # noqa: F401
+
+
+@contextmanager
+def mock_torchcodec_env(load_error=None, ffmpeg_major_version=7):
+    """
+    Mocks an installed torchcodec that fails to load its native library because of `load_error`, or that loaded
+    FFmpeg `ffmpeg_major_version` (`None`: FFmpeg not found).
+    """
+    fake_torchcodec = ModuleType("torchcodec")
+    fake_torchcodec.ffmpeg_major_version = ffmpeg_major_version
+    real_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "torchcodec" and load_error is not None:
+            # Like torchcodec: a generic error wrapping the real cause
+            raise OSError("Could not load this library: libtorchcodec_core.so") from OSError(load_error)
+        return real_import(name, *args, **kwargs)
+
+    is_torchcodec_usable.cache_clear()
+    logging.warning_once.cache_clear()
+    try:
+        with (
+            patch("transformers.utils.import_utils.is_torchcodec_available", return_value=True),
+            patch("transformers.utils.import_utils.is_torchcodec_greater_or_equal", return_value=True),
+            patch.dict(sys.modules, {"torchcodec": fake_torchcodec}),
+            patch("builtins.__import__", side_effect=fake_import),
+        ):
+            yield
+    finally:
+        is_torchcodec_usable.cache_clear()
+
+
+@parameterized.expand(
+    [
+        # (case, mock_torchcodec_env kwargs, expected usable, expected ffmpeg_usable, expected warning)
+        (
+            "build_mismatch",
+            {"load_error": "libnvrtc.so.13: cannot open shared object file"},
+            False,
+            False,
+            "libnvrtc.so.13",
+        ),
+        ("no_ffmpeg", {"ffmpeg_major_version": None}, True, False, "could not load FFmpeg"),
+        ("with_ffmpeg", {"ffmpeg_major_version": 7}, True, True, None),
+    ]
+)
+def test_torchcodec_usability(_, env, usable, ffmpeg_usable, warning):
+    logger = logging.get_logger("transformers.utils.import_utils")
+    with mock_torchcodec_env(**env), CaptureLogger(logger) as captured_logs:
+        for _ in range(2):  # results are cached: the second round must not warn again
+            assert is_torchcodec_usable(decode="image") == usable
+            assert is_torchcodec_usable(decode="audio") == ffmpeg_usable
+            assert is_torchcodec_usable(decode="video") == ffmpeg_usable
+
+    if warning is None:
+        assert captured_logs.out == ""
+    else:
+        assert warning in captured_logs.out  # for a failed load, the innermost cause, not the generic wrapper
+        assert captured_logs.out.count("torchcodec#installing-torchcodec") == 1

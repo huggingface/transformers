@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -50,17 +51,17 @@ if is_torch_available():
     import torch
 
 
-class LlavaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        text_config={
+class LlavaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "projector_hidden_act": "gelu",
+        "seq_length": 7,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -83,8 +84,8 @@ class LlavaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "image_size": 8,
             "patch_size": 2,
             "num_channels": 3,
@@ -98,29 +99,30 @@ class LlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["batch_size"] = 3
+        values["num_channels"] = 3
+        values["image_size"] = 336
+        values["num_image_tokens"] = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
+        # `seq_length` is the text length; the tester's sequence also holds the image tokens
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
 
     def get_config(self):
         return LlavaConfig(
@@ -171,6 +173,8 @@ class LlavaForConditionalGenerationModelTest(
     """
     Model tester for `LlavaForConditionalGeneration`.
     """
+
+    model_tester_class = LlavaVisionText2TextModelTester
 
     all_model_classes = (
         (
@@ -299,7 +303,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
@@ -308,6 +312,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             ("xpu", 3): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
             ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
             ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
+            ("rocm", (9, 4)): '\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,',
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -328,7 +333,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
@@ -336,10 +341,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of boats or other watercraft in the area, as they may be moving at high speeds or making sudden turns, which could pose a risk to pedestrians. Lastly, be aware of any posted signs or warnings, as they may provide important information about the pier\'s conditions or potential dangers.',
-                ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
+                (None, None): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that may affect its safety. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
+                ("cuda", (8, 6)): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents or injuries. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
+                ("xpu", 5): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
+                ("rocm", (9, 4)): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -361,7 +366,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
             "USER: <image>\nWhat is this? ASSISTANT:",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
@@ -370,26 +377,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("xpu", 3): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
-                    "you",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
-                    "lake, you should",
-                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
-                    "is located on",
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which appears to be a dock or pier extending out into the water,",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on",
                 ],
             }
         )
@@ -412,7 +402,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
@@ -423,22 +415,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("cuda", 7): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("cuda", 8): [
-                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
-                    'USER:  \nWhat is this?\nASSISTANT: Cats',
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a lake, there are several things to be cautious about and items to",
-                    "USER:  \nWhat is this?\nASSISTANT: This is a picture of two cats lying on a couch.",
-                ],
+                (None, None): ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a mountain lake, there are several things to be cautious about and items', 'USER:  \nWhat is this?\nASSISTANT: Cats'],
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -465,7 +442,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
             "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
@@ -476,26 +455,13 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("xpu", 3): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
-                    "body of water",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
+                (None, None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending out into a large body",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
                 ],
-                ("cuda", None): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
-                    "body of water",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
-                ],
-                ("rocm", (9, 5)): [
-                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
-                    "with me?\nASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should "
-                    "be",
-                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
-                    "sleeping on a bed.",
+                ("rocm", (9, 4)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier overlooking a large body of",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
                 ],
             }
         )
@@ -542,8 +508,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
-                ("cuda", 8): [
-                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                ("cuda", (8, 6)): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one image and a",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
@@ -552,6 +518,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
+                ("rocm", (9, 4)): ["\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow", '\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding', '\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama'],
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -644,7 +611,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_GENERATIONS = Expectations(
             {
                 (None, None): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow",
-                ("cuda", 8): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
+                ("rocm", (9, 4)): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
+                ("cuda", (8, 6)): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow",
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
@@ -681,6 +649,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a puppy,",
                 ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
+                ("xpu", 5): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of wooden planks, which cover the entire background. The dog appears to be a puppy,",
+                ("rocm", (9, 4)): 'Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of wooden planks, which cover the entire background. The dog appears to be a puppy,',
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
@@ -732,6 +702,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     'What breed is the dog?The dog in the image is a black Labrador Retriever.',
                     'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
                 ],
+                ("xpu", 5): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue."
+                ],
+                ("rocm", (9, 4)): ['What breed is the dog?The dog in the image is a black Labrador Retriever.', 'What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue.'],
             }
         )  # fmt: skip
 

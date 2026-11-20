@@ -40,7 +40,6 @@ class MixtralConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mixtral"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -57,10 +56,9 @@ class MixtralConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {"num_experts": "num_local_experts"}

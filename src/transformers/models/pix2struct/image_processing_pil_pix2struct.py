@@ -269,7 +269,6 @@ class Pix2StructImageProcessorPil(PilBackend):
         Returns:
             `np.ndarray`: Flattened patches with row/column IDs of shape (max_patches, patch_dim).
         """
-        requires_backends(self, "torch")
         # Convert to torch for patch extraction (pix2struct requires torch for unfold)
         image_torch = torch.from_numpy(image)
         patch_height, patch_width = patch_size.height, patch_size.width
@@ -395,7 +394,6 @@ class Pix2StructImageProcessorPil(PilBackend):
 
         # Stack if return_tensors is set
         if return_tensors:
-            requires_backends(self, "torch")
             flattened_patches = torch.stack([torch.from_numpy(p) for p in flattened_patches], dim=0)
             attention_masks = torch.stack([torch.from_numpy(m) for m in attention_masks], dim=0)
 

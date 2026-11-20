@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -47,43 +48,25 @@ if is_torch_available():
     import torch
 
 
-class PPLCNetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=128,
-        num_channels=3,
-        num_stages=5,
-        is_training=False,
-        scale=1.0,
-        reduction=4,
-        dropout_prob=0.2,
-        class_expand=1280,
-        use_last_convolution=True,
-        hidden_act="hardswish",
-        num_labels=4,
-        out_features=["stage2", "stage3", "stage4"],
-        out_indices=[2, 3, 4],
-        stem_channels=16,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.num_stages = num_stages
-        self.scale = scale
-        self.reduction = reduction
-        self.dropout_prob = dropout_prob
-        self.class_expand = class_expand
-        self.use_last_convolution = use_last_convolution
-        self.hidden_act = hidden_act
-        self.num_labels = num_labels
-        self.out_features = out_features
-        self.out_indices = out_indices
-        self.stem_channels = stem_channels
-        self.block_configs = [
+class PPLCNetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "num_channels": 3,
+        "image_size": 128,
+        "is_training": False,
+        "num_stages": 5,
+        "scale": 1.0,
+        "reduction": 4,
+        "dropout_prob": 0.2,
+        "class_expand": 1280,
+        "use_last_convolution": True,
+        "hidden_act": "hardswish",
+        "num_labels": 4,
+        "out_features": ["stage2", "stage3", "stage4"],
+        "out_indices": [2, 3, 4],
+        "stem_channels": 16,
+        "block_configs": [
             [[3, 16, 32, 1, False]],
             [[3, 32, 32, 2, False], [3, 32, 32, 1, False]],
             [[3, 32, 32, 2, False], [3, 32, 32, 1, False]],
@@ -96,7 +79,13 @@ class PPLCNetModelTester:
                 [5, 32, 32, 1, False],
             ],
             [[5, 32, 32, 2, True], [5, 32, 32, 1, True]],
-        ]
+        ],
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -129,6 +118,8 @@ class PPLCNetModelTester:
 
 @require_torch
 class PPLCNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    model_tester_class = PPLCNetModelTester
+
     all_model_classes = (PPLCNetBackbone,) if is_torch_available() else ()
     has_attentions = False
     config_class = PPLCNetConfig
@@ -145,6 +136,8 @@ class PPLCNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
 
 @require_torch
 class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = PPLCNetModelTester
+
     all_model_classes = (PPLCNetForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": PPLCNetForImageClassification} if is_torch_available() else {}
 
@@ -281,7 +274,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPLCNetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg"
         )
         self.image = load_image(img_url)
 
@@ -292,12 +285,12 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
             outputs = self.model(**inputs)
 
         expected_shape_logits = torch.Size((1, 4))
-        expected_logits = torch.tensor([[-0.3655, -1.0573, 2.4883, -1.0640]]).to(torch_device)
+        expected_logits = torch.tensor([[2.7272, -0.9074, -0.8011, -0.983]]).to(torch_device)
 
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape_logits)
         torch.testing.assert_close(outputs.last_hidden_state, expected_logits, rtol=2e-2, atol=2e-2)
 
-        expected_labels = torch.tensor([2]).to(torch_device)
+        expected_labels = torch.tensor([0]).to(torch_device)
         predicted_label = outputs.last_hidden_state.argmax(-1).item()
 
         self.assertEqual(predicted_label, expected_labels)

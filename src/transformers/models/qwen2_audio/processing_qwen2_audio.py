@@ -21,23 +21,15 @@ from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "audio_kwargs": {
-            "return_padding_mask": True,
-            "padding": "max_length",
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Qwen2AudioProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen2AudioProcessorKwargs
+    audio_kwargs = {
+        "return_padding_mask": True,
+        "padding": "max_length",
+    }
 
     def __init__(
         self,
@@ -132,12 +124,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
         messages = [
             {'role': 'system', 'content': 'You are a helpful assistant.'},
             {"role": "user", "content": [
-                {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+                {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
                 {"type": "text", "text": "What's that sound?"},
             ]},
             {"role": "assistant", "content": "It is the sound of glass shattering."},
             {"role": "user", "content": [
-                {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"},
+                {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"},
                 {"type": "text", "text": "How about this one?"},
             ]},
         ]
@@ -173,5 +165,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         )
         # fmt: on
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen2AudioProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen2AudioProcessor"]

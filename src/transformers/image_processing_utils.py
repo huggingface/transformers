@@ -367,17 +367,25 @@ class BaseImageProcessor(ImageProcessingMixin):
             resample=resample,
         )
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images.
-        """
+    @auto_docstring(custom_intro="Preprocess an image or a batch of images.")
+    def preprocess(
+        self,
+        images: ImageInput,
+        *args,
+        image_like_kwargs: dict[str, Any] | None = None,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> BatchFeature:
         # Common validate/setdefault/standardize/dispatch logic lives in `PreprocessingMixin.preprocess`.
-        return super().preprocess(images, *args, **kwargs)
+        # `image_like_kwargs` is a workaround when adding new image like inputs to existing processors where we
+        # cannot modify the order of the input arguments for BC. For details see:
+        # https://github.com/huggingface/transformers/pull/47199#discussion_r4131643549
+        # It skips kwargs validation and is unpacked into `_preprocess_image_like_inputs` by `_preprocess_like_inputs`.
+        return super().preprocess(images, *args, _image_like_kwargs=image_like_kwargs or {}, **kwargs)
 
     def _preprocess_like_inputs(self, images: ImageInput, *args, **kwargs) -> BatchFeature:
         """Dispatch hook called by `PreprocessingMixin.preprocess` with validated kwargs."""
-        return self._preprocess_image_like_inputs(images, *args, **kwargs)
+        image_like_kwargs = kwargs.pop("_image_like_kwargs", None) or {}
+        return self._preprocess_image_like_inputs(images, *args, **image_like_kwargs, **kwargs)
 
     def rescale(
         self,

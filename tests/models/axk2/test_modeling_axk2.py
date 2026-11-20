@@ -18,14 +18,13 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -38,34 +37,20 @@ class AXK2ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = AXK2Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        num_experts_per_tok=2,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        v_head_dim=32,
-        index_n_heads=2,
-        index_head_dim=64,
-        index_topk=8,
-        gated_norm_rank=4,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.index_n_heads = index_n_heads
-        self.index_head_dim = index_head_dim
-        self.index_topk = index_topk
-        self.gated_norm_rank = gated_norm_rank
-        self.mlp_layer_types = ["dense", "sparse"]
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "num_experts_per_tok": 2,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "v_head_dim": 32,
+        "index_n_heads": 2,
+        "index_head_dim": 64,
+        "index_topk": 8,
+        "gated_norm_rank": 4,
+        "mlp_layer_types": ["dense", "sparse"],
+    }
 
 
 @require_torch
@@ -86,21 +71,11 @@ class AXK2ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("AXK2 uses deepseek_sparse_attention layers which are not compatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
-        pass
-
 
 @slow
 @require_torch_accelerator
-class AXK1IntegrationTest(unittest.TestCase):
+class AXK2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "hf-internal-testing/tiny-axk2"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=False)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
 
     def test_model_logits_batched(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, device_map="auto")
@@ -133,7 +108,7 @@ class AXK1IntegrationTest(unittest.TestCase):
     def test_model_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간を実{acknowledgements 사건과-OctCTPコロ passengers Dice GD workloads 울진 Fibonacci announcesdest denote 이야기도 scrap',
+                ("cuda", (8, 6)): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
                 ("xpu", None): 'Tell me about the french revolution. 세상은됨에 Philipp{asày 값에서 쪽은Pkgày속성amentals년여 focalaure 달간 guarant 실시간 juicy김정 conceal 요소들은미세먼 lover평론가-graph 나가서 rooms rooms rooms rooms측에서pid',
             }
         )  # fmt: skip

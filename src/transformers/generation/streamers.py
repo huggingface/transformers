@@ -15,8 +15,8 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import time
+import unicodedata
 from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 
@@ -41,7 +41,7 @@ class BaseStreamer:
 
 class TextStreamer(BaseStreamer):
     """
-    Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
+    Simple text streamer that prints the token(s) to stdout as soon as they are decoded.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -79,7 +79,7 @@ class TextStreamer(BaseStreamer):
 
     def put(self, value):
         """
-        Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
+        Receives tokens, decodes them, and prints them to stdout as soon as they are decoded.
         """
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
@@ -101,6 +101,12 @@ class TextStreamer(BaseStreamer):
             self.print_len = 0
         # If the last token is a CJK character, we print the characters.
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+            printable_text = text[self.print_len :]
+            self.print_len += len(printable_text)
+        # Letters (with their combining marks), digits and spaces are printed right away, so text without spaces (long
+        # words, Thai) streams too. Symbols wait for the next space: they may start some formatting (`\n`, `<br>`) or
+        # be an incomplete character (`\ufffd`).
+        elif all(char.isspace() or unicodedata.category(char)[0] in "LMN" for char in text[self.print_len :]):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
@@ -282,9 +288,6 @@ class AsyncTextIteratorStreamer(TextStreamer):
         self.stop_signal = None
         self.timeout = timeout
         self.loop = asyncio.get_running_loop()
-        timeout_context = getattr(asyncio, "timeout", None)
-        self.has_asyncio_timeout = sys.version_info >= (3, 11) and callable(timeout_context)
-        self.asyncio_timeout = timeout_context if self.has_asyncio_timeout else None
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
@@ -296,19 +299,12 @@ class AsyncTextIteratorStreamer(TextStreamer):
         return self
 
     async def __anext__(self):
-        try:
-            if self.has_asyncio_timeout and self.asyncio_timeout is not None:
-                async with self.asyncio_timeout(self.timeout):
-                    value = await self.text_queue.get()
-            else:
-                value = await asyncio.wait_for(self.text_queue.get(), timeout=self.timeout)
-        except asyncio.TimeoutError:
-            raise TimeoutError()
+        async with asyncio.timeout(self.timeout):
+            value = await self.text_queue.get()
+        if value == self.stop_signal:
+            raise StopAsyncIteration()
         else:
-            if value == self.stop_signal:
-                raise StopAsyncIteration()
-            else:
-                return value
+            return value
 
 
 class TextDiffusionStreamer(TextStreamer):

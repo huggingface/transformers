@@ -22,7 +22,15 @@ from ...audio_processing_base import AudioProcessingMixin
 from ...audio_processing_utils import BaseAudioProcessor
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
+from ...utils import (
+    CONFIG_NAME,
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    cached_file,
+    logging,
+    resolve_revision,
+    safe_load_json_file,
+)
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -38,6 +46,7 @@ logger = logging.get_logger(__name__)
 # chosen at construction (`backend=`, torch if importable else numpy), see `BaseAudioProcessor`.
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", "WavTokenizerFeatureExtractor"),
         ("audio-spectrogram-transformer", "AudioSpectrogramTransformerAudioProcessor"),
         ("audioflamingo3", "WhisperAudioProcessor"),
         ("canary", "ParakeetAudioProcessor"),
@@ -48,6 +57,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("dac", "DacAudioProcessor"),
         ("data2vec-audio", "Wav2Vec2AudioProcessor"),
         ("dia", "DiaAudioProcessor"),
+        ("dots3_note", "Dots3NoteFeatureExtractor"),
+        ("embedding_gemma2", "Gemma4AudioProcessor"),
         ("encodec", "EncodecAudioProcessor"),
         ("fun_asr_nano", "FunAsrNanoAudioProcessor"),
         ("fun_asr_nano_encoder", "FunAsrNanoAudioProcessor"),
@@ -55,6 +66,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("gemma4", "Gemma4AudioProcessor"),
         ("gemma4_unified", "Gemma4UnifiedAudioProcessor"),
         ("glmasr", "WhisperAudioProcessor"),
+        ("gradium_phonon_tts", "PocketTTSFeatureExtractor"),
         ("granite_speech", "GraniteSpeechAudioProcessor"),
         ("granite_speech5_ctc", "GraniteSpeech5AudioProcessor"),
         ("granite_speech5_encoder", "GraniteSpeech5AudioProcessor"),
@@ -69,18 +81,27 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("mimi", "EncodecAudioProcessor"),
         ("moonshine", "Wav2Vec2AudioProcessor"),
         ("moshi", "EncodecAudioProcessor"),
+        ("moss_transcribe_diarize", "MossTranscribeDiarizeFeatureExtractor"),
+        ("muse_spark", "MuseSparkFeatureExtractor"),
         ("musicgen", "EncodecAudioProcessor"),
         ("musicgen_melody", "MusicgenMelodyAudioProcessor"),
+        ("nemo_speechlm", "NemotronAsrStreamingAudioProcessor"),
         ("nemotron3_5_asr", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron3_diarization", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron_asr_streaming", "NemotronAsrStreamingAudioProcessor"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingAudioProcessor"),
+        ("neucodec", "NeuCodecAudioProcessor"),
+        ("omniasr", "OmniASRFeatureExtractor"),
+        ("omniasr_ctc", "OmniASRFeatureExtractor"),
         ("parakeet_ctc", "ParakeetAudioProcessor"),
         ("parakeet_encoder", "ParakeetAudioProcessor"),
-        ("neucodec", "NeuCodecAudioProcessor"),
         ("parakeet_rnnt", "ParakeetAudioProcessor"),
         ("parakeet_tdt", "ParakeetAudioProcessor"),
         ("pe_audio", "PeAudioAudioProcessor"),
         ("pe_audio_video", "PeAudioAudioProcessor"),
         ("phi4_multimodal", "Phi4MultimodalAudioProcessor"),
+        ("pocket_tts", "PocketTTSFeatureExtractor"),
+        ("pocket_tts_audio_tokenizer", "EncodecAudioProcessor"),
         ("pop2piano", "Pop2PianoAudioProcessor"),
         ("qwen2_5_omni", "WhisperAudioProcessor"),
         ("qwen2_audio", "WhisperAudioProcessor"),
@@ -104,6 +125,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-bert", "Wav2Vec2AudioProcessor"),
         ("wav2vec2-conformer", "Wav2Vec2AudioProcessor"),
         ("wavlm", "Wav2Vec2AudioProcessor"),
+        ("wavtokenizer", "WavTokenizerFeatureExtractor"),
         ("whisper", "WhisperAudioProcessor"),
         ("xcodec", "DacAudioProcessor"),
         ("xcodec2", "Xcodec2AudioProcessor"),
@@ -294,6 +316,15 @@ def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kw
     config = kwargs.pop("config", None)
     trust_remote_code = kwargs.pop("trust_remote_code", None)
     kwargs["_from_auto"] = True
+
+    # Resolve the revision once, so that all the files below come from the same repository state.
+    kwargs["revision"] = resolve_revision(
+        pretrained_model_name_or_path,
+        kwargs.get("revision"),
+        token=kwargs.get("token"),
+        local_files_only=kwargs.get("local_files_only", False),
+        cache_dir=kwargs.get("cache_dir"),
+    )
 
     config_dict, _ = AudioProcessingMixin.get_audio_processor_dict(pretrained_model_name_or_path, **kwargs)
 

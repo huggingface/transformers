@@ -95,7 +95,6 @@ class ModernBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     vocab_size: int = 50368
@@ -398,7 +397,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         "attentions": ModernBertAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         cutoff_factor = self.config.initializer_cutoff_factor
@@ -640,12 +638,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -730,10 +722,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

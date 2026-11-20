@@ -18,7 +18,9 @@ This mostly describe the hooks used and the logic to make capture thread/context
 
 from __future__ import annotations
 
+import inspect
 import threading
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -28,12 +30,27 @@ from .import_utils import is_torchdynamo_compiling, requires
 
 
 if TYPE_CHECKING:
+    import torch
     from torch import nn
 
     from ..modeling_utils import PreTrainedModel
 
 
-_CAN_RECORD_REGISTRY = {}
+class _CanRecordRegistry(dict):
+    """
+    The `_can_record_outputs` of each model class, keyed on the model. Classes are stored by name rather than by
+    reference, for executorch support.
+    """
+
+    def __setitem__(self, model: PreTrainedModel, can_record_outputs: dict | None) -> None:
+        super().__setitem__(str(model.__class__), can_record_outputs)
+
+    def get(self, model: PreTrainedModel) -> dict:
+        """The `_can_record_outputs` registered for `model`'s class, or `{}` if it has none."""
+        return super().get(str(model.__class__)) or {}
+
+
+_CAN_RECORD_REGISTRY = _CanRecordRegistry()
 
 
 @dataclass
@@ -48,6 +65,8 @@ class OutputRecorder:
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
         capture_initial_hidden_state  (bool): Whether to prepend the first module's input as the initial hidden state.
+        num_hidden_layers_key (str): The config attribute holding the number of layers captured, used to resolve negative
+            `output_hidden_states` indices.
     """
 
     target_class: type[nn.Module]
@@ -55,6 +74,7 @@ class OutputRecorder:
     layer_name: str | None = None
     class_name: str | None = None
     capture_initial_hidden_state: bool = True
+    num_hidden_layers_key: str = "num_hidden_layers"
 
 
 class CompileableContextVar:
@@ -102,6 +122,12 @@ def install_output_capuring_hook(
 ) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
+    def append_hidden_state(collected_outputs: dict, hidden_state: torch.Tensor) -> None:
+        """Append to the captured `hidden_states`, or append `None` if the requested indices do not select it."""
+        hidden_states = collected_outputs["hidden_states"]
+        selection = collected_outputs.get("_hidden_states_layers")
+        hidden_states.append(hidden_state if selection is None or len(hidden_states) in selection else None)
+
     def output_capturing_hook(module, args, output):
         # Get the current thread-local collector
         collected_outputs = _active_collector.get()
@@ -109,26 +135,15 @@ def install_output_capuring_hook(
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
-        # Optionally capture only some layer's hidden_states
-        hidden_states_layers = collected_outputs.get("_hidden_states_layers")
-
-        # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the hidden_states outputs
-        # have length `num_hidden_layers + 1`. When we request a list of explicit layers to capture, do not add this into the result, so
-        # that the indexing of the output is the same as the actual requested layers
-        if (
-            capture_initial_hidden_state
-            and key == "hidden_states"
-            and len(collected_outputs[key]) == 0
-            and hidden_states_layers is None
-        ):
-            collected_outputs[key].append(args[0])
-
-        # If we are capturing only some layer's hidden_states, skip capture if not part of the requested indices
-        if key == "hidden_states" and hidden_states_layers is not None:
-            current_layer_idx = len(collected_outputs[key])
-            if current_layer_idx not in hidden_states_layers:
-                collected_outputs[key].append(None)
-                return
+        if key == "hidden_states":
+            # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the
+            # hidden_states outputs have length `num_hidden_layers + 1`
+            if capture_initial_hidden_state and len(collected_outputs[key]) == 0:
+                append_hidden_state(collected_outputs, args[0])
+            hidden_state = output if not isinstance(output, tuple) else output[index]
+            if hidden_state is not None:
+                append_hidden_state(collected_outputs, hidden_state)
+            return
 
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
@@ -185,8 +200,7 @@ def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | Non
     Install the output recording hooks on all the modules in `model`. This will take care of correctly dispatching
     the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
-    # _can_record_outputs is None by default
-    capture_flags = _CAN_RECORD_REGISTRY.get(str(model.__class__)) or {}  # there is a weak ref for executorch
+    capture_flags = _CAN_RECORD_REGISTRY.get(model)
 
     capture_tasks = []
     for key, layer_specs in capture_flags.items():
@@ -231,6 +245,68 @@ def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
         install_all_output_capturing_hooks(model)
 
 
+def selected_hidden_states(output_hidden_states: bool | int | list[int] | None) -> list[int] | None:
+    """The hidden state indices `output_hidden_states` selects, or `None` if it is a flag."""
+    if isinstance(output_hidden_states, bool) or output_hidden_states is None:
+        return None
+    if isinstance(output_hidden_states, int):
+        return [output_hidden_states]
+    return list(output_hidden_states)
+
+
+def resolve_hidden_states_indices(
+    model: PreTrainedModel, selected: list[int], num_hidden_states: int | None = None
+) -> set[int]:
+    """
+    Resolve the negative indices in `selected` using the number of hidden states `model` returns. Unless given as
+    `num_hidden_states`, that is `config.num_hidden_layers` (or the recorder's `num_hidden_layers_key`), plus one if
+    the initial hidden state is captured. Indices out of range are dropped, as they select nothing.
+    """
+    if num_hidden_states is None:
+        specs = _CAN_RECORD_REGISTRY.get(model).get("hidden_states")
+        num_hidden_layers_key = getattr(specs, "num_hidden_layers_key", "num_hidden_layers")
+        num_layers = getattr(model.config, num_hidden_layers_key, None)
+        if num_layers is None:
+            if any(i < 0 for i in selected):
+                raise ValueError(
+                    f"{model.__class__.__name__} cannot select hidden states with negative indices {selected} because "
+                    f"its config does not define `{num_hidden_layers_key}`."
+                )
+            return set(selected)
+        num_hidden_states = num_layers + int(getattr(specs, "capture_initial_hidden_state", True))
+    return {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
+
+
+def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list[int]]):
+    """
+    Decorator for methods which only use some hidden states, so that only those are captured by the `capture_outputs`
+    of the submodels they forward their kwargs to. If the caller requests hidden states, that takes precedence.
+
+    Args:
+        selection (`str` or `Callable`):
+            The name of the argument of the decorated method holding the hidden state indices, or a function which
+            returns them given the model.
+    """
+
+    def wrapped_fn(func):
+        signature = inspect.signature(func)
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not kwargs.get("output_hidden_states"):
+                if isinstance(selection, str):
+                    arguments = signature.bind(self, *args, **kwargs)
+                    arguments.apply_defaults()
+                    kwargs["output_hidden_states"] = arguments.arguments[selection]
+                else:
+                    kwargs["output_hidden_states"] = selection(self)
+            return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return wrapped_fn
+
+
 def capture_outputs(func=None, *, tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs through hooks. The hooks are installed only once and lazily,
@@ -242,7 +318,8 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
             Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`. This is true for all language models
             and should be toggled off only if `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
-            is needed for some vision models (e.g. CLIP, SigLIP).
+            is needed for some vision models (e.g. CLIP, SigLIP). A model config can override this default per-model by setting
+            `config.tie_last_hidden_states`.
     """
 
     def wrapped_fn(func):
@@ -251,8 +328,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             # Pop it so that internal modules always return a dict even if False is requested
             return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
 
-            # _can_record_outputs is None by default
-            capturable_flags = _CAN_RECORD_REGISTRY.get(str(self.__class__)) or {}
+            capturable_flags = _CAN_RECORD_REGISTRY.get(self)
             recordable_keys = {
                 f"output_{k}": kwargs.get(f"output_{k}", getattr(self.config, f"output_{k}", False))
                 for k in capturable_flags
@@ -269,12 +345,11 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 )
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
-            # We accept a list of layer indices as `output_hidden_states`, to capture only specific layer outputs - in this case
-            # we need to add the layers to the `collected_outputs`'s dict to tell the hook which ones we need
-            if "output_hidden_states" in recordable_keys and isinstance(
-                recordable_keys["output_hidden_states"], (list, tuple, set)
-            ):
-                collected_outputs["_hidden_states_layers"] = set(recordable_keys["output_hidden_states"])
+            # `output_hidden_states` may select hidden states by index (or indices), in which case only those are kept. The
+            # indices are the ones that would select them from all the hidden states, so they may be negative
+            selected = selected_hidden_states(recordable_keys.get("output_hidden_states"))
+            if selected is not None:
+                collected_outputs["_hidden_states_layers"] = resolve_hidden_states_indices(self, selected)
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -288,14 +363,13 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             finally:
                 _active_collector.reset(output_token)
 
-            hidden_states_layers = collected_outputs.pop("_hidden_states_layers", None)
+            collected_outputs.pop("_hidden_states_layers", None)
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
-                    # If we specifically don't tie, or did not capture the last layer, do nothing
-                    if not tie_last_hidden_states or (
-                        hidden_states_layers is not None and collected_outputs[key][-1] is None
-                    ):
+                    tie_last = getattr(self.config, "tie_last_hidden_states", None)
+                    tie_last = tie_last_hidden_states if tie_last is None else tie_last
+                    if not tie_last or not collected_outputs[key] or collected_outputs[key][-1] is None:
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]

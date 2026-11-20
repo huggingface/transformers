@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import (
     ProcessingKwargs,
     Unpack,
@@ -42,8 +42,8 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..florence2.modeling_florence2 import Florence2ForConditionalGeneration
 from ..mbart.configuration_mbart import MBartConfig
@@ -83,6 +83,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
         The hidden size of the decoder that the encoder features are projected to.
     """
 
+    model_type = "pp_formulanet_vision"
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
@@ -92,6 +93,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
 @auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetTextConfig(MBartConfig):
+    model_type = "pp_formulanet_text"
     base_config_key = "text_config"
     vocab_size: int = 50000
     max_position_embeddings: int = 2560
@@ -112,30 +114,17 @@ class PPFormulaNetTextConfig(MBartConfig):
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
-    sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
+    sub_configs_defaults = {
+        "text_config": PPFormulaNetTextConfig,
+        "vision_config": PPFormulaNetVisionConfig,
+    }
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = PPFormulaNetTextConfig(**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the PPFormulaNetTextConfig with default values.")
-            self.text_config = PPFormulaNetTextConfig()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PPFormulaNetVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the PPFormulaNetVisionConfig with default values.")
-            self.vision_config = PPFormulaNetVisionConfig()
-
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPFormulaNetImageProcessor(NougatImageProcessor):
     image_mean = [0.7931, 0.7931, 0.7931]
     image_std = [0.1738, 0.1738, 0.1738]
@@ -143,10 +132,6 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
 
 
 # Don't copy default values from Nougat!
-class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
 class PPFormulaNetProcessor(NougatProcessor):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
@@ -173,7 +158,7 @@ class PPFormulaNetProcessor(NougatProcessor):
     def __call__(
         self,
         images: ImageInput,
-        **kwargs: Unpack[PPFormulaNetProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -186,7 +171,6 @@ class PPFormulaNetProcessor(NougatProcessor):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
-            PPFormulaNetProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -274,7 +258,6 @@ class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     # Note this goes for the decoder only, the encoder will inherently always use eager attention
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(module)
@@ -328,6 +311,8 @@ class PPFormulaNetMultiModalProjector(nn.Module):
 
 
 class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
+    config: PPFormulaNetVisionConfig
+
     def __init__(self, config: PPFormulaNetVisionConfig):
         super().__init__()
         self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
@@ -335,7 +320,7 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -356,11 +341,14 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
 
 @auto_docstring
 class PPFormulaNetTextModel(MBartDecoder):
-    pass
+    config: PPFormulaNetTextConfig
+
+    def __init__(self, config: PPFormulaNetTextConfig):
+        super().__init__(config)
 
 
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
         self.decoder = PPFormulaNetTextModel(config.text_config)
@@ -370,18 +358,19 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
@@ -409,7 +398,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs.pooler_output,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -417,7 +406,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -430,20 +419,22 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -455,7 +446,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
@@ -463,7 +454,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
@@ -482,7 +473,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -490,9 +481,8 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -509,7 +499,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         return Seq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
@@ -518,7 +508,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 
@@ -528,9 +518,11 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_image_features(self):
         raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self):
+    def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PPFormulaNetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "PPFormulaNetProcessor",

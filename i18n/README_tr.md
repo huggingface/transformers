@@ -240,13 +240,12 @@ pipeline(
 
 - Bu kütüphane, sinir ağları için yapı taşlarından oluşan modüler bir araç kutusu değildir. Model dosyalarındaki kod, araştırmacıların ek soyutlamalara/dosyalara dalmadan her bir model üzerinde hızlıca yineleme yapabilmesi için kasıtlı olarak ek soyutlamalarla yeniden düzenlenmemiştir.
 - Eğitim API'si, Transformers tarafından sağlanan PyTorch modelleriyle çalışmak üzere optimize edilmiştir. Genel amaçlı makine öğrenimi döngüleri için [Accelerate](https://huggingface.co/docs/accelerate) gibi başka bir kütüphane kullanmalısınız.
-- [Örnek kodlar](https://github.com/huggingface/transformers/tree/main/examples) yalnızca *örnektir*. Sizin özel kullanım durumunuzda doğrudan çalışmayabilir ve çalışması için kodu uyarlamanız gerekebilir.
 
 ## Transformers kullanan 100 proje
 
 Transformers, önceden eğitilmiş modelleri kullanmak için bir araç takımından çok daha fazlasıdır; etrafında ve Hugging Face Hub üzerinde kurulan bir proje topluluğudur. Transformers'ın; geliştiricilerin, araştırmacıların, öğrencilerin, profesörlerin, mühendislerin ve diğer herkesin hayalindeki projeleri hayata geçirmesine olanak tanımasını istiyoruz.
 
-Transformers'ın 100.000 yıldızını kutlamak için, Transformers ile inşa edilmiş 100 inanılmaz projeyi listeleyen [awesome-transformers](./awesome-transformers.md) sayfasıyla topluluğu ön plana çıkarmak istedik.
+Transformers'ın 100.000 yıldızını kutlamak için, Transformers ile inşa edilmiş 100 inanılmaz projeyi listeleyen [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) sayfasıyla topluluğu ön plana çıkarmak istedik.
 
 Bir projeye sahipseniz veya kullandığınız bir projenin listede yer alması gerektiğini düşünüyorsanız, eklemek için lütfen bir PR açın!
 

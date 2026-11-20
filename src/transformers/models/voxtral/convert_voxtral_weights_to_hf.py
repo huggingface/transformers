@@ -184,11 +184,10 @@ def write_model(
     # --------------
 
     config_path = cached_file(input_path_or_repo, config_name)
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         original_config = json.load(f)
 
     config = convert_config(original_config)
-    model = VoxtralForConditionalGeneration(config)
 
     # ---------------
     # convert weights
@@ -212,9 +211,13 @@ def write_model(
     # -------------------------
 
     print("Loading the checkpoint in a Voxtral model.")
-    with torch.device("meta"):
-        model = VoxtralForConditionalGeneration(config)
-    model.load_state_dict(converted_state_dict, strict=True, assign=True)
+    model, loading_info = VoxtralForConditionalGeneration.from_pretrained(
+        None, config=config, state_dict=converted_state_dict, output_loading_info=True
+    )
+    if loading_info["missing_keys"]:
+        raise ValueError(f"Missing keys: {sorted(loading_info['missing_keys'])}")
+    if loading_info["unexpected_keys"]:
+        raise ValueError(f"Unexpected keys: {sorted(loading_info['unexpected_keys'])}")
     print("Checkpoint loaded successfully.")
     del model.config._name_or_path
 

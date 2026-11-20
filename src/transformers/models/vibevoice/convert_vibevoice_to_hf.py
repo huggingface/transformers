@@ -207,7 +207,7 @@ def load_original_checkpoint(checkpoint_path: str | Path) -> dict[str, Any]:
         )
 
     logger.info(f"Loading sharded checkpoint from {checkpoint_path}")
-    with open(index_path, "r") as f:
+    with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
     state_dict = {}
@@ -261,7 +261,7 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
     logger.info("Creating feature extractor")
     audio_config = {}
     if processor_config is not None:
-        with open(processor_config, "r") as f:
+        with open(processor_config, "r", encoding="utf-8") as f:
             processor_config = json.load(f)
         audio_config = processor_config.get("audio_processor", {})
         language_model_pretrained_name = processor_config.get("language_model_pretrained_name", None)
@@ -284,7 +284,7 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
 
     # 4) Prepare model configuration
     logger.info(f"Loading model config from {config_path}")
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         model_config = json.load(f)
 
     # fmt: off
@@ -359,11 +359,11 @@ def convert_checkpoint(checkpoint, output_dir, push_to_hub, bfloat16, max_shard_
     # Ensure tokenizer_config.json has the correct tokenizer_class
     tokenizer_config_path = os.path.join(output_dir, "tokenizer_config.json")
     if os.path.exists(tokenizer_config_path):
-        with open(tokenizer_config_path, "r") as f:
+        with open(tokenizer_config_path, "r", encoding="utf-8") as f:
             tokenizer_config = json.load(f)
         tokenizer_config["tokenizer_class"] = "Qwen2TokenizerFast"
 
-        with open(tokenizer_config_path, "w") as f:
+        with open(tokenizer_config_path, "w", encoding="utf-8") as f:
             json.dump(tokenizer_config, f, indent=2)
 
     if push_to_hub is not None:

@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -47,36 +48,29 @@ if is_torch_available():
     import torch
 
 
-class UVDocModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=128,
-        num_channels=3,
-        is_training=False,
-        kernel_size=5,
-        bridge_connector=(32, 32),
-        out_point_positions2D=((32, 8), (8, 2)),
-        padding_mode="reflect",
-        hidden_act="prelu",
-        num_hidden_layers=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.kernel_size = kernel_size
-        self.bridge_connector = bridge_connector
-        self.out_point_positions2D = out_point_positions2D
-        self.padding_mode = padding_mode
-        self.hidden_act = hidden_act
-        self.num_hidden_layers = num_hidden_layers
+class UVDocModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 128,
+        "num_channels": 3,
+        "is_training": False,
+        "kernel_size": 5,
+        "bridge_connector": (32, 32),
+        "out_point_positions2D": ((32, 8), (8, 2)),
+        "padding_mode": "reflect",
+        "hidden_act": "prelu",
+        "num_hidden_layers": 2,
         # For test_hidden_states_output: UVDoc outputs spatial hidden states (B, C, H, W)
         # with shape[-2:] = (8, 8) for image_size=128
-        self.seq_length = 8
-        self.hidden_size = 8
+        "seq_length": 8,
+        "hidden_size": 8,
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -145,30 +139,24 @@ class UVDocModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 2, 8, 8))
 
 
-class UVDocBackboneTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=128,
-        num_channels=3,
-        is_training=False,
-        kernel_size=5,
-        resnet_head=((3, 8), (8, 8)),
-        out_features=["stage1", "stage2"],
-        out_indices=[1, 2],
-        num_hidden_layers=2,
-    ):
+class UVDocBackboneTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 128,
+        "num_channels": 3,
+        "is_training": False,
+        "kernel_size": 5,
+        "resnet_head": ((3, 8), (8, 8)),
+        "out_features": ["stage1", "stage2"],
+        "out_indices": [1, 2],
+        "num_hidden_layers": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.kernel_size = kernel_size
-        self.resnet_head = resnet_head
-        self.out_features = out_features
-        self.out_indices = out_indices
-        self.num_hidden_layers = num_hidden_layers
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -221,6 +209,7 @@ class UVDocBackboneTester:
 
 @require_torch
 class UVDocBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    model_tester_class = UVDocBackboneTester
     all_model_classes = (UVDocBackbone,) if is_torch_available() else ()
     has_attentions = False
     config_class = UVDocBackboneConfig
@@ -237,6 +226,7 @@ class UVDocBackboneTest(BackboneTesterMixin, unittest.TestCase):
 
 @require_torch
 class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = UVDocModelTester
     all_model_classes = (UVDocModel,) if is_torch_available() else ()
 
     has_attentions = False
@@ -307,7 +297,9 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = AutoModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor()
-        img_url = url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg"
+        )
         self.image = load_image(img_url)
 
     def test_inference_document_rectification(self):
@@ -323,11 +315,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((bs, 2, 45, 31))
         expected_logits = torch.tensor(
-            [
-                [-0.7635, -0.7251, -0.6819],
-                [-0.7643, -0.7250, -0.6814],
-                [-0.7647, -0.7252, -0.6816],
-            ],
+            [[-0.8466, -0.7975, -0.7427], [-0.8476, -0.798, -0.7427], [-0.8476, -0.7981, -0.743]],
             device=torch_device,
         )
 
@@ -335,11 +323,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.last_hidden_state[0, 0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
 
         expected_images = torch.tensor(
-            [
-                [131, 130, 128],
-                [131, 129, 127],
-                [130, 129, 127],
-            ],
+            [[248, 204, 184], [248, 205, 184], [248, 206, 184]],
             device=torch_device,
             dtype=torch.uint8,
         )

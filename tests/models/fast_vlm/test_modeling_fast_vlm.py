@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -43,17 +44,15 @@ if is_torch_available():
     import torch
 
 
-class FastVlmVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_id=0,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-1,
-        text_config={
+class FastVlmVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_id": 0,
+        "projector_hidden_act": "gelu",
+        "vision_feature_select_strategy": "full",
+        "vision_feature_layer": -1,
+        "text_config": {
             "model_type": "qwen2",
             "is_training": True,
             "vocab_size": 99,
@@ -69,8 +68,7 @@ class FastVlmVisionText2TextModelTester:
             "initializer_range": 0.02,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "vision_config": {
             "image_size": 16,
             "patch_size": 8,
             "num_channels": 3,
@@ -92,26 +90,30 @@ class FastVlmVisionText2TextModelTester:
                 "stem_use_scale_branch": False,
             },
         },
-    ):
+        "is_training": True,
+        "seq_length": 7,
+        "batch_size": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_image_tokens"] = (
+            values["vision_config"]["image_size"] // values["vision_config"]["patch_size"]
+        ) ** 2
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_id = image_token_id
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return FastVlmConfig(
@@ -158,6 +160,8 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     """
     Model tester for `FastVlmForConditionalGeneration`.
     """
+
+    model_tester_class = FastVlmVisionText2TextModelTester
 
     all_model_classes = (
         (
@@ -250,14 +254,19 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        image_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         raw_image = load_test_image(image_file)
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **",
+                ("rocm", (9, 4)): "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this serene place, there are a few things you should be cautious about:\n\n1.",
+            }
+        )  # fmt: skip
 
-        EXPECTED_DECODED_TEXT = expected_decoded_texts
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -275,7 +284,9 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
             "user\n<image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant",
             "user\n<image>\nWhat is this?\nassistant",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_coco_image("000000039769.jpg")
 
         self.processor.tokenizer.padding_side = "left"
@@ -289,12 +300,16 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = Expectations(
             {
                 (None, None): [
-                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
                 ],
                 ("xpu", None): [
-                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
+                ],
+                ("xpu", 5): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
                 ],
             }
         )

@@ -23,7 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import (
     DepthProConfig,
     DepthProForDepthEstimation,
-    DepthProImageProcessorFast,
+    DepthProImageProcessor,
 )
 
 
@@ -201,7 +201,7 @@ def write_model(
 
 
 def write_image_processor(output_dir: str):
-    image_processor = DepthProImageProcessorFast()
+    image_processor = DepthProImageProcessor()
     image_processor.save_pretrained(output_dir)
     return image_processor
 

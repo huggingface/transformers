@@ -36,20 +36,6 @@ class NemotronAsrStreamingAudioKwargs(AudioKwargs, total=False):
 
 class NemotronAsrStreamingProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: NemotronAsrStreamingAudioKwargs
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": "longest",
-            "return_padding_mask": True,
-            "subsampling_factor": 8,
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "right",
-            "add_special_tokens": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
 
 
 # Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
@@ -59,6 +45,22 @@ DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
 
 @auto_docstring
 class NemotronAsrStreamingProcessor(ProcessorMixin):
+    valid_processor_kwargs = NemotronAsrStreamingProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "right",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": "longest",
+        "return_padding_mask": True,
+        "subsampling_factor": 8,
+        "return_tensors": "pt",
+    }
+
     def __init__(
         self,
         audio_processor,
@@ -132,7 +134,6 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(
-            NemotronAsrStreamingProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -193,7 +194,6 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
             timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
-                NemotronAsrStreamingProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
@@ -258,9 +258,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
 
     @property
     def _subsampling_factor(self) -> int:
-        output_kwargs = self._merge_kwargs(
-            NemotronAsrStreamingProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs)
         return output_kwargs["audio_kwargs"]["subsampling_factor"]
 
     @property

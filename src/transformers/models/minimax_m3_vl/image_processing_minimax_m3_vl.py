@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Iterable
 
 import torch
@@ -102,7 +103,7 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
     def __init__(self, **kwargs: Unpack[MiniMaxM3VLImageProcessorKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
-        size = self.size if size is None else size
+        size = dict(self.size) if size is None else size
         # The default size saved in offcial ckpt isn't correct and wasn't used prev!
         # Override with the correct, new default value in that case
         if size == [672, 672]:
@@ -122,8 +123,19 @@ class MiniMaxM3VLImageProcessor(TorchvisionBackend):
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
+        if min_pixels is not None or max_pixels is not None:
+            warnings.warn(
+                "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
+                "Pass in `size={'longest_edge': xxx, 'shortest_edge': xxx} to override the target size.`",
+                FutureWarning,
+            )
+
+            size_dict = dict(size) if isinstance(size, (dict, SizeDict)) else {}
+            if min_pixels is not None:
+                size_dict["shortest_edge"] = min_pixels
+            if max_pixels is not None:
+                size_dict["longest_edge"] = max_pixels
+            size = SizeDict(**size_dict)
         return super()._standardize_kwargs(size=size, **kwargs)
 
     @auto_docstring
