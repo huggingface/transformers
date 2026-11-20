@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -198,7 +199,7 @@ class Mamba2ModelTester:
             input_ids[:, -1:],
             attention_mask=attention_mask[:, -1:],
             use_cache=True,
-            cache_params=outputs.cache_params,
+            cache=outputs.cache,
         )
         output_two = outputs.last_hidden_state
 
@@ -226,14 +227,14 @@ class Mamba2ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, cache_params=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, cache_params=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, cache_params=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, cache_params=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -462,8 +463,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 @require_torch
 @slow
-class Mamba2IntegrationTest(unittest.TestCase):
+class Mamba2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)

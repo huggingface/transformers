@@ -539,8 +539,8 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 

@@ -50,9 +50,9 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.block_types = ("recurrent", "attention")
+    small_config_overrides = {
+        "block_types": ("recurrent", "attention"),
+    }
 
     def create_and_check_generate_compile_static_cache(self, config, input_ids, model_class):
         model = model_class(config).to(torch_device).eval()
@@ -173,7 +173,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
-    @unittest.skip(reason="Rely on `past_key_values` to crop the assistant pkv. Not supported")
+    @unittest.skip(reason="Rely on `cache` to crop the assistant pkv. Not supported")
     def test_assisted_decoding_matches_greedy_search(self):
         pass
 
@@ -189,7 +189,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @pytest.mark.generate
-    @unittest.skip(reason="Relies on `past_key_values` returned by the model. Not supported with recurrent gemma")
+    @unittest.skip(reason="Relies on `cache` returned by the model. Not supported with recurrent gemma")
     def test_assisted_decoding_sample(self):
         pass
 

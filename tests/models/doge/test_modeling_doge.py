@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -41,50 +42,34 @@ if is_torch_available():
     )
 
 
-class DogeModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=8,
-        seq_length=16,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=128,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=64,
-        hidden_act="silu",
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        pad_token_id=0,
-        scope=None,
-    ):
+class DogeModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 8,
+        "seq_length": 16,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 128,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 64,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -201,7 +186,7 @@ class DogeModelTester:
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -223,7 +208,7 @@ class DogeModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -269,6 +254,8 @@ class DogeModelTester:
 
 @require_torch
 class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DogeModelTester
+
     all_model_classes = (
         (
             DogeModel,

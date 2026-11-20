@@ -32,18 +32,25 @@ from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_accelerate_available,
+    logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -52,6 +59,9 @@ from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTex
 
 if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -65,65 +75,44 @@ class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
     audio_mel_mask: torch.BoolTensor | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma3n outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class Gemma3nModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+class Gemma3nModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
-
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma3n causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Gemma3nCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+class Gemma3nCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 class Gemma3nRMSNorm(nn.Module):
@@ -1196,12 +1185,13 @@ class Gemma3nTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         shared_kv_states: KVSharingDict | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -1216,7 +1206,7 @@ class Gemma3nTextAttention(nn.Module):
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
         # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
-        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
+        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when cache is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.layer_type]
         else:
@@ -1229,8 +1219,8 @@ class Gemma3nTextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None and not self.is_kv_shared_layer:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
         if self.store_full_length_kv:
             shared_kv_states[self.layer_type] = key_states, value_states
 
@@ -1277,6 +1267,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1285,7 +1276,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         shared_kv_states: KVSharingDict | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         predictions = self.altup.predict(hidden_states)
@@ -1300,7 +1291,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
             shared_kv_states=shared_kv_states,
             position_ids=position_ids,
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         attn = self.post_attention_layernorm(attn)
@@ -1337,7 +1328,6 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma3nTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1350,7 +1340,6 @@ class Gemma3nPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("image", "text", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma3nAudioCumulativeGroupNorm):
@@ -1559,7 +1548,6 @@ class Gemma3nRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -1638,13 +1626,14 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         per_layer_inputs: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1662,11 +1651,11 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1677,7 +1666,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             # Create the masks
@@ -1721,7 +1710,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
                 shared_kv_states=shared_kv_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -1743,7 +1732,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:
@@ -1802,12 +1791,13 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1836,7 +1826,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -1857,7 +1847,7 @@ class Gemma3nForCausalLM(Gemma3nPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1922,6 +1912,7 @@ class Gemma3nMultimodalEmbedder(nn.Module):
 class Gemma3nModel(Gemma3nPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
@@ -2001,6 +1992,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         return special_image_mask, special_audio_mask
 
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,  # text inputs
@@ -2009,7 +2001,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         per_layer_inputs: torch.Tensor | None = None,
@@ -2099,6 +2091,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_outputs = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
             audio_features = audio_outputs.pooler_output
@@ -2129,7 +2122,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             per_layer_inputs=per_layer_inputs,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
@@ -2137,12 +2130,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         )
 
         return Gemma3nModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
         )
 
     def get_per_layer_input_embeddings(self):
@@ -2183,6 +2171,8 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike PaliGemma
     accepts_loss_kwargs = False
 
     def __init__(self, config: Gemma3nConfig):
@@ -2197,6 +2187,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,  # text inputs
@@ -2205,7 +2196,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -2276,7 +2267,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             input_features_mask=input_features_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             per_layer_inputs=per_layer_inputs,
@@ -2302,11 +2293,11 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         return Gemma3nCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            audio_hidden_states=outputs.audio_hidden_states,
+            image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
         )
 
     def get_per_layer_input_embeddings(self):

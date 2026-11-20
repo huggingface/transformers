@@ -131,9 +131,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self.do_phonemize = do_phonemize
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
-
-        if do_phonemize:
-            self.init_backend(self.phonemizer_lang)
+        # Created on first use so that loading the tokenizer and decoding work without phonemizer / espeak-ng
+        self._phonemizer_backend = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -225,7 +224,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # set the correct phonemizer language
         if phonemizer_lang is not None:
             self.phonemizer_lang = phonemizer_lang
-            self.init_backend(phonemizer_lang)
+            self._phonemizer_backend = None
 
         return (text, {})
 
@@ -251,13 +250,14 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return tokens
 
     def phonemize(self, text: str, phonemizer_lang: str | None = None) -> str:
+        if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
+            self.init_backend(phonemizer_lang)
+        elif self._phonemizer_backend is None:
+            self.init_backend(self.phonemizer_lang)
+
         from phonemizer.separator import Separator
 
         word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
-        if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
-            self.init_backend(phonemizer_lang)
-        else:
-            phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
         phonemes = self._phonemizer_backend.phonemize(

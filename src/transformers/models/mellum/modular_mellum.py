@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -143,7 +142,6 @@ class MellumDecoderLayer(LagunaDecoderLayer):
 class MellumPreTrainedModel(Qwen3MoePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MellumRotaryEmbedding):

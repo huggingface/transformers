@@ -27,7 +27,6 @@ logger = logging.get_logger(__name__)
 class Kosmos2TextConfig(PreTrainedConfig):
     model_type = "kosmos_2_text_model"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "attention_heads",
         "hidden_size": "embed_dim",

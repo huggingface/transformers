@@ -59,7 +59,6 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_moe_dsa"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",

@@ -51,7 +51,7 @@ class Lfm3Config(PreTrainedConfig):
     """
 
     model_type = "lfm3"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     default_theta = 1000000.0
 
     vocab_size: int = 128_000

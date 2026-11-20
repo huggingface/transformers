@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
+    require_torch_bf16,
     slow,
     torch_device,
 )
@@ -53,19 +54,23 @@ class InklingTextModelTester(CausalLMModelTester):
         base_model_class = InklingTextModel
         causal_lm_class = InklingForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 2
+    small_config_overrides = {
+        "num_hidden_layers": 2,
         # we want to test sharing on both types
-        self.layer_types = ["hybrid_sliding", "hybrid"]
-        self.mlp_layer_types = ["dense", "sparse"]
-        self.swa_num_attention_heads = self.num_attention_heads
-        self.swa_num_key_value_heads = self.num_key_value_heads
-        self.swa_head_dim = self.head_dim
-
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "mlp_layer_types": ["dense", "sparse"],
         # To activate moe blocks
-        self.moe_intermediate_size = 16
-        self.n_routed_experts = 16
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["swa_num_attention_heads"] = values["num_attention_heads"]
+        values["swa_num_key_value_heads"] = values["num_key_value_heads"]
+        values["swa_head_dim"] = values["head_dim"]
+        return values
 
 
 class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
@@ -88,6 +93,38 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(config.intermediate_size, 24576)
         self.assertEqual(config.moe_intermediate_size, 3072)
 
+    @parameterized.expand([("bfloat16", False), ("bfloat16", True), ("float32", True)])
+    @require_torch_bf16
+    def test_router_precision(self, dtype, use_autocast):
+        dtype = getattr(torch, dtype)
+        config = self.model_tester.get_config()
+        config.num_experts_per_tok = 2
+        model = InklingForCausalLM(config)
+        gate = model.model.layers[1].mlp.gate
+        with torch.no_grad():
+            gate.weight.zero_()
+            gate.weight[:8, 0].copy_(torch.tensor([6.25, 6.5, 7, 7.5, 8, 8.5, 9, 10]))
+            gate.e_score_correction_bias.fill_(0.000123)
+            gate.global_scale.fill_(1.234567)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model = InklingForCausalLM.from_pretrained(tmp_dir, dtype=dtype).to(torch_device)
+
+        loaded_gate = model.model.layers[1].mlp.gate
+        hidden_states = torch.zeros(1, config.hidden_size, dtype=dtype, device=torch_device)
+        hidden_states[..., 0] = 1
+        with torch.autocast(device_type=hidden_states.device.type, dtype=torch.bfloat16, enabled=use_autocast):
+            _, weights, indices, gammas = loaded_gate(hidden_states)
+
+        # These exactly representable logits have distinct FP32 sigmoid scores, but all round to 1 in BF16.
+        self.assertEqual(indices.sort().values.tolist(), [[6, 7]])
+        torch.testing.assert_close(
+            loaded_gate.e_score_correction_bias.cpu(), gate.e_score_correction_bias, rtol=0, atol=0
+        )
+        torch.testing.assert_close(loaded_gate.global_scale.cpu(), gate.global_scale, rtol=0, atol=0)
+        self.assertEqual(weights.dtype, dtype)
+        self.assertEqual(gammas.dtype, dtype)
+
 
 class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
@@ -96,25 +133,25 @@ class InklingAudio2TextModelTester(ALMModelTester):
 
     audio_mask_key = "audio_input_ids_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("audio_token_id", 7)
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("seq_length", 50)
-        kwargs.setdefault("feat_seq_length", 4)
-        kwargs.setdefault("n_mel_bins", 4)
-        kwargs.setdefault("mel_vocab_size", 8)
-        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 16)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("swa_num_attention_heads", 2)
-        kwargs.setdefault("swa_num_key_value_heads", 2)
-        kwargs.setdefault("swa_head_dim", 16)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("num_channels", 3)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "audio_token_id": 7,
+        "pad_token_id": 0,
+        "seq_length": 50,
+        "feat_seq_length": 4,
+        "n_mel_bins": 4,
+        "mel_vocab_size": 8,
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 16,
+        "head_dim": 16,
+        "swa_num_attention_heads": 2,
+        "swa_num_key_value_heads": 2,
+        "swa_head_dim": 16,
+        "patch_size": 5,
+        "num_channels": 3,
+    }
 
     @property
     def _special_token_ids(self):
@@ -162,6 +199,10 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
 
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip("The tester has no image in input dict")
+    def test_multimodal_outputs_are_returned(self):
         pass
 
     @parameterized.expand([True, False, None])
@@ -240,23 +281,23 @@ class InklingVision2TextModelTester(VLMModelTester):
     conditional_generation_class = InklingForConditionalGeneration
     config_class = InklingConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("audio_token_id", 8)
-        kwargs.setdefault("seq_length", 25)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 16)
-        kwargs.setdefault("swa_num_attention_heads", 2)
-        kwargs.setdefault("swa_num_key_value_heads", 2)
-        kwargs.setdefault("swa_head_dim", 16)
-        kwargs.setdefault("n_mel_bins", 4)
-        kwargs.setdefault("mel_vocab_size", 8)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "audio_token_id": 8,
+        "seq_length": 25,
+        "num_image_tokens": 1,
+        "patch_size": 5,
+        "temporal_patch_size": 2,
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 16,
+        "swa_num_attention_heads": 2,
+        "swa_num_key_value_heads": 2,
+        "swa_head_dim": 16,
+        "n_mel_bins": 4,
+        "mel_vocab_size": 8,
+    }
 
     @property
     def _special_token_ids(self):

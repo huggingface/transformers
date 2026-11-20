@@ -140,7 +140,6 @@ class VivitPreTrainedModel(ViTPreTrainedModel):
     input_modalities = ("video",)
     _no_split_modules = ["VivitEmbeddings", "VivitLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,26 +48,23 @@ if is_torch_available():
     import torch
 
 
-class PPOCRV5ServerDetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=128,
-        num_channels=3,
-        num_stages=5,
-        is_training=False,
-        scale=1.0,
-        divisor=16,
-    ):
+class PPOCRV5ServerDetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 128,
+        "num_channels": 3,
+        "num_stages": 5,
+        "is_training": False,
+        "scale": 1.0,
+        "divisor": 16,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.num_stages = num_stages
-        self.scale = scale
-        self.divisor = divisor
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -141,6 +139,8 @@ class PPOCRV5ServerDetModelTester:
 
 @require_torch
 class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = PPOCRV5ServerDetModelTester
+
     all_model_classes = (PPOCRV5ServerDetModel, PPOCRV5ServerDetForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = {"object-detection": PPOCRV5ServerDetForObjectDetection} if is_torch_available() else {}
 
@@ -148,12 +148,7 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = PPOCRV5ServerDetModelTester(
-            self,
-            batch_size=3,
-            is_training=False,
-            image_size=128,
-        )
+        self.model_tester = PPOCRV5ServerDetModelTester(self)
         self.model_tester.parent = self
         self.config_tester = ConfigTester(
             self,
