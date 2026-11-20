@@ -651,16 +651,6 @@ class StaticSlidingWindowLayer(StaticLayer):
         """
         # Note that this is only correct as long as we never went beyond the window, which `is_croppable` guarantees - otherwise the
         # evicted states cannot be recovered
-        if self.max_cache_len < self.cumulative_length_int != abs(tokens_to_remove):
-            # Beyond the window, the buffer holds one more state than the next `forward` attends to: the last token can
-            # be rolled back by shifting the states back, the evicted slot is never attended to
-            if abs(tokens_to_remove) != 1:
-                raise RuntimeError(
-                    "`StaticSlidingWindowLayer` can only remove its last token once the sliding window size was reached"
-                )
-            # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-            self.keys.copy_(self.keys.roll(1, dims=-2))
-            self.values.copy_(self.values.roll(1, dims=-2))
         super().crop(tokens_to_remove)
         self.cumulative_length_int -= abs(tokens_to_remove)
 
