@@ -17,7 +17,7 @@ spec.loader.exec_module(check_mic)
 class CheckMicTest(unittest.TestCase):
     def setUp(self):
         # Tests fake an installed transformers-mic through find_spec; pin its version to match.
-        patcher = patch.object(check_mic, "installed_mic_version", return_value="0.1.2")
+        patcher = patch.object(check_mic, "installed_mic_version", return_value="0.1.3")
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -368,7 +368,7 @@ class CheckMicTest(unittest.TestCase):
             self.assertTrue(check_mic.missing_requirements())
         with (
             patch("importlib.util.find_spec", return_value=object()),
-            patch.object(check_mic, "installed_mic_version", return_value="0.1.1"),
+            patch.object(check_mic, "installed_mic_version", return_value="0.1.2"),
         ):
             self.assertTrue(check_mic.missing_requirements())
         self.assertIn("transformers-mic", check_mic.INSTALL_HINT)
