@@ -22,6 +22,7 @@ from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestState, RequestStatus, create_warmup_future_states
+from .sampler import ContinuousBatchingSampler
 from .utils import (
     accelerator_graph_capture_context,
     create_accelerator_graph,
@@ -63,12 +64,10 @@ class ModelRunner:
         return_logprobs: bool,
     ) -> None:
         # Main attributes
-        self.logit_processor = logit_processor
         self.cb_config = cb_config
         self.inputs_and_outputs = inputs_and_outputs
+        self.sampler = ContinuousBatchingSampler(logit_processor, do_sample, return_logprobs)
         # Helper attributes
-        self.do_sample = do_sample
-        self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
@@ -201,51 +200,15 @@ class ModelRunner:
         # Convert to fp32 to match generate
         logits = logits.float()  # shape [1, num_logits, vocab_size]
 
-        # Process logits if there are any logit processors
-        if self.logit_processor.do_processing:
-            # Handle shape inconsistency between generate and continuous batching (dummy_dim is always 1)
-            dummy_dim, num_logits, vocab_size = logits.shape
-            logits_2d = logits.view(dummy_dim * num_logits, vocab_size)
-            sliced_input_ids_2d = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
-            # Process with 2D tensors
-            logits_2d = self.logit_processor(sliced_input_ids_2d, logits_2d, batch_data["logits_processor_args"])
-            # Reshape back to 3D
-            scores = logits_2d.view(dummy_dim, num_logits, vocab_size)
-        else:
-            scores = logits
-
-        # Sample next tokens
-        self._sample(scores, output_ids)
-
-    def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
-        """Private method to sample next tokens from the scores."""
-        # Apply softmax if we are sampling or if we are generating log probabilities
-        if self.do_sample or self.return_logprobs:
-            probs = nn.functional.softmax(scores[0], dim=-1)  # shape [num_logits, vocab_size]
-        else:
-            probs = scores.squeeze(0)  # shape [num_logits, vocab_size]
-
-        # Retrieve next tokens through sampling or argmax
-        if self.do_sample:
-            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [num_logits, 1]
-        else:
-            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [num_logits, 1]
-
-        # Maybe retrieve log probabilities
-        if self.return_logprobs:
-            per_token_probs = probs.gather(dim=1, index=next_tokens).squeeze(-1)
-            logprobs = per_token_probs.log()  # shape [num_logits]
-
-        # Always remove the extra dimension for the gather
-        next_tokens = next_tokens.squeeze(-1)  # shape [num_logits]
-
-        # Copy the next tokens and maybe their logprobs to the static output tensor
-        tokens = next_tokens.size(0)
-        output_ids[0, :tokens].copy_(next_tokens)
-        if self.return_logprobs:
-            # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
-            # underlying data. It's just a trick to use the same storage for both tensors.
-            output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
+        # Process the logits and pick the next tokens, as the batch's sampling mode says (part of the graph key)
+        sliced_input_ids = batch_data["input_ids"][0, logits_indices]  # shape [num_logits]
+        self.sampler.sample(
+            sliced_input_ids,
+            logits[0],
+            batch_data["logits_processor_args"],
+            self.inputs_and_outputs.sampling_mode,
+            output_ids,
+        )
 
     @torch.no_grad()
     def warmup(self, model: nn.Module) -> None:
@@ -316,7 +279,7 @@ class ModelRunner:
         start = time.perf_counter()
         try:
             self.inputs_and_outputs.prepare_batch_tensors(
-                future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
+                future_states, self.sampler, use_decode_fast_path, padded_q, padded_kv, use_padding=True
             )
             batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
             # Flash sizes the workspace according to max_length_k, so we set it to the maximum value for one request

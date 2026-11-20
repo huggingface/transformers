@@ -527,7 +527,7 @@ class ContinuousBatchProcessor:
 
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch=requests_in_batch,
-            logits_processors=self.logit_processor,
+            sampler=self.model_runner.sampler,
             use_decode_fast_path=use_decode_fast_path,
             num_q_tokens=num_q_tokens,
             max_kv_read=max_kv_read,
