@@ -72,7 +72,7 @@ class Lfm3Config(PreTrainedConfig):
     conv_bias: bool = False
     conv_L_cache: int = 7
     layer_types: list[str] | None = None
-    attribute_map = {"rms_norm_eps": "norm_eps"}
+    attribute_map = {"rms_norm_eps": "norm_eps", "gating": "use_attention_gate", "query_pre_attn_scalar": "head_dim"}
     _rope_type_labels = ("full_attention", "sliding_attention")
     head_dim: int = 128
     sliding_window: int | None = 256

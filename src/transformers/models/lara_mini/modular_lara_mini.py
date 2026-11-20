@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch LaraMini model."""
 
-from collections.abc import Callable
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -24,15 +22,15 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ..exaone4.modeling_exaone4 import Exaone4Attention, apply_rotary_pos_emb
 from ..flint.modeling_flint import FlintSparseMoeBlock
 from ..glm5_next.modeling_glm5_next import Glm5NextTextRMSNormGated
 from ..helium.modeling_helium import HeliumRMSNorm
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3RotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
+from ..qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5DecoderLayer,
     Qwen3_5GatedDeltaNet,
@@ -153,50 +151,11 @@ class LaraMiniRotaryEmbedding(Qwen3RotaryEmbedding):
     pass
 
 
-class LaraMiniAttention(Qwen3Attention):
-    """Qwen3 attention that applies rotary embeddings only when it gets them: the `"full_attention"` layers get none."""
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
-        attention_mask: torch.Tensor | None,
-        cache: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+@use_kernelized_func(apply_rotary_pos_emb)
+class LaraMiniAttention(Exaone4Attention):
+    def __init__(self, config: LaraMiniConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del self.sliding_window_pattern
 
 
 @use_kernelized_func(
@@ -305,12 +264,10 @@ class LaraMiniModel(Qwen3NextModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_type = self.config.layer_types[i]
             hidden_states = decoder_layer(
                 hidden_states,
-                # The global layers use no positional encoding
-                position_embeddings=position_embeddings if layer_type == "sliding_attention" else None,
-                attention_mask=causal_mask_mapping[layer_type],
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 cache=cache,
                 use_cache=use_cache,

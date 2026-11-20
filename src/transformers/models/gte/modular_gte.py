@@ -22,14 +22,13 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, no_inherit_decorator
+from ...utils.generic import can_return_tuple
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertForSequenceClassification,
     BertForTokenClassification,
     BertPreTrainedModel,
 )
-from ..gemma.modeling_gemma import GemmaMLP
 from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Attention,
     JinaEmbeddingsV3Embeddings,
@@ -40,6 +39,7 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Pooler,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..t5gemma.modeling_t5gemma import T5GemmaMLP
 
 
 @auto_docstring(checkpoint="alibaba-nlp-community/gte-multilingual-base")
@@ -62,6 +62,7 @@ class GteConfig(BertConfig):
     ```"""
 
     model_type = "gte"
+    attribute_map = {"hidden_activation": "hidden_act", "dropout_rate": "hidden_dropout_prob"}
     default_theta = 160_000.0
 
     vocab_size: int = 250048
@@ -120,19 +121,10 @@ class GteAttention(JinaEmbeddingsV3Attention):
     pass
 
 
-@no_inherit_decorator
-class GteMLP(GemmaMLP):
+class GteMLP(T5GemmaMLP):
     def __init__(self, config: GteConfig):
         super().__init__(config)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=True)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Unlike GemmaMLP, `down_proj` carries a bias and the gated activation is dropped out.
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
-        return down_proj
 
 
 class GteLayer(JinaEmbeddingsV3Layer):

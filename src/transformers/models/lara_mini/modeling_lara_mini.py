@@ -36,7 +36,6 @@ from ...integrations import (
 )
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -210,53 +209,53 @@ def eager_attention_forward(
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class LaraMiniAttention(nn.Module):
-    """Qwen3 attention that applies rotary embeddings only when it gets them: the `"full_attention"` layers get none."""
-
     def __init__(self, config: LaraMiniConfig, layer_idx: int):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
+        self.num_attention_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.hidden_size = config.hidden_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+        self.scaling = self.head_dim**-0.5
+        self.sliding_window = config.sliding_window
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = layer_type == "sliding_attention"
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.q_norm = LaraMiniRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = LaraMiniRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
+
+        self.q_norm = LaraMiniRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = LaraMiniRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
-        attention_mask: torch.Tensor | None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
+        # We use QK-norm
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
+        cos, sin = position_embeddings
+        # We use global NoPE for hybrid attention model
+        if self.sliding_window is None or self.is_sliding:
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
@@ -274,7 +273,7 @@ class LaraMiniAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
+            sliding_window=self.sliding_window if self.is_sliding else None,
             **kwargs,
         )
 
@@ -969,12 +968,10 @@ class LaraMiniModel(LaraMiniPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_type = self.config.layer_types[i]
             hidden_states = decoder_layer(
                 hidden_states,
-                # The global layers use no positional encoding
-                position_embeddings=position_embeddings if layer_type == "sliding_attention" else None,
-                attention_mask=causal_mask_mapping[layer_type],
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 cache=cache,
                 use_cache=use_cache,
