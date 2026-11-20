@@ -203,22 +203,30 @@ def save_sharded_state_dict(
 
     with torch.no_grad():
         for round_start in range(0, len(files), world_size):
-            owned_file = None
-            for owner, (filename, names) in enumerate(files[round_start : round_start + world_size]):
-                shard = {}
-                for name in names:
-                    tensor = state_dict[name]
+            round_files = files[round_start : round_start + world_size]
+            # The files of the round are gathered in lockstep: at step `k`, all ranks join the gathers of the `k`-th
+            # tensor of every file, then each owner copies its tensor to CPU. Gathering one file after the other
+            # would make the copies run one rank at a time, since an owner blocked in `.cpu()` delays the gathers
+            # of the next file.
+            shard = {}
+            for k in range(max(len(names) for _, names in round_files)):
+                owned_tensor = None
+                for owner, (_, names) in enumerate(round_files):
+                    if k >= len(names):
+                        continue
+                    tensor = state_dict[names[k]]
                     # Collective: every rank must gather, even if it does not own the file.
                     if is_dtensor(tensor):
                         tensor = tensor.full_tensor()
                     if owner == rank:
-                        shard[name] = tensor.detach().cpu()
-                if owner == rank:
-                    owned_file = (filename, shard)
+                        owned_tensor = (names[k], tensor)
+                if owned_tensor is not None:
+                    name, tensor = owned_tensor
+                    shard[name] = tensor.detach().cpu()
 
-            if owned_file is None:
+            if rank >= len(round_files):
                 continue
-            filename, shard = owned_file
+            filename = round_files[rank][0]
             if save_original_format:
                 shard = revert_weight_conversion(model, shard)
             expected_names = {name for name, file in weight_map.items() if file == filename}
@@ -229,7 +237,7 @@ def save_sharded_state_dict(
                 )
             shard = {name: tensor.contiguous() for name, tensor in shard.items()}
             safe_save_file(shard, os.path.join(save_directory, filename), metadata=metadata)
-            del shard, owned_file
+            del shard
 
     # The files are only complete once every owner is done writing.
     _distributed_barrier()
