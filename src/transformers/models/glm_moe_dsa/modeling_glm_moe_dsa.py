@@ -378,6 +378,9 @@ _PROTO_PREFILL_MQA_SORTED = _os.environ.get("PROTO_PREFILL_MQA_SORTED", "0") == 
 # WP prefill (bench only): give FlashMLA's sparse kernel the number of valid entries of every list (`topk_length`), so
 # its time follows the keys a query really attends to instead of the padded list width. Same output, bit for bit
 _PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "0") == "1"
+# check only: prefill batches score even when every context fits in index_topk, so (with sorted lists) their lists
+# come in the order of the packed indexer and outputs can be compared bit for bit with the unpatched prefill
+_PROTO_PREFILL_NOSKIP = _os.environ.get("PROTO_PREFILL_NOSKIP", "0") == "1"
 
 
 def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
@@ -386,6 +389,8 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     batch_size, seq_len, _ = hidden_states.shape
     cos, sin = position_embeddings
     skip_scoring = _PROTO_INDEXER_SKIP and max_k <= indexer.index_topk
+    if _PROTO_PREFILL_NOSKIP and seq_len > 512:
+        skip_scoring = False
     k = indexer.k_norm(indexer.wk(hidden_states)).unsqueeze(2)
     k_rot, k_pass = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
     if skip_scoring:
