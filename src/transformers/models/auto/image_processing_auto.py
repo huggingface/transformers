@@ -634,7 +634,7 @@ class AutoImageProcessor:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
         # Load the image processor config
-        if not isinstance(config_dict, dict):
+        if config_dict is None:
             try:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
                     pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **hub_kwargs

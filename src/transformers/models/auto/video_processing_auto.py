@@ -32,7 +32,6 @@ from ...utils import (
     resolve_revision,
     safe_load_json_file,
 )
-from ...utils.hub import hf_api
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -259,19 +258,6 @@ def get_video_processor_config(
     if resolved_video_processor_file is not None and video_processor_dict is None:
         video_processor_dict = safe_load_json_file(resolved_video_processor_file)
 
-    if video_processor_dict:
-        if not os.path.isdir(pretrained_model_name_or_path):
-            video_processor_dict["_path_to_repo"] = hf_api().snapshot_download(
-                pretrained_model_name_or_path,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                local_files_only=local_files_only,
-                token=token,
-                revision=revision,
-            )
-        else:
-            video_processor_dict["_path_to_repo"] = pretrained_model_name_or_path
     return video_processor_dict or {}
 
 
@@ -392,7 +378,7 @@ class AutoVideoProcessor:
             cache_dir=hub_kwargs.get("cache_dir"),
         )
 
-        if not isinstance(config_dict, dict):
+        if config_dict is None:
             config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **hub_kwargs)
         video_processor_class = config_dict.get("video_processor_type", None)
         video_processor_auto_map = None
@@ -438,6 +424,12 @@ class AutoVideoProcessor:
         resolved_video_processor_class = video_processor_class
         if video_processor_class is not None:
             video_processor_class = _load_backend_class(video_processor_class, backend)
+
+        if video_processor_class.__name__ == "Ernie4_5_VLMoeVideoProcessor":
+            # Ernie needs to add its own fields in the resolved dict, so call it again
+            config_dict, _ = video_processor_class.get_video_processor_dict(
+                pretrained_model_name_or_path, **hub_kwargs
+            )
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING

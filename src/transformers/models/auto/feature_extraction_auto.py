@@ -344,7 +344,7 @@ class AutoFeatureExtractor:
             cache_dir=hub_kwargs.get("cache_dir"),
         )
 
-        if not isinstance(config_dict, dict):
+        if config_dict is None:
             config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
                 pretrained_model_name_or_path, **hub_kwargs
             )
