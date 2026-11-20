@@ -125,21 +125,11 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
                     restored = DoryForCausalLM.from_pretrained(directory).to(torch_device).eval()
                 torch.testing.assert_close(restored(input_ids, use_cache=False).logits, expected[..., :retained])
 
-    def _small_config(self, **kwargs):
-        # The tester's widths with the default 3-sliding-1-full layer pattern: full-width defaults use ~5 GB
-        sizes = (
-            "hidden_size",
-            "intermediate_size",
-            "vocab_size",
-            "num_attention_heads",
-            "num_key_value_heads",
-            "head_dim",
-        )
-        return DoryConfig(**{name: getattr(self.model_tester, name) for name in sizes}, **kwargs)
-
     def test_recurrent_cache_layout(self):
         # Plain cache layers: `per_loop` appends one copy of the recurrent layers per extra loop, `last_loop` adds none
-        config = self._small_config(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=3)
+        config = self.model_tester_class(
+            self, num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=3
+        ).get_config()
         input_ids = torch.tensor([[1, 2, 3]])
         for mode, expected in [
             ("per_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"] + ["DynamicSlidingWindowLayer"] * 4),
@@ -151,7 +141,9 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(all(layer.get_seq_length() == 3 for layer in cache.layers))
 
     def test_recurrent_layers_use_the_mask_and_rope_of_their_attention_type(self):
-        config = self._small_config(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
+        config = self.model_tester_class(
+            self, num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2
+        ).get_config()
         model = DoryModel(config)
         self.assertEqual(
             [layer.attention_type for layer in model.layers],
