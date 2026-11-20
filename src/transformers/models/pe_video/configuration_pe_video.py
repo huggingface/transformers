@@ -113,7 +113,7 @@ class PeVideoConfig(PreTrainedConfig):
                 "num_attention_heads": 16,
             },
         ),
-        "video_config": SubConfigSpec(config_class=PeVideoEncoderConfig),
+        "video_config": PeVideoEncoderConfig,
     }
     base_config_key = "audio_video_config"
 

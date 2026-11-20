@@ -28,9 +28,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple
 from ..roberta.modeling_roberta import (
     RobertaClassificationHead,
@@ -65,7 +66,7 @@ class Data2VecTextLayer(RobertaLayer):
 
 @auto_docstring
 class Data2VecTextPreTrainedModel(PreTrainedModel):
-    config_class = Data2VecTextConfig
+    config: Data2VecTextConfig
     base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Data2VecTextEmbeddings", "Data2VecTextLayer"]
@@ -110,7 +111,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -130,17 +131,18 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
-        past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        cache: tuple[tuple[torch.Tensor]] | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -178,16 +180,15 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -196,7 +197,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
@@ -210,7 +211,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -236,12 +237,12 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
@@ -281,7 +282,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     """
 )
 class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -297,10 +298,10 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
@@ -351,7 +352,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         self.data2vec_text = Data2VecTextModel(config)
@@ -367,10 +368,10 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MultipleChoiceModelOutput:
         r"""
@@ -394,7 +395,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -443,7 +444,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -462,10 +463,10 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
@@ -501,7 +502,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -516,10 +517,10 @@ class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

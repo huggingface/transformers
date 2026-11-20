@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -121,7 +121,7 @@ class GraniteSpeech5CTCConfig(PreTrainedConfig):
 
     model_type = "granite_speech5_ctc"
     sub_configs_defaults = {
-        "encoder_config": SubConfigSpec(config_class=GraniteSpeech5EncoderConfig),
+        "encoder_config": GraniteSpeech5EncoderConfig,
     }
 
     vocab_size: int = 16384

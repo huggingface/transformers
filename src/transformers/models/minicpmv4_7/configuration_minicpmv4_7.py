@@ -98,7 +98,7 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     model_type = "minicpmv4_7"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
-        "vision_config": SubConfigSpec(config_class=MiniCPMV4_7VisionConfig),
+        "vision_config": MiniCPMV4_7VisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

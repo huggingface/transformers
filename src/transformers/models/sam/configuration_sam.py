@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -181,9 +181,9 @@ class SamConfig(PreTrainedConfig):
 
     model_type = "sam"
     sub_configs_defaults = {
-        "prompt_encoder_config": SubConfigSpec(config_class=SamPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=SamMaskDecoderConfig),
-        "vision_config": SubConfigSpec(config_class=SamVisionConfig),
+        "prompt_encoder_config": SamPromptEncoderConfig,
+        "mask_decoder_config": SamMaskDecoderConfig,
+        "vision_config": SamVisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

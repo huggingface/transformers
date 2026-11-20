@@ -24,9 +24,10 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -92,7 +93,6 @@ class DeepseekV2Config(LlamaConfig):
     }
 
     model_type = "deepseek_v2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_experts": "n_routed_experts",
     }
@@ -223,7 +223,6 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 
 
 class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -325,11 +324,12 @@ class DeepseekV2Attention(nn.Module):
         key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -352,8 +352,8 @@ class DeepseekV2Attention(nn.Module):
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
-            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
+        if cache is not None:
+            k_nope, k_pe = cache.update(k_nope, k_pe, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)
 
@@ -397,7 +397,6 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
         "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2TopkRouter):
@@ -414,13 +413,14 @@ class DeepseekV2Model(OlmoeModel):
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -430,7 +430,7 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -438,8 +438,8 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -448,7 +448,7 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
         return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

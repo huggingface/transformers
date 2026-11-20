@@ -14,8 +14,10 @@
 
 import copy
 import random
-from inspect import signature
+import tempfile
 from unittest.mock import patch
+
+from huggingface_hub import get_safetensors_metadata
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
@@ -29,15 +31,17 @@ from .test_modeling_common import (
 if is_torch_available():
     import torch
 
+    from transformers import PreTrainedConfig
+    from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers.utils.auto_docstring import get_checkpoint_from_config_class
+
 
 class ALMModelTester(MultiModalModelTester):
-    audio_config_class = None
     audio_config_key = "audio_config"
     # Name under which the audio mask is passed to the model's forward (e.g. "feature_attention_mask"
     # for Qwen2Audio). Leave as `None` if the model does not consume a separate audio-level mask;
     # `_prepare_modality_inputs` then skips adding it to the inputs dict.
     audio_mask_key = None
-    _required_attributes = MultiModalModelTester._required_attributes + ("audio_config_class",)
 
     @property
     def pipeline_model_mapping(self):
@@ -49,17 +53,14 @@ class ALMModelTester(MultiModalModelTester):
         # TODO: should we add automatic-speech-recognition with a special flag?
         return mapping
 
-    def __init__(self, parent, **kwargs):
-        # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
-        kwargs.setdefault("seq_length", 32)
-        kwargs.setdefault("pad_token_id", 1)
-
-        # ALM-specific defaults
-        kwargs.setdefault("feat_seq_length", 128)
-        kwargs.setdefault("num_mel_bins", 80)
-        kwargs.setdefault("audio_token_id", 0)
-
-        super().__init__(parent, **kwargs)
+    defaults = {
+        **MultiModalModelTester.defaults,
+        "seq_length": 32,
+        "pad_token_id": 1,
+        "feat_seq_length": 128,
+        "num_mel_bins": 80,
+        "audio_token_id": 0,
+    }
 
     # -- Overridable ALM-specific hooks ------------------------------------------------------
 
@@ -124,9 +125,6 @@ class ALMModelTester(MultiModalModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.audio_token_id}
 
-    def _build_modality_sub_configs(self):
-        return {self.audio_config_key: self.get_audio_config()}
-
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         audio_features = self.create_audio_features(batch_size=batch_size)
         audio_mask = self.create_audio_mask(batch_size=batch_size)
@@ -143,16 +141,6 @@ class ALMModelTester(MultiModalModelTester):
         )
         modality_inputs.update(additional_inputs)
         return input_ids, modality_inputs
-
-    # -- Audio sub-config construction -------------------------------------------------------
-
-    @property
-    def audio_config_args(self):
-        return list(signature(self.audio_config_class.__init__).parameters.keys())
-
-    def get_audio_config(self):
-        kwargs = self._collect_kwargs(self.audio_config_args, self.audio_config_class)
-        return self.audio_config_class(**kwargs)
 
 
 class ALMModelTest(MultiModalModelTest):
@@ -256,3 +244,46 @@ class ALMModelTest(MultiModalModelTest):
                     [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key]], dim=0
                 )
             _ = model(**curr_input_dict)
+
+    # TODO: @eustlb, escalate to core? Core `test_reverse_loading_mapping` only checks self-consistency (no reference
+    # layout), so it misses #45534. No saved layout is enforced: built from config, all rules are reverted and rule
+    # order picks the layout when rules collide (#45534, nemotron3_5_transcribe, inkling); after `from_pretrained`,
+    # used rules can still collide (inkling), untested. Escalating = run this check for every model with a mapping.
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        """
+        Model built from config (no `from_pretrained`) must save under its reference checkpoint's tensor names.
+        Regression test for #45534: saved `language_model.model.model.*` instead of the checkpoint's
+        `language_model.model.*`.
+
+        Test:
+            1. reference = repo in config docstring, fetch only its config + safetensors header
+            2. build model from that config on meta
+            3. run `save_pretrained`, capture the names it writes (file write patched out)
+            4. every saved name must be in the checkpoint -> catches #45534
+        """
+        model_class = self.model_tester.conditional_generation_class
+        config_class = model_class.config_class
+        repo = get_checkpoint_from_config_class(config_class)
+        if repo is None:  # `auto_docstring(custom_intro=...)` drops the link, the sub-configs keep it (e.g. Inkling)
+            sub_config_classes = [
+                c for c in config_class.sub_configs.values() if isinstance(c, type) and issubclass(c, PreTrainedConfig)
+            ]
+            repo = next(filter(None, map(get_checkpoint_from_config_class, sub_config_classes)), None)
+        if repo is None:
+            self.skipTest(f"No reference checkpoint declared for {config_class.__name__}")
+        config = config_class.from_pretrained(repo)
+        with torch.device("meta"):
+            model = model_class(config)
+        if not get_model_conversion_mapping(model, add_legacy=False):
+            self.skipTest("No checkpoint conversion mapping: the model saves its own parameter names")
+        checkpoint_keys = set(get_safetensors_metadata(repo).weight_map)
+
+        # Real `save_pretrained`, only the file write is replaced (meta tensors can't be written)
+        saved_keys = set()
+        with (
+            tempfile.TemporaryDirectory() as tmpdirname,
+            patch("transformers.modeling_utils.safe_save_file", lambda shard, *_, **__: saved_keys.update(shard)),
+        ):
+            model.save_pretrained(tmpdirname)
+
+        self.assertEqual(saved_keys - checkpoint_keys, set(), f"Saved under names that are not in {repo}")

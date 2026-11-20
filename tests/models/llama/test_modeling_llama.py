@@ -71,6 +71,7 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         """
         expected_texts = Expectations(
             {
+                ("rocm", (9, 4)): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the feudal system.\nThe National Assembly',
                 ("rocm", (9, 5)): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the rise of the middle class.\n',
                 ("cuda", 8): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 to 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the establishment of the First French Republic, and the Reign of Terror.\nThe French Revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshrined the',
                 ("cuda", None): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
@@ -288,23 +289,32 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         input_text = {"role": "user", "content": "What's the meaning of life?"}
+        # The template writes today's date into the system prompt unless `date_string` is set; pin the
+        # date the expectation was recorded with so the prompt is the same every day.
         inputs = tokenizer.apply_chat_template(
-            [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True
+            [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True, date_string="26 Jun 2026"
         ).to(model.device)
 
-        out_sdpa = model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
+        out_sdpa = model.generate(
+            **inputs, max_new_tokens=100, cache_implementation="static", disable_compile=True, do_sample=False
+        )
         output_text_sdpa = tokenizer.batch_decode(out_sdpa[0, inputs.input_ids.shape[1] :])[0]
 
         # Now toggle FA and test again
         model.set_attn_implementation("flash_attention_2")
 
         out_fa = model.generate(
-            **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False, return_dict_in_generate=True
+            **inputs,
+            max_new_tokens=100,
+            cache_implementation="static",
+            disable_compile=True,
+            do_sample=False,
+            return_dict_in_generate=True,
         )
         output_text_fa = tokenizer.batch_decode(out_fa.sequences[0, inputs.input_ids.shape[1] :])[0]
 
         # Just to make sure
-        self.assertTrue(all(isinstance(layer, StaticLayer) for layer in out_fa.past_key_values.layers))
+        self.assertTrue(all(isinstance(layer, StaticLayer) for layer in out_fa.cache.layers))
 
         expected_text = Expectations(
             {
@@ -424,7 +434,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
         outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
+        cache_a = outs_1a["cache"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
         input_1b = input_ids_shared_prefix[:, part_a:]
@@ -434,7 +444,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
             input_1b,
             attention_mask=mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
+            cache=cache_a,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
@@ -461,7 +471,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -475,7 +485,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            past_key_values=past_key_values,
+            cache=cache,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
             0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
@@ -502,7 +512,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         # forward run for the first part of input
         part_a = 3  # split point
@@ -522,7 +532,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         # forward run for the second part of input
@@ -538,7 +548,7 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values,
+            cache=cache,
         )
         decoded_1b = [
             self.tokenizer.decode(t)

@@ -22,21 +22,27 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     merge_with_config_defaults,
     no_inherit_decorator,
@@ -197,10 +203,9 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Ernie4_5_VLMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Ernie4_5_VLMoeTextConfig),
+        "vision_config": Ernie4_5_VLMoeVisionConfig,
+        "text_config": Ernie4_5_VLMoeTextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -263,7 +268,6 @@ class Ernie4_5_VLMoeTextRotaryEmbedding(nn.Module):
 
         return inv_freq_3d, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         # One row of positions per M-RoPE axis: (num_axes, bs, positions)
@@ -454,6 +458,7 @@ class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Ernie4_5_VLMoeRMSNorm(config.hidden_size, config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -461,7 +466,7 @@ class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
@@ -474,7 +479,7 @@ class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -538,14 +543,15 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
@@ -556,15 +562,15 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
@@ -587,7 +593,7 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=text_position_ids,
         )
 
@@ -603,7 +609,7 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 moe_mm_token_type_ids=moe_mm_token_type_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -611,7 +617,7 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -648,7 +654,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Ernie4_5_VLMoeVisionConfig) -> None:
         super().__init__(config)
 
         del self.merger
@@ -929,7 +935,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -945,7 +951,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -955,6 +961,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return image_outputs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -962,16 +969,16 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         position_ids: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
@@ -1021,7 +1028,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
                 mm_token_type_ids=mm_token_type_ids,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
 
         outputs = self.language_model(
@@ -1030,23 +1037,19 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
             moe_mm_token_type_ids=moe_mm_token_type_ids,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             return_dict=True,
             **kwargs,
         )
 
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
@@ -1061,6 +1064,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
     def get_image_features(self, **super_kwargs):
         return super().get_image_features(**super_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1081,6 +1085,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
 
         return model_inputs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1088,19 +1093,19 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         position_ids: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         r"""
         mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
@@ -1117,7 +1122,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
             position_ids=position_ids,
             mm_token_type_ids=mm_token_type_ids,
             moe_mm_token_type_ids=moe_mm_token_type_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
@@ -1131,9 +1136,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1152,13 +1156,15 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 
@@ -1238,6 +1244,8 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    config: Ernie4_5_VLMoeConfig
+
     def post_init(self):
         logger.warning_once(
             "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",

@@ -44,14 +44,10 @@ class HrmTextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = HrmTextModel
 
-    def __init__(
-        self,
-        parent,
-        prefix_lm=False,
-    ):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # False default to enable FA
-        self.prefix_lm = prefix_lm
+        "prefix_lm": False,
+    }
 
 
 @require_torch
@@ -254,7 +250,7 @@ class HrmTextIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 ("cuda", (8, 6)): torch.tensor(
-                    [[-6.8750, -5.0000, -7.0625], [-5.3750, -3.2656, -4.5938], [2.1875, 2.2031, 2.5625]],
+                    [[-6.8750, -4.9688, -7.0312], [-5.3750, -3.2656, -4.6250], [2.1875, 2.1875, 2.5781]],
                     dtype=torch.bfloat16,
                 ),
                 ("xpu", 3): torch.tensor(

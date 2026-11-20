@@ -42,6 +42,7 @@ from transformers.utils import is_torch_available, is_torch_xpu_available, is_to
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -99,7 +100,7 @@ if is_torch_available():
         def set_begin_index(self, begin_index: int):
             self.begin_index = begin_index
 
-        def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
             # we don't want to randomly sample timestamp tokens
             if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
@@ -167,56 +168,37 @@ def prepare_whisper_inputs_dict(
 
 
 @require_torch
-class WhisperModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden_layers
-        seq_length=60,
-        is_training=True,
-        use_labels=False,
-        vocab_size=200,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        max_target_positions=40,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-        num_mel_bins=80,
-        decoder_start_token_id=85,
-        num_conv_layers=1,
-        suppress_tokens=None,
-    ):
+class WhisperModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden_layers
+        "seq_length": 60,
+        "is_training": True,
+        "use_labels": False,
+        "vocab_size": 200,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "input_channels": 1,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 30,
+        "max_target_positions": 40,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
+        "num_mel_bins": 80,
+        "decoder_start_token_id": 85,
+        "num_conv_layers": 1,
+        "suppress_tokens": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.num_conv_layers = num_conv_layers
-        self.suppress_tokens = suppress_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -291,7 +273,7 @@ class WhisperModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
@@ -302,9 +284,7 @@ class WhisperModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -315,6 +295,27 @@ class WhisperModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+
+    def create_and_check_training_compile_fullgraph(self, config, inputs_dict):
+        # Explicitly check with layerdrop=0.0 (fullgraph compiles without graph breaks)
+        config.encoder_layerdrop = 0.0
+        config.decoder_layerdrop = 0.0
+        model = WhisperForConditionalGeneration(config).to(torch_device).train()
+        compiled = torch.compile(model, fullgraph=True, backend="eager")
+        outputs = compiled(**inputs_dict)
+        loss = outputs.logits.sum()
+        loss.backward()
+        self.parent.assertIsNotNone(loss)
+
+        # Explicitly check with layerdrop > 0.0 (compile succeeds with graph break)
+        config.encoder_layerdrop = 0.5
+        config.decoder_layerdrop = 0.5
+        model_layerdrop = WhisperForConditionalGeneration(config).to(torch_device).train()
+        compiled_layerdrop = torch.compile(model_layerdrop, fullgraph=False, backend="eager")
+        outputs_layerdrop = compiled_layerdrop(**inputs_dict)
+        loss_layerdrop = outputs_layerdrop.logits.sum()
+        loss_layerdrop.backward()
+        self.parent.assertIsNotNone(loss_layerdrop)
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = WhisperModel(config=config).to(torch_device).eval()
@@ -348,6 +349,8 @@ class WhisperModelTester:
 
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = WhisperModelTester
+
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -686,8 +689,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -1220,6 +1223,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
+
+    @pytest.mark.torch_compile_test
+    def test_training_compile_fullgraph(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.create_and_check_training_compile_fullgraph(*config_and_inputs)
 
     # TODO (joao, eustache): fix me :) The model is not returning a `Cache` by default
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
@@ -3087,52 +3095,35 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-class WhisperEncoderModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden layers
-        seq_length=60,
-        is_training=True,
-        use_labels=True,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        num_mel_bins=80,
-        num_conv_layers=1,
-        suppress_tokens=None,
-        classifier_proj_size=4,
-        num_labels=2,
-        is_encoder_decoder=False,
-        is_decoder=False,
-    ):
+class WhisperEncoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden layers
+        "seq_length": 60,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "input_channels": 1,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 30,
+        "num_mel_bins": 80,
+        "num_conv_layers": 1,
+        "suppress_tokens": None,
+        "classifier_proj_size": 4,
+        "num_labels": 2,
+        "is_encoder_decoder": False,
+        "is_decoder": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.num_conv_layers = num_conv_layers
-        self.suppress_tokens = suppress_tokens
-        self.classifier_proj_size = classifier_proj_size
-        self.num_labels = num_labels
-        self.is_encoder_decoder = is_encoder_decoder
-        self.is_decoder = is_decoder
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return WhisperConfig(
@@ -3195,6 +3186,8 @@ class WhisperEncoderModelTester:
 
 @require_torch
 class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = WhisperEncoderModelTester
+
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
 
@@ -3280,54 +3273,37 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class WhisperStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden layers
-        is_training=True,
-        use_labels=False,
-        vocab_size=200,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        max_target_positions=40,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-        num_mel_bins=80,
-        decoder_start_token_id=85,
-        num_conv_layers=1,
-        suppress_tokens=None,
-    ):
+class WhisperStandaloneDecoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden layers
+        # The standalone decoder tests only run inference.
+        "is_training": False,
+        "use_labels": False,
+        "vocab_size": 200,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "input_channels": 1,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 30,
+        "max_target_positions": 40,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
+        "num_mel_bins": 80,
+        "decoder_start_token_id": 85,
+        "num_conv_layers": 1,
+        "suppress_tokens": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.num_conv_layers = num_conv_layers
-        self.suppress_tokens = suppress_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -3400,7 +3376,7 @@ class WhisperStandaloneDecoderModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past_key_values = outputs["past_key_values"]
+        cache = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -3409,7 +3385,7 @@ class WhisperStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -3429,7 +3405,7 @@ class WhisperStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        cache = model(input_ids, attention_mask=attn_mask, use_cache=True)["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -3448,9 +3424,7 @@ class WhisperStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=attn_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -3463,12 +3437,14 @@ class WhisperStandaloneDecoderModelTester:
 
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = WhisperStandaloneDecoderModelTester
+
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
     is_encoder_decoder = False
     test_missing_keys = False
 
     def setUp(self):
-        self.model_tester = WhisperStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = WhisperStandaloneDecoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
 
     def test_config(self):

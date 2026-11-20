@@ -59,67 +59,41 @@ class UnlimitedOcrVisionText2TextModelTester(VLMModelTester):
     text_config_class = UnlimitedOcrTextConfig
     vision_config_class = UnlimitedOcrVisionConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("num_image_tokens", 7)
-        kwargs.setdefault("image_token_id", 1)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("hidden_size", 128)
-        kwargs.setdefault("intermediate_size", 256)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("tie_word_embeddings", False)
-        kwargs.setdefault("bos_token_id", 2)
-        kwargs.setdefault("eos_token_id", 3)
-        kwargs.setdefault("pad_token_id", 4)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
-        kwargs.setdefault("moe_intermediate_size", 64)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("sliding_window", 4)
-        super().__init__(parent, **kwargs)
-
-        self.sam_config = {
-            "hidden_size": 32,
-            "output_channels": 16,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_channels": 3,
-            "image_size": 16,
-            "patch_size": 2,
-            "hidden_act": "gelu",
-            "mlp_ratio": 4.0,
-            "mlp_dim": 128,
-            "window_size": 4,
-            "global_attn_indexes": [1],
-            "downsample_channels": [32, 64],
-        }
-        self.encoder_config = {
-            "hidden_size": 64,
-            "intermediate_size": 128,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 4,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-            "rms_norm_eps": 1.0,
-        }
-
-    def get_vision_config(self):
-        return UnlimitedOcrVisionConfig(
-            sam_config=self.sam_config,
-            encoder_config=self.encoder_config,
-        )
-
-    def get_config(self):
-        return self.config_class(
-            vision_config=self.get_vision_config(),
-            text_config=self.get_text_config(),
-            image_token_id=self.image_token_id,
-        )
+    small_config_overrides = {
+        "num_image_tokens": 7,
+        "image_token_id": 1,
+        "image_size": 16,
+        "hidden_size": 128,
+        "intermediate_size": 256,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "tie_word_embeddings": False,
+        "bos_token_id": 2,
+        "eos_token_id": 3,
+        "pad_token_id": 4,
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 64,
+        "num_experts_per_tok": 2,
+        "sliding_window": 4,
+        "vision_sam_hidden_size": 32,
+        "vision_sam_output_channels": 16,
+        "vision_sam_image_size": 16,
+        "vision_sam_patch_size": 2,
+        "vision_sam_hidden_act": "gelu",
+        "vision_sam_mlp_ratio": 4.0,
+        "vision_sam_mlp_dim": 128,
+        "vision_sam_window_size": 4,
+        "vision_sam_global_attn_indexes": [1],
+        "vision_sam_downsample_channels": [32, 64],
+        "vision_encoder_hidden_size": 64,
+        "vision_encoder_intermediate_size": 128,
+        "vision_encoder_rms_norm_eps": 1.0,
+    }
 
 
 @require_torch
@@ -141,11 +115,11 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
         )
         return config, inputs_dict
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # max cache length can be smaller than sequence length
-        max_length = past_key_values.get_max_length()
+        max_length = cache.get_max_length()
         seq_length = min(seq_length, max_length) if max_length >= 0 else seq_length
-        super()._check_past_key_values_for_generate(batch_size, past_key_values, seq_length, config)
+        super()._check_cache_for_generate(batch_size, cache, seq_length, config)
 
     def _check_attention_shapes(self, layer, seq_length, k_shape, v_shape):
         # Super method assumes that there is only layer.keys/values but reference sliding window layers
@@ -192,7 +166,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
                 # Pass attention mask explicitly as input_ids_reference sometimes contains randomly generated
                 # pad tokens which trips up the automatic attention mask generation.
                 attention_mask=torch.ones_like(input_ids_reference),
-                past_key_values=out_prefill.past_key_values,
+                cache=out_prefill.cache,
                 max_new_tokens=3,
                 do_sample=False,
                 return_dict_in_generate=True,
@@ -202,7 +176,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
 
             prompt_length = inputs_dict["input_ids"].shape[1]
             reference_layers = [
-                layer for layer in out.past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+                layer for layer in out.cache.layers if layer._layer_type == "reference_sliding_attention"
             ]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:
@@ -232,7 +206,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             model = model_class(config).to(torch_device).eval()
             input_ids = inputs_dict["input_ids"]
             prompt_length = input_ids.shape[1]
-            past_key_values = (
+            cache = (
                 StaticCache(config=config.get_text_config(), max_cache_len=prompt_length + num_decode_steps)
                 if cache_implementation == "static"
                 else DynamicCache(config=config.get_text_config())
@@ -241,12 +215,10 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             next_tokens = input_ids
             with torch.no_grad():
                 for _ in range(num_decode_steps + 1):
-                    outputs = model(input_ids=next_tokens, past_key_values=past_key_values, use_cache=True)
+                    outputs = model(input_ids=next_tokens, cache=cache, use_cache=True)
                     next_tokens = outputs.logits[:, -1:].argmax(dim=-1)
 
-            reference_layers = [
-                layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention"
-            ]
+            reference_layers = [layer for layer in cache.layers if layer._layer_type == "reference_sliding_attention"]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:
                 self.assertEqual(layer.prefill_length, prompt_length)
@@ -276,7 +248,7 @@ class UnlimitedOcrModelTest(VLMModelTest, unittest.TestCase):
             )
 
             reference_layers = [
-                layer for layer in out.past_key_values.layers if layer._layer_type == "reference_sliding_attention"
+                layer for layer in out.cache.layers if layer._layer_type == "reference_sliding_attention"
             ]
             self.assertGreater(len(reference_layers), 0)
             for layer in reference_layers:
@@ -331,6 +303,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("cuda", 8): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("rocm", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
+                ("xpu", 5): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
                 ("cpu", None): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
             }
         ).get_expectation()  # fmt: skip
@@ -367,6 +340,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("cuda", 8): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("rocm", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("xpu", 5): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
                 ("cpu", None): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
             }
         ).get_expectation()  # fmt: skip
@@ -434,6 +408,13 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     ],
                     [[[383, 88, 497, 171]], [[53, 23, 365, 41]]],
                 ),
+                ("xpu", 5): (
+                    [
+                        r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
+                        r"<\|det\|>header \[\d+, \d+, \d+, \d+\]<\|/det\|>Advanced Template and Styl",
+                    ],
+                    [[[383, 87, 497, 171]], [[53, 23, 365, 41]]],
+                ),
                 ("cpu", None): (
                     [
                         r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
@@ -489,6 +470,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[382, 87, 489, 174]]),
                 ("cuda", 8): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[382, 87, 489, 174]]),
                 ("rocm", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
+                ("xpu", 5): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
                 ("cpu", None): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
             }
         ).get_expectation()  # fmt: skip

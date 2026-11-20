@@ -37,7 +37,6 @@ class PersimmonConfig(PreTrainedConfig):
     ```"""
 
     model_type = "persimmon"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 262144
     hidden_size: int = 4096

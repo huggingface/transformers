@@ -16,16 +16,15 @@
 import tempfile
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
-    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
-    Gemma4VisionConfig,
     is_torch_available,
     logging,
     set_seed,
@@ -79,33 +78,33 @@ class Gemma4TextModelTester(CausalLMModelTester):
         base_model_class = Gemma4TextModel
         causal_lm_class = Gemma4ForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 4  # override to correctly test sharing cache pattern
-        self.num_kv_shared_layers = 2  # important to override
-        self.layer_types = [
-            "sliding_attention",
-            "full_attention",
-            "sliding_attention",
-            "full_attention",
-        ]  # similarly we want to test sharing on both types
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
-            if layer_type == "full_attention"
-        }  # gemma4 use a different head_dim for full and sliding layers
-
+    small_config_overrides = {
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
         # To make model small
-        self.vocab_size_per_layer_input = 99
-        self.hidden_size_per_layer_input = 16
-
+        "vocab_size_per_layer_input": 99,
+        "hidden_size_per_layer_input": 16,
         # To activate moe blocks
-        self.enable_moe_block = True
-        self.moe_intermediate_size = 16
-        self.top_k_experts = 2
-
+        "enable_moe_block": True,
+        "moe_intermediate_size": 16,
+        "top_k_experts": 2,
         # Test if bidirectional image mask path works
-        self.use_bidirectional_attention = "vision"
+        "use_bidirectional_attention": "vision",
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
+            if layer_type == "full_attention"
+        }
+        return values
 
 
 @require_torch
@@ -174,6 +173,39 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         for attention in out.attentions:
             self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
+    def test_kv_shared_prefill_truncation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 4
+        config.layer_types = ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        config.num_kv_shared_layers = 2
+
+        model = Gemma4ForCausalLM(config)
+        model.eval()
+
+        input_ids = torch.randint(10, 60, (2, 14))
+        mask = torch.ones_like(input_ids)
+
+        COUNTER = 0
+
+        def new_slice(*args, **kwargs):
+            nonlocal COUNTER
+            COUNTER += 1
+            # slice 1:5 to absorb self
+            return args[1:5]
+
+        with torch.no_grad():
+            out_skipped = model(input_ids, mask, logits_to_keep=1)
+            with patch(
+                "transformers.models.gemma4.modeling_gemma4.Gemma4TextModel._maybe_slice_kv_shared_inputs", new_slice
+            ):
+                out_unskipped = model(input_ids, mask, logits_to_keep=1)
+
+        # Make sure we skipped correctly
+        self.assertEqual(COUNTER, 1)
+        # Make sure outputs are the same
+        torch.testing.assert_close(out_skipped.logits, out_unskipped.logits)
+        torch.testing.assert_close(out_skipped.shared_kv_states, out_unskipped.shared_kv_states)
+
     def test_model_training(self):
         pass
 
@@ -196,48 +228,53 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    audio_config_class = Gemma4AudioConfig
+
+    sub_configs_to_skip = ["vision_config"]
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("boi_token_id", 5)
-        kwargs.setdefault("eoi_token_id", 6)
-        kwargs.setdefault("audio_token_id", 7)
-        kwargs.setdefault("boa_token_id", 8)
-        kwargs.setdefault("eoa_token_index", 9)
-        kwargs.setdefault("video_token_id", 10)
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("seq_length", 50)
-        kwargs.setdefault("feat_seq_length", 96)
-        kwargs.setdefault("num_mel_bins", 16)
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("num_kv_shared_layers", 2)
-        kwargs.setdefault(
-            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
-        )
-        kwargs.setdefault("vocab_size_per_layer_input", 99)
-        kwargs.setdefault("hidden_size_per_layer_input", 16)
-        kwargs.setdefault("enable_moe_block", True)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("top_k_experts", 2)
-        kwargs.setdefault("subsampling_conv_channels", [16, 8])
-        kwargs.setdefault("conv_kernel_size", 3)
-        kwargs.setdefault("attention_chunk_size", 4)
-        kwargs.setdefault("attention_context_left", 5)
-        kwargs.setdefault("attention_context_right", 0)
-        kwargs.setdefault("output_proj_dims", 32)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "audio_token_id": 7,
+        "boa_token_id": 8,
+        "eoa_token_index": 9,
+        "video_token_id": 10,
+        "pad_token_id": 0,
+        "seq_length": 50,
+        "feat_seq_length": 96,
+        "num_mel_bins": 16,
+        "num_hidden_layers": 4,
+        "num_kv_shared_layers": 2,
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+        "vocab_size_per_layer_input": 99,
+        "hidden_size_per_layer_input": 16,
+        "enable_moe_block": True,
+        "moe_intermediate_size": 16,
+        "top_k_experts": 2,
+        "subsampling_conv_channels": [16, 8],
+        "conv_kernel_size": 3,
+        "attention_chunk_size": 4,
+        "attention_context_left": 5,
+        "attention_context_right": 0,
+        "output_proj_dims": 32,
+        # vision max-pos-size
+        "position_embedding_size": 128,
         # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
         # comparison logic (inf - inf = NaN). Disable for testing.
-        kwargs.setdefault("use_clipped_linears", False)
-        super().__init__(parent, **kwargs)
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
+        "use_clipped_linears": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        values["text_per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
             if layer_type == "full_attention"
         }
+        return values
 
     @property
     def _special_token_ids(self):
@@ -256,7 +293,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def create_audio_mask(self, batch_size: int | None = None):
-        return super().create_audio_mask(batch_size).bool()
+        # Keep the random lengths of the base mask, but right-pad (like the Gemma4 feature extractor). With left padding,
+        # the causal conv in `lconv1d` mixes the (all-zero) padded frames into the valid ones, and the gradients flowing
+        # back into those zero frames get amplified by each `Gemma4RMSNorm` (x 1/sqrt(eps)) until they overflow to NaN.
+        audio_mask = super().create_audio_mask(batch_size).bool()
+        lengths = audio_mask.sum(dim=-1, keepdim=True)
+        positions = torch.arange(audio_mask.shape[-1], device=audio_mask.device)[None, :]
+        return positions < lengths
 
     def get_audio_embeds_mask(self, audio_mask):
         # Each of the two stride-2 subsampling convs keeps every other mask position
@@ -355,37 +398,42 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    vision_config_class = Gemma4VisionConfig
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("boi_token_id", 5)
-        kwargs.setdefault("eoi_token_id", 6)
-        kwargs.setdefault("video_token_id", 7)
-        kwargs.setdefault("audio_token_id", 8)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("pooling_kernel_size", 2)
-        kwargs.setdefault("num_image_tokens", 5)
-        kwargs.setdefault("seq_length", 25)
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("num_kv_shared_layers", 2)
-        kwargs.setdefault(
-            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
-        )
-        kwargs.setdefault("vocab_size_per_layer_input", 99)
-        kwargs.setdefault("hidden_size_per_layer_input", 16)
-        kwargs.setdefault("enable_moe_block", True)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("top_k_experts", 2)
-        kwargs.setdefault("use_bidirectional_attention", "vision")
-        kwargs.setdefault("tie_word_embeddings", True)
-        super().__init__(parent, **kwargs)
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
+    sub_configs_to_skip = ["audio_config"]
+
+    small_config_overrides = {
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "video_token_id": 7,
+        "audio_token_id": 8,
+        "patch_size": 5,
+        "pooling_kernel_size": 2,
+        "num_image_tokens": 5,
+        "seq_length": 25,
+        "num_hidden_layers": 4,
+        "num_kv_shared_layers": 2,
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+        "vocab_size_per_layer_input": 99,
+        "hidden_size_per_layer_input": 16,
+        "enable_moe_block": True,
+        "moe_intermediate_size": 16,
+        "top_k_experts": 2,
+        "use_bidirectional_attention": "vision",
+        "tie_word_embeddings": True,
+        # vision max-pos-size
+        "position_embedding_size": 128,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["text_per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
             if layer_type == "full_attention"
         }
+        return values
 
     @property
     def _special_token_ids(self):
@@ -463,6 +511,38 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
+
+    def test_forward_with_videos(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+
+        # Two videos with 2 and 3 frames
+        num_frames_per_video = torch.tensor([2, 3], device=torch_device)
+        pixel_values_videos = self.model_tester.create_pixel_values(5).to(torch_device)
+        video_position_ids = self.model_tester.create_image_position_ids(5)
+        num_tokens = self.model_tester.num_image_tokens  # per frame
+        input_ids = torch.ones((2, 3 * num_tokens + 2), dtype=torch.long, device=torch_device)
+        input_ids[0, 1 : 1 + 2 * num_tokens] = config.video_token_id
+        input_ids[1, 1 : 1 + 3 * num_tokens] = config.video_token_id
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == config.video_token_id] = 2
+
+        with torch.no_grad():
+            video_features = model.model.get_video_features(
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video
+            )
+            # `generate` encodes the videos first, so check that raw pixels give the same output
+            expected = model(
+                input_ids, mm_token_type_ids=mm_token_type_ids, mm_encoder_outputs={"video": video_features}
+            )
+            output = model(
+                input_ids,
+                mm_token_type_ids=mm_token_type_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_position_ids=video_position_ids,
+                num_frames_per_video=num_frames_per_video,
+            )
+        torch.testing.assert_close(output.logits, expected.logits)
 
     def test_vision_axial_rope(self):
         # override -> model shipped weirdly to from the start, pos IDs have actual batch dim
@@ -736,7 +816,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
             config=config.text_config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
             position_ids=position_ids,
             block_sequence_ids=block_sequence_ids,
         )
@@ -780,7 +860,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
 
         model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
         batch_size, prompt_length = inputs_dict["input_ids"].shape
-        past_key_values = StaticCache(
+        cache = StaticCache(
             config=config.get_text_config(),
             max_batch_size=batch_size,
             max_cache_len=prompt_length + 8,  # longer than the sliding window
@@ -789,7 +869,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         )
 
         with torch.no_grad():
-            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+            model(**inputs_dict, cache=cache, use_cache=True)
 
 
 @slow
@@ -930,9 +1010,6 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     @require_torch_multi_gpu
     def test_model_text_only_multigpu(self):
-        """Accelerate destroys the input dict `shared_kv_states` if it's not passed as kwarg and part of
-        `_skip_keys_device_placement`, so test this to avoid regresions.
-        """
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
         inputs = tokenizer.apply_chat_template(
@@ -1033,7 +1110,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = Gemma4ForConditionalGeneration.from_pretrained(
             self.model_name,
             device_map=torch_device,
-            attn_implementation=attn_implementation,
+            # Audio tower chunked local attention is eager-only (#49404); vary only text
+            # attention.
+            attn_implementation={"text_config": attn_implementation, "audio_config": "eager"},
         )
 
         # Make sure prefill is larger than sliding window
@@ -1045,10 +1124,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_COMPLETIONS = Expectations(
             {
-                ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'"
-                    if attn_implementation == "sdpa"
-                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
+                ("cuda", (8, 6)): [
+                    "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [

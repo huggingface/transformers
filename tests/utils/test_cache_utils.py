@@ -24,6 +24,7 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
+    Expectations,
     backend_device_count,
     backend_torch_accelerator_module,
     cleanup,
@@ -48,27 +49,43 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CLIPVisionConfig,
+        CTRLConfig,
+        CTRLLMHeadModel,
         DynamicCache,
+        Ernie4_5_VLMoeConfig,
+        Ernie4_5_VLMoeForConditionalGeneration,
         Gemma2Config,
+        Gemma3Config,
+        Gemma3ForConditionalGeneration,
+        Gemma3TextConfig,
+        Gemma4Config,
         Gemma4ForCausalLM,
+        Gemma4ForConditionalGeneration,
         Gemma4TextConfig,
+        Gemma4VisionConfig,
         GenerationConfig,
         LlamaConfig,
         LlamaForCausalLM,
+        LlavaConfig,
+        LlavaForConditionalGeneration,
         MixtralConfig,
         MixtralForCausalLM,
         PreTrainedConfig,
         QuantizedCache,
         Qwen3VLConfig,
         Qwen3VLForConditionalGeneration,
+        SiglipVisionConfig,
         StaticCache,
         convert_and_export_with_cache,
         pipeline,
     )
     from transformers.cache_utils import (
+        DummyLayer,
         DynamicIndexedLayer,
         DynamicLayer,
         DynamicSlidingWindowLayer,
+        Fp8QuantizedLayer,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
@@ -185,16 +202,23 @@ class CacheTest(unittest.TestCase):
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
 
-    @require_optimum_quanto
-    def test_quantized_layer_beam_reorder(self):
+    @parameterized.expand(["quanto", "fp8"])
+    def test_quantized_layer_beam_reorder(self, backend):
         """
         `reorder_cache` must reorder the quantized states as well, not only the residual cache. It used to index the
         (emptied) residual cache while guarding on the total sequence length, so it either raised or silently left
-        the quantized states in the previous beam order.
+        the quantized states in the previous beam order. FP8 has no residual cache, and reorders right away.
         """
-        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
-        # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
-        row_values = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1)
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+            # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
+            row_values, atol = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1), 1e-2
+        else:
+            layer = Fp8QuantizedLayer()
+            # Same, with constants exactly representable in `float8_e4m3fn` once divided by the calibrated scale
+            row_values, atol = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1), 0
 
         def states(order, seq_len):
             # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
@@ -212,8 +236,8 @@ class CacheTest(unittest.TestCase):
             keys, values = layer.update(states(order, 1), states(order, 1))
             # Every cached position of a row must hold that row's constant, whatever the beam shuffling
             expected = row_values.index_select(0, order).expand_as(keys)
-            torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
-            torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=atol)
+            torch.testing.assert_close(values, expected, rtol=0, atol=atol)
 
     @parameterized.expand(
         [
@@ -243,19 +267,61 @@ class CacheTest(unittest.TestCase):
                 layer._dequantize(layer._quantized_keys).shape[-2], sequence_length - expected_residual_length
             )
 
-    @require_optimum_quanto
-    def test_quantized_layer_reset(self):
-        """`reset` must also drop the quantized states, which hold most of the cache."""
-        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+    @parameterized.expand(["quanto", "fp8"])
+    def test_quantized_layer_reset(self, backend):
+        """`reset` must also drop the quantized states, which hold most of the cache, and any calibrated scale."""
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+        else:
+            layer = Fp8QuantizedLayer()
 
-        # 5 tokens for a residual length of 4: the first flush has happened, so most of the cache is quantized
-        layer.update(torch.rand(4, 2, 5, 8), torch.rand(4, 2, 5, 8))
+        # 5 tokens for a residual length of 4, so the first flush has happened and most of the cache is quantized.
+        # The large amplitude makes a stale FP8 scale obvious on the next calibration.
+        layer.update(torch.rand(4, 2, 5, 8) * 100, torch.rand(4, 2, 5, 8) * 100)
+        calibrated_scale = layer._quantized_keys[1].clone() if backend == "fp8" else None
         layer.reset()
 
         self.assertEqual(layer.get_seq_length(), 0)
+        self.assertIsNone(layer._quantized_keys)
+        self.assertIsNone(layer._quantized_values)
+
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
+        if backend == "fp8":
+            self.assertLess(layer._quantized_keys[1].item(), calibrated_scale.item())
+
+    def test_fp8_quantized_layer(self):
+        """Tests that `Fp8QuantizedLayer` appends new tokens using the scale calibrated on the first `update`."""
+        layer = Fp8QuantizedLayer()
+
+        # As in the attention layer, the states come out of a transpose, so they are not contiguous
+        keys, values = torch.randn(1, 5, 2, 8).transpose(1, 2), torch.randn(1, 5, 2, 8).transpose(1, 2)
+        layer.update(keys, values)
+        quantized_keys, calibrated_scale = layer._quantized_keys
+        self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(quantized_keys.shape, keys.shape)
+        calibrated_scale = calibrated_scale.clone()
+
+        # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
+        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8) * 100, torch.randn(1, 2, 1, 8))
+        self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
+        self.assertEqual(cached_keys.dtype, keys.dtype)
+        quantized_keys, scale = layer._quantized_keys
+        self.assertTrue(torch.equal(scale, calibrated_scale))
+        self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
+
+    def test_fp8_quantized_cache_rejects_group_wise_options(self):
+        """Tests that the `fp8` backend, which quantizes per-tensor, does not silently drop the group-wise options."""
+        config = LlamaConfig(num_hidden_layers=2)
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            QuantizedCache(backend="fp8", config=config, q_group_size=128, nbits=2)
+
+        layer = QuantizedCache(backend="fp8", config=config).layers[0]
+        self.assertIsInstance(layer, Fp8QuantizedLayer)
+        self.assertFalse(hasattr(layer, "q_group_size"))
 
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
@@ -382,7 +448,7 @@ class CacheTest(unittest.TestCase):
         )
 
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing the global one
-        cache = out.past_key_values
+        cache = out.cache
         self.assertIsInstance(cache, StaticCache)
         self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 16, 8, 16])
 
@@ -417,7 +483,7 @@ class CacheTest(unittest.TestCase):
         )
 
         # Each layer must fall back to the `hidden_size // num_attention_heads` division
-        cache = out.past_key_values
+        cache = out.cache
         self.assertIsInstance(cache, StaticCache)
         self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], [8, 8])
 
@@ -481,7 +547,7 @@ class CacheTest(unittest.TestCase):
         )
 
         # First generation pass filling a Cache
-        first_gen_ids = model.generate(inputs, past_key_values=cache, **generation_kwargs)
+        first_gen_ids = model.generate(inputs, cache=cache, **generation_kwargs)
 
         # Now make sure we get the same results with and without prefill chunking
         new_ids = torch.randint(10, 40, (1, 5), device=torch_device)
@@ -491,10 +557,10 @@ class CacheTest(unittest.TestCase):
         uncached_ids = full_sequence[:, cache.get_seq_length() :]
 
         no_chunked_only_new_ids = model.generate(
-            uncached_ids, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+            uncached_ids, attention_mask=full_sequence_mask, cache=copy.deepcopy(cache), **generation_kwargs
         )
         no_chunked_full_ids = model.generate(
-            full_sequence, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+            full_sequence, attention_mask=full_sequence_mask, cache=copy.deepcopy(cache), **generation_kwargs
         )
         # Not related to this test, but just to make sure
         self.assertTrue(
@@ -504,20 +570,302 @@ class CacheTest(unittest.TestCase):
         chunked_only_new_ids = model.generate(
             uncached_ids,
             attention_mask=full_sequence_mask,
-            past_key_values=copy.deepcopy(cache),
+            cache=copy.deepcopy(cache),
             prefill_chunk_size=2,
             **generation_kwargs,
         )
         chunked_full_ids = model.generate(
             full_sequence,
             attention_mask=full_sequence_mask,
-            past_key_values=copy.deepcopy(cache),
+            cache=copy.deepcopy(cache),
             prefill_chunk_size=2,
             **generation_kwargs,
         )
         # Should both be equal, and equal to the ones without chunking
         self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
         self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
+
+    @staticmethod
+    def _get_tiny_llava():
+        set_seed(3)
+        config = LlavaConfig(
+            vision_config=CLIPVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=4,
+                projection_dim=16,
+            ),
+            text_config=LlamaConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                max_position_embeddings=64,
+                pad_token_id=0,
+            ),
+            image_token_index=63,
+            vision_feature_layer=-1,
+            vision_feature_select_strategy="full",
+        )
+        return LlavaForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_chunked_prefill_keeps_image_inputs(self):
+        """
+        A chunked prefill must pass the image inputs to its first forward, as the unchunked prefill does. They were
+        dropped from every chunk, so a vision-language model generated without the image.
+        """
+        model = self._get_tiny_llava()
+        # 5 image tokens (4 patches + CLS) in the first chunk of 6, then 4 text tokens
+        input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        image_a = torch.randn(1, 3, 8, 8, device=torch_device)
+        image_b = torch.randn(1, 3, 8, 8, device=torch_device) * 5
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+
+        expected = model.generate(input_ids, pixel_values=image_a, **generation_kwargs)
+        out = model.generate(input_ids, pixel_values=image_a, **generation_kwargs, prefill_chunk_size=6)
+        out_b = model.generate(input_ids, pixel_values=image_b, **generation_kwargs, prefill_chunk_size=6)
+
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+        self.assertFalse(torch.equal(torch.stack(out.scores), torch.stack(out_b.scores)))
+
+    def test_chunked_prefill_splits_image_features(self):
+        """
+        A chunk boundary may fall inside a run of image tokens: each chunk must get the image features of its own image
+        tokens, so that any `prefill_chunk_size` gives the same output as the unchunked prefill.
+        """
+        model = self._get_tiny_llava()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        one_image = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        # Image runs at positions 1-5 and 8-12: chunks of 4 split both of them
+        two_images = torch.tensor([[1] + [63] * 5 + [5, 6] + [63] * 5 + [7, 8]], device=torch_device)
+        two_prompts = torch.tensor(
+            [[1] + [63] * 5 + [5, 6, 7, 8], [1, 9, 10] + [63] * 5 + [11, 12]], device=torch_device
+        )
+        cases = [
+            (one_image, torch.randn(1, 3, 8, 8, device=torch_device), [4, 2]),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), [4, 3]),
+            (two_prompts, torch.randn(2, 3, 8, 8, device=torch_device), [4]),
+        ]
+        for input_ids, pixel_values, chunk_sizes in cases:
+            expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+            for chunk_size in chunk_sizes:
+                case = f"{pixel_values.shape[0]} images, batch {input_ids.shape[0]}, prefill_chunk_size={chunk_size}"
+                out = model.generate(
+                    input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=chunk_size
+                )
+                self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+                torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+    def test_chunked_prefill_raises_on_raw_image_inputs(self):
+        """
+        Raw image inputs cannot be split into chunks: a model that does not pre-encode them must raise when the prefill
+        is split, and still work when the prefill fits in one chunk.
+        """
+        model = self._get_tiny_llava()
+        model._supports_mm_encoder_outputs = lambda: False
+        input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        pixel_values = torch.randn(1, 3, 8, 8, device=torch_device)
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+
+        with self.assertRaisesRegex(ValueError, "pixel_values"):
+            model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=6)
+
+        expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+        out = model.generate(
+            input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=input_ids.shape[1]
+        )
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+    def test_chunked_prefill_keeps_token_type_ids(self):
+        """
+        Gemma3 and Gemma4 build a bidirectional mask over each image run from `token_type_ids` and `mm_token_type_ids`.
+        Every chunk of a chunked prefill must get them, or the image tokens of a later chunk attend causally only and
+        the output differs from the unchunked prefill.
+        """
+        set_seed(3)
+        config = Gemma3Config(
+            vision_config=SiglipVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=2,
+            ),
+            text_config=Gemma3TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                pad_token_id=0,
+            ),
+            mm_tokens_per_image=4,
+            boi_token_index=61,
+            eoi_token_index=62,
+            image_token_index=63,
+        )
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        image = [61] + [63] * 4 + [62]
+        # Chunks of 4: the image run fills the second chunk
+        later_image = torch.tensor([[1, 2, 3] + image + [5, 6, 7]], device=torch_device)
+        # Chunks of 8: one image run in each chunk
+        two_images = torch.tensor([[1] + image + [5, 6] + image + [7]], device=torch_device)
+        cases = [
+            (later_image, torch.randn(1, 3, 8, 8, device=torch_device), 4),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), 8),
+        ]
+        for input_ids, pixel_values, chunk_size in cases:
+            inputs = {"pixel_values": pixel_values, "token_type_ids": (input_ids == 63).long()}
+            expected = model.generate(input_ids, **inputs, **generation_kwargs)
+            out = model.generate(input_ids, **inputs, **generation_kwargs, prefill_chunk_size=chunk_size)
+            case = f"{pixel_values.shape[0]} images, prefill_chunk_size={chunk_size}"
+            self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+            torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+        config = Gemma4Config(
+            vision_config=Gemma4VisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                patch_size=2,
+                pooling_kernel_size=2,
+                position_embedding_size=16,
+            ),
+            text_config=Gemma4TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                vocab_size_per_layer_input=64,
+                hidden_size_per_layer_input=8,
+                use_bidirectional_attention="vision",
+                pad_token_id=0,
+            ),
+            boi_token_id=61,
+            eoi_token_id=62,
+            image_token_id=63,
+            video_token_id=60,
+            audio_token_id=59,
+        )
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        # A 4x4 grid of patches, pooled 2x2 into the 4 image tokens of the second chunk
+        grid = torch.stack([torch.arange(4).repeat(4), torch.arange(4).repeat_interleave(4)], dim=-1)
+        inputs = {
+            "pixel_values": torch.randn(1, 16, 12, device=torch_device),
+            "image_position_ids": grid[None].to(torch_device),
+            "mm_token_type_ids": (later_image == 63).long(),
+        }
+        expected = model.generate(later_image, **inputs, **generation_kwargs)
+        out = model.generate(later_image, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+    def test_chunked_prefill_slices_per_token_types(self):
+        """
+        Ernie4.5-VL-MoE routes each token by its `moe_mm_token_type_ids`, so every chunk of a chunked prefill must
+        get the types of its own tokens. CTRL drops `token_type_ids` in generation, so no chunk may get them back.
+        """
+        set_seed(3)
+        # Both layers route by type, so a wrong route of the first one reaches the later chunks through the cache
+        config = Ernie4_5_VLMoeConfig(
+            text_config={
+                "vocab_size": 64,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "num_key_value_heads": 1,
+                "rope_parameters": {"rope_type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
+                "moe_intermediate_size": [32, 32],
+                "mlp_layer_types": ["sparse", "sparse"],
+                "pad_token_id": 0,
+            },
+            vision_config={
+                "depth": 1,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_heads": 2,
+                "spatial_merge_size": 1,
+            },
+            image_start_token_id=5,
+            image_end_token_id=6,
+            image_token_id=7,
+            video_start_token_id=3,
+            video_end_token_id=4,
+            video_token_id=8,
+        )
+        model = Ernie4_5_VLMoeForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        # Chunks of 4: the 2x2 patches of the image fill the second chunk
+        input_ids = torch.tensor([[1, 9, 10, 5] + [7] * 4 + [6, 11, 12, 13]], device=torch_device)
+        inputs = {
+            "pixel_values": torch.randn(4, 3 * 14 * 14, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 2, 2]], device=torch_device),
+            "mm_token_type_ids": (input_ids == 7).long(),
+            "moe_mm_token_type_ids": torch.isin(input_ids, torch.tensor([5, 6, 7], device=torch_device)).long(),
+        }
+        expected = model.generate(input_ids, **inputs, **generation_kwargs)
+        out = model.generate(input_ids, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+        set_seed(3)
+        config = CTRLConfig(vocab_size=64, n_embd=16, dff=32, n_layer=1, n_head=2, n_positions=64, pad_token_id=0)
+        model = CTRLLMHeadModel(config).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 9, 10, 11, 12, 13, 14, 15, 16, 17]], device=torch_device)
+        token_type_ids = torch.tensor([[0, 0, 1, 1, 0, 0, 1, 1, 0, 0]], device=torch_device)
+        expected = model.generate(input_ids, token_type_ids=token_type_ids, **generation_kwargs)
+        out = model.generate(input_ids, token_type_ids=token_type_ids, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
@@ -606,7 +954,7 @@ class CacheIntegrationTest(unittest.TestCase):
             disable_compile=True,
         )
         # Sanity check: a cache was used
-        self.assertIsInstance(gen_out.past_key_values, Cache)
+        self.assertIsInstance(gen_out.cache, Cache)
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
@@ -617,12 +965,12 @@ class CacheIntegrationTest(unittest.TestCase):
         second = self.tokenizer(["A sequence: 1, 2, 3, 4, 5"], return_tensors="pt").to(self.model.device)
 
         cache = DynamicCache(config=self.model.config)
-        self.model.generate(**first, past_key_values=cache, max_new_tokens=10, do_sample=False)
+        self.model.generate(**first, cache=cache, max_new_tokens=10, do_sample=False)
 
         # Reuse the same cache for a different prompt, which is what `reset` is for.
         cache.reset()
         self.assertEqual(cache.get_seq_length(), 0)
-        reused = self.model.generate(**second, past_key_values=cache, max_new_tokens=10, do_sample=False)
+        reused = self.model.generate(**second, cache=cache, max_new_tokens=10, do_sample=False)
 
         # Before the fix, the reset kept the first prompt's states around, so this silently generated gibberish.
         expected = self.model.generate(**second, max_new_tokens=10, do_sample=False)
@@ -659,27 +1007,32 @@ class CacheIntegrationTest(unittest.TestCase):
             return_dict_in_generate=True,
         )
         # Sanity check: a cache was used
-        self.assertIsInstance(gen_out.past_key_values, Cache)
+        self.assertIsInstance(gen_out.cache, Cache)
         # At least one of the sequences requires multiple beam indices -> `reorder_cache` had to shift things around
         self.assertTrue(any(len(set(beams_in_sequence)) > 1 for beams_in_sequence in gen_out.beam_indices))
         # Confirm that the output matches expectations
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @parameterized.expand([("quanto"), ("hqq")])
+    @parameterized.expand([("quanto"), ("hqq"), ("fp8")])
     def test_quantized_cache_generation(self, backend):
-        """Tests that QuantizedCache works as expected for both `quanto` and `hqq` backends."""
+        """Tests that QuantizedCache works as expected for the `quanto`, `hqq` and `fp8` backends."""
+        # The group-wise integer backends share the same options, while `fp8` quantizes per-tensor
+        cache_config = {"backend": backend, "nbits": 4, "q_group_size": 16, "residual_length": 4}
         if backend == "quanto":
             if not is_optimum_quanto_available():
                 self.skipTest("Quanto is not available")
-            axis_key, axis_value = 0, 0
+            cache_config.update({"axis_key": 0, "axis_value": 0})
             # This output is taken from a run with the same parameters, and is known to be correct
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
         elif backend == "hqq":
             if not is_hqq_available():
                 self.skipTest("HQQ is not available")
-            axis_key, axis_value = 1, 1
+            cache_config.update({"axis_key": 1, "axis_value": 1})
             # HQQ has slightly different numerics
+            expected_generation = ["The cat's whiskers are also a sign of anxiety."]
+        elif backend == "fp8":
+            cache_config = {"backend": backend}
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
         else:
             return
@@ -692,18 +1045,11 @@ class CacheIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             return_dict_in_generate=True,
             cache_implementation="quantized",
-            cache_config={
-                "backend": backend,
-                "nbits": 4,
-                "q_group_size": 16,
-                "residual_length": 4,
-                "axis_key": axis_key,
-                "axis_value": axis_value,
-            },
+            cache_config=cache_config,
             disable_compile=True,
         )
 
-        self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+        self.assertIsInstance(gen_out.cache, QuantizedCache)
 
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
@@ -730,8 +1076,8 @@ class CacheIntegrationTest(unittest.TestCase):
                 cache_config=cache_config,
                 disable_compile=True,
             )
-            self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
-            self.assertEqual(len(gen_out.past_key_values.layers), self.model.config.num_hidden_layers)
+            self.assertIsInstance(gen_out.cache, QuantizedCache)
+            self.assertEqual(len(gen_out.cache.layers), self.model.config.num_hidden_layers)
             self.assertEqual(cache_config, expected_cache_config)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -793,24 +1139,45 @@ class CacheHardIntegrationTest(unittest.TestCase):
         input_length = inputs.input_ids.shape[1]
         score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
-        EXPECTED_GENERATION = (
-            "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
-            "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
-            "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
-            "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
-            "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
-            "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
-            "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
-            "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
-            "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
-            "disabilities. They have a long life span, and they can live for many years. They are also known for "
-            "their agility and gracefulness. They are often associated with mystery and independence. They are also "
-            "known for their ability to land on their feet when they fall. They"
-        )
-        EXPECTED_SCORE_SUM = 10834.7919921875
+        EXPECTED_GENERATION = Expectations(
+            {
+                (None, None): (
+                    "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
+                    "a face with a nose, eyes, and mouth. They have fur, they have claws, and they have whiskers. They are "
+                    "usually small, but some are big. They are usually gray or black or white, but they can be many colors. "
+                    "They have a soft body, they are usually quiet, but they can be loud. They are good at catching mice, "
+                    "and they are good at climbing trees. They are often kept as pets, and they are often seen in homes. "
+                    "They are independent, but they can be affectionate with their owners. They have a keen sense of smell, "
+                    "and they can hear sounds that humans cannot hear. They have a good sense of balance, which helps them "
+                    "to jump and climb. They are also good at hunting, and they can be trained to do tricks. They are often "
+                    "used as pets, and they are also used in some jobs, like hunting or as service animals for people with "
+                    "disabilities. They have a long life span, and they can live for many years. They are also known for "
+                    "their agility and gracefulness. They are often associated with mystery and independence. They are also "
+                    "known for their ability to land on their feet when they fall. They"
+                ),
+                ("cuda", (8, 6)): (
+                    "Here's everything I know about cats. Cats are mammals, they have fur, they have four legs, they "
+                    "have a tail, they have a face, they have a nose, they have a mouth, they have a body, they have a "
+                    "heart, they have a brain, they have a liver, they have a stomach, they have a kidney, they have a "
+                    "bladder, they have a skeleton, they have a circulatory system, they have a respiratory system, they "
+                    "have a digestive system, they have a nervous system, they have a muscular system, they have a "
+                    "skeletal system, they have a lymphatic system, they have a reproductive system, they have a "
+                    "excretory system, they have a endocrine system, they have a immune system, they have a "
+                    "integumentary system, they have a sensory system, they have a excretory system, they have a "
+                    "digestive system, they have a circulatory system, they have a respiratory system, they have a "
+                    "nervous system, they have a muscular system, they have a skeletal system, they have a lymphatic "
+                    "system, they have a reproductive system, they have a excretory system, they have a endocrine "
+                    "system, they have a immune system, they have a integumentary system, they have a sensory system. "
+                    "\n\nOkay, so I have"
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_SCORE_SUM = Expectations(
+            {(None, None): 10834.7919921875, ("cuda", (8, 6)): 11565.626953125}
+        ).get_expectation()
         self.assertEqual(decoded[0], EXPECTED_GENERATION)
         self.assertAlmostEqual(score_sum.item(), EXPECTED_SCORE_SUM, places=2)
-        self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
+        self.assertIsInstance(gen_out.cache, DynamicCache)  # sanity check
 
     @parameterized.expand([("eager"), ("sdpa")])
     @require_torch_accelerator
@@ -839,21 +1206,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
+            self.assertIsInstance(gen_out.cache, DynamicCache)  # sanity check
 
         set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
+            self.assertIsInstance(gen_out.cache, StaticCache)  # sanity check
 
         set_seed(42)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
         decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
-            self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
+            self.assertIsInstance(gen_out.cache, StaticCache)  # sanity check
 
     @require_torch_accelerator
     @slow
@@ -872,19 +1239,34 @@ class CacheHardIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             do_sample=False,
             cache_implementation="static",
+            disable_compile=True,  # we don't care about it and faster without
             prefill_chunk_size=2,
             return_dict_in_generate=True,
         )
 
         self.assertEqual(gen_out.sequences.shape[-1], inputs.input_ids.shape[-1] + 10)
-        cache = gen_out.past_key_values
+        cache = gen_out.cache
         self.assertIsInstance(cache, StaticCache)
 
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
         text_config = model.config.get_text_config(decoder=True)
-        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
-        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
+        expected_head_dims = [
+            text_config.per_layer_config[i].head_dim
+            for i, layer in enumerate(cache.layers)
+            if not isinstance(layer, DummyLayer)
+        ]
+        self.assertEqual(
+            [layer.keys.shape[-1] for layer in cache.layers if not isinstance(layer, DummyLayer)], expected_head_dims
+        )
         self.assertGreater(len(set(expected_head_dims)), 1)
+        # Make sure the dummy layers are expected to be there
+        self.assertTrue(
+            all(
+                text_config.kv_sharing_modes[i] == "reuse"
+                for i, layer in enumerate(cache.layers)
+                if isinstance(layer, DummyLayer)
+            )
+        )
 
     @require_torch_accelerator
     @slow
@@ -935,26 +1317,33 @@ class CacheHardIntegrationTest(unittest.TestCase):
         inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(torch_device)
         # This is the common prompt cached, we need to run forward without grad to be able to copy
         with torch.no_grad():
-            prompt_cache = model(**inputs_initial_prompt, past_key_values=prompt_cache).past_key_values
+            prompt_cache = model(**inputs_initial_prompt, cache=prompt_cache).cache
 
         prompts = ["Help me to write a blogpost about travelling.", "What is the capital of France?"]
         responses = []
         for prompt in prompts:
             new_inputs = tokenizer(INITIAL_PROMPT + prompt, return_tensors="pt").to(torch_device)
-            past_key_values = copy.deepcopy(prompt_cache)
-            outputs = model.generate(
-                **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
-            )
+            cache = copy.deepcopy(prompt_cache)
+            outputs = model.generate(**new_inputs, cache=cache, max_new_tokens=40, disable_compile=True)
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
-        EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
-            "wonderful way to explore the world, learn about different cultures, and create unforgettable "
-            "memories. Whether you're a seasoned traveler or someone",
-            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
-            " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
-        ]
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore the world, learn about different cultures, and create unforgettable "
+                "memories. Whether you're a seasoned traveler or someone",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+            ("cuda", (8, 6)): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore new places, cultures, and experiences. Whether you are a seasoned "
+                "traveler or a first-time adventurer, there is always something",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+        }).get_expectation()  # fmt: skip
 
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 
@@ -975,12 +1364,12 @@ class CacheHardIntegrationTest(unittest.TestCase):
         model_inputs = tokenizer(["foo bar"] * num_gpus, return_tensors="pt").to(model.device)
 
         # w/o DP
-        no_parallelism_cache = model(**model_inputs).past_key_values
+        no_parallelism_cache = model(**model_inputs).cache
         self.assertIsInstance(no_parallelism_cache, DynamicCache)
 
         # w DP
         model = torch.nn.DataParallel(model)
-        parallelism_cache = model(**model_inputs).past_key_values
+        parallelism_cache = model(**model_inputs).cache
         self.assertIsInstance(parallelism_cache, DynamicCache)
 
         # Check that the caches are the same
@@ -1036,8 +1425,8 @@ class CacheHardIntegrationTest(unittest.TestCase):
             max_cache_len=requested_max_cache_len,
             return_dict_in_generate=True,
         )
-        self.assertIsInstance(out.past_key_values, StaticCache)
-        self.assertEqual(out.past_key_values.get_max_length(), requested_max_cache_len)
+        self.assertIsInstance(out.cache, StaticCache)
+        self.assertEqual(out.cache.get_max_length(), requested_max_cache_len)
 
     def test_chunked_prefill_initializes_static_cache_eagerly(self):
         """
@@ -1146,10 +1535,10 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
     def test_export_preserves_sliding_cache_behavior(self):
         # Update both layer types so export must preserve their different cache behavior.
         class CacheUpdateModule(torch.nn.Module):
-            def forward(self, new_states, past_key_values):
-                past_key_values.update(new_states, new_states, layer_idx=0)
-                past_key_values.update(new_states, new_states, layer_idx=1)
-                return past_key_values
+            def forward(self, new_states, cache):
+                cache.update(new_states, new_states, layer_idx=0)
+                cache.update(new_states, new_states, layer_idx=1)
+                return cache
 
         # Exceed the retained cache length so sliding and unbounded updates produce different outputs.
         new_states = torch.arange(10.0).reshape(1, 1, 5, 2)
@@ -1164,12 +1553,10 @@ class DynamicCacheExportPytreeTest(unittest.TestCase):
         exported_program = torch.export.export(
             CacheUpdateModule(),
             (),
-            {"new_states": new_states, "past_key_values": DynamicCache(config=cache_config)},
+            {"new_states": new_states, "cache": DynamicCache(config=cache_config)},
             strict=False,
         )
-        exported_cache = exported_program.module()(
-            new_states=new_states, past_key_values=DynamicCache(config=cache_config)
-        )
+        exported_cache = exported_program.module()(new_states=new_states, cache=DynamicCache(config=cache_config))
         eager_cache = CacheUpdateModule()(new_states, DynamicCache(config=cache_config))
 
         self.assertEqual(len(exported_cache.layers), 2)
@@ -1202,10 +1589,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(config=model.config),
+            cache=DynamicCache(config=model.config),
             use_cache=True,
         )
-        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
+        self.assertTrue(len(res.cache) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
             3,
@@ -1218,15 +1605,15 @@ class CacheExportIntegrationTest(unittest.TestCase):
             ),
         )
 
-        past_key_values_eager = DynamicCache(config=model.config)
+        cache_eager = DynamicCache(config=model.config)
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values_eager,
+            cache=cache_eager,
             use_cache=True,
         )
         self.assertTrue(torch.allclose(res.logits, res_eager.logits, atol=1e-5))
-        for l1, l2 in zip(res.past_key_values.layers, res_eager.past_key_values.layers):
+        for l1, l2 in zip(res.cache.layers, res_eager.cache.layers):
             self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
@@ -1250,10 +1637,10 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(config=model.config),
+            cache=DynamicCache(config=model.config),
             use_cache=True,
         )
-        self.assertTrue(len(res.past_key_values) == model.config.num_hidden_layers)
+        self.assertTrue(len(res.cache) == model.config.num_hidden_layers)
         self.assertEqual(2 * model.config.num_hidden_layers + 1, len(ep.graph_signature.output_specs))
         self.assertEqual(
             3,
@@ -1269,18 +1656,18 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=DynamicCache(config=model.config),
+            cache=DynamicCache(config=model.config),
             use_cache=True,
         )
-        past_key_values_eager = res_eager.past_key_values
-        past_key_values = res.past_key_values
+        cache_eager = res_eager.cache
+        cache = res.cache
 
         shapes = torch.export.ShapesCollection()
         dyn = torch.export.Dim.DYNAMIC(max=512)
 
-        for ix in range(len(past_key_values)):
-            shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)
-            shapes[past_key_values.layers[ix].values] = (None, None, dyn, None)
+        for ix in range(len(cache)):
+            shapes[cache.layers[ix].keys] = (None, None, dyn, None)
+            shapes[cache.layers[ix].values] = (None, None, dyn, None)
 
         ep_second = torch.export.export(
             model,
@@ -1288,7 +1675,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             {
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "use_cache": True,
             },
             strict=False,
@@ -1297,31 +1684,31 @@ class CacheExportIntegrationTest(unittest.TestCase):
         res_export = ep_second.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=True,
         )
         # It should work with variable len
         res_export_2 = ep_second.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=res_export.past_key_values,
+            cache=res_export.cache,
             use_cache=True,
         )
 
         res_eager = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values_eager,
+            cache=cache_eager,
             use_cache=True,
         )
         res_eager_2 = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=res_eager.past_key_values,
+            cache=res_eager.cache,
             use_cache=True,
         )
 
-        for l1, l2 in zip(res_export_2.past_key_values.layers, res_eager_2.past_key_values.layers):
+        for l1, l2 in zip(res_export_2.cache.layers, res_eager_2.cache.layers):
             self.assertTrue(torch.allclose(l1.keys, l2.keys, atol=1e-5))
             self.assertTrue(torch.allclose(l1.values, l2.values, atol=1e-5))
 
@@ -2072,6 +2459,59 @@ class CacheCroppingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
                 layer.crop(self.seq_len - 3)
+
+    def test_crop_static_layers(self):
+        """Test that `crop` rolls the write offset of the static layers back, in-place"""
+        keys = torch.rand(*self.attention_shape)
+        values = torch.rand(*self.attention_shape)
+        # `max_cache_len <= sliding_window`, so the sliding layer never slides and stays croppable
+        layer_kwargs = {"max_cache_len": self.seq_len, "sliding_window": self.seq_len}
+        for layer_cls in (StaticLayer, StaticSlidingWindowLayer):
+            layer = layer_cls(**layer_kwargs)
+            self.assertTrue(layer.is_croppable)
+
+            # Prefill, then draft 3 more tokens
+            layer.update(keys[..., :-3, :], values[..., :-3, :])
+            layer.update(keys[..., -3:, :], values[..., -3:, :])
+            self.assertEqual(layer.get_seq_length(), self.seq_len)
+            keys_data_ptr, values_data_ptr = layer.keys.data_ptr(), layer.values.data_ptr()
+
+            # Reject the 3 drafted tokens
+            layer.crop(-3)
+
+            # The backing tensors keep their shape and their static address, only the offset moved back
+            self.assertEqual(layer.get_seq_length(), self.seq_len - 3)
+            self.assertEqual(layer.keys.shape[-2], self.seq_len)
+            self.assertEqual(layer.values.shape[-2], self.seq_len)
+            self.assertEqual(layer.keys.data_ptr(), keys_data_ptr)
+            self.assertEqual(layer.values.data_ptr(), values_data_ptr)
+
+            # The next `update` overwrites the rejected slots, so the live states match a run that never drafted
+            new_keys, new_values = (
+                torch.rand(*self.attention_shape[:-2], 1, 32),
+                torch.rand(*self.attention_shape[:-2], 1, 32),
+            )
+            layer.update(new_keys, new_values)
+            live = layer.get_seq_length()
+            self.assertTrue((layer.keys[..., : live - 1, :] == keys[..., : self.seq_len - 3, :]).all())
+            self.assertTrue((layer.values[..., : live - 1, :] == values[..., : self.seq_len - 3, :]).all())
+            self.assertTrue((layer.keys[..., live - 1 : live, :] == new_keys).all())
+            self.assertTrue((layer.values[..., live - 1 : live, :] == new_values).all())
+
+    def test_static_sliding_window_layer_is_croppable_only_without_eviction(self):
+        """Test that a static sliding layer only advertises itself as croppable while the window cannot slide"""
+        self.assertTrue(StaticSlidingWindowLayer(max_cache_len=10, sliding_window=10).is_croppable)
+        self.assertTrue(StaticSlidingWindowLayer(max_cache_len=10, sliding_window=20).is_croppable)
+        # Here the window slides, so the evicted states cannot be recovered by `crop`
+        self.assertFalse(StaticSlidingWindowLayer(max_cache_len=20, sliding_window=10).is_croppable)
+
+    def test_crop_static_layers_with_positive_value(self):
+        """Test that `crop` on the static layers raises when called with a positive value"""
+        for layer_cls in (StaticLayer, StaticSlidingWindowLayer):
+            layer = layer_cls(max_cache_len=self.seq_len, sliding_window=self.seq_len)
+            layer.update(torch.rand(*self.attention_shape), torch.rand(*self.attention_shape))
+            with self.assertRaises(RuntimeError):
+                layer.crop(3)
 
     def test_update_with_recording_returns_advertised_kv_width(self):
         """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""

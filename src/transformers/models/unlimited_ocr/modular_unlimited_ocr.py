@@ -28,7 +28,7 @@ from ...cache_utils import (
     DynamicSlidingWindowLayer,
     StaticSlidingWindowLayer,
 )
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
@@ -41,6 +41,7 @@ from ...masking_utils import (
     or_masks,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
@@ -52,6 +53,7 @@ from ...utils import (
     logging,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.configuration_clip import CLIPVisionConfig
@@ -211,7 +213,7 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
 
 
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
-    valid_processor_kwargs = AttributeError()
+    images_kwargs = AttributeError()
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "num_local_patches", "patches_grid"]
 
     def __init__(
@@ -377,8 +379,8 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=UnlimitedOcrSamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=UnlimitedOcrVisionEncoderConfig),
+        "sam_config": UnlimitedOcrSamVisionConfig,
+        "encoder_config": UnlimitedOcrVisionEncoderConfig,
     }
 
 
@@ -465,8 +467,8 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
 
     model_type = "unlimited_ocr"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=UnlimitedOcrVisionConfig),
-        "text_config": SubConfigSpec(config_class=UnlimitedOcrTextConfig),
+        "vision_config": UnlimitedOcrVisionConfig,
+        "text_config": UnlimitedOcrTextConfig,
     }
 
     def __post_init__(self, **kwargs):
@@ -602,6 +604,7 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
 )
 class UnlimitedOcrVisionEncoder(CLIPVisionModel):
     main_input_name = "patch_embeds"
+    config: UnlimitedOcrVisionEncoderConfig
     _input_embed_layer = AttributeError()
     _can_record_outputs = {
         "hidden_states": UnlimitedOcrEncoderLayer,
@@ -629,6 +632,8 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
 
 @auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
+    config: UnlimitedOcrVisionConfig
+
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         del self.query_768_resolution
@@ -1012,12 +1017,26 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
 
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was.
+        """
+        # We don't know yet, so let's be extra careful
+        if self.prefill_length is None:
+            return False
+        return self.prefill_max_cache_len <= self.prefill_length
+
+    # We never want to set it, but this is needed as the parent tries it - so just do nothing
+    @is_croppable.setter
+    def is_croppable(self, x): ...
+
 
 def create_reference_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1026,10 +1045,8 @@ def create_reference_sliding_window_causal_mask(
     allow_is_causal_skip: bool = False,
 ) -> torch.Tensor | BlockMask | None:
     layer = None
-    if past_key_values is not None:
-        layer = next(
-            (layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention"), None
-        )
+    if cache is not None:
+        layer = next((layer for layer in cache.layers if layer._layer_type == "reference_sliding_attention"), None)
 
     if layer is None:
         prefill_length = float("inf")
@@ -1054,7 +1071,7 @@ def create_reference_sliding_window_causal_mask(
         config=config,
         inputs_embeds=inputs_embeds,
         attention_mask=attention_mask,
-        past_key_values=past_key_values,
+        cache=cache,
         position_ids=position_ids,
         or_mask_function=prefill_mask_function,
         and_mask_function=and_mask_function,
@@ -1065,13 +1082,14 @@ def create_reference_sliding_window_causal_mask(
 
 
 class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -1081,12 +1099,12 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1095,7 +1113,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
 
@@ -1113,7 +1131,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -1121,7 +1139,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1144,14 +1162,14 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         patches_grid: list[list[int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> "UnlimitedOcrModelOutputWithPooling":
         r"""
-        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
@@ -1177,7 +1195,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             per_image_local = [None] * batch_size
 
         hidden_size = global_features.shape[-1]
-        newline = self.image_newline[None, None, :]
+        newline = self.image_newline[None, None, :].to(global_features.device)
         num_queries_global = int(global_features.shape[1] ** 0.5)
 
         # Different from DeepseekOcr2: each row of image patches gets a newline token appended.
@@ -1211,23 +1229,24 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             **local_outputs,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         patches_grid: list[list[int]] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UnlimitedOcrModelOutputWithPast:
         r"""
-        pixel_values_local (`torch.FloatTensor`, *optional*):
+        pixel_values_local (`torch.Tensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]`, *optional*):
             Number of local patches per image in the batch.
@@ -1257,19 +1276,12 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
-        return UnlimitedOcrModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return UnlimitedOcrModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 # Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
@@ -1289,16 +1301,16 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         patches_grid: list[list[int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
             The tensors corresponding to the global view input images.
-        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
@@ -1315,17 +1327,18 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         patches_grid: list[list[int]] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1333,7 +1346,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UnlimitedOcrCausalLMOutputWithPast:
         r"""
-        pixel_values_local (`torch.FloatTensor`, *optional*):
+        pixel_values_local (`torch.Tensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]`, *optional*):
             Number of local patches per image in the batch.
@@ -1406,7 +1419,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             patches_grid=patches_grid,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1414,8 +1427,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None
@@ -1430,10 +1442,10 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         return UnlimitedOcrCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

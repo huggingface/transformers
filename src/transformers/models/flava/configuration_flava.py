@@ -17,7 +17,7 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -236,10 +236,10 @@ class FlavaConfig(PreTrainedConfig):
 
     model_type = "flava"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=FlavaTextConfig),
-        "image_config": SubConfigSpec(config_class=FlavaImageConfig),
-        "multimodal_config": SubConfigSpec(config_class=FlavaMultimodalConfig),
-        "image_codebook_config": SubConfigSpec(config_class=FlavaImageCodebookConfig),
+        "text_config": FlavaTextConfig,
+        "image_config": FlavaImageConfig,
+        "multimodal_config": FlavaMultimodalConfig,
+        "image_codebook_config": FlavaImageCodebookConfig,
     }
 
     image_config: dict[str, Any] | PreTrainedConfig | None = None

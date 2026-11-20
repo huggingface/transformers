@@ -18,14 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 import torch
 from torch import nn
 
+from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModel
 from .configuration_colmodernvbert import ColModernVBertConfig
@@ -41,34 +44,38 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
 
 @auto_docstring(
     custom_intro="""
-    Base class for ColModernVBert embeddings output.
+    Base class for ColModernVBert embeddings output. Contains the outputs of the language model backbone and the
+    outputs of vision encoder.
     """
 )
 @dataclass
-class ColModernVBertForRetrievalOutput(ModelOutput):
+class ColModernVBertForRetrievalOutput(MultimodalModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True` and `pixel_values` are provided):
-        Tuple of `torch.FloatTensor` (one for the output of the image modality projection + one for the output of each layer) of shape
-        `(batch_size, num_channels, image_size, image_size)`.
-        Hidden-states of the image encoder at the output of each layer plus the initial modality projection outputs.
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    cache: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 @auto_docstring(
@@ -107,7 +114,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ColModernVBertForRetrievalOutput:
@@ -131,9 +138,10 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
         return ColModernVBertForRetrievalOutput(
             embeddings=embeddings,
+            cache=vlm_output.cache,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_output.image_hidden_states,
+            image_outputs=vlm_output.image_outputs,
         )
 
 

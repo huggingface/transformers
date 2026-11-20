@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -124,7 +124,6 @@ class Molmo2TextConfig(PreTrainedConfig):
 
     model_type = "molmo2_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -193,9 +192,9 @@ class Molmo2Config(PreTrainedConfig):
     model_type = "molmo2"
     attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Molmo2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Molmo2VisionConfig),
-        "adapter_config": SubConfigSpec(config_class=Molmo2AdapterConfig),
+        "text_config": Molmo2TextConfig,
+        "vision_config": Molmo2VisionConfig,
+        "adapter_config": Molmo2AdapterConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

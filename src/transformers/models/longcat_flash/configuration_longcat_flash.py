@@ -54,7 +54,6 @@ class LongcatFlashConfig(PreTrainedConfig):
     """
 
     model_type = "longcat_flash"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "num_experts_per_tok": "moe_topk",

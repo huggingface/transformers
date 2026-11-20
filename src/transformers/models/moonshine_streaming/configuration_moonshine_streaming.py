@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -98,9 +98,8 @@ class MoonshineStreamingConfig(PreTrainedConfig):
 
     model_type = "moonshine_streaming"
     sub_configs_defaults = {
-        "encoder_config": SubConfigSpec(config_class=MoonshineStreamingEncoderConfig),
+        "encoder_config": MoonshineStreamingEncoderConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     encoder_config: dict | MoonshineStreamingEncoderConfig | None = None
     vocab_size: int = 32768

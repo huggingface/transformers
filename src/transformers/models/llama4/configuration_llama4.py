@@ -16,7 +16,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -107,7 +107,6 @@ class Llama4TextConfig(PreTrainedConfig):
     """
 
     model_type = "llama4_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -124,18 +123,8 @@ class Llama4TextConfig(PreTrainedConfig):
         "layers.*.feed_forward.up_proj": "colwise",
         "layers.*.feed_forward.down_proj": "rowwise",
     }
-    base_model_ep_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",  # col because not linear
-        "layers.*.feed_forward.gate_proj": "colwise",
-        "layers.*.feed_forward.up_proj": "colwise",
-        "layers.*.feed_forward.down_proj": "rowwise",
-        "layers.*.feed_forward.router": "ep_router",
-    }
+    # No `base_model_ep_plan`: the experts take every token pre-scaled by its router score rather than the routing,
+    # so there is nothing to dispatch. They shard with the tensor-parallel plan above.
 
     vocab_size: int = 202048
     hidden_size: int = 5120
@@ -197,7 +186,8 @@ class Llama4TextConfig(PreTrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
+                "chunked_attention" if no_rope and self.attention_chunk_size is not None else "full_attention"
+                for no_rope in self.no_rope_layers
             ]
 
         super().__post_init__(**kwargs)
@@ -233,8 +223,8 @@ class Llama4Config(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Llama4TextConfig),
-        "vision_config": SubConfigSpec(config_class=Llama4VisionConfig),
+        "text_config": Llama4TextConfig,
+        "vision_config": Llama4VisionConfig,
     }
 
     base_model_tp_plan = {

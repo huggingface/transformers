@@ -35,6 +35,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto import AutoConfig, AutoTokenizer
+from ..models.auto.auto_factory import _BaseAutoModelClass
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
@@ -236,6 +237,10 @@ def load_model(
         all_traceback = {}
         for model_class in class_tuple:
             kwargs = model_kwargs.copy()
+            if not issubclass(model_class, _BaseAutoModelClass):
+                # Only the Auto classes understand `code_revision`, because they're the ones that load remote code.
+                # Concrete classes from `config.architectures` would pass it to the model `__init__` and crash
+                kwargs.pop("code_revision", None)
 
             try:
                 model = model_class.from_pretrained(model, **kwargs)
@@ -706,8 +711,9 @@ def build_pipeline_init_args(
             Device on which the pipeline is allocated. When left unset, the pipeline is placed on the first available
             accelerator (CUDA, MPS, XPU, ...) and falls back to CPU only when none is available; the model is moved
             there automatically. Pass `device="cpu"` (or `-1`) to force CPU, a positive ordinal or `"cuda:1"` to select
-            a specific accelerator, or a native `torch.device`/`str`. This argument cannot be combined with a model
-            already loaded via `accelerate` (i.e. one with an `hf_device_map`).
+            a specific accelerator, or a native `torch.device`/`str`. If `device` is left unset and `pipeline()` loads
+            the model on a single device with `device_map`, it stays on that device. This argument cannot be combined
+            with a model already loaded via `accelerate` (i.e. one with an `hf_device_map`).
         dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
             Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
             model in the dtype it was saved in (read from the checkpoint's `config.dtype`, otherwise inferred from the

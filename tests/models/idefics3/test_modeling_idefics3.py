@@ -25,6 +25,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -33,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -51,16 +53,16 @@ if is_vision_available():
     from PIL import Image
 
 
-class Idefics3VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        is_training=True,
-        batch_size=2,
-        scale_factor=2,
-        num_images=2,
-        seq_length=7,
-        vision_config={
+class Idefics3VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+        "batch_size": 2,
+        "scale_factor": 2,
+        "num_images": 2,
+        "seq_length": 7,
+        "vision_config": {
             "image_size": 16,
             "patch_size": 4,
             "hidden_size": 32,
@@ -71,7 +73,7 @@ class Idefics3VisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        text_config={
+        "text_config": {
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
@@ -91,33 +93,35 @@ class Idefics3VisionText2TextModelTester:
             "sliding_window": 32,
             "attention_dropout": 0.0,
         },
-        use_cache=False,
-        tie_word_embeddings=False,
+        "use_cache": False,
+        "tie_word_embeddings": False,
         # should be smaller than vocab size - 16 to survive clamping
-        image_token_id=57,
-    ):
-        self.parent = parent
-        self.pad_token_id = text_config["pad_token_id"]
-        self.is_training = is_training
-        self.batch_size = batch_size
-        self.num_images = num_images
-        self.scale_factor = scale_factor
-        self.image_seq_length = (
-            int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (self.scale_factor**2))
-            * self.num_images
-        )
-        self.seq_length = seq_length + self.image_seq_length
-        self.use_cache = use_cache
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        # Hack - add properties here so use common tests
-        self.vocab_size = text_config["vocab_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
+        "image_token_id": 57,
+    }
 
-        self.vision_config = vision_config
-        self.text_config = text_config
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["image_seq_length"] = (
+            int(
+                (values["vision_config"]["image_size"] // values["vision_config"]["patch_size"]) ** 2
+                / values["scale_factor"] ** 2
+            )
+            * values["num_images"]
+        )
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        # Hack - add properties here so use common tests
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Idefics3Config(
@@ -166,6 +170,8 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     Model tester for `Idefics3`.
     """
 
+    model_tester_class = Idefics3VisionText2TextModelTester
+
     all_model_classes = (Idefics3Model,) if is_torch_available() else ()
     # Idefics3 merges batch_size and num_frames in the first output dimension
     skip_test_image_features_output_shape = True
@@ -204,6 +210,8 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
     Model tester for `Idefics3ForConditionalGeneration`.
     """
+
+    model_tester_class = Idefics3VisionText2TextModelTester
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
@@ -269,7 +277,6 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test(self):
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
@@ -284,19 +291,26 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=10)
-        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_texts = self.processor.batch_decode(
+            generated_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
-        expected_generated_text = "<image>In this image, we see the Statue of Liberty, which is located on Liberty"
+        expected_generated_text = Expectations(
+            {
+                ("cuda", None): " the Statue of Liberty, which is a colossal ne",
+                ("rocm", (9, 4)): " the Statue of Liberty, which is a symbol of",
+            }
+        ).get_expectation()
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
     @require_bitsandbytes
-    @unittest.skip("multi-gpu tests are disabled for now")
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics3ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/Idefics3-8B-Llama3",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -304,9 +318,15 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         text = ["<image>In this image, we see", "bla, bla <image><image>"]
         images = [[self.image1], [self.image2, self.image3]]
         inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs.to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=10)
-        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_texts = self.processor.batch_decode(
+            generated_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
-        expected_generated_text = "<image>In this image, we see the Statue of Liberty, trees, buildings, water"
-        self.assertEqual(generated_texts[0], expected_generated_text)
+        expected_generated_texts = [
+            " the Statue of Liberty, trees, buildings, water",
+            " The golden gate bridge is in the image.",
+        ]
+        self.assertEqual(generated_texts, expected_generated_texts)

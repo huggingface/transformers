@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -53,16 +54,16 @@ if is_vision_available():
     from PIL import Image
 
 
-class SmolVLMVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        is_training=True,
-        batch_size=2,
-        seq_length=7,
-        scale_factor=2,
-        num_images=2,
-        vision_config={
+class SmolVLMVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+        "batch_size": 2,
+        "seq_length": 7,
+        "scale_factor": 2,
+        "num_images": 2,
+        "vision_config": {
             "image_size": 24,  # 9 image tokens per image, not a multiple of patch_size
             "patch_size": 4,
             "hidden_size": 32,
@@ -73,7 +74,7 @@ class SmolVLMVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        text_config={
+        "text_config": {
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
@@ -93,32 +94,34 @@ class SmolVLMVisionText2TextModelTester:
             "sliding_window": 32,
             "attention_dropout": 0.0,
         },
-        use_cache=False,
-        tie_word_embeddings=False,
-        image_token_id=57,
-    ):
-        self.parent = parent
-        self.is_training = is_training
-        self.batch_size = batch_size
-        self.num_images = num_images
-        self.scale_factor = scale_factor
-        self.image_seq_length = (
-            int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (self.scale_factor**2))
-            * self.num_images
-        )
-        self.seq_length = seq_length + self.image_seq_length
-        self.use_cache = use_cache
-        self.image_token_id = image_token_id
-        self.pad_token_id = text_config["pad_token_id"]
-        self.tie_word_embeddings = tie_word_embeddings
-        # Hack - add properties here so use common tests
-        self.vocab_size = text_config["vocab_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
+        "use_cache": False,
+        "tie_word_embeddings": False,
+        "image_token_id": 57,
+    }
 
-        self.vision_config = vision_config
-        self.text_config = text_config
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["image_seq_length"] = (
+            int(
+                (values["vision_config"]["image_size"] // values["vision_config"]["patch_size"]) ** 2
+                / values["scale_factor"] ** 2
+            )
+            * values["num_images"]
+        )
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        # Hack - add properties here so use common tests
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return SmolVLMConfig(
@@ -168,6 +171,8 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     Model tester for `SmolVLM`.
     """
 
+    model_tester_class = SmolVLMVisionText2TextModelTester
+
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
     skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
@@ -206,6 +211,8 @@ class SmolVLMForConditionalGenerationModelTest(
     """
     Model tester for `SmolVLMForConditionalGeneration`.
     """
+
+    model_tester_class = SmolVLMVisionText2TextModelTester
 
     all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
@@ -292,7 +299,13 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(**inputs, max_new_tokens=9)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue,"
+        expected_generated_text = Expectations(
+            {
+                (None, None): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue,",
+                ("cuda", (8, 6)): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue of",
+                ("rocm", (9, 4)): "\n\n\n\nIn this image, we see the Statue of Liberty, a green statue of",
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts[0], expected_generated_text)
 
     @slow
