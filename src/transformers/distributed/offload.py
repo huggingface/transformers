@@ -102,7 +102,9 @@ class _Pool:
     def materialize(self, device):
         if self.banks is None:
             self.banks = {
-                name: torch.empty(self.num_slots, *shape, dtype=dtype, device=device)
+                name: torch.zeros(
+                    self.num_slots, *shape, dtype=dtype, device=device
+                )  # unfilled slots: zeros, never NaN
                 for name, (shape, dtype) in self.layout.items()
             }
         # bf16 / fp32 banks, run by the experts interface; packed (quantized) banks have their own kernels
@@ -274,13 +276,17 @@ class ExpertsOffloadStore:
         self.readers.setdefault(module_name, []).append(_ExpertReader(target_name, mapping, reads, hf_quantizer))
 
     def _read(self, layer, expert):
-        """One expert's rows, read with `pread` straight to the device (MPS, CPU)."""
+        """One expert's rows in host memory (MPS, CPU). Runs on an io thread, so it never touches the device: the
+        loader's own slices may be MPS handles, and MPS work issued from several threads at once is not safe. The main
+        thread copies the rows into the slot (`_install`); on unified memory that is one memcpy."""
         self.reads += 1
-        return {
-            param: slice_[rows].to(self.device, dtype)[0]
-            for reader in self.readers[layer]
-            for param, slice_, rows, dtype, _ in reader.sources(expert)
-        }
+        out = {}
+        for reader in self.readers[layer]:
+            for param, slice_, rows, dtype, key in reader.sources(expert):
+                if self.key_files is not None:
+                    slice_ = self._handle(self.key_files[key]).get_slice(key)  # a CPU handle
+                out[param] = slice_[rows].to("cpu", dtype)[0]
+        return out
 
     def fetch(self, layer, experts):
         """Start reading the `experts` of `layer` that are neither resident nor already being read; returns the
@@ -573,13 +579,17 @@ class _RowReader:
 
     def __init__(self, reads: dict[str, list], device):
         entries = [entry for slices in reads.values() for entry in slices]
-        self.slices = [entry for entry in entries if len(entry[0].get_shape()) >= 1]
-        scales = [entry for entry in entries if len(entry[0].get_shape()) == 0]
+        # The table's own rank (e.g. 2-d rows); lower-rank sources are its dequantization scales (FP8 `weight_scale_inv`)
+        rank = max(len(entry[0].get_shape()) for entry in entries)
+        self.slices = [entry for entry in entries if len(entry[0].get_shape()) == rank]
+        scales = [
+            s for slice_, *_ in entries if len(slice_.get_shape()) < rank for s in slice_[...].flatten().tolist()
+        ]
         if scales and len(scales) not in (1, len(self.slices)):
             raise ValueError(
                 f"Cannot stream rows of {list(reads)}: {len(scales)} scales for {len(self.slices)} shards"
             )
-        self.scales = [slice_[...].float().item() for slice_, *_ in scales]  # a few scalars: read once
+        self.scales = scales  # a few values: read once
         widths = {tuple(slice_.get_shape()[1:]) for slice_, *_ in self.slices}
         if len(widths) != 1:
             raise ValueError(f"Cannot stream rows of {list(reads)}: their sources differ in row shape {widths}")

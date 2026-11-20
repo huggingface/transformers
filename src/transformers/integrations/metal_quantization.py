@@ -222,19 +222,21 @@ class MetalExperts(nn.Module):
     def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
         num_tokens, top_k = top_k_index.shape
         ids = top_k_index.reshape(-1)
-        weights = top_k_weights.reshape(-1) * (ids < self.num_experts)  # sentinels contribute zero
+        valid = ids < self.num_experts  # sentinels (expert parallel, streamed misses) contribute zero
+        weights = top_k_weights.reshape(-1)
         ids = ids.clamp(max=self.num_experts - 1).to(torch.int32)
         rows = torch.arange(num_tokens * top_k, device=ids.device) // top_k
         # MLX picks its batched kernel for sorted ids (prefill); decode rows stay in place
         sorted_indices = ids.numel() >= 16
         if sorted_indices:
             ids, order = torch.sort(ids, stable=True)
-            rows, weights = rows[order], weights[order]
+            rows, weights, valid = rows[order], weights[order], valid[order]
         x = hidden_states[rows]
         out = self._qmm(
             self._apply_gate(self._qmm(x, "gate_up_proj", ids, sorted_indices)), "down_proj", ids, sorted_indices
         )
-        out = out * weights[:, None].to(out.dtype)
+        # `where`, not a product: a sentinel's clamped slot may hold anything (an unfilled pool slot), even NaN
+        out = torch.where(valid[:, None], out * weights[:, None].to(out.dtype), 0)
         return torch.zeros_like(hidden_states).index_add_(0, rows, out)
 
 
