@@ -27,6 +27,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -824,7 +825,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
 
 
 @auto_docstring
-class ChameleonModel(ChameleonPreTrainedModel):
+class ChameleonModel(ChameleonPreTrainedModel, MultimodalMixin):
     def __init__(self, config: ChameleonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -864,7 +865,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
     @auto_docstring(
         custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -875,6 +876,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
         bpe_tokens = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens).view(batch_size, -1)
         vqmodel_outputs.pooler_output = self.get_input_embeddings()(bpe_tokens)
+        vqmodel_outputs.pooler_output, vqmodel_outputs.split_sizes = flatten_items(vqmodel_outputs.pooler_output)
         return vqmodel_outputs
 
     def get_placeholder_mask(
@@ -905,6 +907,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
     @capture_outputs
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -928,7 +931,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
@@ -985,7 +988,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
     Chameleon Model with a head on top used for outputting logits for next token prediction.
     """
 )
-class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixin):
+class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: ChameleonConfig):
@@ -999,12 +1002,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
 
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

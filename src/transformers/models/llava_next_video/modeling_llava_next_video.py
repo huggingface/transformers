@@ -30,6 +30,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -261,7 +262,7 @@ def unpad_image(tensor, original_size):
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
     """
 )
-class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
+class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
 
     def __init__(
@@ -353,7 +354,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
@@ -415,7 +416,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             vision_feature_select_strategy,
             image_newline=self.image_newline,
         )
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = torch.cat(image_features, dim=0)
+        image_outputs.split_sizes = feature_lens
 
         return image_outputs
 
@@ -464,6 +466,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -499,7 +502,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -508,16 +511,15 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
@@ -525,10 +527,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = [feature.flatten(0, 1) for feature in mm_encoder_outputs["video"].pooler_output]
-            video_feature_lens = [feature.size(0) for feature in video_features]
-            video_features = torch.cat(video_features, dim=0)
-            video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
+            video_features = mm_encoder_outputs["video"].pooler_output
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
 
             _, special_video_mask = self.get_placeholder_mask(
@@ -555,7 +554,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
@@ -597,6 +596,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
         video_outputs.pooler_output = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
+        video_outputs.pooler_output, video_outputs.split_sizes = flatten_items(video_outputs.pooler_output)
         return video_outputs
 
 
@@ -605,7 +605,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
     The LLAVA-NeXT model which consists of a vision backbone and a language model.
     """
 )
-class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, GenerationMixin):
+class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -624,38 +624,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             image_sizes=image_sizes,
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
-        )
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
-            The tensors corresponding to the input images.
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Actual image size of each images (H, W).
-        vision_feature_layer (`Union[int, list[int]]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
         )
 
     @merge_with_config_defaults
@@ -774,34 +742,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
             video_outputs=outputs.video_outputs,
-        )
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-            The tensors corresponding to the input video.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
         )
 
 

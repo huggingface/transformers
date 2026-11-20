@@ -40,6 +40,7 @@ from ...masking_utils import (
     or_masks,
 )
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1799,7 +1800,7 @@ class UnlimitedOcrTextModel(UnlimitedOcrTextPreTrainedModel):
     The UnlimitedOcr model which consists of a vision backbone and a language model.
     """
 )
-class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
+class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_unexpected = {"lm_head"}  # unused and untied weight in original checkpoint
 
@@ -1824,7 +1825,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
@@ -1887,7 +1888,8 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         return UnlimitedOcrModelOutputWithPooling(
             last_hidden_state=global_vision_outputs.last_hidden_state,
-            pooler_output=all_features,
+            pooler_output=torch.cat(all_features, dim=0),
+            split_sizes=torch.tensor([len(features) for features in all_features], device=all_features[0].device),
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
             **local_outputs,
@@ -1918,6 +1920,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1950,13 +1953,13 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, pixel_values_local, num_local_patches, patches_grid, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -1976,7 +1979,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
 # Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
 # and UnlimitedOcrGenerationMixin. Cannot change the inheritance order as this breaks modular generation.
 @auto_docstring
-class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, UnlimitedOcrGenerationMixin):
+class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, MultimodalMixin, UnlimitedOcrGenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -1985,34 +1988,6 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         self.model = UnlimitedOcrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_values_local: torch.Tensor | None = None,
-        num_local_patches: list[int] | None = None,
-        patches_grid: list[list[int]] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
-            The tensors corresponding to the global view input images.
-        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
-            All local patches flattened across the batch, or `None` if no local views.
-        num_local_patches (`list[int]`, *optional*):
-            Number of local patches per image, e.g. `[6, 0, 4]`.
-        patches_grid (`list[list[int]]`, *optional*):
-            The patches grid `(num_columns, num_rows)` per image. Required if `pixel_values_local` is passed.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            pixel_values_local=pixel_values_local,
-            num_local_patches=num_local_patches,
-            patches_grid=patches_grid,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

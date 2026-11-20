@@ -26,6 +26,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -124,7 +125,7 @@ class Lfm2VlModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     The Lfm2Vl model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class Lfm2VlModel(Lfm2VlPreTrainedModel):
+class Lfm2VlModel(Lfm2VlPreTrainedModel, MultimodalMixin):
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -137,7 +138,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
@@ -181,9 +182,8 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
-        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
-        split_sizes = (spatial_shapes // factor).prod(-1).tolist()
-        image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        image_outputs.split_sizes = (spatial_shapes // factor).prod(-1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -213,6 +213,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -245,7 +246,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
@@ -253,9 +254,8 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
@@ -280,7 +280,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
     The LFM2_VL model which consists of a vision backbone and a language model.
     """
 )
-class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
+class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -292,29 +292,6 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        spatial_shapes: torch.Tensor,
-        pixel_attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
-            The spatial shapes of the input images.
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
-            The pixel attention mask of the input images.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            spatial_shapes=spatial_shapes,
-            pixel_attention_mask=pixel_attention_mask,
-            **kwargs,
-        )
 
     @can_return_tuple
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

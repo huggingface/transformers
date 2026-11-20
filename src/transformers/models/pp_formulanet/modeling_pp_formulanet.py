@@ -34,6 +34,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
@@ -1030,7 +1031,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 
 
 @auto_docstring
-class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
+class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 

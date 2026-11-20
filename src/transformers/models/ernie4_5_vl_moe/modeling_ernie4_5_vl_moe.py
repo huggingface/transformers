@@ -33,6 +33,7 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
@@ -1068,7 +1069,7 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
 
 
 @auto_docstring
-class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
+class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1246,7 +1247,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
@@ -1254,18 +1255,18 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
-        split_sizes = (
+        video_outputs.pooler_output = video_embeds
+        video_outputs.split_sizes = (
             video_grid_thw.prod(-1)
-            // self.vision_tower.spatial_merge_size**2
+            // self.config.vision_config.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
-        ).tolist()
-        video_outputs.pooler_output = torch.split(video_embeds, split_sizes)
+        )
         return video_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1273,8 +1274,8 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_outputs.pooler_output = torch.split(image_embeds, split_sizes)
+        image_outputs.pooler_output = image_embeds
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return image_outputs
 
     def get_placeholder_mask(
@@ -1370,6 +1371,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1404,18 +1406,18 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
@@ -1423,7 +1425,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
 
         if mm_encoder_outputs.get("video") is not None:
             video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1529,7 +1531,7 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
-class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
+class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
@@ -1545,32 +1547,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

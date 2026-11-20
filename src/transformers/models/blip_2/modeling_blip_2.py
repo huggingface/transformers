@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -1455,7 +1456,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     </Tip>
     """
 )
-class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
+class Blip2ForConditionalGeneration(Blip2PreTrainedModel, MultimodalMixin, GenerationMixin):
     config: Blip2Config
     main_input_name = "pixel_values"
 
@@ -1516,7 +1517,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
@@ -1565,6 +1566,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         image_features = self.language_projection(query_output)
         vision_outputs.pooler_output = image_features
 
+        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):
@@ -1584,6 +1586,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1677,7 +1680,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithVisionQformerOutputs = self.get_image_embeddings(
                 pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True
             )
 

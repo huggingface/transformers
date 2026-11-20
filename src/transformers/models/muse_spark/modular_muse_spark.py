@@ -25,6 +25,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -793,6 +794,7 @@ class MuseSparkModel(MuseGlimmerModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -874,28 +876,26 @@ class MuseSparkModel(MuseGlimmerModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_embeds = mm_encoder_outputs["video"].pooler_output
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

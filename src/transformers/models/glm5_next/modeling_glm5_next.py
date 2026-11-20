@@ -20,7 +20,6 @@
 
 import math
 from collections.abc import Callable
-from itertools import accumulate
 
 import torch
 import torch.nn as nn
@@ -41,6 +40,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1889,7 +1889,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
 
 
 @auto_docstring
-class Glm5NextModel(Glm5NextPreTrainedModel):
+class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1907,7 +1907,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
@@ -1924,25 +1924,22 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
 
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-
-        return vision_outputs
+        image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -1999,6 +1996,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -2027,28 +2025,26 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_embeds = mm_encoder_outputs["video"].pooler_output
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -2143,7 +2139,7 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin):
+class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, MultimodalMixin, GenerationMixin):
     """
     Main Glm5Next conditional generation class.
     """
@@ -2164,32 +2160,6 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
 
         self.post_init()
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -2298,59 +2268,9 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             router_logits=outputs.router_logits,
         )
 
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.LongTensor | None = None,
-    ) -> dict[str, dict]:
-        # override -> model uses the same config key for image and video placeholders
-        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            # Tensor of size [bs, seqlen, dim] where `bs` is number of images in this text sample
-            # Each text can have 1+ images associated with it
-            # Inteleaving on first dim does the same thing as `input_ids.repeat_interlave` in leading batch dim!
-            if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
-            else:
-                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
-                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
-
-        for modality in ["image", "video"]:
-            modalily_outputs = mm_encoder_output.get(modality)
-            if modalily_outputs is None or getattr(modalily_outputs, "pooler_output", None) is None:
-                continue
-
-            # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
-            token_id_key = f"{modality}_token_id"
-            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-                special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
-            else:
-                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
-            num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
-            num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
-            num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
-
-            # 2. Find offsets to split encoder output into separate groups per text. In a single batch
-            # we might get a text with single image and another with two images, so the most reliable
-            # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
-            offsets = [0] + [
-                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
-            ]
-            is_split_images = not isinstance(modalily_outputs.pooler_output, torch.Tensor)
-            modalily_outputs.pooler_output = [
-                out
-                for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(modalily_outputs.pooler_output[start:end], expand_size)
-            ]
-
-            # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
-            if not is_split_images:
-                modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
-        return mm_encoder_output
+    def _placeholder_token_id(self, modality: str) -> int:
+        # Video placeholders reuse the image token
+        return self.config.image_token_id
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

@@ -31,6 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -930,7 +931,7 @@ class Step3p7ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
     """
 )
-class Step3p7Model(Step3p7PreTrainedModel):
+class Step3p7Model(Step3p7PreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     config: Step3p7Config
@@ -950,7 +951,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_values_local: torch.Tensor | None = None,
@@ -988,7 +989,8 @@ class Step3p7Model(Step3p7PreTrainedModel):
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=merged,
+            pooler_output=torch.cat(merged, dim=0),
+            split_sizes=torch.tensor([len(features) for features in merged], device=merged[0].device),
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )
@@ -1019,6 +1021,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1047,13 +1050,13 @@ class Step3p7Model(Step3p7PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -1083,7 +1086,7 @@ class Step3p7CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
 
 
 @auto_docstring
-class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
+class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     input_modalities = ("image", "text")
@@ -1100,30 +1103,6 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
 
     def pack_image_features(self):
         raise NotImplementedError("Step3p7 does not use pack_image_features")
-
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_values_local: torch.Tensor | None = None,
-        num_local_patches: list[int] | torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
-            The tensors corresponding to the global view input images.
-        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
-            All local patches flattened across the batch, or `None` if no local views.
-        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
-            Number of local patches per image, e.g. `[6, 0, 4]`.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            pixel_values_local=pixel_values_local,
-            num_local_patches=num_local_patches,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

@@ -38,6 +38,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1668,7 +1669,7 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
+class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration, MultimodalMixin):
     config: Qwen2_5OmniThinkerConfig
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^token2wav"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
@@ -1686,7 +1687,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
@@ -1694,14 +1695,13 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1709,8 +1709,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
@@ -1847,6 +1846,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1900,17 +1900,17 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithPooling = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithPooling = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithPooling = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithPooling = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1918,7 +1918,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds = mm_encoder_outputs["video"].pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1956,7 +1956,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
-class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+class Qwen2_5OmniThinkerForConditionalGeneration(
+    Qwen2_5OmniPreTrainedModelForConditionalGeneration, MultimodalMixin, GenerationMixin
+):
     config: Qwen2_5OmniThinkerConfig
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
@@ -1969,32 +1971,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.post_init()
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     def get_audio_features(

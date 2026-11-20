@@ -31,6 +31,7 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1039,7 +1040,7 @@ class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
     """
 )
-class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, GenerationMixin):
+class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel, MultimodalMixin, GenerationMixin):
     config: InstructBlipVideoConfig
     main_input_name = "pixel_values"
 
@@ -1118,6 +1119,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1202,7 +1204,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("video") is None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_embeddings(
                 pixel_values,
                 qformer_input_ids=qformer_input_ids,
                 qformer_attention_mask=qformer_attention_mask,
@@ -1297,7 +1299,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_embeddings(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
@@ -1330,7 +1332,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
 
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values: torch.Tensor,
         qformer_input_ids: torch.LongTensor,
@@ -1398,6 +1400,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
         vision_outputs.pooler_output = video_features
 
+        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 
 

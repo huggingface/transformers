@@ -27,6 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -164,7 +165,7 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     [*ModernVBERT: Towards Smaller Visual Document Retrievers*](https://arxiv.org/abs/2510.01149).
     """
 )
-class ModernVBertModel(ModernVBertPreTrainedModel):
+class ModernVBertModel(ModernVBertPreTrainedModel, MultimodalMixin):
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -193,7 +194,7 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
@@ -215,7 +216,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
-        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -242,10 +242,8 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [
-            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
-        ]
-
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
         return image_outputs
 
     @can_return_tuple
@@ -285,14 +283,15 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         # Images processing
         image_outputs = None
         if pixel_values is not None:
-            image_outputs = self.get_image_features(
+            image_outputs = self.get_image_embeddings(
                 pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, return_dict=True
             )
             image_hidden_states = image_outputs.pooler_output
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
-            image_hidden_states = torch.cat(image_hidden_states, dim=0)
+            if not isinstance(image_hidden_states, torch.Tensor):
+                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states

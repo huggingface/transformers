@@ -1051,7 +1051,8 @@ _FLASH_VARLEN_KWARGS = ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_l
 
 def accepts_precomputed_kwargs(modality: str):
     """
-    Decorator for `get_<modality>_features` methods that:
+    Decorator for `get_<modality>_embeddings` methods (`get_<modality>_features` where a model has no flat
+    getter) that:
       - strips the modality prefix from incoming kwargs whose stripped name isn't an existing
         parameter (e.g. `image_cu_seqlens` → `cu_seqlens`, forwarded via `**kwargs`);
       - drops kwargs prefixed with another known modality (e.g. `video_*` passed to an
@@ -1063,8 +1064,8 @@ def accepts_precomputed_kwargs(modality: str):
     `video_position_ids`, …) without enumerating each one in every signature.
 
     NOTE: Apply this decorator **only once per modality**, on the innermost base model's
-    `get_<modality>_features` (i.e. on `Model.get_image_features`, not on the outer
-    `ForConditionalGeneration.get_image_features` wrapper). Stacking it at multiple layers
+    getter (i.e. on `Model.get_image_embeddings`, not on the outer
+    `ForConditionalGeneration.get_image_embeddings` wrapper). Stacking it at multiple layers
     causes premature prefix-stripping: the outer layer rewrites `image_foo` → `foo` based
     on its own (narrower) signature, hiding kwargs that the inner method declares as named
     parameters. Outer wrappers should just forward `**kwargs` through.

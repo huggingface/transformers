@@ -22,7 +22,6 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
-from itertools import accumulate
 
 import numpy as np
 import torch
@@ -36,6 +35,7 @@ from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -60,10 +60,10 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Granite4VisionModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
-    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    deepstack_features (`list[torch.Tensor]`, *optional*):
+        The features the deepstack and spatial projectors add to the decoder layers: one
+        `(num_image_tokens, hidden_size)` tensor per layer, for the language model layers of
+        `config.deepstack_layer_map` then `config.spatial_target_layers`.
     """
 
     deepstack_features: list | None = None
@@ -85,10 +85,10 @@ class Granite4VisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    deepstack_features (`list[torch.Tensor]`, *optional*):
+        The features the deepstack and spatial projectors add to the decoder layers: one
+        `(num_image_tokens, hidden_size)` tensor per layer, for the language model layers of
+        `config.deepstack_layer_map` then `config.spatial_target_layers`.
     """
 
     deepstack_features: list | None = None
@@ -110,10 +110,10 @@ class Granite4VisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
 @dataclass
 class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
     r"""
-    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    deepstack_features (`list[torch.Tensor]`, *optional*):
+        The features the deepstack and spatial projectors add to the decoder layers: one
+        `(num_image_tokens, hidden_size)` tensor per layer, for the language model layers of
+        `config.deepstack_layer_map` then `config.spatial_target_layers`.
     """
 
     deepstack_features: list | None = None
@@ -744,7 +744,7 @@ def unpad_image(tensor, original_size):
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
     """
 )
-class Granite4VisionModel(Granite4VisionPreTrainedModel):
+class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
     base_model_prefix = "model"
     config: Granite4VisionConfig
 
@@ -844,7 +844,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor,
@@ -885,7 +885,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
-        for projection_idx, (vision_layer, llm_layer) in enumerate(self.config.deepstack_layer_map):
+        for projection_idx, (vision_layer, _) in enumerate(self.config.deepstack_layer_map):
             selected_feature = vision_outputs.hidden_states[vision_layer]
 
             if vision_feature_select_strategy == "default":
@@ -900,7 +900,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, packed_features))
+            all_features.append(torch.cat(packed_features, dim=0))
 
         # Spatial features: extract 4 offset groups from a single vision layer
         spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
@@ -908,7 +908,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         if vision_feature_select_strategy == "default":
             spatial_feature = spatial_feature[:, 1:]
 
-        for group_idx, llm_layer in enumerate(self.config.spatial_target_layers):
+        for group_idx in range(len(self.config.spatial_target_layers)):
             projected_group = self.spatial_projectors[group_idx](spatial_feature)
             projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
 
@@ -918,11 +918,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, packed_group))
+            all_features.append(torch.cat(packed_group, dim=0))
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
             hidden_states=vision_outputs.hidden_states,
+            split_sizes=torch.tensor([len(features) for features in packed_group], device=spatial_feature.device),
         )
 
     def get_placeholder_mask(
@@ -951,6 +952,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -984,7 +986,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
@@ -997,9 +999,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         vision_mask = None
         if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
-            for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
-                if not isinstance(packed_features, torch.Tensor):
-                    packed_features = torch.cat(packed_features, dim=0)
+            llm_layers = [layer for _, layer in self.config.deepstack_layer_map] + list(
+                self.config.spatial_target_layers
+            )
+            for idx, (llm_layer_idx, packed_features) in enumerate(
+                zip(llm_layers, mm_encoder_outputs["image"].deepstack_features)
+            ):
                 packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     vision_mask = self.get_placeholder_mask(
@@ -1037,7 +1042,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
     The LLAVA-NeXT model which consists of a vision backbone and a language model.
     """
 )
-class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, GenerationMixin):
+class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -1056,38 +1061,6 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             image_sizes=image_sizes,
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
-        )
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_sizes: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
-            The tensors corresponding to the input images.
-        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-            Actual image size of each images (H, W).
-        vision_feature_layer (`Union[int, list[int]]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
         )
 
     @merge_with_config_defaults
@@ -1176,59 +1149,6 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             attentions=outputs.attentions,
             deepstack_features=outputs.deepstack_features,
         )
-
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.LongTensor | None = None,
-    ) -> dict[str, dict]:
-        # override -> model has only deepstack features with no pooler output
-
-        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
-            else:
-                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
-                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
-
-        image_outputs = mm_encoder_output.get("image")
-        if image_outputs is None or getattr(image_outputs, "deepstack_features", None) is None:
-            return mm_encoder_output
-
-        # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
-        if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
-        else:
-            num_image_tokens_in_text = (input_ids == self.config.image_token_id).sum(-1)
-        num_image_tokens_in_vision = [len(out) for out in image_outputs.deepstack_features[0][1]]
-        num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
-        num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
-
-        # 2. Find offsets to split encoder output into separate groups per text. In a single batch
-        # we might get a text with single image and another with two images, so the most reliable
-        # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
-        offsets = [0] + [i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text]
-
-        # 3. GraniteVision has each deepstack feature as a `tuple(layer_idx, list[torch.Tensor])`
-        # Each deepstack feat is `(total_image_len, dim)` tensor
-        image_outputs.deepstack_features = [
-            (
-                tuple_item[0],
-                [
-                    expanded_feats
-                    for start, end in zip(offsets[:-1], offsets[1:])
-                    for expanded_feats in repeat_tensor_or_list(tuple_item[1][start:end], expand_size)
-                ],
-            )
-            for tuple_item in image_outputs.deepstack_features
-        ]
-
-        return mm_encoder_output
 
 
 __all__ = [

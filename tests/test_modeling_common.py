@@ -2297,7 +2297,11 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertTrue(hasattr(outputs.image_outputs, "hidden_states"))
             # Some models do not return pooler output, e.g. Mllama
             if hasattr(outputs.image_outputs, "pooler_output"):
-                self.assertEqual(len(outputs.image_outputs.pooler_output), self.model_tester.batch_size)
+                # Flat outputs hold all images' rows in one tensor, and `split_sizes` has one entry per image
+                split_sizes = getattr(outputs.image_outputs, "split_sizes", None)
+                pooler_output = outputs.image_outputs.pooler_output
+                num_images = len(split_sizes) if split_sizes is not None else len(pooler_output)
+                self.assertEqual(num_images, self.model_tester.batch_size)
 
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
@@ -5559,7 +5563,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_image_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_image_features"):
+            if "image" not in model_class.input_modalities or not hasattr(model_class, "get_image_features"):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
@@ -5646,7 +5650,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
                 continue
-            if not hasattr(model_class, "get_image_features"):
+            if "image" not in model_class.input_modalities or not hasattr(model_class, "get_image_features"):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
@@ -5666,6 +5670,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 2,
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
+            if hasattr(model, "get_image_embeddings"):
+                with torch.no_grad():
+                    split_sizes = model.get_image_embeddings(**inputs_dict, return_dict=True).split_sizes
+                self.assertIsNotNone(split_sizes, "`get_image_embeddings` must return `split_sizes` for `generate`")
+                self.assertEqual(split_sizes.tolist(), [len(item) for item in pooler_output])
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5687,7 +5696,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_image_features"):
+            if "image" not in model_class.input_modalities or not hasattr(model_class, "get_image_features"):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
@@ -5775,7 +5784,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_image_features"):
+            if "image" not in model_class.input_modalities or not hasattr(model_class, "get_image_features"):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
@@ -5943,7 +5952,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_video_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6021,7 +6030,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
                 continue
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6041,6 +6050,11 @@ class ModelTesterMixin(ExportTesterMixin):
                 2,
                 f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
             )
+            if hasattr(model, "get_video_embeddings"):
+                with torch.no_grad():
+                    split_sizes = model.get_video_embeddings(**inputs_dict, return_dict=True).split_sizes
+                self.assertIsNotNone(split_sizes, "`get_video_embeddings` must return `split_sizes` for `generate`")
+                self.assertEqual(split_sizes.tolist(), [len(item) for item in pooler_output])
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -6062,7 +6076,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
@@ -6104,7 +6118,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_video_features"):
+            if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()

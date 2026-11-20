@@ -30,6 +30,7 @@ from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -1209,10 +1210,7 @@ class HunYuanVLModel(Qwen2VLModel):
         self.rope_deltas = rope_deltas
         return rope_positions
 
-    def get_video_features(self, **super_kwargs):
-        raise AttributeError("Model doesn't support videos")
-
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1221,10 +1219,12 @@ class HunYuanVLModel(Qwen2VLModel):
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs.pooler_output = image_outputs.pooler_output[0]
+        merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
+            -1
+        )
         # Include row separators and image boundary tokens in each split.
-        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)
+        image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
         return image_outputs
 
     def get_placeholder_mask(
@@ -1280,12 +1280,11 @@ class HunYuanVLModel(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
@@ -1318,7 +1317,7 @@ class HunYuanVLModel(Qwen2VLModel):
 
 
 @auto_docstring
-class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixin):
+class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -1330,19 +1329,6 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.vocab_size = config.text_config.vocab_size
         self.post_init()
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor`):
-            Flat per-patch pixel features produced by the image processor.
-        """
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

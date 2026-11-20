@@ -32,6 +32,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
+from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
@@ -241,7 +242,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values: torch.Tensor,
         qformer_input_ids: torch.LongTensor,
@@ -309,9 +310,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
         vision_outputs.pooler_output = video_features
 
+        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 
-    def get_image_features(**super_kwargs):
+    def get_image_embeddings(**super_kwargs):
         raise AttributeError("No need to inherit as this architecture only supports videos.")
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor):
@@ -331,6 +333,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -415,7 +418,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("video") is None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_embeddings(
                 pixel_values,
                 qformer_input_ids=qformer_input_ids,
                 qformer_attention_mask=qformer_attention_mask,
@@ -510,7 +513,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_embeddings(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,

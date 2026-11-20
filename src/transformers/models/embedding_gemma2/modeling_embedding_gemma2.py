@@ -30,6 +30,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -634,7 +635,7 @@ class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
     mean pooling and normalization.
     """
 )
-class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
+class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
@@ -667,7 +668,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
@@ -688,13 +689,10 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        non_pad_mask = (image_position_ids != -1).all(dim=-1)
-        split_sizes = (non_pad_mask.sum(dim=-1) // k_squared).tolist()
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
         return vision_outputs
 
     def get_placeholder_mask(
@@ -746,6 +744,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -788,11 +787,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            image_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
             mm_encoder_outputs["image"] = image_outputs
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -808,13 +805,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             )
 
         if pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
+            video_outputs = self.get_video_embeddings(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
             )
             mm_encoder_outputs["video"] = video_outputs
-            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -890,7 +885,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
@@ -925,17 +920,17 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
-        pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
-        non_pad_mask = (video_position_ids != -1).all(dim=-1)  # (total_num_frames, max_patches)
-        num_tokens_per_frame = non_pad_mask.sum(dim=-1) // k_squared
-        split_sizes = [
-            int(video_frames.sum())
-            for video_frames in torch.split(num_tokens_per_frame, num_frames_per_video.tolist())
-        ]
-
-        vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
+        tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        video_index = torch.repeat_interleave(
+            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
+            num_frames_per_video.to(tokens_per_frame.device),
+            output_size=len(tokens_per_frame),
+        )
+        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
+            0, video_index, tokens_per_frame
+        )
         return vision_outputs
 
 

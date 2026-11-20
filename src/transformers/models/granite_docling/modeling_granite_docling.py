@@ -31,6 +31,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -1007,7 +1008,7 @@ class GraniteDoclingVisionModel(GraniteDoclingPreTrainedModel):
     states without any specific head on top.
     """
 )
-class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
+class GraniteDoclingModel(GraniteDoclingPreTrainedModel, MultimodalMixin):
     def __init__(self, config: GraniteDoclingConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -1036,7 +1037,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.BoolTensor,
@@ -1059,11 +1060,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
             pixel_values=pixel_values[pixel_attention_mask].to(self.dtype), fine=fine, return_dict=True, **kwargs
         )
         tokens_per_tile = self.image_seq_len * 4 if fine else self.image_seq_len
-        split_sizes = (tiles_per_sample * tokens_per_tile).tolist()
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output, split_sizes)
-        image_outputs.deepstack_features = [
-            torch.split(features, split_sizes) for features in image_outputs.deepstack_features
-        ]
+        image_outputs.split_sizes = tiles_per_sample * tokens_per_tile
         if self.density_router is not None:
             tile_sample_index = torch.arange(batch_size, device=pixel_values.device).repeat_interleave(
                 tiles_per_sample
@@ -1120,18 +1117,16 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
         mm_encoder_outputs = {} if mm_encoder_outputs is None else mm_encoder_outputs
         if mm_encoder_outputs.get("image") is not None or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
-                mm_encoder_outputs["image"] = self.get_image_features(
+                mm_encoder_outputs["image"] = self.get_image_embeddings(
                     pixel_values, pixel_attention_mask, tile_fine_mask=tile_fine_mask, return_dict=True
                 )
             image_outputs = mm_encoder_outputs["image"]
-            image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_hidden_states = image_outputs.pooler_output
+            image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
-                    torch.cat(features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-                    for features in deepstack_visual_embeds
+                    features.to(inputs_embeds.device, inputs_embeds.dtype) for features in deepstack_visual_embeds
                 ]
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask.unsqueeze(-1), image_hidden_states)
@@ -1208,7 +1203,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel):
     text decoder, with a language modeling head on top.
     """
 )
-class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, GenerationMixin):
+class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -1228,23 +1223,6 @@ class GraniteDoclingForConditionalGeneration(GraniteDoclingPreTrainedModel, Gene
 
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
-        )
 
     @can_return_tuple
     @auto_docstring
