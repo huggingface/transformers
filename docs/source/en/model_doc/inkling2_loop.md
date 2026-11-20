@@ -27,8 +27,13 @@ Inkling 2 Mini comes with an additional [research checkpoint](https://huggingfac
 Both checkpoints contain NVFP4 and MXFP8 quantized layers that Transformers dequantizes when loading the model.
 
 **Checkpoints**
+
 - [Inkling 2 Mini](http://hf.co/thinkingmachines/Inkling-2-Mini)
 - [Inkling 2 Mini varloop research](http://hf.co/thinkingmachines/TML-d24-varloop-research)
+
+## Resources
+
+- [Hugging Face Blog](https://huggingface.co/blog/inkling2mini)
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
