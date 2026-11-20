@@ -41,7 +41,11 @@ FLEETS = ("prototypes", "control")
 FLEET_VARIANTS = {"prototypes": ("bfloat16",), "control": ("default", "bfloat16")}
 # Baselines are recorded (and checked in CI) with this many CPU threads; fewer or more can shift numerics.
 BASELINE_THREADS = 4
-INSTALL_HINT = 'transformers-mic>=0.1.3 or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
+# The oldest transformers-mic that reads the testers' static small-config overrides; keep it in step with setup.py.
+MIN_MIC_VERSION = "0.1.3"
+INSTALL_HINT = (
+    f'transformers-mic>={MIN_MIC_VERSION} or hf-doc-builder is not installed: python -m pip install -e ".[testing]"'
+)
 STATUS = {
     "pass": "✓",
     "fail": "✗",
@@ -651,12 +655,12 @@ def installed_mic_version():
 
 
 def missing_requirements():
-    """Check if mic (0.1.3 or newer: it reads the testers' static small-config overrides) and hf-doc-builder are installed"""
+    """Check if mic (MIN_MIC_VERSION or newer) and hf-doc-builder are installed"""
     if importlib.util.find_spec("transformers_mic") is None:
         return True
     from packaging.version import Version
 
-    if Version(installed_mic_version()) < Version("0.1.3"):
+    if Version(installed_mic_version()) < Version(MIN_MIC_VERSION):
         return True
     try:
         from doc_builder.testing import DocIntegrationTest  # noqa: F401

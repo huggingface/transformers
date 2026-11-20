@@ -17,7 +17,7 @@ spec.loader.exec_module(check_mic)
 class CheckMicTest(unittest.TestCase):
     def setUp(self):
         # Tests fake an installed transformers-mic through find_spec; pin its version to match.
-        patcher = patch.object(check_mic, "installed_mic_version", return_value="0.1.3")
+        patcher = patch.object(check_mic, "installed_mic_version", return_value=check_mic.MIN_MIC_VERSION)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -368,11 +368,16 @@ class CheckMicTest(unittest.TestCase):
             self.assertTrue(check_mic.missing_requirements())
         with (
             patch("importlib.util.find_spec", return_value=object()),
-            patch.object(check_mic, "installed_mic_version", return_value="0.1.2"),
+            patch.object(check_mic, "installed_mic_version", return_value="0.0.0"),
         ):
             self.assertTrue(check_mic.missing_requirements())
         self.assertIn("transformers-mic", check_mic.INSTALL_HINT)
         self.assertIn('pip install -e ".[testing]"', check_mic.INSTALL_HINT)
+
+    def test_setup_pins_the_minimum_mic_version(self):
+        from transformers.dependency_versions_table import deps
+
+        self.assertEqual(deps["transformers-mic[runtime]"], f"transformers-mic[runtime]>={check_mic.MIN_MIC_VERSION}")
 
     def test_runner_env_uses_the_baseline_thread_count(self):
         self.assertEqual(check_mic.runner_env({})["OMP_NUM_THREADS"], "4")
