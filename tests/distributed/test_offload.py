@@ -44,9 +44,9 @@ class ExpertsOffloadTest(unittest.TestCase):
         self.ids = torch.randint(0, 64, (1, 12))
         self.expected = self.generate(self.model)
         self.expert_bytes = 3 * 16 * 32 * 4
-        self.resident = sum(
-            p.numel() * 4 for n, p in self.model.named_parameters() if "experts" not in n
-        ) + sum(b.numel() * b.element_size() for b in self.model.buffers())
+        self.resident = sum(p.numel() * 4 for n, p in self.model.named_parameters() if "experts" not in n) + sum(
+            b.numel() * b.element_size() for b in self.model.buffers()
+        )
 
     def generate(self, model):
         with torch.no_grad():
@@ -72,6 +72,15 @@ class ExpertsOffloadTest(unittest.TestCase):
                         self.assertEqual(sum(p.num_slots for p in store.pools.values()), slots)
                         torch.testing.assert_close(self.generate(model), self.expected)
                         self.assertGreater(store.reads, 0)
+
+    def test_lfu_matches_eager(self):
+        with tempfile.TemporaryDirectory() as path:
+            self.model.save_pretrained(path)
+            model, store = self.load(path, 5)
+            for pool in store.pools.values():
+                pool.policy = "lfu"
+            torch.testing.assert_close(self.generate(model), self.expected)
+            self.assertTrue(any(pool.counts for pool in store.pools.values()))
 
     def test_stacked_checkpoint(self):
         with tempfile.TemporaryDirectory() as path:

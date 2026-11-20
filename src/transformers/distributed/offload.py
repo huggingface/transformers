@@ -74,9 +74,12 @@ def split_offloaded_experts(device_map):
 class _Pool:
     """Device banks of `num_slots` experts of one layout, with one LRU over every layer that uses it."""
 
-    def __init__(self, layout: dict[str, tuple[tuple[int, ...], torch.dtype]], num_slots: int):
+    def __init__(self, layout: dict[str, tuple[tuple[int, ...], torch.dtype]], num_slots: int, policy: str = "lru"):
         self.layout = layout
         self.num_slots = num_slots
+        self.policy = policy
+        self.counts: dict[tuple[str, int], float] = {}  # lookups per expert, halved every `num_slots` lookups (lfu)
+        self.lookups = 0
         self.banks = None
         self.cache: OrderedDict[tuple[str, int], int] = OrderedDict()  # (layer, expert) -> slot, coldest first
         self.free = list(range(num_slots))
@@ -88,10 +91,28 @@ class _Pool:
                 for name, (shape, dtype) in self.layout.items()
             }
 
+    def count(self, keys):
+        """Record lookups (lfu): every lookup counts, hit or miss, and old counts decay."""
+        if self.policy != "lfu":
+            return
+        for key in keys:
+            self.counts[key] = self.counts.get(key, 0) + 1
+        self.lookups += len(keys)
+        if self.lookups >= self.num_slots:
+            self.lookups = 0
+            self.counts = {k: v / 2 for k, v in self.counts.items() if v >= 0.5}
+
     def slot_for(self, key, pinned) -> int | None:
-        """A free slot for `key`, evicting the least recently used unpinned expert; None if all are pinned."""
+        """A free slot for `key`, evicting an unpinned expert (least recently used, or with `lfu` the least counted of
+        the 64 least recently used); None if all are pinned."""
         if not self.free:
-            victim = next((k for k in self.cache if k not in pinned), None)
+            # ponytail: approximate LFU over a window of the LRU's cold end; a heap if the window misses hot experts
+            candidates = (k for k in self.cache if k not in pinned)
+            if self.policy == "lfu":
+                window = [k for _, k in zip(range(64), candidates)]
+                victim = min(window, key=lambda k: self.counts.get(k, 0), default=None)
+            else:
+                victim = next(candidates, None)
             if victim is None:
                 return None
             self.free.append(self.cache.pop(victim))
@@ -103,7 +124,10 @@ class _Pool:
 class ExpertsOffloadStore:
     """Expert slot pools, checkpoint readers and the read schedule of every offloaded experts module."""
 
-    def __init__(self, device, cache_bytes: int, io_threads: int = 4, lookahead: int = 1):
+    def __init__(self, device, cache_bytes: int, io_threads: int = 4, lookahead: int = 1, policy: str = "lru"):
+        if policy not in ("lru", "lfu"):
+            raise ValueError(f"Unknown expert cache policy {policy!r}: use 'lru' or 'lfu'")
+        self.policy = policy
         self.device = torch.device(device)
         self.cache_bytes = cache_bytes
         self.lookahead = lookahead
@@ -155,7 +179,7 @@ class ExpertsOffloadStore:
             num_slots = min(total, int(budget * len(names) / len(self.layers)) // expert_bytes)
             if num_slots < 1:
                 raise ValueError(f"No room for one expert in {budget} bytes of `max_memory` for streamed experts")
-            self.pools[key] = pool = _Pool(layout, num_slots)
+            self.pools[key] = pool = _Pool(layout, num_slots, self.policy)
             for name in names:
                 self.pool_of[name] = pool
         logger.info(f"Streaming experts through {[p.num_slots for p in self.pools.values()]} device slots")
@@ -256,6 +280,7 @@ class ExpertsOffloadLayer(TensorParallelLayer):
             store.misses += len(misses)
             for e in hits:
                 pool.cache.move_to_end((name, e))
+            pool.count([(name, e) for e in experts])
             futures = [store.fetch(name, e) for e in misses]
             # 2. Reads for the next layers overlap this layer's compute
             if decode:
