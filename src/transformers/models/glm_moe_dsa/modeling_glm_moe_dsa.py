@@ -41,6 +41,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from . import _fuse_compile
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 
 
@@ -906,7 +907,11 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None  # MAIN DIFF with DSV3.2
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        # [scratch, bench only] FUSE_COMPILE: decode-shaped CB batches run one compiled function per layer
+        fuse_compile = _fuse_compile.MODE != "0" and _fuse_compile.applies(self, hidden_states, cache, kwargs)
+        if fuse_compile:
+            hidden_states = _fuse_compile.run_layers(self, hidden_states, position_embeddings, cache, kwargs)
+        for i, decoder_layer in enumerate(() if fuse_compile else self.layers[: self.config.num_hidden_layers]):
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["indexed_attention"],
