@@ -1315,7 +1315,8 @@ class Inkling2Model(InklingModel):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
             router_logits=outputs.router_logits,
         )
 
@@ -1421,7 +1422,8 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

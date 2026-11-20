@@ -168,6 +168,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertConfig"),
         ("doge", "DogeConfig"),
         ("donut-swin", "DonutSwinConfig"),
+        ("dory", "DoryConfig"),
         ("dots1", "Dots1Config"),
         ("dots3_note", "Dots3NoteConfig"),
         ("dots3_note_audio_encoder", "Dots3NoteAudioConfig"),
