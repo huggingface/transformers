@@ -20,7 +20,7 @@ import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import DynamicCache, LlamaConfig, LlamaForCausalLM, MistralConfig
-from transformers.distributed.context_parallel import ALL_CP_STYLES, SplitSequenceParallel, UlyssesAttention
+from transformers.distributed.sequence_parallel import ALL_SP_STYLES, SplitSequenceParallel, UlyssesAttention
 from transformers.masking_utils import create_sliding_window_causal_mask
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.models.mistral.modeling_mistral import MistralAttention, MistralRotaryEmbedding
@@ -30,7 +30,7 @@ from ..distributed_testing_utils import run_distributed
 
 
 def _mesh(size=2, rank=0):
-    """A `cp` mesh that only has to report its size and the caller's rank."""
+    """An `sp` mesh that only has to report its size and the caller's rank."""
     return types.SimpleNamespace(size=lambda: size, get_local_rank=lambda: rank)
 
 
@@ -58,7 +58,7 @@ class _Layer(torch.nn.Module):
 
 def _test_ulysses_matches_full_attention(rank):
     """An attention layer on this rank's tokens matches the same layer on the full sequence."""
-    cp_size = dist.get_world_size()
+    sp_size = dist.get_world_size()
     # grouped-query attention (4 query heads, 2 key/value heads) with a sliding window of 4 tokens
     config = MistralConfig(
         hidden_size=16, num_attention_heads=4, num_key_value_heads=2, sliding_window=4, attn_implementation="sdpa"
@@ -75,14 +75,14 @@ def _test_ulysses_matches_full_attention(rank):
     expected.sum().backward()
 
     sdpa = ALL_ATTENTION_FUNCTIONS["sdpa"]
-    UlyssesAttention().install_forward(attention, init_device_mesh("cpu", (cp_size,)))
-    local_hidden_states = hidden_states.detach().chunk(cp_size, dim=1)[rank].clone().requires_grad_()
-    local_position_embeddings = tuple(x.chunk(cp_size, dim=1)[rank] for x in position_embeddings)
+    UlyssesAttention().install_forward(attention, init_device_mesh("cpu", (sp_size,)))
+    local_hidden_states = hidden_states.detach().chunk(sp_size, dim=1)[rank].clone().requires_grad_()
+    local_position_embeddings = tuple(x.chunk(sp_size, dim=1)[rank] for x in position_embeddings)
     output, _ = attention(local_hidden_states, local_position_embeddings, mask)
     output.sum().backward()
 
-    torch.testing.assert_close(output, expected.chunk(cp_size, dim=1)[rank])
-    torch.testing.assert_close(local_hidden_states.grad, hidden_states.grad.chunk(cp_size, dim=1)[rank])
+    torch.testing.assert_close(output, expected.chunk(sp_size, dim=1)[rank])
+    torch.testing.assert_close(local_hidden_states.grad, hidden_states.grad.chunk(sp_size, dim=1)[rank])
     assert ALL_ATTENTION_FUNCTIONS["sdpa"] is sdpa
 
 
@@ -92,14 +92,14 @@ class TestUlyssesAttention(unittest.TestCase):
         run_distributed(world_size=2, backend="gloo")(_test_ulysses_matches_full_attention)()
 
     def test_refusals(self):
-        for config, cp_size, message in (
+        for config, sp_size, message in (
             (_config(attn_implementation="eager"), 2, "takes no attention mask"),
             (_config(attn_implementation="flex_attention"), 2, "takes no attention mask"),
             (_config(hidden_size=48, num_attention_heads=6, num_key_value_heads=6), 4, "must divide"),
             (_config(num_attention_heads=8, num_key_value_heads=2), 4, "must divide"),
         ):
-            with self.subTest(message, cp_size=cp_size), self.assertRaisesRegex(ValueError, message):
-                UlyssesAttention().install_forward(MistralAttention(config, layer_idx=0), _mesh(cp_size))
+            with self.subTest(message, sp_size=sp_size), self.assertRaisesRegex(ValueError, message):
+                UlyssesAttention().install_forward(MistralAttention(config, layer_idx=0), _mesh(sp_size))
 
 
 class TestSplitSequenceParallel(unittest.TestCase):
@@ -126,13 +126,13 @@ class TestSplitSequenceParallel(unittest.TestCase):
     def test_refuses_a_sequence_the_ranks_cannot_split(self):
         layer = _Layer()
         SplitSequenceParallel().install_forward(layer, _mesh(), split_hidden_states=True)
-        with self.assertRaisesRegex(ValueError, "must be divisible by `cp_size`"):
+        with self.assertRaisesRegex(ValueError, "must be divisible by `sp_size`"):
             layer(torch.randn(1, 7, 4))
 
 
-class TestModelContextParallel(unittest.TestCase):
+class TestModelSequenceParallel(unittest.TestCase):
     def test_pads_and_splits_the_loss(self):
-        model, style = LlamaForCausalLM(_config(pad_token_id=0)), ALL_CP_STYLES["cp_model"]
+        model, style = LlamaForCausalLM(_config(pad_token_id=0)), ALL_SP_STYLES["sp_model"]
         input_ids = torch.randint(1, 99, (2, 7), generator=torch.Generator().manual_seed(0))
         inputs = {
             "input_ids": input_ids,
@@ -161,7 +161,7 @@ class TestModelContextParallel(unittest.TestCase):
 
     def test_refuses_a_cache(self):
         with self.assertRaisesRegex(ValueError, "`past_key_values` are not allowed"):
-            ALL_CP_STYLES["cp_model"].transform_inputs_pre_forward(
+            ALL_SP_STYLES["sp_model"].transform_inputs_pre_forward(
                 LlamaForCausalLM(_config()),
                 (),
                 {"input_ids": torch.ones(1, 4), "past_key_values": DynamicCache()},
