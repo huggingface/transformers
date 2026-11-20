@@ -124,6 +124,11 @@ class MetalHfQuantizer(HfQuantizer):
         return True
 
     @property
+    def is_compileable(self) -> bool:
+        # The Metal kernels' ops have fake implementations (`_register_fake_kernels`): compile traces through them
+        return True
+
+    @property
     def is_trainable(self) -> bool:
         return False
 

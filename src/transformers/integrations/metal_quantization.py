@@ -62,7 +62,36 @@ def _get_metal_kernel():
                 "Make sure you have `kernels` installed (`pip install kernels`) "
                 "and are running on an Apple Silicon machine."
             ) from e
+        _register_fake_kernels(_metal_kernel)
     return _metal_kernel
+
+
+def _register_fake_kernels(kernel):
+    """Shape-only implementations of the kernel's ops, so `torch.compile` traces through them (one graph per decode
+    step) instead of breaking the graph at every quantized matmul."""
+    namespace = kernel.ops.__name__.rpartition(".")[2]
+
+    def register(op, fake):
+        try:
+            torch.library.register_fake(f"{namespace}::{op}")(fake)
+        except (RuntimeError, AttributeError):  # already registered, or an older build without the op
+            pass
+
+    def quantized_matmul(x, w, scales, biases, transpose, group_size, bits, mode):
+        # transpose: w is [..., N, K * bits / 32] -> [..., N]; else w is [..., K, N * bits / 32]
+        n = w.shape[-2] if transpose else w.shape[-1] * 32 // (bits or 4)
+        return x.new_empty(*torch.broadcast_shapes(x.shape[:-2], w.shape[:-2]), x.shape[-2], n)
+
+    def gather_qmm(
+        x, w, scales, biases, lhs_indices, rhs_indices, transpose, group_size, bits, mode, global_scale, sorted_indices
+    ):
+        n = w.shape[-2] if transpose else w.shape[-1] * 32 // (bits or 4)
+        indices = [i.shape for i in (lhs_indices, rhs_indices) if i is not None]
+        batch = torch.broadcast_shapes(*indices) if indices else x.shape[:-2]
+        return x.new_empty(*batch, x.shape[-2], n)
+
+    register("quantized_matmul", quantized_matmul)
+    register("gather_qmm", gather_qmm)
 
 
 # ---------------------------------------------------------------------------
