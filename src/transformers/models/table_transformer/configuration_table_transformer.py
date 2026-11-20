@@ -85,7 +85,7 @@ class TableTransformerConfig(PreTrainedConfig):
     init_xavier_std: float = 1.0
     auxiliary_loss: bool = False
     position_embedding_type: str = "sine"
-    dilation: bool = False
+    dilation: bool | None = False
     class_cost: int = 1
     bbox_cost: int = 5
     giou_cost: int = 2
