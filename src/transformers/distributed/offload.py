@@ -39,6 +39,7 @@ from __future__ import annotations
 import bisect
 import copy
 import fnmatch
+import threading
 import time
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -183,8 +184,13 @@ class ExpertsOffloadStore:
         self.device_tables: dict[str, torch.Tensor] = {}  # module name -> expert -> slot, on the device
         self.pending = {}  # (layer, expert) -> Future of its device tensors
         self.hits = self.misses = self.reads = self.covered = 0
+        self.trace: list | None = None  # set to [] to record (time, thread, phase, layer, info) events, see `_mark`
         # Host time blocked on the routing copy (device sync) and on expert reads, see `stats`
         self.sync_seconds = self.wait_seconds = 0.0
+
+    def _mark(self, phase, layer=None, **info):
+        if self.trace is not None:
+            self.trace.append((time.perf_counter(), threading.get_ident(), phase, layer, info))
 
     def stats(self) -> dict:
         return {
@@ -331,14 +337,17 @@ class ExpertsOffloadStore:
                         if index == len(rounds):
                             rounds.append({})
                         rounds[index].setdefault(file, {})[key] = rows
+            self._mark("batch_start", layer, experts=len(futures))
             loaders = {}
             for index, plan in enumerate(rounds):
                 for file, keys in plan.items():
                     loaders[(index, file)] = self._handle(file).prefetch(keys, device=str(self.device), threads=16)
+            self._mark("loaders_started", layer, loaders=len(loaders))
             taken = {}
             for expert, future in futures.items():
                 self.reads += 1
                 out = {}
+                self._mark("take_start", layer, expert=expert)
                 for reader in self.readers[layer]:
                     tensors = []
                     for _, rows, dtype, key in reader.sources(expert):
@@ -347,7 +356,9 @@ class ExpertsOffloadStore:
                         taken[(file, key)] = index + 1
                         tensors.append(loaders[(index, file)].take(key).to(dtype))
                     out.update(reader.assemble(tensors))
-                future.set_result((out, None))
+                self._mark("take_end", layer, expert=expert, bytes=sum(t.nbytes for t in out.values()))
+                if not future.cancelled():
+                    future.set_result((out, None))
             for loader in loaders.values():
                 loader.close()
         except BaseException as error:
@@ -380,8 +391,10 @@ class ExpertsOffloadStore:
     def _install(self, pool, slot, future):
         """Copy a read expert into `slot` once its read (and host-to-device copy) is done."""
         start = time.perf_counter()
+        self._mark("wait_start")
         tensors, copied = future.result()
         self.wait_seconds += time.perf_counter() - start
+        self._mark("wait_end")
         if copied is not None:  # the device waits for the copy, the host does not
             torch.cuda.current_stream(self.device).wait_event(copied)
         for param, tensor in tensors.items():
@@ -412,9 +425,11 @@ class ExpertsOffloadStore:
         for next_name in guessed:
             logits = torch.nn.functional.linear(hidden_states, self.routers[next_name].weight)
             routes.append(logits.topk(top_k_index.shape[-1], dim=-1).indices.flatten())
+        self._mark("sync_start", name)
         start = time.perf_counter()
         routes = torch.cat(routes).cpu()
         self.sync_seconds += time.perf_counter() - start
+        self._mark("sync_end", name)
         routing = routes[: top_k_index.numel()].view(top_k_index.shape)
         experts = torch.unique(routing).tolist()
         misses = [e for e in experts if (name, e) not in pool.cache]
@@ -425,6 +440,13 @@ class ExpertsOffloadStore:
                 pool.cache.move_to_end((name, e))
         pool.count([(name, e) for e in experts])
         self.covered += sum((name, e) in self.pending for e in misses)  # already read ahead by the lookahead
+        self._mark(
+            "misses",
+            name,
+            misses=len(misses),
+            experts=len(experts),
+            covered=sum((name, e) in self.pending for e in misses),
+        )
         futures = self.fetch_many(name, misses)
         # 2. Reads for the next layers overlap this layer's compute
         for index, next_name in enumerate(guessed):
@@ -447,12 +469,15 @@ class ExpertsOffloadStore:
             table = torch.full((num_experts,), pool.num_slots, dtype=top_k_index.dtype)
             table[batch] = torch.tensor([pool.cache[(name, e)] for e in batch], dtype=top_k_index.dtype)
             slots = table[routing].to(self.device, non_blocking=True)
+            self._mark("pass2", name, experts=len(batch))
             output.add_(_run_pool(module, original_forward, hidden_states, slots, top_k_weights, {}))
             misses, futures = misses[len(batch) :], futures[len(batch) :]
         self._refresh_tables(pool)
         # Guesses for this layer that the routing did not pick
-        for key in [key for key in self.pending if key[0] == name]:
+        unused = [key for key in self.pending if key[0] == name]
+        for key in unused:
             self.pending.pop(key).cancel()
+        self._mark("layer_end", name, unused_guesses=len(unused))
 
     def next_layers(self, layer):
         index = self.order.index(layer)
