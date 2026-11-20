@@ -141,9 +141,8 @@ class Lfm2VlModel(LlavaModel):
         patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
-        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
         image_outputs.split_sizes = (spatial_shapes // factor).prod(-1)
-        image_outputs.pooler_output = image_features
         return image_outputs
 
     def get_placeholder_mask(

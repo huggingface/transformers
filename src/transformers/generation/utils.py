@@ -967,6 +967,10 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
         `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
         """
+        # A dict of our own: the decoding loop clears it after the prefill to free the encoder outputs, and a dict
+        # passed by the user is left as it is
+        if model_kwargs.get("mm_encoder_outputs") is not None:
+            model_kwargs["mm_encoder_outputs"] = dict(model_kwargs["mm_encoder_outputs"])
         if self.config.is_encoder_decoder and model_kwargs.get("encoder_outputs") is None:
             return self._prepare_text_encoder_decoder_kwargs_for_generation(
                 inputs_tensor=inputs_tensor,
@@ -3020,11 +3024,6 @@ class GenerationMixin(ContinuousMixin):
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
-        # A dict of our own, which the decoding loop's copy of the kwargs shares: clearing it after the prefill frees
-        # the encoder outputs, while a dict passed by the user is left as it is
-        if model_kwargs.get("mm_encoder_outputs") is not None:
-            model_kwargs["mm_encoder_outputs"] = dict(model_kwargs["mm_encoder_outputs"])
-
         # 9. Call generation mode
         result = decoding_method(
             self,

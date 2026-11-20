@@ -1201,10 +1201,7 @@ class GraniteDoclingModel(Idefics3Model):
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
-                    (features if isinstance(features, torch.Tensor) else torch.cat(features, dim=0)).to(
-                        inputs_embeds.device, inputs_embeds.dtype
-                    )
-                    for features in deepstack_visual_embeds
+                    features.to(inputs_embeds.device, inputs_embeds.dtype) for features in deepstack_visual_embeds
                 ]
             special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_hidden_states)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask.unsqueeze(-1), image_hidden_states)

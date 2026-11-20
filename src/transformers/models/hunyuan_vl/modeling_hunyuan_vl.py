@@ -998,6 +998,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
             -1
         )
+        # Include row separators and image boundary tokens in each split.
         image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
         return image_outputs
 

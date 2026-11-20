@@ -818,7 +818,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         return inputs_embeds
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(custom_intro="Skips the padding images.")
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -826,8 +826,6 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Skips the padding images.
-
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         pixel_attention_mask (`torch.LongTensor`, *optional*):
