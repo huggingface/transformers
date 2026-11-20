@@ -250,12 +250,16 @@ class OffloadingManager:
         all_cpu_ids: dict[str, list[int]] = {name: [] for name in self.cache.cache_allocators}
         all_gpu_ids: dict[str, list[int]] = {name: [] for name in self.cache.cache_allocators}
 
+        # Collect the blocks to copy first, without touching the bookkeeping: the CPU blocks are only freed and the
+        # requests only marked restored after the H2D copy below succeeds. If the copy raises, the CPU copies stay
+        # reserved and the requests stay flagged as offloaded, so the restore can be retried (or the CPU caches freed
+        # on cancellation) instead of silently proceeding with stale GPU blocks.
+        to_restore: list[tuple[FutureRequestState, dict[str, list[int]]]] = []
         for future_state in requests_in_batch:
             state = future_state.state
             if not state.is_cpu_offloaded:
                 continue
-            # TODO: if the H2D copy below raises, already-popped entries leak (never returned to the CPU pool)
-            cpu_blocks = self._request_id_to_cpu_blocks.pop(state.request_id)
+            cpu_blocks = self._request_id_to_cpu_blocks[state.request_id]
             for name, cpu_ids in cpu_blocks.items():
                 allocator = self.cache.cache_allocators[name]
                 # The request may have been re-allocated more blocks than were offloaded: slice to match
@@ -263,7 +267,34 @@ class OffloadingManager:
                 num_blocks = min(len(cpu_ids), len(gpu_blocks))
                 all_gpu_ids[name].extend(gpu_blocks[:num_blocks])
                 all_cpu_ids[name].extend(cpu_ids[:num_blocks])
-                self._cpu_pool.free_blocks(allocator.index, cpu_ids)
+            to_restore.append((future_state, cpu_blocks))
+
+        # Single batched copy per allocator: a few non-blocking slice copies into a staging tensor, then one scatter
+        # into the cache. All stream-ordered, so the host never waits and the next forward sees the data. Skipped
+        # when there is nothing to copy; the release below still runs in that case, as before.
+        if any(all_cpu_ids.values()):
+            with self._stream_ctx():
+                for name, allocator in self.cache.cache_allocators.items():
+                    cpu_ids = all_cpu_ids[name]
+                    if not cpu_ids:
+                        continue
+                    cpu_view = self._cpu_views[name]
+                    staging = torch.empty(
+                        (len(cpu_ids), allocator.bytes_per_block), dtype=torch.uint8, device=self.cache.device
+                    )
+                    for start, offset, length in contiguous_runs(cpu_ids):
+                        staging[offset : offset + length].copy_(cpu_view[start : start + length], non_blocking=True)
+                    gpu_ids = torch.as_tensor(all_gpu_ids[name], dtype=torch.long).to(
+                        self.cache.device, non_blocking=True
+                    )
+                    allocator._copy_view.index_copy_(0, gpu_ids, staging)
+
+        # The copy succeeded: release the CPU blocks and mark the requests restored.
+        for future_state, cpu_blocks in to_restore:
+            state = future_state.state
+            self._request_id_to_cpu_blocks.pop(state.request_id)
+            for name, cpu_ids in cpu_blocks.items():
+                self._cpu_pool.free_blocks(self.cache.cache_allocators[name].index, cpu_ids)
             state.is_cpu_offloaded = False
             # Prefix sharing: the restored blocks are fresh and unhashed, so the next update re-hashes them, which
             # also de-duplicates them against any identical block still living in the cache
@@ -277,26 +308,6 @@ class OffloadingManager:
                 f"Restored CPU-offloaded request {state.request_id} with {len(state.initial_tokens)} prefill tokens "
                 f"and {len(state.generated_tokens)} generated tokens."
             )
-
-        # Early return if there is no copy to perform
-        if not any(all_cpu_ids.values()):
-            return None
-
-        # Single batched copy per allocator: a few non-blocking slice copies into a staging tensor, then one scatter
-        # into the cache. All stream-ordered, so the host never waits and the next forward sees the data.
-        with self._stream_ctx():
-            for name, allocator in self.cache.cache_allocators.items():
-                cpu_ids = all_cpu_ids[name]
-                if not cpu_ids:
-                    continue
-                cpu_view = self._cpu_views[name]
-                staging = torch.empty(
-                    (len(cpu_ids), allocator.bytes_per_block), dtype=torch.uint8, device=self.cache.device
-                )
-                for start, offset, length in contiguous_runs(cpu_ids):
-                    staging[offset : offset + length].copy_(cpu_view[start : start + length], non_blocking=True)
-                gpu_ids = torch.as_tensor(all_gpu_ids[name], dtype=torch.long).to(self.cache.device, non_blocking=True)
-                allocator._copy_view.index_copy_(0, gpu_ids, staging)
 
     def free_request_cpu_cache(self, state: RequestState) -> None:
         """Free CPU blocks for a single request (e.g., on cancellation)."""

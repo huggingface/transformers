@@ -61,6 +61,7 @@ from transformers.generation.continuous_batching.distributed import DistributedH
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import (
+    FutureRequestState,
     GenerationOutput,
     RequestState,
     RequestStatus,
@@ -2452,6 +2453,79 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=30,
             num_repeat_prompts=4,
         )
+
+
+class OffloadingManagerRestoreTests(unittest.TestCase):
+    """Unit tests for OffloadingManager.restore_scheduled_requests (see #51009).
+
+    The restore used to free the CPU blocks and mark the request restored before the H2D copy ran, so a copy
+    failure lost the KV cache and left stale GPU blocks behind. These tests drive the manager directly with a
+    fake single-allocator cache, so they run on CPU with no model or accelerator.
+    """
+
+    def _make_manager(self):
+        """Build an OffloadingManager with a fake cache holding one offloaded request ("req-0", CPU blocks [0, 1]
+        holding known data, GPU blocks [2, 3]). The fake copy view's `fail` flag makes the H2D scatter raise."""
+        bytes_per_block = 8
+        cpu_view = torch.arange(4 * bytes_per_block, dtype=torch.uint8).reshape(4, bytes_per_block)
+        gpu_cache = torch.zeros(4, bytes_per_block, dtype=torch.uint8)
+
+        class FakeCopyView:
+            fail = False
+
+            def index_copy_(self, dim, index, source):
+                if self.fail:
+                    raise RuntimeError("simulated H2D copy failure")
+                gpu_cache.index_copy_(dim, index, source)
+
+        allocator = SimpleNamespace(
+            index=0,
+            block_table={"req-0": [2, 3]},
+            bytes_per_block=bytes_per_block,
+            tokens_per_page=4,
+            _copy_view=FakeCopyView(),
+        )
+        freed = []
+        cpu_pool = SimpleNamespace(free_blocks=lambda index, cpu_ids: freed.append((index, list(cpu_ids))))
+        cache = SimpleNamespace(cache_allocators={"k": allocator}, device="cpu", use_prefix_sharing=False)
+        manager = OffloadingManager.__new__(OffloadingManager)
+        manager._cpu_pool = cpu_pool
+        manager._cpu_views = {"k": cpu_view}
+        manager._request_id_to_cpu_blocks = {"req-0": {"k": [0, 1]}}
+        manager.cache = cache
+        manager._compute_stream = None
+
+        state = RequestState(request_id="req-0", initial_tokens=[1, 2, 3])
+        state.is_cpu_offloaded = True
+        state.position_offset = 8
+        future_state = FutureRequestState(state, has_new_token=False, complete_blocks={}, query_length=0)
+        return manager, future_state, freed, cpu_view, gpu_cache
+
+    def test_restore_failure_keeps_cpu_offload_state(self):
+        """A failing H2D copy must not free the CPU blocks or mark the request restored, and the restore must
+        succeed when retried once the copy works again."""
+        manager, future_state, freed, cpu_view, gpu_cache = self._make_manager()
+        state = future_state.state
+        manager.cache.cache_allocators["k"]._copy_view.fail = True
+
+        with self.assertRaises(RuntimeError):
+            manager.restore_scheduled_requests([future_state])
+
+        self.assertTrue(state.is_cpu_offloaded)
+        self.assertIn("req-0", manager._request_id_to_cpu_blocks)
+        self.assertEqual(freed, [])
+        self.assertEqual(future_state.complete_blocks, {})
+        self.assertTrue(torch.equal(gpu_cache, torch.zeros_like(gpu_cache)))
+
+        # The CPU copy survived the failure, so retrying the restore succeeds and lands the same data.
+        manager.cache.cache_allocators["k"]._copy_view.fail = False
+        manager.restore_scheduled_requests([future_state])
+
+        self.assertFalse(state.is_cpu_offloaded)
+        self.assertNotIn("req-0", manager._request_id_to_cpu_blocks)
+        self.assertEqual(freed, [(0, [0, 1])])
+        self.assertTrue(torch.equal(gpu_cache[2], cpu_view[0]))
+        self.assertTrue(torch.equal(gpu_cache[3], cpu_view[1]))
 
 
 class ContinuousBatchingMemoryTests(unittest.TestCase):
