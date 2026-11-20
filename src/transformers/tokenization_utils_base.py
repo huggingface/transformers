@@ -2965,6 +2965,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        sequences = to_py_obj(sequences)
+        # An empty batch has no sequences to decode, `decode` would read it as a single empty sequence
+        if len(sequences) == 0:
+            return []
+
         # Forward to decode() which now handles batched input natively
         result = self.decode(
             token_ids=sequences,
@@ -2974,6 +2979,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
         # Ensure we always return a list for backwards compatibility
         if isinstance(result, str):
+            # See #41872: `batch_decode` expects a batch, single sequences belong to `decode`
+            logger.warning_once(
+                "Passing a single sequence to `batch_decode` is deprecated and will be removed in a future version, "
+                "use `decode` instead."
+            )
             return [result]
         return result
 
@@ -3203,13 +3213,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
-                                # start_token is out of bounds maybe due to truncation.
+                        # Mask every token overlapping a span, so a span cut by left or right truncation keeps
+                        # its remaining tokens (same approach as `ProcessorMixin`). Spans and token offsets are
+                        # both in order, so a single pass over the tokens is enough.
+                        spans = generation_indices[i]
+                        span_idx = 0
+                        for token_id, (token_start, token_end) in enumerate(out.encodings[i].offsets):
+                            while span_idx < len(spans) and token_start >= spans[span_idx][1]:
+                                span_idx += 1
+                            if span_idx == len(spans):
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                            if token_end > spans[span_idx][0]:
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
 

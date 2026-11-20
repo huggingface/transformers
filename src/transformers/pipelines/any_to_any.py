@@ -257,7 +257,7 @@ class AnyToAnyPipeline(Pipeline):
 
     def __call__(
         self,
-        text: str | list[str] | list[dict],
+        text: str | list[str] | list[dict] | None = None,
         images: str | list[str] | list[list[str]] | ImageInput | None = None,
         videos: str | list[str] | VideoInput | None = None,
         audio: str | list[str] | AudioInput | None = None,
@@ -327,8 +327,8 @@ class AnyToAnyPipeline(Pipeline):
                 ids of the generated text.
             - **input_text** (`str`) -- The input text.
         """
-        if images is None and text is None:
-            raise ValueError("You must at least provide either text or images.")
+        if all(x is None for x in (text, images, videos, audio)):
+            raise ValueError("You must provide text, images, videos, or audio.")
 
         if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
             # We have one or more prompts in list-of-dicts format, so this is chat mode
@@ -410,7 +410,7 @@ class AnyToAnyPipeline(Pipeline):
             inputs = {}
         else:
             inputs = inputs.copy()  # avoid in-place changes if users passed dict
-            text = inputs.pop("text")
+            text = inputs.pop("text", None)
 
             # Feature extractor do not load audio files and expect a decoded array
             if inputs.get("audio", None) is not None and hasattr(self.processor, "feature_extractor"):
@@ -455,7 +455,7 @@ class AnyToAnyPipeline(Pipeline):
         **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
-        input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
+        input_texts = [input_texts] if input_texts is None or isinstance(input_texts, (str, Chat)) else input_texts
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
         if isinstance(generated_sequence, torch.Tensor) and generated_sequence.ndim == 3:
@@ -466,8 +466,11 @@ class AnyToAnyPipeline(Pipeline):
         input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
             return [
-                {"input_text": input_texts[i], "generated_token_ids": generated_sequence[i]}
-                for i in range(len(input_texts))
+                {
+                    "input_text": input_text.messages if isinstance(input_text, Chat) else input_text,
+                    "generated_token_ids": generated_sequence[i],
+                }
+                for i, input_text in enumerate(input_texts)
             ]
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
@@ -487,10 +490,13 @@ class AnyToAnyPipeline(Pipeline):
             # (accounting for the possibility of a space between the input and generated text)
             new_generated_texts = []
             postprocess_kwargs["generation_mode"] = "text"
-            decoded_inputs = self.processor.post_process_multimodal_output(
-                input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
-            )
-            decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
+            if input_ids is None:
+                decoded_inputs = [""] * len(input_texts)
+            else:
+                decoded_inputs = self.processor.post_process_multimodal_output(
+                    input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+                )
+                decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
             for text_generated, decoded_input in zip(generated_outputs, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)

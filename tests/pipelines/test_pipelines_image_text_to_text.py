@@ -95,6 +95,26 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertEqual([len(group) for group in batched], [2, 2])
 
     @require_torch
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+            max_new_tokens=2,
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+                    {"type": "text", "text": "What is this?"},
+                ],
+            }
+        ]
+
+        outputs = pipe(text=messages, return_tensors=True)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
     def test_generate_kwargs_not_mutated_tiny_llava(self):
         pipe = pipeline(
             "image-text-to-text",

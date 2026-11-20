@@ -411,6 +411,7 @@ class StaticLayer(CacheLayerMixin):
     """
 
     is_compileable = True
+    is_croppable = True
     is_sliding = False
     cumulative_length: torch.Tensor
 
@@ -506,6 +507,19 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        if tokens_to_remove > 0:
+            raise RuntimeError(
+                "Static layers can only be cropped by passing a negative int, to specify how many tokens to remove"
+            )
+        # Note that we do not touch the actual `keys` and `values` tensors, we simply take care of updating `cumulative_length` so that
+        # the next `update` will overwrite the stale states
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.sub_(abs(tokens_to_remove))
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
@@ -527,6 +541,8 @@ class StaticSlidingWindowLayer(StaticLayer):
         super().__init__(max_cache_len=effective_max_cache_len)
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
         self.cumulative_length_int = 0
+        # This needs to be checked dynamically, as it's only True if we never go beyond the window
+        self._is_croppable = max_cache_len <= sliding_window
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -629,9 +645,26 @@ class StaticSlidingWindowLayer(StaticLayer):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length_int
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        # Note that this is only correct as long as we never went beyond the window, which `is_croppable` guarantees - otherwise the
+        # evicted states cannot be recovered
+        super().crop(tokens_to_remove)
+        self.cumulative_length_int -= abs(tokens_to_remove)
+
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put this layer back as it was."""
+        # Note: since LinearAttention layers have this as a `property`, we also need to access it as a `property` here for mixed classes
+        # such as `LinearAttentionAndStaticSlidingWindowAttentionLayer`, otherwise they complain if we try to set `self.is_croppable` directly
+        # in the `__init__`
+        return self._is_croppable
 
 
 class StaticIndexedLayer(StaticLayer):
@@ -694,6 +727,14 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        super().crop(tokens_to_remove)
+        if self.is_indexer_initialized:
+            self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
+
     def reset(self) -> None:
         super().reset()
         self.indexer_position_ids = None
@@ -717,6 +758,8 @@ class BaseQuantizedLayer(DynamicLayer):
     `_quantized_keys` and `_quantized_values`. Their layout is left to the backend, so the sequence length is
     tracked separately, in `cumulative_length`.
     """
+
+    is_croppable = False
 
     def __init__(self):
         super().__init__()
@@ -1036,8 +1079,6 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compilable
-    is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
@@ -1116,6 +1157,15 @@ class LinearAttentionCacheLayerMixin(ABC):
         # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
         # have any recurrent state (they are updated in the same forward)
         return any(self.is_conv_states_initialized.values())
+
+    @property
+    def is_compileable(self) -> bool:
+        """
+        All shapes are static by essence in a LinearAttention layer, so it is compilable. The exception is when we record the past to
+        be able to `crop` later: the conv states then grow, and they are assigned instead of copied in place, so they lose their
+        static address and may alias a cudagraph output.
+        """
+        return not self.record_past
 
     def activate_past_recording(self):
         """
@@ -1896,8 +1946,7 @@ class Cache:
         """Return whether the layers of the cache are linear attention (Mamba/SSM) layers. Note that layers containing
         both linear and full attention states will return False by this function"""
         return [
-            isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            isinstance(layer, LinearAttentionCacheLayerMixin) and not isinstance(layer, CacheLayerMixin)
             for layer in self.layers
         ]
 

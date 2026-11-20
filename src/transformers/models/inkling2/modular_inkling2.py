@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from collections.abc import Callable
 
@@ -219,15 +218,6 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-# Missing from the hub config: the routed experts are MXFP8 (e4m3, a ue8m0 scale per row and 32 values), the rest bf16
-INKLING2_QUANTIZATION_CONFIG = {
-    "quant_method": "fp8",
-    "weight_block_size": [1, 32],
-    "scale_fmt": "ue8m0",
-    "modules_to_not_convert": ["lm_head", "model.vision_tower", "model.language_model.layers.*.self_attn"],
-}
-
-
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2Config(InklingConfig):
@@ -246,14 +236,6 @@ class Inkling2Config(InklingConfig):
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not needed for Inkling2")
-
-    @classmethod
-    def from_dict(cls, config_dict: dict, **kwargs):
-        # Quantization config is missing from the hub config: only added to an original checkpoint's config, not to
-        # one saved by Transformers (which has its own, or none once dequantized)
-        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
-            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
-        return PreTrainedConfig.from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:
@@ -690,6 +672,10 @@ class Inkling2Experts(InklingExperts):
 
 
 class Inkling2TopKRouter(DeepseekV4TopKRouter):
+    def __init__(self, config: Inkling2TextConfig):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
+
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # routing runs in fp32, as in the original
         hidden_states = hidden_states.float()
@@ -703,9 +689,8 @@ class Inkling2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
 class Inkling2BlockAttentionResidual(nn.Module):
     def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
-        self.query = nn.Parameter(
-            torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
-        )
+        shape = (config.hidden_size,) if num_queries == 1 else (num_queries, config.hidden_size)
+        self.query = nn.Parameter(torch.zeros(*shape, dtype=torch.float32))
         self.norm = Inkling2UnweightedRMSNorm()
 
     def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
@@ -735,10 +720,10 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -792,10 +777,10 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1333,7 +1318,8 @@ class Inkling2Model(InklingModel):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_embeds,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
             router_logits=outputs.router_logits,
         )
 
@@ -1439,7 +1425,8 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 
