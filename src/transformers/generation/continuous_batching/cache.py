@@ -122,7 +122,7 @@ class PagedAttentionCache:
         self,
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
-        device: torch.device | str,
+        device: torch.device,
         cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
         dtype: torch.dtype = torch.float16,
     ) -> None:
