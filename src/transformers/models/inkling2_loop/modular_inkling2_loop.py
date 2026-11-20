@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
+
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -21,6 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
@@ -41,6 +44,7 @@ from ..inkling2.modeling_inkling2 import (
     Inkling2TextModel,
     Inkling2TopKRouter,
     Inkling2UnweightedRMSNorm,
+    eager_attention_forward,
     get_relative_distance,
 )
 
@@ -218,9 +222,13 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
         hidden_size = stacked_states.shape[-1]
         query_states = self.query[loop_layer_idx].float()
         query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
-        attn_weights = torch.matmul(query_states, stacked_states.transpose(-1, -2)) * hidden_size**-0.5
-        attn_weights = attn_weights.softmax(dim=-1)
-        return torch.matmul(attn_weights, stacked_states)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, _ = attention_interface(
+            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
+        )
+        return attn_output.transpose(1, 2)
 
 
 class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):

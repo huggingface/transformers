@@ -833,6 +833,9 @@ class Inkling2BlockAttentionResidual(nn.Module):
             torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
         self.norm = Inkling2UnweightedRMSNorm()
+        self.config = config
+        self.num_key_value_groups = 1
+        self.is_causal = False
 
     def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
         stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
@@ -841,10 +844,15 @@ class Inkling2BlockAttentionResidual(nn.Module):
         hidden_size = stacked_states.shape[-1]
         # (batch, seq_len, num_queries, hidden_size), the same queries at every position
         query_states = self.query.float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
-        attn_weights = torch.matmul(query_states, stacked_states.transpose(-1, -2)) * hidden_size**-0.5
-        attn_weights = attn_weights.softmax(dim=-1)
-        attn_output = torch.matmul(attn_weights, stacked_states)
-        return attn_output.unbind(-2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, _ = attention_interface(
+            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
+        )
+        return attn_output.transpose(1, 2).unbind(-2)
 
 
 class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):

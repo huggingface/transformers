@@ -87,6 +87,52 @@ class Inkling2LoopMessageGate(nn.Module):
         return (1 - forget_gate) * hidden_states + message_gate * message
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    position_bias: torch.Tensor | None = None,
+    sinks: torch.Tensor | None = None,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if position_bias is not None:
+        attn_weights = attn_weights + position_bias
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    if sinks is not None:
+        # The sink is one extra logit per query with a zero value: it only absorbs probability mass
+        combined_logits = torch.cat([attn_weights, sinks], dim=-1).float()
+        attn_weights = F.softmax(combined_logits, dim=-1)[..., :-1].to(query.dtype)
+    else:
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Inkling2LoopMessageAttentionResidual(nn.Module):
     """Retrieves messages from the block states of the previous block using learned queries."""
 
@@ -97,6 +143,9 @@ class Inkling2LoopMessageAttentionResidual(nn.Module):
             torch.zeros(config.loop_layer_index_end - config.loop_layer_index_start, 4, config.hidden_size)
         )
         self.norm = Inkling2LoopUnweightedRMSNorm()
+        self.config = config
+        self.num_key_value_groups = 1
+        self.is_causal = False
 
     def forward(
         self, block_states: torch.Tensor, partial_block_states: torch.Tensor, loop_layer_idx: int
@@ -107,9 +156,13 @@ class Inkling2LoopMessageAttentionResidual(nn.Module):
         hidden_size = stacked_states.shape[-1]
         query_states = self.query[loop_layer_idx].float()
         query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
-        attn_weights = torch.matmul(query_states, stacked_states.transpose(-1, -2)) * hidden_size**-0.5
-        attn_weights = attn_weights.softmax(dim=-1)
-        return torch.matmul(attn_weights, stacked_states)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, _ = attention_interface(
+            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
+        )
+        return attn_output.transpose(1, 2)
 
 
 class Inkling2LoopL2Clip(nn.Module):
@@ -450,52 +503,6 @@ class Inkling2LoopGatedOutputProjection(nn.Module):
         return self.linear(attn_output)
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    position_bias: torch.Tensor | None = None,
-    sinks: torch.Tensor | None = None,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if position_bias is not None:
-        attn_weights = attn_weights + position_bias
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    if sinks is not None:
-        # The sink is one extra logit per query with a zero value: it only absorbs probability mass
-        combined_logits = torch.cat([attn_weights, sinks], dim=-1).float()
-        attn_weights = F.softmax(combined_logits, dim=-1)[..., :-1].to(query.dtype)
-    else:
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class Inkling2LoopSlidingAttention(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__()
@@ -803,6 +810,9 @@ class Inkling2LoopBlockAttentionResidual(nn.Module):
             torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
         self.norm = Inkling2LoopUnweightedRMSNorm()
+        self.config = config
+        self.num_key_value_groups = 1
+        self.is_causal = False
 
     def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
         stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
@@ -811,10 +821,15 @@ class Inkling2LoopBlockAttentionResidual(nn.Module):
         hidden_size = stacked_states.shape[-1]
         # (batch, seq_len, num_queries, hidden_size), the same queries at every position
         query_states = self.query.float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
-        attn_weights = torch.matmul(query_states, stacked_states.transpose(-1, -2)) * hidden_size**-0.5
-        attn_weights = attn_weights.softmax(dim=-1)
-        attn_output = torch.matmul(attn_weights, stacked_states)
-        return attn_output.unbind(-2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, _ = attention_interface(
+            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
+        )
+        return attn_output.transpose(1, 2).unbind(-2)
 
 
 class Inkling2LoopSlidingDecoderLayer(GradientCheckpointingLayer):
