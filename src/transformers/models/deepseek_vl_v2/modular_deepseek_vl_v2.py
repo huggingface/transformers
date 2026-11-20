@@ -127,7 +127,6 @@ class DeepseekVLV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["SiglipEncoderLayer", "DeepseekV2DecoderLayer", "DeepseekV3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -219,7 +218,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
     ) -> torch.Tensor:
         if input_ids is None:
             image_token = self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = (inputs_embeds == image_token).all(-1)
         else:
