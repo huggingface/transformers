@@ -87,7 +87,7 @@ class DoryAttention(AfmoeAttention):
         attention_mask: torch.Tensor | None,
         cache: Cache | None = None,
         cache_offset: int = 0,
-        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        write_cache: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -107,18 +107,12 @@ class DoryAttention(AfmoeAttention):
         query_scale = (self.sqk * self.sqk_scale).view(-1, 1, self.head_dim)
         query_states = query_states * query_scale.square()
 
-        if shared_kv_states is not None:
-            # `last_loop`: earlier loops attend over the last loop's cached past and their own tokens, without writing
-            if (past := shared_kv_states.get(self.layer_idx)) is not None:
-                key_states = torch.cat([past[0], key_states], dim=-2)
-                value_states = torch.cat([past[1], value_states], dim=-2)
-                if self.sliding_window is not None:
-                    # The cache may hold more than the window if past recording is on
-                    num_visible = self.sliding_window - 1 + query_states.shape[-2]
-                    key_states, value_states = key_states[..., -num_visible:, :], value_states[..., -num_visible:, :]
-        elif cache is not None:
-            # `per_loop` loops past the first write to their own copy of this layer's cache, see `DoryModel.forward`
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx + cache_offset)
+        if cache is not None:
+            # `per_loop` loops past the first write to their own copy of this layer's cache, `last_loop` loops before
+            # the last only read it, see `DoryModel.forward`
+            key_states, value_states = cache.update(
+                key_states, value_states, self.layer_idx + cache_offset, write=write_cache
+            )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -295,11 +289,7 @@ class DoryModel(LlamaModel):
         recurrent_end = recurrent_start + n_recurrent
         last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
 
-        shared_kv_states = None
-        if cache is not None and last_loop_only:
-            # Only the last loop writes, the earlier ones read the past
-            shared_kv_states = {i: (c.keys, c.values) for i, c in enumerate(cache.layers) if c.is_initialized}
-        elif cache is not None and len(cache.layers) == self.config.num_hidden_layers:
+        if cache is not None and not last_loop_only and len(cache.layers) == self.config.num_hidden_layers:
             # Loops 1, 2, ... write to copies of the recurrent cache layers, appended at the end
             cache.layers += [copy.deepcopy(c) for c in cache.layers[recurrent_start:recurrent_end] * (n_loops - 1)]
 
@@ -327,7 +317,8 @@ class DoryModel(LlamaModel):
                     position_embeddings=position_embeddings[decoder_layer.attention_type],
                     cache=cache,
                     cache_offset=cache_offset,
-                    shared_kv_states=shared_kv_states if loop_idx < n_loops - 1 else None,
+                    # `last_loop`: only the last loop writes, the earlier ones attend over the past without caching
+                    write_cache=not last_loop_only or loop_idx == n_loops - 1,
                     **kwargs,
                 )
 
