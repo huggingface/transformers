@@ -113,6 +113,7 @@ if TYPE_CHECKING:
     from .deepseek_v4 import *
     from .deepseek_v32 import *
     from .deepseek_vl import *
+    from .deepseek_vl_v2 import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
     from .deimv2 import *

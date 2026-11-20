@@ -147,6 +147,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deepseek_v32", "DeepseekV32Config"),
         ("deepseek_v4", "DeepseekV4Config"),
         ("deepseek_vl", "DeepseekVLConfig"),
+        ("deepseek_vl_v2", "DeepseekVLV2Config"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deimv2", "Deimv2Config"),
@@ -1256,6 +1257,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("csm", "CsmProcessor"),
         ("deepseek_ocr2", "DeepseekOcr2Processor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
+        ("deepseek_vl_v2", "DeepseekVLV2Processor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
         ("dia", "DiaProcessor"),
         ("dots3_note", "Dots3NoteProcessor"),
@@ -1416,6 +1418,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("cosmos3_edge", {"pil": "Cosmos3EdgeImageProcessorPil", "torchvision": "Cosmos3EdgeImageProcessor"}),
         ("deepseek_ocr2", {"pil": "DeepseekOcr2ImageProcessorPil", "torchvision": "DeepseekOcr2ImageProcessor"}),
         ("deepseek_vl", {"pil": "DeepseekVLImageProcessorPil", "torchvision": "DeepseekVLImageProcessor"}),
+        ("deepseek_vl_v2", {"torchvision": "DeepseekVLV2ImageProcessor"}),
         (
             "deepseek_vl_hybrid",
             {"pil": "DeepseekVLHybridImageProcessorPil", "torchvision": "DeepseekVLHybridImageProcessor"},
