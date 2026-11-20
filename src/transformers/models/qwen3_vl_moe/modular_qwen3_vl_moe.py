@@ -33,12 +33,12 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
     Qwen3MoePreTrainedModel,
-    Qwen3MoeRMSNorm,
     Qwen3MoeSparseMoeBlock,
     load_balancing_loss_func,
 )
@@ -172,7 +172,7 @@ class Qwen3VLMoeCausalLMOutputWithPast(AriaCausalLMOutputWithPast):
     pass
 
 
-class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
+class Qwen3VLMoeTextRMSNorm(LlamaRMSNorm):
     pass
 
 
