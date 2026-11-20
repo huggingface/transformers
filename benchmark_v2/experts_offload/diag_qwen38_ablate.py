@@ -26,6 +26,7 @@ variants = {
     "lm_head": r"^lm_head$",
     "experts": "experts",
     "all of the above": "all",
+    "tiny dispatches (a, b, inject, shared gate)": r"(in_proj_[ab]|block_inject_weight|shared_expert_gate)$",
 }
 names = sys.argv[1:] or list(variants)
 

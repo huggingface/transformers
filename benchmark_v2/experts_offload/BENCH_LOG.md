@@ -51,3 +51,6 @@ Stub ablations of Q4 (`diag_qwen38_ablate.py`, 25.0 ms/token): experts 7.97 ms (
 lm_head 1.77 ms (0.40 GB, 225 GB/s), shared expert 1.22 ms (0.15 GB); all matmuls 21.9 ms for 4.06 GB, the rest 3.1 ms.
 Measured bandwidth: 250 GB/s read (`x.sum()`), so 4-bit single-token decode tops out near 4.06 GB / 250 GB/s + 3.1 ms
 = 19.3 ms = **52 tok/s**. 100 tok/s needs <= ~1.7 GB/token, or several tokens per forward (speculative / MTP).
+| Q6 | 2026-11-21 | vectorized `qmv4` (uint4 + float4) for thin linears; same for experts | 38.1 / 38.4 | | noise: thin matrices are latency-bound, MLX `gather_qmm` already at par |
+| Q7 | 2026-11-21 | fuse sibling projections sharing an input (180 groups: linear_attn qkv+z+b+a, hyper down+inject, shared gate+up) | 39.6 | 25.7 | noise; stubbing all 216 tiny dispatches only saves 0.94 ms |
+| Q8 | 2026-11-21 | speculative-verify proxy: decode step over a batch of k | k=4: 58.3 ms, k=8: 90.3 ms | | expert union grows with k: 100 tok/s would need 5.8 (k=4) / 9.0 (k=8) accepted per step |
