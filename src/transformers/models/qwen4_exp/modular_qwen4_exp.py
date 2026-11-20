@@ -416,57 +416,40 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
         visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
 
-        selected_token_indices = torch.full(
-            (batch_size, seq_length, self.token_budget + self.compress_ratio - 1),
-            -1,
-            dtype=torch.int32,
-            device=hidden_states.device,
-        )
-        for batch_idx in range(batch_size):
-            for query_idx in range(seq_length):
-                local_visible_indices = torch.nonzero(
-                    visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
-                ).flatten()
-                num_complete_blocks = local_visible_indices.shape[-1] // self.compress_ratio
-                # Compute selected tokens
-                if num_complete_blocks > 0:
-                    block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
-                        num_complete_blocks, self.compress_ratio
-                    )
+        visible = visible_token_indices[:, 0]  # [batch, queries, kv]
+        kv_length, ratio = visible.shape[-1], self.compress_ratio
+        num_groups = kv_length // ratio
+        if num_groups == 0:
+            return visible.unsqueeze(1)
+        # Each query pools the tokens it sees, in order, into groups of `compress_ratio`. A query sees an ordered prefix
+        # of what its row sees at all (causal + padding), so the groups are the same for every query of a row: pool
+        # them once. ponytail: masks where queries see non-nested sets (packed documents) need the per-query groups
+        seen = visible.any(dim=1)
+        rank = seen.cumsum(-1) - 1
+        positions = torch.arange(kv_length, device=visible.device)
+        order = torch.argsort(torch.where(seen, positions, positions + kv_length), dim=-1)[:, : num_groups * ratio]
+        key_groups = raw_keys.gather(1, order[..., None].expand(-1, -1, raw_keys.shape[-1]))
+        pooled_keys = key_groups.view(batch_size, num_groups, ratio, -1).float().mean(dim=2).to(raw_keys.dtype)
+        pooled_keys = self.k_layernorm(pooled_keys)
+        # Groups past what a row sees (static cache slots) are never complete: any valid position does
+        group_starts = order[:, ::ratio, None].clamp(max=full_cos.shape[1] - 1)
+        block_cos = full_cos.expand(batch_size, -1, -1).gather(1, group_starts.expand(-1, -1, full_cos.shape[-1]))
+        block_sin = full_sin.expand(batch_size, -1, -1).gather(1, group_starts.expand(-1, -1, full_sin.shape[-1]))
+        block_key_states = apply_rotary_pos_emb(
+            pooled_keys.unsqueeze(2), cos=block_cos, sin=block_sin, unsqueeze_dim=2
+        ).squeeze(2)
 
-                    key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
-                    key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
-                    pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
-                    pooled_keys = self.k_layernorm(pooled_keys)
-                    group_starts = block_token_indices[:, 0]
-                    block_key_states = apply_rotary_pos_emb(
-                        pooled_keys.unsqueeze(1),
-                        cos=full_cos[batch_idx].index_select(0, group_starts),
-                        sin=full_sin[batch_idx].index_select(0, group_starts),
-                    ).squeeze(1)
-
-                    scores = torch.matmul(
-                        q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
-                    ).transpose(-1, -2)
-                    scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
-
-                    selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
-                    # Remap the indices of the blocks to the indices of individual tokens
-                    selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
-                else:
-                    selected_tokens = torch.tensor([], device=hidden_states.device)
-                tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
-                selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
-                selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
-
-        # Create the selection mask to combine with the main causal mask
-        kv_length = attention_mask.shape[-1]
-        selected_token_mask = torch.zeros(
-            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
-        )
-        # We absorb all the -1 by scaterring them to the last index that we will drop
-        scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
-        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
+        scores = torch.einsum("bshd,bgd->bsgh", q.float(), block_key_states.float())
+        scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+        # Only a query's complete groups compete; its incomplete tail is always kept
+        complete_tokens = visible.sum(dim=-1, keepdim=True) // ratio * ratio
+        complete = torch.arange(num_groups, device=visible.device) * ratio < complete_tokens
+        scores = scores.masked_fill(~complete, float("-inf"))
+        top = scores.topk(min(self.block_topk, num_groups), dim=-1).indices
+        chosen = torch.zeros_like(complete).scatter(-1, top, True) & complete
+        token_group = (rank // ratio).clamp(0, num_groups - 1)[:, None, :].expand(-1, seq_length, -1)
+        selected = chosen.gather(-1, token_group) | (rank[:, None, :] >= complete_tokens)
+        selected_token_mask = (visible & selected).unsqueeze(1)
 
         return selected_token_mask
 
