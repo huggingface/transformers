@@ -921,6 +921,35 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
         self.assertEqual(batch["input_ids"].shape, (2, 10))
         self.assertEqual(batch["labels"].shape, (2, 10))
 
+    def test_whole_word_mask_linear(self):
+        """Test _whole_word_mask expands masked word IDs per row and ignores -1 special tokens."""
+        word_ids = np.array(
+            [
+                [-1, 0, 0, 1, 2, 2, -1],
+                [-1, 0, 1, 1, -1, -1, -1],
+            ]
+        )
+        mask = np.array(
+            [
+                [True, False, True, False, False, False, False],
+                [False, False, True, False, False, False, True],
+            ]
+        )
+        expected = np.array(
+            [
+                [False, True, True, False, False, False, False],
+                [False, False, True, True, False, False, False],
+            ]
+        )
+        np.testing.assert_array_equal(DataCollatorForLanguageModeling._whole_word_mask(word_ids, mask), expected)
+
+        # All special tokens (-1) should produce all False without error.
+        all_special = np.full((2, 4), -1)
+        np.testing.assert_array_equal(
+            DataCollatorForLanguageModeling._whole_word_mask(all_special, np.ones((2, 4), dtype=bool)),
+            np.zeros((2, 4), dtype=bool),
+        )
+
     def test_numpy_mlm(self):
         """Test MLM mode with NumPy output."""
         set_seed(42)
