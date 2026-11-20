@@ -361,35 +361,6 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
         self.assertEqual(layers[3].max_cache_len, 48)
 
-    def test_cache_layer_indices(self):
-        """
-        Tests models running a decoder layer several times per forward (e.g. looped models) set
-        `cache_layer_indices` to repeat the same layer's cache in the right order.
-        """
-        config = LlamaConfig(
-            hidden_size=64,
-            num_hidden_layers=3,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            sliding_window=None,
-            per_layer_config={1: {"sliding_window": 16}},
-        )
-        # decoder layers 1 and 2 run twice, in two extra cache layers at the end
-        config.cache_layer_indices = [0, 1, 2, 1, 2]
-
-        dynamic_layers = DynamicCache(config=config).layers
-        static_layers = StaticCache(config=config, max_cache_len=64).layers
-        self.assertEqual(len(dynamic_layers), 5)
-        self.assertEqual(len(static_layers), 5)
-        for cache_layer_idx in (1, 3):
-            self.assertIsInstance(dynamic_layers[cache_layer_idx], DynamicSlidingWindowLayer)
-            self.assertEqual(dynamic_layers[cache_layer_idx].sliding_window, 16)
-            self.assertIsInstance(static_layers[cache_layer_idx], StaticSlidingWindowLayer)
-            self.assertEqual(static_layers[cache_layer_idx].max_cache_len, 16)
-        for cache_layer_idx in (0, 2, 4):
-            self.assertFalse(dynamic_layers[cache_layer_idx].is_sliding)
-            self.assertFalse(static_layers[cache_layer_idx].is_sliding)
-
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_linear_attention_layers(self):
         """

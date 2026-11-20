@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from collections.abc import Callable
 
 import torch
@@ -140,15 +141,10 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
             )
 
     @property
-    def cache_layer_indices(self) -> list[int]:
-        """Returns decoder layer index for each cache layer."""
-        looped_layer_indices = range(self.loop_layer_index_start, self.loop_layer_index_end)
-        return list(range(self.num_hidden_layers)) + (self.loop_num_passes - 1) * list(looped_layer_indices)
-
-    @property
     def total_num_hidden_layers(self) -> int:
         """Total number of decoder layers visited in each forward pass. This takes looped layers into account."""
-        return len(self.cache_layer_indices)
+        num_loop_layers = self.loop_layer_index_end - self.loop_layer_index_start
+        return self.num_hidden_layers + (self.loop_num_passes - 1) * num_loop_layers
 
 
 @auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
@@ -495,6 +491,11 @@ class Inkling2LoopTextModel(Inkling2TextModel):
         loop_start = self.config.loop_layer_index_start
         loop_end = self.config.loop_layer_index_end
         num_loop_layers = loop_end - loop_start
+
+        if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
+            # Append extra caches for loop layers
+            loop_cache_layers = cache.layers[loop_start:loop_end]
+            cache.layers += [copy.deepcopy(layer) for layer in loop_cache_layers * (self.config.loop_num_passes - 1)]
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])

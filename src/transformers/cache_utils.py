@@ -1938,13 +1938,6 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     # Some models may have "moe" or "mlp" as layer_type, for layer that do not need any attention - replace them with "dummy"
     layer_types = ["dummy" if layer_type in ("moe", "mlp") else layer_type for layer_type in layer_types]
 
-    # Some models run a layer several times per forward (e.g. looped models) and need one cache layer per run:
-    # `cache_layer_indices` gives, for each cache layer, the index of the decoder layer it belongs to
-    cache_layer_indices = getattr(config, "cache_layer_indices", None)
-    if cache_layer_indices is not None:
-        layer_types = [layer_types[layer_idx] for layer_idx in cache_layer_indices]
-        layer_configs = [layer_configs[layer_idx] for layer_idx in cache_layer_indices]
-
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
@@ -2199,7 +2192,7 @@ class QuantizedCache(Cache):
                 "`QuantizedCache` is only supported for models with only full attention layers. We found the following invalid layer "
                 f"types: {invalid_layer_types}"
             )
-        layers = [layer_class(**layer_kwargs) for _ in range(len(layer_types))]
+        layers = [layer_class(**layer_kwargs) for _ in range(config.num_hidden_layers)]
         super().__init__(layers=layers)
 
 
