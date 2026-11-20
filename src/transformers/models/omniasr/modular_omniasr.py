@@ -27,6 +27,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..parakeet.modeling_parakeet import ParakeetEncoderModelOutput, ParakeetPreTrainedModel
@@ -313,6 +314,7 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
     input_modalities = ("audio", "text")
     _keep_in_fp32_modules_strict = AttributeError()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

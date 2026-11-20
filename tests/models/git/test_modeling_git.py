@@ -23,6 +23,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,44 +40,38 @@ if is_vision_available():
     from PIL import Image
 
 
-class GitVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=32,
-        patch_size=16,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class GitVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 32,
+        "patch_size": 16,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -124,6 +119,8 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as GIT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = GitVisionModelTester
 
     all_model_classes = (GitVisionModel,) if is_torch_available() else ()
 
@@ -188,62 +185,48 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class GitModelTester:
-    def __init__(
-        self,
-        parent,
-        num_channels=3,
-        image_size=32,
-        patch_size=16,
-        batch_size=13,
-        text_seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-    ):
-        self.parent = parent
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.batch_size = batch_size
-        self.text_seq_length = text_seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
+class GitModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "num_channels": 3,
+        "image_size": 32,
+        "patch_size": 16,
+        "batch_size": 13,
+        "text_seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # make sure the BOS, EOS and PAD tokens are within the vocab
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
-
+        values["bos_token_id"] = values["vocab_size"] - 1
+        values["eos_token_id"] = values["vocab_size"] - 1
+        values["pad_token_id"] = values["vocab_size"] - 1
         # for GIT, the sequence length is the sum of the text and patch tokens, + 1 due to the CLS token
-        self.seq_length = self.text_seq_length + int((self.image_size / self.patch_size) ** 2) + 1
+        values["seq_length"] = values["text_seq_length"] + int((values["image_size"] / values["patch_size"]) ** 2) + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
@@ -366,6 +349,8 @@ class GitModelTester:
 
 @require_torch
 class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = GitModelTester
+
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

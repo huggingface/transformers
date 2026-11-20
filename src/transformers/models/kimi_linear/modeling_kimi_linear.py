@@ -326,7 +326,7 @@ class KimiLinearForgetGate(nn.Module):
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.A_log = nn.Parameter(torch.empty(1, 1, self.num_heads, 1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -722,12 +722,12 @@ class KimiLinearTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -843,7 +843,6 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["KimiLinearDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = None
@@ -854,6 +853,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
     }
     _is_stateful = True
     _can_compile_fullgraph = True
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight", "dt_bias"]
 
     def _init_weights(self, module):
         super()._init_weights(module)

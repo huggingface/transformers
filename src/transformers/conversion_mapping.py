@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
     Interleave,
+    LayerPairCollapse,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
@@ -69,6 +70,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
+    "sarvam_mla": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
     "cohere2_moe": "qwen2_moe",
     "rt_detr_v2": "rt_detr",
@@ -156,6 +158,13 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # Dory checkpoints store each decoder layer as an attention block followed by an mlp block
+        "dory": [
+            LayerPairCollapse(),
+            WeightRenaming(r"\.self_attn\.g_proj\.", ".self_attn.gate_proj."),
+            WeightRenaming(r"^backbone\.", "model."),
+            WeightRenaming(r"\.embeddings\.", ".embed_tokens."),
+        ],
         "hy_v4": [
             # General HC prefix which is dropped
             WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
@@ -1279,6 +1288,18 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Concatenate(dim=0)],
             ),
         ],
+        "exaone": [
+            WeightRenaming(r"^transformer\.wte\.", "model.embed_tokens."),
+            WeightRenaming(r"^transformer\.h\.", "model.layers."),
+            WeightRenaming(r"^transformer\.ln_f\.", "model.norm."),
+            WeightRenaming(r"\.attn\.attention\.", ".self_attn."),
+            WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+            WeightRenaming(r"\.ln_1\.", ".input_layernorm."),
+            WeightRenaming(r"\.ln_2\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.mlp\.c_fc_0\.", ".mlp.gate_proj."),
+            WeightRenaming(r"\.mlp\.c_fc_1\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.c_proj\.", ".mlp.down_proj."),
+        ],
         "lara_mini": [
             WeightRenaming(source_patterns=r"linear_attn\.out_norm\.", target_patterns="linear_attn.norm."),
             # The checkpoints fuse the gated delta net input projections into one `in_proj`, rows `[q|k|v|z|b|a]`
@@ -2266,6 +2287,22 @@ def _build_checkpoint_conversion_mapping():
             operations=[Concatenate(dim=0)],
         ),
         WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.mlp\.gate\.expert_bias", ".mlp.gate.e_score_correction_bias"),
+    ]
+
+    mapping["sarvam_moe"] = mapping["qwen2_moe"].copy()
+    mapping["sarvam_moe"] += [
+        WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"\.attention\.", ".self_attn."),
+        # GQA, so the fused rows `[q|k|v]` are split by each target's size
+        WeightConverter(
+            source_patterns="query_key_value",
+            target_patterns=["q_proj", "k_proj", "v_proj"],
+            operations=[Split(dim=0)],
+        ),
+        WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
         WeightRenaming(r"\.mlp\.gate\.expert_bias", ".mlp.gate.e_score_correction_bias"),
     ]
 
