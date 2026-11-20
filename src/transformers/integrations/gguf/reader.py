@@ -16,6 +16,7 @@
 import struct
 from collections.abc import Container
 from math import prod
+from os import PathLike
 from typing import NamedTuple
 
 import numpy as np
@@ -53,6 +54,7 @@ class GgufHeader(NamedTuple):
     architecture: str
     tensors: tuple[TensorInfo, ...]
     data_start: int  # where the tensor data begins, after the aligned metadata
+    shards: tuple["GgufHeader", ...] = ()
 
     @property
     def ggml_types(self) -> dict[str, int]:
@@ -80,27 +82,87 @@ class GgufHeader(NamedTuple):
     @classmethod
     def from_file(cls, gguf_path: str) -> "GgufHeader":
         """Parse a file's metadata and tensor table, without touching its tensor data."""
-        blob = _mapped(gguf_path)
-        metadata, tensor_count, pos = _read_metadata(blob, gguf_path)
-        architecture = metadata["general.architecture"]
-        alignment = metadata.get("general.alignment", 32)  # llama.cpp's default
+        return cls.from_files(gguf_path)
+
+    @classmethod
+    def from_files(cls, gguf_paths: str | PathLike | list[str]) -> "GgufHeader":
+        """Read one file, or a complete checkpoint with per-file tensor offsets."""
+        metadata, files = _read_gguf_files(gguf_paths)
+        shards = []
+        for path, entries, data_start in files:
+            infos = tuple(
+                TensorInfo(name, shape, ggml_type, offset, _byte_count(ggml_type, prod(shape), path))
+                for name, shape, ggml_type, offset in entries
+            )
+            shards.append(cls(path, metadata["general.architecture"], infos, data_start))
+        first = shards[0]
+        return first._replace(
+            tensors=tuple(info for shard in shards for info in shard.tensors),
+            shards=tuple(shards) if len(shards) > 1 else (),
+        )
+
+
+def read_gguf_metadata(
+    gguf_path: str | PathLike | list[str], string_arrays: "Container[str]" = ()
+) -> tuple[dict, tuple[str, ...]]:
+    """Read one file's metadata, or the first metadata and complete tensor inventory of a list of shards."""
+    metadata, files = _read_gguf_files(gguf_path, string_arrays)
+    return metadata, tuple(name for _, entries, _ in files for name, *_ in entries)
+
+
+def _read_gguf_files(
+    gguf_paths: str | PathLike | list[str], string_arrays: "Container[str]" = ()
+) -> tuple[dict, list[tuple[str, list[tuple], int]]]:
+    complete = not isinstance(gguf_paths, (str, PathLike))
+    if not complete:
+        gguf_paths = [gguf_paths]
+    if not gguf_paths:
+        raise ValueError("A GGUF checkpoint must contain at least one file.")
+
+    files = []
+    first_metadata = {}
+    tensor_names = set()
+    total_tensors = None
+    for index, path in enumerate(gguf_paths):
+        blob = _mapped(path)
+        metadata, tensor_count, pos = _read_metadata(blob, path, string_arrays)
+        architecture = metadata.get("general.architecture", first_metadata.get("general.architecture"))
+        if architecture is None:
+            raise ValueError(f"{path} has no `general.architecture` in its metadata.")
+        if index == 0:
+            first_metadata = metadata
+        elif architecture != first_metadata["general.architecture"]:
+            raise ValueError(f"{path} has a conflicting `general.architecture` for this GGUF checkpoint.")
+
+        # llama.cpp's gguf-split --merge retains split metadata with split.count set to zero.
+        is_merged = len(gguf_paths) == 1 and metadata.get("split.count") == 0
+        expected_split = {
+            "split.no": index,
+            "split.count": len(gguf_paths),
+            "split.tensors.count": first_metadata.get("split.tensors.count"),
+        }
+        if complete and not is_merged and (len(gguf_paths) > 1 or any(key in metadata for key in expected_split)):
+            for key, expected in expected_split.items():
+                if key not in metadata:
+                    raise ValueError(f"{path} is missing required GGUF shard metadata `{key}`.")
+                if metadata[key] != expected:
+                    raise ValueError(f"{path} has `{key}` {metadata[key]}, but expected {expected}.")
+            total_tensors = metadata["split.tensors.count"]
 
         entries, pos = _read_tensor_table(blob, tensor_count, pos)
-        infos = tuple(
-            TensorInfo(name, shape, ggml_type, offset, _byte_count(ggml_type, prod(shape), gguf_path))
-            for name, shape, ggml_type, offset in entries
-        )
-        # the data section starts at the next alignment boundary after the tensor table
+        alignment = metadata.get("general.alignment", 32)
         data_start = (pos + alignment - 1) // alignment * alignment
-        return cls(gguf_path, architecture, infos, data_start)
+        for name, *_ in entries:
+            if complete and name in tensor_names:
+                raise ValueError(f"Duplicate GGUF tensor name `{name}` in {path}.")
+            tensor_names.add(name)
+        files.append((path, entries, data_start))
 
-
-def read_gguf_metadata(gguf_path: str, string_arrays: "Container[str]" = ()) -> tuple[dict, tuple[str, ...]]:
-    """A file's metadata keys and tensor names, without reading any tensor data."""
-    blob = _mapped(gguf_path)
-    metadata, tensor_count, pos = _read_metadata(blob, gguf_path, string_arrays)
-    entries, _ = _read_tensor_table(blob, tensor_count, pos)
-    return metadata, tuple(name for name, *_ in entries)
+    if total_tensors is not None and len(tensor_names) != total_tensors:
+        raise ValueError(
+            f"The GGUF checkpoint contains {len(tensor_names)} tensors, but `split.tensors.count` is {total_tensors}."
+        )
+    return first_metadata, files
 
 
 def _read_tensor_table(blob: np.ndarray, tensor_count: int, pos: int) -> tuple[list[tuple], int]:
@@ -135,8 +197,6 @@ def _read_metadata(blob: np.ndarray, gguf_path: str, string_arrays: "Container[s
         key, pos = _read_string(blob, pos)
         (value_type,) = struct.unpack_from("<I", blob, pos)
         metadata[key], pos = _read_value(blob, pos + 4, value_type, key in string_arrays)
-    if "general.architecture" not in metadata:
-        raise ValueError(f"{gguf_path} has no `general.architecture` in its metadata.")
     return metadata, tensor_count, pos
 
 
@@ -214,6 +274,11 @@ class LazyGgufTensor:
 
 def load_gguf_state_dict(header: GgufHeader) -> dict[str, LazyGgufTensor]:
     """`{gguf_name: LazyGgufTensor}` — the file's tensors, none of them read yet."""
+    if header.shards:
+        state_dict = {}
+        for shard in header.shards:
+            state_dict.update(load_gguf_state_dict(shard))
+        return state_dict
     blob = _mapped(header.path)
 
     state_dict = {}

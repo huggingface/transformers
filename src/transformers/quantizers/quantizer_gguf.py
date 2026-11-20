@@ -100,12 +100,12 @@ class GgufHfQuantizer(HfQuantizer):
         self.attn_requested = config._attn_implementation is not None
         return config
 
-    def read_header(self, gguf_file: str):
-        """Parse the file's metadata, once `from_pretrained` knows where the file is."""
+    def read_header(self, gguf_file: str | list[str]):
+        """Parse checkpoint metadata once `from_pretrained` has resolved its files."""
         metadata, _ = read_gguf_metadata(gguf_file)
         self.supported = is_gguf_arch_supported(metadata["general.architecture"])
         if self.supported:
-            self.header = GgufHeader.from_file(gguf_file)
+            self.header = GgufHeader.from_files(gguf_file)
             self.validate_environment()
 
     def update_dtype(self, dtype):
@@ -129,7 +129,7 @@ class GgufHfQuantizer(HfQuantizer):
         # supperted architectures will cast themselves.
         return None if self.supported else super().get_new_dtype(converter, param, dtype)
 
-    def get_state_dict(self, checkpoint_file: str, model):
+    def get_state_dict(self, checkpoint_file: str | list[str], model):
         """The file's tensors, quantized ones kept as raw blocks."""
         if self.supported:
             return load_gguf_state_dict(self.header)

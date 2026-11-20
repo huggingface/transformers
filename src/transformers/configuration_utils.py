@@ -47,6 +47,7 @@ from .utils import (
     resolve_revision,
 )
 from .utils.generic import is_timm_config_dict
+from .utils.hub import _get_gguf_checkpoint_files
 
 
 if TYPE_CHECKING:
@@ -976,12 +977,31 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
+        if gguf_file:
+            configuration_file = gguf_file
+            if os.path.isfile(pretrained_model_name_or_path):
+                configuration_file = pretrained_model_name_or_path
+            gguf_checkpoint_files = _get_gguf_checkpoint_files(
+                pretrained_model_name_or_path,
+                configuration_file,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
+                user_agent=user_agent,
+                revision=revision,
+                subfolder=subfolder,
+                tqdm_class=kwargs.pop("tqdm_class", None),
+            )
+            resolved_config_file = gguf_checkpoint_files[0]
+            is_local = is_local or os.path.isfile(configuration_file)
+        elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
             # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
         else:
-            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
+            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 
             try:
                 # Load from local folder or from cache or download from model Hub and cache
@@ -1018,13 +1038,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 # reader covers rebuild it from those keys; the rest go to the legacy reader.
                 from .integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
 
-                metadata, tensor_names = read_gguf_metadata(resolved_config_file)
+                metadata, tensor_names = read_gguf_metadata(gguf_checkpoint_files)
                 if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
                     config_dict = get_gguf_config(metadata, tensor_names)
                 else:
                     from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
-                    config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+                    config_dict = load_gguf_checkpoint(gguf_checkpoint_files, return_tensors=False)["config"]
             else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
