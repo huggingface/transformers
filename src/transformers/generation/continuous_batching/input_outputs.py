@@ -24,6 +24,7 @@ from transformers.generation.configuration_utils import ContinuousBatchingConfig
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
 from .cache_allocators import FULL_ATTENTION, INDEXED_ATTENTION, SLIDING_ATTENTION, FullAttentionCacheAllocator
+from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE, MLACacheAllocator
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
@@ -345,6 +346,8 @@ class ContinuousBatchingIOs:
         in one go on the device, which also resets it)."""
         if 0 < self.num_q_tokens <= _PROTO_SKIP_MASK_MAX_Q:
             return True
+        if _PROTO_MLA_BLOCK_TABLE and self.use_block_table:
+            return True
         return _PROTO_DEVICE_MASK == "1" and getattr(self.config, "sliding_window", None) is None
 
     def _proto_expand_read_index(
@@ -489,7 +492,9 @@ class ContinuousBatchingIOs:
 
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself
-            if self.use_block_table:
+            if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+                pass  # uploaded once for the whole batch after the loop
+            elif self.use_block_table:
                 self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
@@ -521,6 +526,25 @@ class ContinuousBatchingIOs:
 
         # Scalar attribute update
         self.total_seqlen_q = cumulative_seqlens_q[-1]
+
+        # PROTOTYPE: one block table upload for the batch, and the bucket of the longest request (the prototype
+        # attention sizes its per-request key window with it, so it is part of the graph key)
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            width = self.block_table.shape[-1]
+            for allocator in allocators:
+                if not isinstance(allocator, MLACacheAllocator):
+                    raise RuntimeError("CB_PROTO_MLA_BLOCK_TABLE only handles MLA allocators")
+                pages_stride = allocator.block_physical_stride // allocator.tokens_per_page
+                rows = []
+                for future_state in requests_in_batch:
+                    block_ids = allocator.block_table[future_state.state.request_id]
+                    if len(block_ids) > width:
+                        raise RuntimeError("A request holds more blocks than the block table is wide")
+                    rows.append([b * pages_stride for b in block_ids] + [-1] * (width - len(block_ids)))
+                table = torch.tensor(rows, dtype=self.block_table.dtype)
+                self.block_table[allocator.index, : len(rows)].copy_(table, non_blocking=True)
+            longest = max(self.max_length_k.values())
+            self._proto_len_k_bucket = pad_to_pow2(longest, self.cache.max_decode_fast_path_length, 1024)
 
         # If needed, build the attention mask with the un-padded sequence lengths
         proto_device_mask = _PROTO_DEVICE_MASK != "0" and getattr(self.config, "sliding_window", None) is None
@@ -658,6 +682,8 @@ class ContinuousBatchingIOs:
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: num_sequences + 1]
             kwargs["max_length_k"][layer_type] = 1 if self.use_block_table else self.max_length_k[layer_type]
+            if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+                kwargs["max_length_k"][layer_type] = self._proto_len_k_bucket
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
@@ -676,6 +702,8 @@ class ContinuousBatchingIOs:
 
     def _get_graph_key(self) -> tuple[int, ...]:
         # Keys for decode fast path
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            return (self.num_q_tokens, self._proto_len_k_bucket)
         if self.use_block_table:
             return (self.num_q_tokens,)
         # Keys for varlen path
