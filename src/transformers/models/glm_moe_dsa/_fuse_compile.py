@@ -17,6 +17,11 @@
 #   NOT supported (CB captures its own CUDA graphs).
 # FUSE_COMPILE_DYNAMIC: 0 = static shapes (one artifact per kind and padded batch size), 1 = dynamic (default 0).
 # FUSE_COMPILE_FULLGRAPH: 1 (default) errors on any graph break inside the layer.
+# FUSE_COMPILE_TP (tensor parallel only): `twin` (default) = the compiled function runs on a twin of each layer that
+#   holds this rank's local parameters and the classes' own forwards, and all-reduces explicitly where the tp_plan
+#   does (after `o_proj`, after the MLP block: needs HF_TP_SINGLE_MLP_ALL_REDUCE=1); `trace` = trace through the
+#   tp_plan forward wrappers installed on the modules (probe of what dynamo makes of them).
+import copy
 import os
 import time
 
@@ -27,6 +32,7 @@ import torch.nn.functional as F
 MODE = os.environ.get("FUSE_COMPILE", "0")
 DYNAMIC = os.environ.get("FUSE_COMPILE_DYNAMIC", "0") == "1"
 FULLGRAPH = os.environ.get("FUSE_COMPILE_FULLGRAPH", "1") == "1"
+TP_MODE = os.environ.get("FUSE_COMPILE_TP", "twin")
 
 _flash_mla = None
 _rotary = None  # `apply_rotary_pos_emb_interleave` of the modeling file, set on first use (no circular import)
@@ -75,6 +81,23 @@ def _tp_all_reduce(x: torch.Tensor) -> None:
     import torch.distributed as dist
 
     dist.all_reduce(x, group=_tp_group)
+
+
+def _localize(module):
+    """A twin of `module` for inference on one tensor-parallel rank: same classes, same storage, but the parameters
+    are this rank's local tensors instead of DTensors and the forwards are the classes' own (the tp_plan wrappers set
+    on the instances are dropped). The original module is left untouched for the regular path."""
+    from torch.distributed.tensor import DTensor
+
+    twin = copy.copy(module)
+    twin.__dict__ = dict(module.__dict__)
+    twin.__dict__.pop("forward", None)
+    twin._parameters = {
+        name: torch.nn.Parameter(p.to_local(), requires_grad=False) if isinstance(p, DTensor) else p
+        for name, p in module._parameters.items()
+    }
+    twin._modules = {name: None if m is None else _localize(m) for name, m in module._modules.items()}
+    return twin
 
 
 torch.library.custom_op("transformers::fuse_cache_write", _cache_write, mutates_args=("cache_rows",))
@@ -170,7 +193,22 @@ def _prepare(model, cache):
     views = [allocator.cache_tensor[position[i] * page : position[i] * page + common] for i in range(len(layers))]
     weights = [_proto_kv_b_dequantized(layer.self_attn) for layer in layers]
     h_pad = 0 if torch.cuda.get_device_capability()[0] == 9 else 64
-    state = {"cache": cache, "allocator": allocator, "views": views, "w_kv_b": weights, "h_pad": h_pad}
+    tp, run_layers_on = False, list(layers)
+    o_proj_weight = layers[0].self_attn.o_proj.weight
+    if hasattr(o_proj_weight, "device_mesh"):  # tensor parallel: the parameters are DTensors
+        global _tp_group
+        mesh = o_proj_weight.device_mesh
+        _tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        if TP_MODE == "twin":
+            if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") != "1":
+                raise NotImplementedError("FUSE_COMPILE under TP expects HF_TP_SINGLE_MLP_ALL_REDUCE=1")
+            if any(layer.self_attn.o_proj.bias is not None for layer in layers):
+                raise NotImplementedError("FUSE_COMPILE under TP expects bias-free row-parallel projections")
+            tp, run_layers_on = True, [_localize(layer) for layer in layers]
+    state = {
+        "cache": cache, "allocator": allocator, "views": views, "w_kv_b": weights, "h_pad": h_pad, "tp": tp,
+        "layers": run_layers_on,
+    }
     model._fuse_compile_state = state
     return state
 
@@ -225,10 +263,9 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
 
     cos, sin = position_embeddings
     fn = _layer_fn()
-    tp = _tp_group is not None
-    layers = model.layers[: model.config.num_hidden_layers]
+    tp = state["tp"]
     timings = STATS.get("layer_seconds")  # set to a list by a benchmark to get the wall time of each layer call
-    for i, layer in enumerate(layers):
+    for i, layer in enumerate(state["layers"]):
         if timings is not None:
             start = time.perf_counter()
         hidden_states = fn(

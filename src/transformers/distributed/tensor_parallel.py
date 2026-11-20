@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 import warnings
 from typing import TYPE_CHECKING
@@ -91,6 +92,11 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
         return None
     # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+
+
+# [scratch, bench only] FUSE_COMPILE_TP=trace: the in-place all-reduces of the inference path go through the custom op
+# of `models/glm_moe_dsa/_fuse_compile.py` so a compiled layer can trace through the tp_plan wrappers
+_FUSE_TP_TRACE = os.environ.get("FUSE_COMPILE", "0") not in ("0", "eager") and os.environ.get("FUSE_COMPILE_TP") == "trace"
 
 
 class TensorParallelLayer:
@@ -297,7 +303,10 @@ class RowwiseParallel(TensorParallelLayer):
             return output
         if use_local_inference_path:
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            dist.all_reduce(output, group=process_group)
+            if _FUSE_TP_TRACE:  # [scratch, bench only] an op dynamo can keep in a graph
+                torch.ops.transformers.fuse_tp_all_reduce(output)
+            else:
+                dist.all_reduce(output, group=process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
         else:
@@ -400,6 +409,9 @@ class AllReduceParallel(TensorParallelLayer):
         if not isinstance(output, DTensor):
             # each rank holds a partial sum as a plain tensor: sum them in place, like `moe_tp_experts`
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            if _FUSE_TP_TRACE and not torch.is_grad_enabled():  # [scratch, bench only]
+                torch.ops.transformers.fuse_tp_all_reduce(output)
+                return output
             return _AllReduceForward.apply(output, process_group)
         if output.placements != (Replicate(),):
             output = output.redistribute(placements=[Replicate()])
