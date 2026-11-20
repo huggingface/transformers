@@ -226,3 +226,22 @@ class Seq2seqTrainerTester(TestCasePlus):
                 compute_metrics=lambda x: {"samples": x[0].shape[0]},
             )
         self.assertIn("Fix these issues to train your model", str(exc.exception))
+
+    @require_torch
+    def test_optimizer_cls_and_kwargs(self):
+        class DummyModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = torch.nn.Linear(2, 2)
+
+            def forward(self, x):
+                return self.linear(x)
+
+        model = DummyModel()
+        args = Seq2SeqTrainingArguments(self.get_auto_remove_tmp_dir(), report_to=[])
+        opt = (torch.optim.SGD, {"lr": 0.1})
+        trainer = Seq2SeqTrainer(model=model, args=args, optimizer_cls_and_kwargs=opt)
+        self.assertEqual(trainer.optimizer_cls_and_kwargs, opt)
+        trainer.create_optimizer()
+        self.assertIsInstance(trainer.optimizer, torch.optim.SGD)
+        self.assertEqual(trainer.optimizer.defaults["lr"], 0.1)
