@@ -70,10 +70,10 @@ class ExportedMultimodalModel(ExportedModel):
             mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
             if features[spec.component] is None:
                 # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows; the
-                # model returns them too, one tensor per image.
+                # model returns them too, one tensor per decoder layer in its config's order.
                 inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
-                features["deepstack_features"] = list(layers.items())
                 layers = {layer: torch.cat(images) for layer, images in layers.items()}
+                features["deepstack_features"] = list(layers.values())
             else:
                 inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
             if layers is not None:
@@ -101,7 +101,7 @@ class ExportedMultimodalModel(ExportedModel):
         # And Granite4-Vision its per-layer ones.
         if "deepstack_features" in features and "deepstack_features" in fields:
             outputs["deepstack_features"] = [
-                (layer, [image.clone() for image in images]) for layer, images in features["deepstack_features"]
+                layer_features.clone() for layer_features in features["deepstack_features"]
             ]
         return outputs
 
