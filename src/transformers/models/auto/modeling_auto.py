@@ -366,6 +366,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("minicpm_ocr", "MiniCPMOcrModel"),
         ("minicpm_ocr_vision", "MiniCPMOcrVisionModel"),
         ("minicpmv2_5", "MiniCPMV2_5Model"),
+        ("minicpmv2_5_vision", "MiniCPMV2_5VisionTransformer"),
         ("minicpmv4_6", "MiniCPMV4_6Model"),
         ("minicpmv4_7", "MiniCPMV4_7Model"),
         ("minicpmv4_7_vision", "MiniCPMV4_7VisionModel"),

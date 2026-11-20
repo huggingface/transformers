@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import get_image_size
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -42,7 +41,12 @@ class MiniCPMV2_5ImageProcessingTester(ImageProcessingTester):
 
     def num_patches(self, image):
         """Patches of an image too small to be sliced: upscaled to ~scale_resolution**2 px, sides rounded to 14 px."""
-        height, width = (image.height, image.width) if isinstance(image, Image.Image) else get_image_size(image)
+        if isinstance(image, Image.Image):
+            height, width = image.height, image.width
+        elif isinstance(image, np.ndarray):  # the tester's NumPy images are channels-last
+            height, width = image.shape[:2]
+        else:  # and its PyTorch images channels-first
+            height, width = image.shape[-2:]
         aspect_ratio = width / height
         new_height = int(self.scale_resolution / math.sqrt(aspect_ratio))
         new_width = int(new_height * aspect_ratio)
@@ -61,16 +65,12 @@ class MiniCPMV2_5ImageProcessingTester(ImageProcessingTester):
 class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = MiniCPMV2_5ImageProcessingTester
 
-    @unittest.skip("expected_output_image_shape cannot infer the channel dim for 4-channel images")
-    def test_call_numpy_4_channels(self):
-        pass
-
     def test_call_returns_expected_keys(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             images = self.image_processor_tester.prepare_image_inputs(torchify=True)
             result = image_processor(images, return_tensors="pt")
-            for key in ("pixel_values", "patch_attention_mask", "patch_position_ids", "target_sizes", "grids"):
+            for key in ("pixel_values", "pixel_attention_mask", "patch_position_ids", "grids"):
                 self.assertIn(key, result)
 
     def test_padding_mask_and_position_ids(self):
@@ -80,15 +80,16 @@ class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
             result = image_processor(images, return_tensors="pt")
             mask, positions, pixel_values = (
-                result["patch_attention_mask"],
+                result["pixel_attention_mask"],
                 result["patch_position_ids"],
                 result["pixel_values"],
             )
             patch_size = self.image_processor_tester.patch_size
             patches = pixel_values.unflatten(-1, (-1, patch_size)).permute(0, 3, 1, 2, 4)
-            for slice_idx, (rows, cols) in enumerate(result["target_sizes"].tolist()):
-                num_patches = rows * cols
-                self.assertEqual(mask[slice_idx].sum().item(), num_patches)
+            for slice_idx in range(pixel_values.shape[0]):
+                num_patches = mask[slice_idx].sum().item()
+                rows, cols = (positions[slice_idx, :num_patches].max(dim=0).values + 1).tolist()
+                self.assertEqual(rows * cols, num_patches)
                 self.assertTrue(mask[slice_idx, :num_patches].all())
                 self.assertEqual(patches[slice_idx, num_patches:].abs().sum().item(), 0)
                 expected = torch.stack(torch.meshgrid(torch.arange(rows), torch.arange(cols), indexing="ij"), -1)
@@ -96,7 +97,8 @@ class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 self.assertEqual(positions[slice_idx, num_patches:].abs().sum().item(), 0)
 
     def test_backends_equivalent(self):
-        """The PIL and torchvision backends return the same slices (pixels within resizing differences)."""
+        """Both backends return the same slices for a batch of differently sized images (pixels within the usual
+        resizing differences)."""
         if len(self.image_processing_classes) < 2:
             self.skipTest("needs both backends")
         images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
@@ -104,9 +106,10 @@ class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             cls(**self.image_processor_dict)(images, return_tensors="pt")
             for cls in self.image_processing_classes.values()
         ]
-        for key in ("patch_attention_mask", "patch_position_ids", "target_sizes"):
+        for key in ("pixel_attention_mask", "patch_position_ids"):
             torch.testing.assert_close(results[0][key], results[1][key])
-        self.assertEqual(results[0]["pixel_values"].shape, results[1]["pixel_values"].shape)
+        self.assertEqual(results[0]["grids"], results[1]["grids"])
+        self._assert_tensors_equivalence(results[0]["pixel_values"], results[1]["pixel_values"])
 
     def test_crop_to_patches_aspect_ratio(self):
         """Row/column order is correct when slicing non-square images."""
@@ -121,7 +124,7 @@ class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 result = image_processor(test_image, return_tensors="pt")
                 self.assertEqual(result.grids, [[num_rows, num_cols]])
                 self.assertEqual(tuple(result.pixel_values.shape), (7, 3, patch_size, overview_patches * patch_size))
-                self.assertEqual(result.patch_attention_mask.sum(-1).tolist(), [overview_patches] + [1] * 6)
+                self.assertEqual(result.pixel_attention_mask.sum(-1).tolist(), [overview_patches] + [1] * 6)
 
     def test_sizes_rounded_to_patch_size(self):
         # 300 x 500 px is under 448**2, so it is upscaled to ~448**2 px and each side rounded to a multiple of 14
@@ -129,5 +132,5 @@ class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             image = np.random.randint(255, size=(3, 300, 500), dtype=np.uint8)
-            target_sizes = image_processing(image, return_tensors="pt")["target_sizes"]
-            self.assertListEqual(target_sizes.tolist(), [[25, 41]])  # 350 x 574 px
+            positions = image_processing(image, return_tensors="pt")["patch_position_ids"]
+            self.assertListEqual((positions[0].max(dim=0).values + 1).tolist(), [25, 41])  # 350 x 574 px

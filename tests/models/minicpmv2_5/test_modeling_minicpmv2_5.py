@@ -16,7 +16,14 @@
 import unittest
 
 from transformers import AutoProcessor, MiniCPMV2_5Config, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
@@ -39,10 +46,11 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
         "image_token_id": 100,
         "image_size": 32,
         "patch_size": 8,  # each test image is one 4x4-patch slice
-        "query_num": 4,  # ... which the resampler turns into 4 tokens
+        "resampler_n_latents": 4,  # ... which the resampler turns into 4 tokens
+        "resampler_n_heads": 4,
         "num_image_tokens": 4,
         "vocab_size": 256,
-        "hidden_size": 128,  # the resampler uses 128-dim heads
+        "hidden_size": 128,
         "intermediate_size": 37,
         "num_hidden_layers": 2,
         "num_attention_heads": 4,
@@ -67,14 +75,14 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
         batch_size = batch_size if batch_size is not None else self.batch_size
         side = self.image_size // self.patch_size
         # Every other slice is a smaller (side - 1) x side grid padded to side x side, so attention tests cover padding.
-        patch_attention_mask = torch.ones(batch_size, side * side, dtype=torch.bool)
-        patch_attention_mask[1::2, (side - 1) * side :] = False
-        grid = torch.stack(torch.meshgrid(torch.arange(side), torch.arange(side), indexing="ij"), dim=-1)
-        patch_position_ids = grid.reshape(1, side * side, 2).repeat(batch_size, 1, 1) * patch_attention_mask[..., None]
-        return {
-            "patch_attention_mask": patch_attention_mask.to(torch_device),
-            "patch_position_ids": patch_position_ids.to(torch_device),
-        }
+        pixel_attention_mask = torch.ones(batch_size, side * side, dtype=torch.bool, device=torch_device)
+        pixel_attention_mask[1::2, (side - 1) * side :] = False
+        rows, cols = torch.meshgrid(
+            torch.arange(side, device=torch_device), torch.arange(side, device=torch_device), indexing="ij"
+        )
+        grid = torch.stack([rows, cols], dim=-1).reshape(1, side * side, 2).repeat(batch_size, 1, 1)
+        patch_position_ids = grid * pixel_attention_mask[..., None]
+        return {"pixel_attention_mask": pixel_attention_mask, "patch_position_ids": patch_position_ids}
 
 
 @require_torch
@@ -85,21 +93,10 @@ class MiniCPMV2_5ModelTest(VLMModelTest, unittest.TestCase):
         # As in llava, the base model has no `model.` prefix to reverse the `^llm\.model\.` rename onto
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    def test_resampler_narrow_hidden_size(self):
-        # The resampler uses 128-dim heads; a text model narrower than 128 (e.g. tiny test fixtures) gets one head.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.text_config.hidden_size = 64
-        resampler = MiniCPMV2_5Model(config).resampler.to(torch_device)
-        self.assertEqual((resampler.num_heads, resampler.head_dim), (1, 64))
-        vision_features = torch.randn(2, 16, config.vision_config.hidden_size, device=torch_device)
-        mask = inputs_dict["patch_attention_mask"]
-        output = resampler(vision_features, mask, inputs_dict["patch_position_ids"])
-        self.assertEqual(tuple(output.shape), (2, config.query_num, 64))
-
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict = {
-            key: value for key, value in inputs_dict.items() if key.startswith("pixel") or key.startswith("patch_")
+            key: value for key, value in inputs_dict.items() if key.startswith("pixel") or key == "patch_position_ids"
         }
         return config, inputs_dict
 
@@ -136,9 +133,13 @@ class MiniCPMV2_5IntegrationTest(unittest.TestCase):
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])[0]
-        expected = (
-            "The image depicts two cats lying on a pink blanket. One cat is on the left side, and the other is on "
-            "the right side. Both cats appear to be resting or sleeping. There are also two remote controls placed "
-            "near the cats."
+        expected_texts = Expectations(
+            {
+                ("cuda", None): (
+                    "The image depicts two cats lying on a pink blanket. One cat is on the left side, and the other is "
+                    "on the right side. Both cats appear to be resting or sleeping. There are also two remote controls "
+                    "placed near the cats."
+                ),
+            }
         )
-        self.assertEqual(decoded, expected)
+        self.assertEqual(decoded, expected_texts.get_expectation())

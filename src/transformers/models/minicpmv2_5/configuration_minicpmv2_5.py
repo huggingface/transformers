@@ -65,10 +65,12 @@ class MiniCPMV2_5VisionConfig(PreTrainedConfig):
 @strict
 class MiniCPMV2_5Config(PreTrainedConfig):
     r"""
-    query_num (`int`, *optional*, defaults to 96):
-        Number of learned queries of the resampler, i.e. the number of tokens each image slice becomes.
+    resampler_n_latents (`int`, *optional*, defaults to 96):
+        Number of learned latent queries of the resampler, i.e. the number of tokens each image slice becomes.
+    resampler_n_heads (`int`, *optional*, defaults to 32):
+        Number of attention heads of the resampler's cross-attention.
     image_token_id (`int`, *optional*, defaults to 128002):
-        Token id of the image placeholder (`<unk>`), repeated `query_num` times per image slice.
+        Token id of the image placeholder (`<unk>`), repeated `resampler_n_latents` times per image slice.
 
     Example:
 
@@ -104,7 +106,8 @@ class MiniCPMV2_5Config(PreTrainedConfig):
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    query_num: int = 96
+    resampler_n_latents: int = 96
+    resampler_n_heads: int = 32
     image_token_id: int = 128002
     tie_word_embeddings: bool = False
 

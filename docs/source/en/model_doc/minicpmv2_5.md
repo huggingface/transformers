@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2024-08-03 and contributed to Hugging Face Transformers on 2026-11-18.*
+*This model was published in HF papers on 2024-08-03 and contributed to Hugging Face Transformers on 2026-11-20.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -30,10 +30,10 @@ The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
 ## Usage example
 
 ```python
-from transformers import AutoProcessor, MiniCPMV2_5ForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model_id = "openbmb/MiniCPM-Llama3-V-2_5"
-model = MiniCPMV2_5ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
@@ -64,6 +64,11 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 ## MiniCPMV2_5VisionConfig
 
 [[autodoc]] MiniCPMV2_5VisionConfig
+
+## MiniCPMV2_5VisionTransformer
+
+[[autodoc]] MiniCPMV2_5VisionTransformer
+    - forward
 
 ## MiniCPMV2_5Model
 

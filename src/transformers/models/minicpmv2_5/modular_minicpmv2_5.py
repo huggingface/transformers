@@ -24,17 +24,19 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
+from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, is_flash_attention_requested
+from ...utils.generic import can_return_tuple
 from ..auto import AutoConfig, AutoModel
+from ..detr.modeling_detr import DetrCrossAttention
 from ..idefics2.configuration_idefics2 import Idefics2VisionConfig
-from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer, eager_attention_forward
+from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -42,11 +44,7 @@ from ..llava.modeling_llava import (
     LlavaModelOutputWithPast,
     LlavaPreTrainedModel,
 )
-from ..minicpmv4_6.image_processing_minicpmv4_6 import (
-    MiniCPMV4_6ImageProcessor,
-    MiniCPMV4_6ImageProcessorKwargs,
-    ensure_divide,
-)
+from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, ensure_divide
 from ..minicpmv4_6.image_processing_pil_minicpmv4_6 import MiniCPMV4_6ImageProcessorPil
 
 
@@ -68,10 +66,12 @@ class MiniCPMV2_5VisionConfig(Idefics2VisionConfig):
 @strict
 class MiniCPMV2_5Config(PreTrainedConfig):
     r"""
-    query_num (`int`, *optional*, defaults to 96):
-        Number of learned queries of the resampler, i.e. the number of tokens each image slice becomes.
+    resampler_n_latents (`int`, *optional*, defaults to 96):
+        Number of learned latent queries of the resampler, i.e. the number of tokens each image slice becomes.
+    resampler_n_heads (`int`, *optional*, defaults to 32):
+        Number of attention heads of the resampler's cross-attention.
     image_token_id (`int`, *optional*, defaults to 128002):
-        Token id of the image placeholder (`<unk>`), repeated `query_num` times per image slice.
+        Token id of the image placeholder (`<unk>`), repeated `resampler_n_latents` times per image slice.
 
     Example:
 
@@ -107,7 +107,8 @@ class MiniCPMV2_5Config(PreTrainedConfig):
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    query_num: int = 96
+    resampler_n_latents: int = 96
+    resampler_n_heads: int = 32
     image_token_id: int = 128002
     tie_word_embeddings: bool = False
 
@@ -127,101 +128,279 @@ def find_best_resize(
     return ensure_divide(height, patch_size), ensure_divide(width, patch_size)
 
 
-def pad_slices(pixel_values: torch.Tensor, target_sizes: torch.Tensor, patch_size: int) -> dict[str, torch.Tensor]:
+class MiniCPMV2_5ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    max_slice_nums (`int`, *optional*, defaults to 9):
+        Maximum number of slices when splitting a high-resolution image.
+    scale_resolution (`int`, *optional*, defaults to 448):
+        Target resolution for individual slices.
+    patch_size (`int`, *optional*, defaults to 14):
+        Spatial patch size of the vision encoder.
+    slice_mode (`bool`, *optional*, defaults to `True`):
+        Whether to split images into multiple slices for higher resolution.
     """
-    Split MiniCPM-V 4.6's packed `(1, num_channels, patch_size, total_patches * patch_size)` strip into one row per
-    slice, padded to the longest slice, plus the mask of real patches and each patch's `(row, col)` in its slice grid
-    (0 for padding).
-    """
-    num_patches = (target_sizes[:, 0] * target_sizes[:, 1]).tolist()
-    max_patches = max(num_patches)
-    slices = pixel_values[0].split([n * patch_size for n in num_patches], dim=-1)
-    padded = torch.stack([F.pad(s, (0, (max_patches - n) * patch_size)) for s, n in zip(slices, num_patches)])
-    patch_index = torch.arange(max_patches)[None, :]
-    patch_attention_mask = patch_index < torch.tensor(num_patches)[:, None]
-    widths = target_sizes[:, 1:2].long()
-    patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
-    patch_position_ids = patch_position_ids * patch_attention_mask[..., None]
-    return {
-        "pixel_values": padded,
-        "patch_attention_mask": patch_attention_mask,
-        "patch_position_ids": patch_position_ids,
-    }
 
-
-class MiniCPMV2_5ImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=False):
-    pass
+    max_slice_nums: int
+    scale_resolution: int
+    patch_size: int
+    slice_mode: bool
 
 
 class MiniCPMV2_5ImageProcessor(MiniCPMV4_6ImageProcessor):
-    # Slicing is MiniCPM-V 4.6's. Differences: no visual-token merger, so sizes are rounded to the patch size only
-    # (`downsample_mode` is unused), and slices are returned padded to the same length instead of packed.
-    model_input_names = ["pixel_values", "patch_attention_mask", "patch_position_ids"]
+    # Slicing is MiniCPM-V 4.6's, but with no visual-token merger sizes are rounded to the patch size only, and each
+    # slice is returned as one row of patches, padded to the longest slice.
+    downsample_mode = AttributeError()
+    use_image_id = AttributeError()
+    model_input_names = ["pixel_values", "pixel_attention_mask", "patch_position_ids"]
 
-    def find_best_resize(self, image_size, scale_resolution, patch_size, downsample_mode=None, allow_upscale=False):
+    def find_best_resize(self, image_size, scale_resolution, patch_size, allow_upscale=False):
         return find_best_resize(image_size, scale_resolution, patch_size, allow_upscale)
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]) -> BatchFeature:
-        return_tensors = kwargs.pop("return_tensors", None)
-        outputs = super().preprocess(images, **kwargs)
-        target_sizes = outputs["target_sizes"]
-        data = pad_slices(outputs["pixel_values"], target_sizes, kwargs.get("patch_size", self.patch_size))
-        data.update(
-            target_sizes=target_sizes, grids=outputs["grids"], num_patches_per_image=outputs["num_patches_per_image"]
+    def get_refine_size(
+        self,
+        image_size: tuple[int, int],
+        grid: list[int],
+        scale_resolution: int,
+        patch_size: int,
+        allow_upscale: bool = False,
+    ) -> tuple[int, int]:
+        height, width = image_size
+        grid_y, grid_x = grid
+        best_height, best_width = self.find_best_resize(
+            image_size=(ensure_divide(height, grid_y) / grid_y, ensure_divide(width, grid_x) / grid_x),
+            scale_resolution=scale_resolution,
+            patch_size=patch_size,
+            allow_upscale=allow_upscale,
         )
+        return best_height * grid_y, best_width * grid_x
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        resample,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        max_slice_nums: int,
+        scale_resolution: int,
+        patch_size: int,
+        slice_mode: bool,
+        return_tensors: str | TensorType | None = None,
+        disable_grouping: bool | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        slices, slice_sizes, grids = [], [], []
+        for image in images:
+            image_size = image.shape[-2:]
+            best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
+
+            # The overview image, then (if sliced) the slices of the refined image, row by row
+            image_patches = [image]
+            source_height, source_width = image_size
+            slice_height = slice_width = 0
+            if do_resize:
+                source_height, source_width = self.find_best_resize(
+                    image_size, scale_resolution, patch_size, allow_upscale=best_grid is None
+                )
+                image_patches = [
+                    self.resize(image, size=SizeDict(height=source_height, width=source_width), resample=resample)
+                ]
+                if best_grid is not None:
+                    refine_height, refine_width = self.get_refine_size(
+                        image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                    )
+                    refine_image = self.resize(
+                        image, size=SizeDict(height=refine_height, width=refine_width), resample=resample
+                    )
+                    slice_height, slice_width = refine_height // best_grid[0], refine_width // best_grid[1]
+                    image_patches.extend(divide_to_patches(refine_image, (slice_height, slice_width)))
+
+            grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
+            processed_grouped = {
+                shape: self.rescale_and_normalize(
+                    stacked.float(), do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+                for shape, stacked in grouped_patches.items()
+            }
+            processed_patches = reorder_images(processed_grouped, grouped_index)
+
+            slices.extend(self.reshape_by_patch(patch, patch_size) for patch in processed_patches)
+            slice_sizes.append((source_height // patch_size, source_width // patch_size))
+            slice_sizes.extend(
+                [(slice_height // patch_size, slice_width // patch_size)] * (len(processed_patches) - 1)
+            )
+            grids.append(best_grid if best_grid is not None else [0, 0])
+
+        # Pad every slice to the longest one; the mask marks real patches, the position ids give each one's (row, col)
+        num_patches = [height * width for height, width in slice_sizes]
+        max_patches = max(num_patches)
+        device = slices[0].device
+        pixel_values = torch.stack(
+            [F.pad(s, (0, (max_patches - n) * patch_size)) for s, n in zip(slices, num_patches)]
+        )
+        patch_index = torch.arange(max_patches, device=device)[None, :]
+        pixel_attention_mask = patch_index < torch.tensor(num_patches, device=device)[:, None]
+        widths = torch.tensor([width for _, width in slice_sizes], device=device)[:, None]
+        patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
         return BatchFeature(
-            data=data, tensor_type=return_tensors, skip_tensor_conversion=["grids", "num_patches_per_image"]
+            data={
+                "pixel_values": pixel_values,
+                "pixel_attention_mask": pixel_attention_mask,
+                "patch_position_ids": patch_position_ids * pixel_attention_mask[..., None],
+                "grids": grids,
+            },
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["grids"],
         )
 
 
 class MiniCPMV2_5ImageProcessorPil(MiniCPMV4_6ImageProcessorPil):
+    downsample_mode = AttributeError()
+    use_image_id = AttributeError()
     valid_kwargs = MiniCPMV2_5ImageProcessorKwargs
-    model_input_names = ["pixel_values", "patch_attention_mask", "patch_position_ids"]
+    model_input_names = ["pixel_values", "pixel_attention_mask", "patch_position_ids"]
 
     def __init__(self, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def find_best_resize(self, image_size, scale_resolution, patch_size, downsample_mode=None, allow_upscale=False):
-        return find_best_resize(image_size, scale_resolution, patch_size, allow_upscale)
-
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]) -> BatchFeature:
-        # Same as `pad_slices`, in NumPy so this backend works without PyTorch.
-        return_tensors = kwargs.pop("return_tensors", None)
-        outputs = super().preprocess(images, **kwargs)
-        target_sizes, patch_size = outputs["target_sizes"], kwargs.get("patch_size", self.patch_size)
-        num_patches = (target_sizes[:, 0] * target_sizes[:, 1]).tolist()
+        return super().preprocess(images, **kwargs)
+
+    def find_best_resize(self, image_size, scale_resolution, patch_size, allow_upscale=False):
+        return find_best_resize(image_size, scale_resolution, patch_size, allow_upscale)
+
+    def get_refine_size(
+        self,
+        image_size: tuple[int, int],
+        grid: list[int],
+        scale_resolution: int,
+        patch_size: int,
+        allow_upscale: bool = False,
+    ) -> tuple[int, int]:
+        height, width = image_size
+        grid_y, grid_x = grid
+        best_height, best_width = self.find_best_resize(
+            image_size=(ensure_divide(height, grid_y) / grid_y, ensure_divide(width, grid_x) / grid_x),
+            scale_resolution=scale_resolution,
+            patch_size=patch_size,
+            allow_upscale=allow_upscale,
+        )
+        return best_height * grid_y, best_width * grid_x
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        resample: "PILImageResampling | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        max_slice_nums: int,
+        scale_resolution: int,
+        patch_size: int,
+        slice_mode: bool,
+        return_tensors: str | TensorType | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        slices, slice_sizes, grids = [], [], []
+        for image in images:
+            image_size = image.shape[-2:]
+            best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
+
+            # The overview image, then (if sliced) the slices of the refined image, row by row
+            image_patches = [image]
+            source_height, source_width = image_size
+            slice_height = slice_width = 0
+            if do_resize:
+                source_height, source_width = self.find_best_resize(
+                    image_size, scale_resolution, patch_size, allow_upscale=best_grid is None
+                )
+                image_patches = [
+                    self.resize(image, size=SizeDict(height=source_height, width=source_width), resample=resample)
+                ]
+                if best_grid is not None:
+                    refine_height, refine_width = self.get_refine_size(
+                        image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                    )
+                    refine_image = self.resize(
+                        image, size=SizeDict(height=refine_height, width=refine_width), resample=resample
+                    )
+                    slice_height, slice_width = refine_height // best_grid[0], refine_width // best_grid[1]
+                    image_patches.extend(divide_to_patches(refine_image, (slice_height, slice_width)))
+
+            for patch in image_patches:
+                if do_rescale:
+                    patch = self.rescale(patch, rescale_factor)
+                if do_normalize:
+                    patch = self.normalize(patch, image_mean, image_std)
+                slices.append(self.reshape_by_patch(patch, patch_size))
+            slice_sizes.append((source_height // patch_size, source_width // patch_size))
+            slice_sizes.extend([(slice_height // patch_size, slice_width // patch_size)] * (len(image_patches) - 1))
+            grids.append(best_grid if best_grid is not None else [0, 0])
+
+        # Pad every slice to the longest one; the mask marks real patches, the position ids give each one's (row, col)
+        num_patches = [height * width for height, width in slice_sizes]
         max_patches = max(num_patches)
-        slices = np.split(outputs["pixel_values"][0], np.cumsum(num_patches)[:-1] * patch_size, axis=-1)
-        pad_widths = [((0, 0), (0, 0), (0, (max_patches - n) * patch_size)) for n in num_patches]
+        pixel_values = np.stack(
+            [np.pad(s, ((0, 0), (0, 0), (0, (max_patches - n) * patch_size))) for s, n in zip(slices, num_patches)]
+        )
         patch_index = np.arange(max_patches)[None, :]
-        patch_attention_mask = patch_index < np.array(num_patches)[:, None]
-        widths = target_sizes[:, 1:2].astype(np.int64)
+        pixel_attention_mask = patch_index < np.array(num_patches)[:, None]
+        widths = np.array([width for _, width in slice_sizes])[:, None]
         patch_position_ids = np.stack([patch_index // widths, patch_index % widths], axis=-1)
-        data = {
-            "pixel_values": np.stack([np.pad(s, pad) for s, pad in zip(slices, pad_widths)]),
-            "patch_attention_mask": patch_attention_mask,
-            "patch_position_ids": patch_position_ids * patch_attention_mask[..., None],
-            "target_sizes": target_sizes,
-            "grids": outputs["grids"],
-            "num_patches_per_image": outputs["num_patches_per_image"],
-        }
         return BatchFeature(
-            data=data, tensor_type=return_tensors, skip_tensor_conversion=["grids", "num_patches_per_image"]
+            data={
+                "pixel_values": pixel_values,
+                "pixel_attention_mask": pixel_attention_mask,
+                "patch_position_ids": patch_position_ids * pixel_attention_mask[..., None],
+                "grids": grids,
+            },
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["grids"],
         )
 
 
 @auto_docstring
 class MiniCPMV2_5Processor(ProcessorMixin):
-    image_token = "<unk>"
-    image_start_token = "<image>"
-    image_end_token = "</image>"
-    slice_start_token = "<slice>"
-    slice_end_token = "</slice>"
-    num_image_tokens = 96
-
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        image_token: str = "<unk>",
+        image_start_token: str = "<image>",
+        image_end_token: str = "</image>",
+        slice_start_token: str = "<slice>",
+        slice_end_token: str = "</slice>",
+        num_image_tokens: int = 96,
+        **kwargs,
+    ):
+        r"""
+        image_token (`str`, *optional*, defaults to `"<unk>"`):
+            Marks an image in the text, and is repeated `num_image_tokens` times per image slice.
+        image_start_token (`str`, *optional*, defaults to `"<image>"`):
+            Opens the image tokens of one slice.
+        image_end_token (`str`, *optional*, defaults to `"</image>"`):
+            Closes the image tokens of one slice.
+        slice_start_token (`str`, *optional*, defaults to `"<slice>"`):
+            Opens the slices of a sliced image.
+        slice_end_token (`str`, *optional*, defaults to `"</slice>"`):
+            Closes the slices of a sliced image.
+        num_image_tokens (`int`, *optional*, defaults to 96):
+            Number of image tokens per slice (the resampler's number of latents).
+        """
+        self.image_token = image_token
+        self.image_start_token = image_start_token
+        self.image_end_token = image_end_token
+        self.slice_start_token = slice_start_token
+        self.slice_end_token = slice_end_token
+        self.num_image_tokens = num_image_tokens
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
 
@@ -237,7 +416,8 @@ class MiniCPMV2_5Processor(ProcessorMixin):
 
     @property
     def unused_input_names(self) -> list[str]:
-        return ["grids", "num_patches_per_image", "target_sizes"]
+        # Each image's slice grid, which the processor needs to build its placeholder text
+        return ["grids"]
 
 
 class MiniCPMV2_5ModelOutputWithPast(LlavaModelOutputWithPast):
@@ -262,31 +442,32 @@ class MiniCPMV2_5VisionTransformer(Idefics2VisionTransformer):
     pass
 
 
+class MiniCPMV2_5CrossAttention(DetrCrossAttention):
+    """
+    Multi-headed cross-attention, as in DETR: keys can get position embeddings, values never do. The resampler adds the
+    slice's 2D position embedding to the keys only.
+    """
+
+    pass
+
+
 class MiniCPMV2_5Resampler(nn.Module):
     """
-    Perceiver-style resampler: `query_num` learned queries cross-attend to the patch features of one image slice, so
-    every slice becomes `query_num` tokens at the language model's width. Keys get a 2D sin-cos position embedding of
-    the slice's patch grid; values do not.
+    Perceiver-style resampler: `resampler_n_latents` learned queries cross-attend to the patch features of one image
+    slice, so every slice becomes `resampler_n_latents` tokens at the language model's width. Keys get a 2D sin-cos
+    position embedding of the slice's patch grid; values do not.
     """
 
     def __init__(self, config: MiniCPMV2_5Config):
         super().__init__()
         self.config = config
         self.embed_dim = config.text_config.hidden_size
-        # 128-dim heads like the original (32 heads at 4096); configs narrower than 128 get a single head
-        self.num_heads = max(self.embed_dim // 128, 1)
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-        self.query = nn.Parameter(torch.zeros(config.query_num, self.embed_dim))
+        self.query = nn.Parameter(torch.zeros(config.resampler_n_latents, self.embed_dim))
         self.kv_proj = nn.Linear(config.vision_config.hidden_size, self.embed_dim, bias=False)
         self.ln_q = nn.LayerNorm(self.embed_dim, eps=1e-6)
         self.ln_kv = nn.LayerNorm(self.embed_dim, eps=1e-6)
+        self.attn = MiniCPMV2_5CrossAttention(config, self.embed_dim, config.resampler_n_heads)
         self.ln_post = nn.LayerNorm(self.embed_dim, eps=1e-6)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.proj = nn.Parameter(torch.zeros(self.embed_dim, self.embed_dim))
 
     def get_2d_pos_embed(self, patch_position_ids: torch.Tensor) -> torch.Tensor:
@@ -304,56 +485,39 @@ class MiniCPMV2_5Resampler(nn.Module):
     def forward(
         self,
         vision_features: torch.Tensor,
-        patch_attention_mask: torch.Tensor,
+        pixel_attention_mask: torch.Tensor,
         patch_position_ids: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        num_slices = vision_features.shape[0]
-        pos_embed = self.get_2d_pos_embed(patch_position_ids) * patch_attention_mask[..., None]
         kv = self.ln_kv(self.kv_proj(vision_features))
-        queries = self.ln_q(self.query).unsqueeze(0).expand(num_slices, -1, -1)
-
-        query_states = self.q_proj(queries).view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(kv + pos_embed.to(kv.dtype))
-        key_states = key_states.view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(kv).view(num_slices, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        if is_flash_attention_requested(self.config):
-            # Flash attention's padding handling assumes the queries are the last positions of the keys (decoder
-            # layout), which doesn't hold for this cross-attention over right-padded slices: use SDPA for this call
-            # only, so the vision tower and language model still use flash attention.
-            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
-            attention_mask = patch_attention_mask[:, None, None, :]
-        else:
-            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-                self.config._attn_implementation, eager_attention_forward
-            )
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=queries,
-                attention_mask=patch_attention_mask,
-                encoder_hidden_states=kv,
-            )
-        attn_output, _ = attention_interface(
-            self, query_states, key_states, value_states, attention_mask, scaling=self.scaling, dropout=0.0
+        pos_embed = (self.get_2d_pos_embed(patch_position_ids) * pixel_attention_mask[..., None]).to(kv.dtype)
+        queries = self.ln_q(self.query).unsqueeze(0).expand(kv.shape[0], -1, -1)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=queries,
+            attention_mask=pixel_attention_mask,
+            encoder_hidden_states=kv,
         )
-        attn_output = attn_output.reshape(num_slices, -1, self.embed_dim)
-        return self.ln_post(self.o_proj(attn_output)) @ self.proj
+        attn_output, _ = self.attn(
+            queries, kv, attention_mask=attention_mask, encoder_position_embeddings=pos_embed, **kwargs
+        )
+        return self.ln_post(attn_output) @ self.proj
 
 
 class MiniCPMV2_5Model(LlavaModel):
     def __init__(self, config: MiniCPMV2_5Config):
         MiniCPMV2_5PreTrainedModel.__init__(self, config)
-        self.vision_tower = MiniCPMV2_5VisionTransformer._from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.resampler = MiniCPMV2_5Resampler(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Encodes image slices and resamples each one to `config.query_num` tokens.")
+    @auto_docstring(custom_intro="Encodes image slices and resamples each one to `config.resampler_n_latents` tokens.")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
-        patch_attention_mask: torch.Tensor,
+        pixel_attention_mask: torch.Tensor,
         patch_position_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -361,19 +525,19 @@ class MiniCPMV2_5Model(LlavaModel):
         pixel_values (`torch.FloatTensor` of shape `(num_slices, num_channels, patch_size, max_patches * patch_size)`):
             Every image slice of the batch as a single row of patches (as the checkpoint was trained), padded to the
             longest slice, as returned by [`MiniCPMV2_5ImageProcessor`].
-        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
+        pixel_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
             Which patches are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid, used by the resampler's 2D position embedding.
         """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values.to(self.vision_tower.dtype),
-            patch_attention_mask=patch_attention_mask[:, None, :],
+            patch_attention_mask=pixel_attention_mask[:, None, :],
             return_dict=True,
             **kwargs,
         )
         vision_outputs.pooler_output = self.resampler(
-            vision_outputs.last_hidden_state, patch_attention_mask, patch_position_ids
+            vision_outputs.last_hidden_state, pixel_attention_mask, patch_position_ids
         )
         return vision_outputs
 
@@ -384,7 +548,7 @@ class MiniCPMV2_5Model(LlavaModel):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        patch_attention_mask: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
         patch_position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -394,7 +558,7 @@ class MiniCPMV2_5Model(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniCPMV2_5ModelOutputWithPast:
         r"""
-        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
+        pixel_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
             Which patches of `pixel_values` are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`, *optional*):
             `(row, col)` of each patch in its slice's patch grid.
@@ -411,9 +575,10 @@ class MiniCPMV2_5Model(LlavaModel):
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
-                patch_attention_mask=patch_attention_mask,
+                pixel_attention_mask=pixel_attention_mask,
                 patch_position_ids=patch_position_ids,
                 return_dict=True,
+                **kwargs,
             )
 
         image_features = None
@@ -445,21 +610,21 @@ class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
-        patch_attention_mask: torch.Tensor,
+        pixel_attention_mask: torch.Tensor,
         patch_position_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(num_slices, num_channels, patch_size, max_patches * patch_size)`):
             Every image slice of the batch as a single row of patches, padded to the longest slice.
-        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
+        pixel_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
             Which patches are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid.
         """
         return self.model.get_image_features(
             pixel_values=pixel_values,
-            patch_attention_mask=patch_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             patch_position_ids=patch_position_ids,
             **kwargs,
         )
@@ -471,7 +636,7 @@ class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        patch_attention_mask: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
         patch_position_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -483,7 +648,7 @@ class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniCPMV2_5CausalLMOutputWithPast:
         r"""
-        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
+        pixel_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
             Which patches of `pixel_values` are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`, *optional*):
             `(row, col)` of each patch in its slice's patch grid.
@@ -514,7 +679,7 @@ class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            patch_attention_mask=patch_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             patch_position_ids=patch_position_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -548,6 +713,7 @@ __all__ = [
     "MiniCPMV2_5ImageProcessorPil",
     "MiniCPMV2_5Processor",
     "MiniCPMV2_5PreTrainedModel",
+    "MiniCPMV2_5VisionTransformer",
     "MiniCPMV2_5Model",
     "MiniCPMV2_5ForConditionalGeneration",
 ]

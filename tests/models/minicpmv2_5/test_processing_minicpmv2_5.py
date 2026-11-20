@@ -72,7 +72,7 @@ class MiniCPMV2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             sorted(inputs.keys()),
-            ["attention_mask", "input_ids", "patch_attention_mask", "patch_position_ids", "pixel_values"],
+            ["attention_mask", "input_ids", "patch_position_ids", "pixel_attention_mask", "pixel_values"],
         )
         self.assertIsInstance(inputs["pixel_values"], torch.Tensor)
         self.assertEqual(inputs["pixel_values"].shape[0], 1)  # one image, not sliced

@@ -41,21 +41,12 @@ class MiniCPMV2_5ImageProcessorKwargs(ImagesKwargs, total=False):
         Spatial patch size of the vision encoder.
     slice_mode (`bool`, *optional*, defaults to `True`):
         Whether to split images into multiple slices for higher resolution.
-    downsample_mode (`str`, *optional*, defaults to `"16x"`):
-        Visual token downsampling mode. `"16x"` applies full merge; `"4x"` keeps
-        4x more tokens.
-    use_image_id (`bool`, *optional*, defaults to `True`):
-        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
-        each image placeholder. Consumed by the Processor for placeholder
-        generation, not by the image processing pipeline itself.
     """
 
     max_slice_nums: int
     scale_resolution: int
     patch_size: int
     slice_mode: bool
-    downsample_mode: str
-    use_image_id: bool
 
 
 def ensure_divide(length: int, divisor: int) -> int:
@@ -77,28 +68,6 @@ def find_best_resize(
     return ensure_divide(height, patch_size), ensure_divide(width, patch_size)
 
 
-def pad_slices(pixel_values: torch.Tensor, target_sizes: torch.Tensor, patch_size: int) -> dict[str, torch.Tensor]:
-    """
-    Split MiniCPM-V 4.6's packed `(1, num_channels, patch_size, total_patches * patch_size)` strip into one row per
-    slice, padded to the longest slice, plus the mask of real patches and each patch's `(row, col)` in its slice grid
-    (0 for padding).
-    """
-    num_patches = (target_sizes[:, 0] * target_sizes[:, 1]).tolist()
-    max_patches = max(num_patches)
-    slices = pixel_values[0].split([n * patch_size for n in num_patches], dim=-1)
-    padded = torch.stack([F.pad(s, (0, (max_patches - n) * patch_size)) for s, n in zip(slices, num_patches)])
-    patch_index = torch.arange(max_patches)[None, :]
-    patch_attention_mask = patch_index < torch.tensor(num_patches)[:, None]
-    widths = target_sizes[:, 1:2].long()
-    patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
-    patch_position_ids = patch_position_ids * patch_attention_mask[..., None]
-    return {
-        "pixel_values": padded,
-        "patch_attention_mask": patch_attention_mask,
-        "patch_position_ids": patch_position_ids,
-    }
-
-
 @auto_docstring
 class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
@@ -112,12 +81,8 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
     scale_resolution = 448
     patch_size = 14
     slice_mode = True
-    downsample_mode = "16x"
-    use_image_id = True
     valid_kwargs = MiniCPMV2_5ImageProcessorKwargs
-    # Slicing is MiniCPM-V 4.6's. Differences: no visual-token merger, so sizes are rounded to the patch size only
-    # (`downsample_mode` is unused), and slices are returned padded to the same length instead of packed.
-    model_input_names = ["pixel_values", "patch_attention_mask", "patch_position_ids"]
+    model_input_names = ["pixel_values", "pixel_attention_mask", "patch_position_ids"]
 
     def __init__(self, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -127,9 +92,7 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
         kwargs.pop("do_resize")
         super()._validate_preprocess_kwargs(**kwargs)
 
-    def find_best_resize(
-        self, image_size, scale_resolution, patch_size, downsample_mode=None, allow_upscale=False
-    ) -> tuple[int, int]:
+    def find_best_resize(self, image_size, scale_resolution, patch_size, allow_upscale=False) -> tuple[int, int]:
         return find_best_resize(image_size, scale_resolution, patch_size, allow_upscale)
 
     def get_refine_size(
@@ -138,19 +101,14 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
-        downsample_mode: str,
         allow_upscale: bool = False,
     ) -> tuple[int, int]:
         height, width = image_size
         grid_y, grid_x = grid
-        refine_width = ensure_divide(width, grid_x)
-        refine_height = ensure_divide(height, grid_y)
-
         best_height, best_width = self.find_best_resize(
-            image_size=(refine_height / grid_y, refine_width / grid_x),
+            image_size=(ensure_divide(height, grid_y) / grid_y, ensure_divide(width, grid_x) / grid_x),
             scale_resolution=scale_resolution,
             patch_size=patch_size,
-            downsample_mode=downsample_mode,
             allow_upscale=allow_upscale,
         )
         return best_height * grid_y, best_width * grid_x
@@ -195,17 +153,12 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
         return patches
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs]) -> BatchFeature:
-        return_tensors = kwargs.pop("return_tensors", None)
-        outputs = super().preprocess(images, **kwargs)
-        target_sizes = outputs["target_sizes"]
-        data = pad_slices(outputs["pixel_values"], target_sizes, kwargs.get("patch_size", self.patch_size))
-        data.update(
-            target_sizes=target_sizes, grids=outputs["grids"], num_patches_per_image=outputs["num_patches_per_image"]
-        )
-        return BatchFeature(
-            data=data, tensor_type=return_tensors, skip_tensor_conversion=["grids", "num_patches_per_image"]
-        )
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[MiniCPMV2_5ImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,
@@ -221,90 +174,72 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
-        downsample_mode: str,
         return_tensors: str | TensorType | None = None,
         disable_grouping: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
-        per_image_pixel_values: list[list[torch.Tensor]] = []
-        per_image_target_sizes: list[list[list[int]]] = []
-        all_grids: list[list[int]] = []
-
+        slices, slice_sizes, grids = [], [], []
         for image in images:
             image_size = image.shape[-2:]
-            best_grid = None
+            best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
 
-            if slice_mode:
-                best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
-
+            # The overview image, then (if sliced) the slices of the refined image, row by row
             image_patches = [image]
+            source_height, source_width = image_size
+            slice_height = slice_width = 0
             if do_resize:
-                # Always resize source image
-                source_h, source_w = self.find_best_resize(
-                    image_size,
-                    scale_resolution,
-                    patch_size,
-                    downsample_mode=downsample_mode,
-                    allow_upscale=(best_grid is None),
+                source_height, source_width = self.find_best_resize(
+                    image_size, scale_resolution, patch_size, allow_upscale=best_grid is None
                 )
-                source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
-
-                # Collect all patches for this image: [source, *slices]
-                image_patches = [source_img]
-                patch_height = patch_width = 0
+                image_patches = [
+                    self.resize(image, size=SizeDict(height=source_height, width=source_width), resample=resample)
+                ]
                 if best_grid is not None:
-                    refine_h, refine_w = self.get_refine_size(
-                        image_size,
-                        best_grid,
-                        scale_resolution,
-                        patch_size,
-                        downsample_mode=downsample_mode,
-                        allow_upscale=True,
+                    refine_height, refine_width = self.get_refine_size(
+                        image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
                     )
-                    refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
-                    refine_height, refine_width = refine_img.shape[-2:]
-                    grid_y, grid_x = best_grid
-                    patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
-                    slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
-                    image_patches.extend(slice_patches)
+                    refine_image = self.resize(
+                        image, size=SizeDict(height=refine_height, width=refine_width), resample=resample
+                    )
+                    slice_height, slice_width = refine_height // best_grid[0], refine_width // best_grid[1]
+                    image_patches.extend(divide_to_patches(refine_image, (slice_height, slice_width)))
 
-            # Group patches by shape and batch rescale + normalize
             grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
-            processed_grouped = {}
-            for shape, stacked in grouped_patches.items():
-                stacked = self.rescale_and_normalize(
+            processed_grouped = {
+                shape: self.rescale_and_normalize(
                     stacked.float(), do_rescale, rescale_factor, do_normalize, image_mean, image_std
                 )
-                processed_grouped[shape] = stacked
+                for shape, stacked in grouped_patches.items()
+            }
             processed_patches = reorder_images(processed_grouped, grouped_index)
 
-            image_pv = [self.reshape_by_patch(processed_patches[0], patch_size)]
-            image_ts = [[source_h // patch_size, source_w // patch_size]]
-            for processed_slice in processed_patches[1:]:
-                image_pv.append(self.reshape_by_patch(processed_slice, patch_size))
-                image_ts.append([patch_height // patch_size, patch_width // patch_size])
+            slices.extend(self.reshape_by_patch(patch, patch_size) for patch in processed_patches)
+            slice_sizes.append((source_height // patch_size, source_width // patch_size))
+            slice_sizes.extend(
+                [(slice_height // patch_size, slice_width // patch_size)] * (len(processed_patches) - 1)
+            )
+            grids.append(best_grid if best_grid is not None else [0, 0])
 
-            per_image_pixel_values.append(image_pv)
-            per_image_target_sizes.append(image_ts)
-            all_grids.append(best_grid if best_grid is not None else [0, 0])
-
-        all_pv = [pv for sublist in per_image_pixel_values for pv in sublist]
-        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0)
-
-        all_ts = [ts for sublist in per_image_target_sizes for ts in sublist]
-        target_sizes = torch.tensor(all_ts, dtype=torch.int32)
-
-        num_patches_per_image = [len(sublist) for sublist in per_image_pixel_values]
-
+        # Pad every slice to the longest one; the mask marks real patches, the position ids give each one's (row, col)
+        num_patches = [height * width for height, width in slice_sizes]
+        max_patches = max(num_patches)
+        device = slices[0].device
+        pixel_values = torch.stack(
+            [F.pad(s, (0, (max_patches - n) * patch_size)) for s, n in zip(slices, num_patches)]
+        )
+        patch_index = torch.arange(max_patches, device=device)[None, :]
+        pixel_attention_mask = patch_index < torch.tensor(num_patches, device=device)[:, None]
+        widths = torch.tensor([width for _, width in slice_sizes], device=device)[:, None]
+        patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
         return BatchFeature(
             data={
                 "pixel_values": pixel_values,
-                "target_sizes": target_sizes,
-                "grids": all_grids,
-                "num_patches_per_image": num_patches_per_image,
+                "pixel_attention_mask": pixel_attention_mask,
+                "patch_position_ids": patch_position_ids * pixel_attention_mask[..., None],
+                "grids": grids,
             },
             tensor_type=return_tensors,
-            skip_tensor_conversion=["grids", "num_patches_per_image"],
+            skip_tensor_conversion=["grids"],
         )
 
 
