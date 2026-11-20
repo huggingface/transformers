@@ -217,6 +217,8 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     If you have suggestions to improve this class, please open an issue on the [mistral-common GitHub repository](https://github.com/mistralai/mistral-common/issues) if it is related to the tokenizer or on the [Transformers GitHub repository](https://github.com/huggingface/transformers/issues) if it is related to the Hugging Face interface.
     """
 
+    _backend_name = "mistral_common"
+
     model_input_names: list[str] = ["input_ids", "attention_mask"]
     padding_side: str = "left"
     truncation_side: str = "right"
@@ -299,10 +301,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         self._all_special_ids = self._get_all_special_ids()
         self._all_special_tokens = self.convert_ids_to_tokens(self.all_special_ids)
-
-        # Set backend to "mistral_common" if not already set
-        if "backend" not in kwargs:
-            kwargs["backend"] = "mistral_common"
 
         super().__init__(
             truncation_side=truncation_side,

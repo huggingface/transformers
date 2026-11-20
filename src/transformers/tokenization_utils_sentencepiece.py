@@ -55,6 +55,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
+    _backend_name = "sentencepiece"
     vocab_files_names = VOCAB_FILES_NAMES
 
     def __init__(self, **kwargs):
@@ -65,10 +66,6 @@ class SentencePieceBackend(PreTrainedTokenizer):
         self.vocab_file = kwargs.get("vocab_file")
         self.legacy = kwargs.get("legacy", True)
         self.sp_model_kwargs = kwargs.pop("sp_model_kwargs", {})
-
-        # Set backend to "sentencepiece" if not already set
-        if "backend" not in kwargs:
-            kwargs["backend"] = "sentencepiece"
 
         # Load the SentencePiece model before calling parent __init__
         # This is needed because parent __init__ may call methods that depend on sp_model
