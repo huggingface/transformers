@@ -88,6 +88,17 @@ class GlmMoeDsaConfig(PreTrainedConfig):
             "layers.*.mlp.down_proj": "rowwise_partial",
             "layers.*.mlp": "all_reduce",
         }
+    if os.environ.get("HF_TP_ALL_REDUCE", "nccl") == "flashinfer_fused":
+        # [gap2 prototype] The attention and MLP blocks keep their partial sums: the decoder layer reduces them
+        # together with the residual add and the RMSNorm that follow (`tp_all_reduce_add_rms_norm`).
+        base_model_tp_plan = {
+            **base_model_tp_plan,
+            "layers.*.self_attn.o_proj": "rowwise_partial",
+            "layers.*.mlp.experts": "moe_tp_experts_partial",
+            "layers.*.mlp.shared_experts.down_proj": "rowwise_partial",
+            "layers.*.mlp.down_proj": "rowwise_partial",
+        }
+        base_model_tp_plan.pop("layers.*.mlp", None)
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),

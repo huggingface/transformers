@@ -47,7 +47,8 @@ if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
-    from .parallel_utils import _AllReduceBackward, _AllReduceForward
+    from . import parallel_utils
+    from .parallel_utils import _AllReduceBackward, _AllReduceForward, _tp_inference_all_reduce
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -297,7 +298,7 @@ class RowwiseParallel(TensorParallelLayer):
             return output
         if use_local_inference_path:
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            dist.all_reduce(output, group=process_group)
+            output = _tp_inference_all_reduce(output, process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
         else:
@@ -657,6 +658,8 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
+    # [gap2 prototype] `tp_all_reduce_add_rms_norm` is called from model code, which has no mesh
+    parallel_utils._TP_GROUP = tp_mesh.get_group() if tp_mesh.ndim == 1 else tp_mesh.get_group("tp")
 
     for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]

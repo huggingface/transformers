@@ -47,6 +47,10 @@ from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 # --- WP glue (bench only): fewer tiny kernels per decode step, each change behind an env var that defaults to off ------
 import os as _glue_os
 
+# [gap2 prototype] the decoder layer fuses each TP all-reduce with the residual add and the RMSNorm that follow it
+_TP_FUSED_ALL_REDUCE_NORM = _glue_os.environ.get("HF_TP_ALL_REDUCE", "nccl") == "flashinfer_fused"
+if _TP_FUSED_ALL_REDUCE_NORM:
+    from ...distributed.parallel_utils import tp_all_reduce_add_rms_norm
 _GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "0") == "1"  # F.rms_norm: 1 kernel instead of 8
 _GLUE_ROPE = _glue_os.environ.get("GLUE_ROPE", "0") == "1"  # rotary written in place: 4 kernels per tensor instead of 7
 _GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "0") == "1"  # no group selection when there is a single group
@@ -947,8 +951,31 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
+        normed_hidden_states: torch.Tensor | None = None,
+        next_norm: nn.Module | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        if next_norm is not None:
+            # [gap2 prototype] HF_TP_ALL_REDUCE=flashinfer_fused: both blocks return this rank's partial sum, and
+            # each reduce is fused with the residual add and the norm that follows it. The norm after the MLP block
+            # belongs to the next layer (or is the model's final norm), so its output is handed over.
+            residual = hidden_states
+            if normed_hidden_states is None:
+                normed_hidden_states = self.input_layernorm(hidden_states)
+            hidden_states, _, topk_indices = self.self_attn(
+                hidden_states=normed_hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache=cache,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+                prev_topk_indices=prev_topk_indices,
+                **kwargs,
+            )
+            hidden_states, residual = tp_all_reduce_add_rms_norm(hidden_states, residual, self.post_attention_layernorm)
+            hidden_states = self.mlp(hidden_states)
+            normed_hidden_states, hidden_states = tp_all_reduce_add_rms_norm(hidden_states, residual, next_norm)
+            return hidden_states, topk_indices, normed_hidden_states
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
@@ -1065,7 +1092,25 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None  # MAIN DIFF with DSV3.2
+        normed_hidden_states = None
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if _TP_FUSED_ALL_REDUCE_NORM:
+                # [gap2 prototype] the layer also computes the norm that follows its MLP block: the next layer's
+                # input norm, or the final norm
+                next_norm = self.layers[i + 1].input_layernorm if i + 1 < self.config.num_hidden_layers else self.norm
+                hidden_states, topk_indices, normed_hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping["indexed_attention"],
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    cache=cache,
+                    use_cache=use_cache,
+                    prev_topk_indices=topk_indices,
+                    normed_hidden_states=normed_hidden_states,
+                    next_norm=next_norm,
+                    **kwargs,
+                )
+                continue
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["indexed_attention"],
@@ -1077,7 +1122,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = normed_hidden_states if _TP_FUSED_ALL_REDUCE_NORM else self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             cache=cache,
