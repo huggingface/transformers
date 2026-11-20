@@ -51,41 +51,40 @@ class Step3p7VisionText2TextModelTester(VLMModelTester):
     config_class = Step3p7Config
     conditional_generation_class = Step3p7ForConditionalGeneration if is_torch_available() else None
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # Vision downsampler reduces (image_size/patch_size)^2 → (image_size/patch_size/4)^2
         # For image_size=32, patch_size=4: 16 patches → 4 tokens after 2×stride-2 conv
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("hidden_size", 16)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("pad_token_id", 1)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 2)
-        kwargs.setdefault("moe_intermediate_size", 8)
-        kwargs.setdefault("n_routed_experts", 4)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("share_expert_dim", 8)
+        "num_image_tokens": 4,
+        "image_token_id": 4,
+        "image_size": 32,
+        "patch_size": 4,
+        "num_hidden_layers": 2,
+        "hidden_size": 16,
+        "intermediate_size": 37,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 1,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "pad_token_id": 1,
+        "bos_token_id": 0,
+        "eos_token_id": 2,
+        "moe_intermediate_size": 8,
+        "n_routed_experts": 4,
+        "num_experts_per_tok": 2,
+        "share_expert_dim": 8,
         # layer_types is required (Step3p7Attention accesses it by index)
-        kwargs.setdefault("layer_types", ["full_attention", "full_attention"])
+        "layer_types": ["full_attention", "full_attention"],
         # mlp_layer_types default heuristic (MoE from layer index 3 onward) never fires for a
         # 2-layer model; set explicitly so at least one layer builds a real `experts` submodule
         # (needed for `base_model_tp_plan`'s `mlp.experts.*` entries to match a real parameter).
-        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        "mlp_layer_types": ["dense", "sparse"],
         # sliding_window required by create_sliding_window_causal_mask even when no sliding layers are used
-        kwargs.setdefault("sliding_window", 64)
-
-        kwargs.setdefault("vision_num_hidden_layers", 1)
-        kwargs.setdefault("vision_hidden_size", 8)
-        kwargs.setdefault("vision_num_attention_heads", 2)
-        kwargs.setdefault("mlp_ratio", 1.0)
-        super().__init__(parent, **kwargs)
+        "sliding_window": 64,
+        "vision_num_hidden_layers": 1,
+        "vision_hidden_size": 8,
+        "vision_num_attention_heads": 2,
+        "mlp_ratio": 1.0,
+    }
 
 
 @require_torch

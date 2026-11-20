@@ -74,14 +74,14 @@ class ExportedMultimodalModel(ExportedModel):
         # And Granite4-Vision its per-layer ones.
         if "deepstack_features" in features and "deepstack_features" in fields:
             outputs["deepstack_features"] = [
-                (layer, [image.clone() for image in images]) for layer, images in features["deepstack_features"]
+                layer_features.clone() for layer_features in features["deepstack_features"]
             ]
         return outputs
 
     def embed(self, **kwargs) -> tuple[dict, dict]:
         """`input_ids` as `inputs_embeds` (plus `per_layer_inputs` when the embedder returns them), each present
         modality's features scattered into its placeholder rows, and what a deepstack decoder adds inside its layers;
-        and the features, by component (a Granite4-Vision tower's per-image ones under `deepstack_features`)."""
+        and the features, by component (a Granite4-Vision tower's per-layer ones under `deepstack_features`)."""
         input_ids = kwargs["input_ids"]
         # The embedder's and modality graphs' outputs are read within this call (what the model returns is copied
         # out), so a backend may hand out its own buffers.
@@ -106,10 +106,10 @@ class ExportedMultimodalModel(ExportedModel):
             features[spec.component], layers = self._features(spec, runner, kwargs)
             if features[spec.component] is None:
                 # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows; the
-                # model returns them too, one tensor per image.
+                # model returns them too, one tensor per decoder layer in its config's order.
                 inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
-                features["deepstack_features"] = list(layers.items())
                 layers = {layer: torch.cat(images) for layer, images in layers.items()}
+                features["deepstack_features"] = list(layers.values())
             else:
                 inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
             if layers is not None:

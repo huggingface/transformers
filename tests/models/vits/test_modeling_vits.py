@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import set_seed
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -65,48 +66,33 @@ def _config_zero_init(config):
 
 
 @require_torch
-class VitsModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=7,
-        is_training=False,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=64,
-        flow_size=16,
-        vocab_size=38,
-        spectrogram_bins=8,
-        duration_predictor_num_flows=2,
-        duration_predictor_filter_channels=16,
-        prior_encoder_num_flows=2,
-        upsample_initial_channel=16,
-        upsample_rates=[8, 2],
-        upsample_kernel_sizes=[16, 4],
-        resblock_kernel_sizes=[3, 7],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5]],
-    ):
+class VitsModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 7,
+        "is_training": False,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 64,
+        "flow_size": 16,
+        "vocab_size": 38,
+        "spectrogram_bins": 8,
+        "duration_predictor_num_flows": 2,
+        "duration_predictor_filter_channels": 16,
+        "prior_encoder_num_flows": 2,
+        "upsample_initial_channel": 16,
+        "upsample_rates": [8, 2],
+        "upsample_kernel_sizes": [16, 4],
+        "resblock_kernel_sizes": [3, 7],
+        "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5]],
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.flow_size = flow_size
-        self.vocab_size = vocab_size
-        self.spectrogram_bins = spectrogram_bins
-        self.duration_predictor_num_flows = duration_predictor_num_flows
-        self.duration_predictor_filter_channels = duration_predictor_filter_channels
-        self.prior_encoder_num_flows = prior_encoder_num_flows
-        self.upsample_initial_channel = upsample_initial_channel
-        self.upsample_rates = upsample_rates
-        self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.resblock_kernel_sizes = resblock_kernel_sizes
-        self.resblock_dilation_sizes = resblock_dilation_sizes
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
@@ -156,6 +142,8 @@ class VitsModelTester:
 
 @require_torch
 class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = VitsModelTester
+
     all_model_classes = (VitsModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}

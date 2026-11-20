@@ -38,9 +38,9 @@ class DeepseekVLVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = DeepseekVLForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("vision_use_head", False)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "vision_use_head": False,
+    }
 
 
 @require_torch

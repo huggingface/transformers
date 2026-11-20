@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -50,62 +51,46 @@ if is_torch_available():
     )
 
 
-class SwitchTransformersModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=9,
+class SwitchTransformersModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 9,
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "decoder_start_token_id": 0,
+        "decoder_layers": None,
+        "sparse_step": 1,
+        "num_sparse_decoder_layers": 2,
+        "num_sparse_encoder_layers": 2,
+        "expert_capacity": 100,
+        "router_jitter_noise": 0.0,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        decoder_layers=None,
-        sparse_step=1,
-        num_sparse_decoder_layers=2,
-        num_sparse_encoder_layers=2,
-        expert_capacity=100,
-        router_jitter_noise=0.0,
-    ):
+        values["seq_length"] = values["decoder_seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
-        self.sparse_step = sparse_step
-        self.num_sparse_decoder_layers = num_sparse_decoder_layers
-        self.num_sparse_encoder_layers = num_sparse_encoder_layers
-        self.expert_capacity = expert_capacity
-        self.router_jitter_noise = router_jitter_noise
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -473,6 +458,8 @@ class SwitchTransformersModelTester:
 
 @require_torch
 class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SwitchTransformersModelTester
+
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
@@ -661,47 +648,38 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         pass
 
 
-class SwitchTransformersEncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
+class SwitchTransformersEncoderOnlyModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "use_attention_mask": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "is_training": False,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "is_encoder_decoder": False,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
+        values["seq_length"] = values["encoder_seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -758,6 +736,8 @@ class SwitchTransformersEncoderOnlyModelTester:
 
 
 class SwitchTransformersEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = SwitchTransformersEncoderOnlyModelTester
+
     all_model_classes = (SwitchTransformersEncoderModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
