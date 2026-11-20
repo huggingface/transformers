@@ -328,6 +328,27 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 torch.stack(with_cache.logits), torch.stack(from_scratch.logits), rtol=1e-4, atol=1e-4
             )
 
+    def test_forward_with_cache_and_attention_mask(self):
+        """
+        Tests that a forward call with a cache and the attention mask of the whole sequence, as in a manual decoding
+        loop, gives the same logits as a single forward over the whole sequence.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        new_ids = torch.tensor([[10, 11, 12]] * self.model_tester.batch_size, device=torch_device)
+        full_inputs = {
+            **input_dict,
+            "input_ids": torch.cat([input_dict["input_ids"], new_ids], dim=1),
+            "attention_mask": torch.cat([input_dict["attention_mask"], torch.ones_like(new_ids)], dim=1),
+            "mm_token_type_ids": torch.cat([input_dict["mm_token_type_ids"], torch.zeros_like(new_ids)], dim=1),
+        }
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                expected = model(**full_inputs).logits[:, -3:]
+                cache = model(**input_dict, use_cache=True).cache
+                logits = model(input_ids=new_ids, attention_mask=full_inputs["attention_mask"], cache=cache).logits
+            torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
+
     def test_vision_position_ids(self):
         """
         Tests that vision position ids are built correctly for images and for videos.
