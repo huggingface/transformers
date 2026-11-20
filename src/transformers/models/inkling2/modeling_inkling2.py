@@ -444,6 +444,20 @@ class Inkling2FullKeyValueProjection(nn.Module):
         return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
 
 
+class Inkling2GatedOutputProjection(nn.Module):
+    """Output projection of the attention layers, applied after gating the attention output with a sigmoid of the layer input."""
+
+    def __init__(self, config: Inkling2TextConfig, num_heads: int, head_dim: int):
+        super().__init__()
+        self.gate_proj = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)
+        self.linear = nn.Linear(num_heads * head_dim, config.hidden_size, bias=False)
+
+    def forward(self, attn_output: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        gate = torch.sigmoid(self.gate_proj(hidden_states).float())
+        attn_output = (attn_output.float() * gate).to(attn_output.dtype)
+        return self.linear(attn_output)
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -509,11 +523,10 @@ class Inkling2SlidingAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=0)
         self.v_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=1)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
+        self.o_proj = Inkling2GatedOutputProjection(config, self.num_heads, self.head_dim)
         self.q_norm = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.rel_logits_proj = Inkling2RelativeLogits(config, self.num_heads, self.rel_extent)
-        self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
@@ -581,9 +594,7 @@ class Inkling2SlidingAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        gate = torch.sigmoid(self.gate_proj(hidden_states).float())
-        attn_output = (attn_output.float() * gate).to(attn_output.dtype)
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output, hidden_states)
         return attn_output, attn_weights
 
 
@@ -606,11 +617,10 @@ class Inkling2FullAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=0)
         self.v_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=1)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
+        self.o_proj = Inkling2GatedOutputProjection(config, self.num_heads, self.head_dim)
         self.q_norm = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.rel_logits_proj = Inkling2RelativeLogits(config, self.num_heads, self.rel_extent)
-        self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
 
@@ -657,7 +667,6 @@ class Inkling2FullAttention(nn.Module):
         query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
         key_states = self.k_norm(key_states).transpose(1, 2)
         value_states = self.v_norm(value_states).transpose(1, 2)
-
         position_bias = self.rel_logits_proj(hidden_states, cache=cache, layer_idx=cache_layer_idx, scale=tau)
 
         if cache is not None:
@@ -683,9 +692,7 @@ class Inkling2FullAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        gate = torch.sigmoid(self.gate_proj(hidden_states).float())
-        attn_output = (attn_output.float() * gate).to(attn_output.dtype)
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output, hidden_states)
         return attn_output, attn_weights
 
 

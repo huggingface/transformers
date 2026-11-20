@@ -366,8 +366,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"self_attn\.rel_l2_clip\.", target_patterns=r"self_attn.rel_logits_proj.norm."
             ),
-            WeightRenaming(source_patterns=r"self_attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
-            WeightRenaming(source_patterns=r"self_attn\.gate_attn", target_patterns=r"self_attn.gate_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wo_ud", target_patterns=r"self_attn.o_proj.linear"),
+            WeightRenaming(source_patterns=r"self_attn\.gate_attn", target_patterns=r"self_attn.o_proj.gate_proj"),
             WeightRenaming(source_patterns=r"self_attn\.attn_sink_proj", target_patterns=r"self_attn.sink_proj"),
             WeightRenaming(source_patterns=r"attn_sconv\.", target_patterns=r"post_attention_convolution."),
             WeightRenaming(source_patterns=r"mlp_sconv\.", target_patterns=r"post_mlp_convolution."),
