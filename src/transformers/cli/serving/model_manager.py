@@ -52,6 +52,7 @@ from .utils import (
     model_owner,
     parse_model_id,
     prompt_length,
+    set_serve_log_level,
     set_torch_seed,
 )
 
@@ -331,9 +332,10 @@ class EngineClient:
         context = multiprocessing.get_context("spawn")
         requests, results = context.Queue(), [context.Queue() for _ in range(api_servers)]
         reader, writer = context.Pipe(duplex=False)
+        log_level = logging.get_logger("transformers.cli").level
         process = context.Process(
             target=EngineClient.run_engine,
-            args=(load, generation_state, requests, results, writer, on_progress is not None, logging.get_verbosity()),
+            args=(load, generation_state, requests, results, writer, on_progress is not None, log_level),
             name="model",
             daemon=True,
         )
@@ -363,7 +365,7 @@ class EngineClient:
         log_level: int,
     ) -> None:
         """What the model's process runs: loads the model, then hands each request to a runner."""
-        logging.set_verbosity(log_level)  # the server's: a new process starts with the default
+        set_serve_log_level(log_level)
         exit_with_parent()
         if generation_state.seed is not None:
             set_torch_seed(generation_state.seed)
@@ -392,6 +394,7 @@ class EngineClient:
             return
         writer.send(None)  # loaded
         writer.close()
+        threading.Thread(target=runner.log_stats, name="stats", daemon=True).start()
         freeze_garbage_collector()
 
         while True:
@@ -651,7 +654,7 @@ class ModelLoader:
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
         """Loads the model `model_id` (see `parse_model_id`) and its processor, its progress events going to
         `on_progress`."""
-        logger.warning(f"Loading {model_id}")
+        logger.info(f"Loading {model_id}")
         if on_progress is not None:
             on_progress({"status": "loading", "model": model_id, "stage": "processor"})
         processor = self.load_processor(model_id)

@@ -28,6 +28,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
+from parameterized import parameterized
 
 from transformers import DecisionConfig
 from transformers.cli.serve import Serve
@@ -42,6 +43,7 @@ from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
     BaseHandler,
     EngineDeadError,
+    GenerateRunner,
     GenerationState,
     Modality,
     ModelNotServedError,
@@ -54,9 +56,12 @@ from transformers.cli.serving.utils import (
     get_response_template,
     parse_assistant_message,
     parse_model_id,
+    request_logger,
     response_events_to_chunks,
+    set_serve_log_level,
 )
 from transformers.testing_utils import (
+    CaptureLogger,
     require_audio,
     require_multipart,
     require_serve,
@@ -67,6 +72,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
@@ -760,6 +766,50 @@ class TestChunkSSE(unittest.TestCase):
 
 
 @require_serve
+class _StopLogging(Exception):
+    pass
+
+
+@require_serve
+class TestLogging(unittest.TestCase):
+    def tearDown(self):
+        set_serve_log_level(logging.NOTSET, log_requests=True)  # back to the library's level
+
+    @parameterized.expand([("info", False, 0), ("info", True, 1), ("debug", True, 2), ("warning", True, 0)])
+    def test_request_lines(self, level, log_requests, lines):
+        library_level = logging.get_verbosity()
+        set_serve_log_level(logging.log_levels[level], log_requests)
+        engine = MagicMock(model_id="Qwen/Qwen2.5-0.5B-Instruct@main", use_cb=False)
+        generation_kwargs = {"max_new_tokens": 8, "do_sample": False, "eos_token_id": 2}
+        body = {"model": "Qwen/Qwen2.5-0.5B-Instruct", "stream": True}
+        with CaptureLogger(request_logger) as captured:
+            BaseHandler._log_request("req-1", engine, {"input_ids": [1, 2, 3]}, generation_kwargs, True, body)
+        expected = [
+            "Request req-1: model Qwen/Qwen2.5-0.5B-Instruct@main, 3 prompt tokens, generate, stream True, "
+            "{'max_new_tokens': 8, 'do_sample': False}",
+            'Request req-1 body: {"model": "Qwen/Qwen2.5-0.5B-Instruct", "stream": true}',
+        ]
+        self.assertEqual(captured.out.splitlines(), expected[:lines])
+        self.assertEqual(logging.get_verbosity(), library_level)  # serve's level only
+
+    def test_stats_line(self):
+        set_serve_log_level(logging.INFO)
+        runner = GenerateRunner(MagicMock(), None, MagicMock())
+        runner.count_tokens(prompt=2000, generated=500)
+        # Two 10-second windows: the tokens above, then nothing (no line)
+        with (
+            patch("transformers.cli.serving.utils.time.perf_counter", side_effect=[0.0, 10.0, 20.0]),
+            patch("transformers.cli.serving.utils.time.sleep", side_effect=[None, None, _StopLogging]),
+            CaptureLogger(logging.get_logger("transformers.cli.serving.utils")) as captured,
+            self.assertRaises(_StopLogging),
+        ):
+            runner.log_stats()
+        self.assertEqual(
+            captured.out.splitlines(),
+            ["Prompts: 200.0 tokens/s, generation: 50.0 tokens/s, requests: 0 running, 0 waiting"],
+        )
+
+
 @require_serve
 class TestAppRoutes(unittest.TestCase):
     @classmethod

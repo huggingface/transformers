@@ -119,12 +119,11 @@ class ChatCompletionHandler(BaseHandler):
         self._validate_request(body)
 
         engine = self._get_engine(body)
-        use_cb = engine.use_cb
-        logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
         inputs = self.render_messages(engine, body["messages"], body)
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         streaming = body.get("stream")
+        self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
         if streaming:
             return self._streaming(request_id, engine, inputs, generation_kwargs, tools=body.get("tools"))
         else:

@@ -24,6 +24,7 @@ import multiprocessing
 import os
 import queue
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -64,6 +65,8 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+# A line per request (its body at debug): off unless `--enable-log-requests`, see `set_serve_log_level`
+request_logger = logging.get_logger("transformers.cli.serving.requests")
 
 
 # Model ids
@@ -164,6 +167,14 @@ def prompt_length(inputs: dict) -> int:
     """The number of tokens of a prompt: lists for continuous batching, tensors otherwise."""
     input_ids = inputs["input_ids"]
     return len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+
+
+def set_serve_log_level(level: int, log_requests: bool = False) -> None:
+    """Serve's messages (its `transformers.cli` loggers) at `level`, with a line per request only if `log_requests`.
+    The library's other messages, loading a model included, keep their own level (warning by default, see
+    `TRANSFORMERS_VERBOSITY`), so that info stays readable."""
+    logging.get_logger("transformers.cli").setLevel(level)
+    request_logger.setLevel(level if log_requests else logging.WARNING)  # it only writes info and debug lines
 
 
 def set_torch_seed(seed: int) -> None:
@@ -760,20 +771,20 @@ class _TokenStreamer:
     """The streamer of a request's `model.generate()`: sends each new token (not the prompt's), and stops the
     generation once the request is cancelled."""
 
-    def __init__(self, request_id: int, send_results: Callable, cancelled_request_ids: set):
+    def __init__(self, request_id: int, runner: "GenerateRunner"):
         self.request_id = request_id
-        self.send_results = send_results
-        self.cancelled_request_ids = cancelled_request_ids
+        self.runner = runner
         self.prompt = True
 
     def put(self, value) -> None:
-        if self.request_id in self.cancelled_request_ids:
+        if self.request_id in self.runner.cancelled_request_ids:
             raise _GenerationCancelled()
         if self.prompt:
             self.prompt = False
             return
         tokens = value.tolist()
-        self.send_results([self.request_id] * len(tokens), tokens, [])
+        self.runner.count_tokens(generated=len(tokens))
+        self.runner.send_results([self.request_id] * len(tokens), tokens, [])
 
     def end(self) -> None:
         pass
@@ -791,6 +802,9 @@ class GenerateRunner:
         self.model, self.processor, self.send_results = model, processor, send_results
         self.queue: queue.Queue = queue.Queue()
         self.cancelled_request_ids: set[int] = set()
+        self.running = False
+        self.lock = threading.Lock()
+        self.prompt_tokens = self.generated_tokens = 0  # since the last stats line
         threading.Thread(target=self._process_requests, name="generate", daemon=True).start()
 
     def generate(self, request_id: int, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
@@ -816,6 +830,7 @@ class GenerateRunner:
             sequences = model.generate(**kwargs)
             return sequences[0, model_inputs["input_ids"].shape[-1] :].tolist()
 
+        self.count_tokens(prompt=prompt_length(inputs))
         self.queue.put((request_id, generate_tokens, (), stream))
 
     def submit(self, request_id: int, function: Callable, args: tuple, stream: bool) -> None:
@@ -823,6 +838,39 @@ class GenerateRunner:
 
     def cancel(self, request_id: int) -> None:
         self.cancelled_request_ids.add(request_id)
+
+    def count_tokens(self, prompt: int = 0, generated: int = 0) -> None:
+        """Counts prompt tokens received and tokens generated, for the stats line (see `log_stats`)."""
+        with self.lock:
+            self.prompt_tokens += prompt
+            self.generated_tokens += generated
+
+    def log_stats(self, interval: float = 10.0) -> None:
+        """Every `interval` seconds unless idle, a line at info: the prompt tokens received and the tokens generated
+        per second, the requests running and waiting (see `state`)."""
+        start = time.perf_counter()
+        while True:
+            time.sleep(interval)
+            now = time.perf_counter()
+            elapsed, start = now - start, now
+            with self.lock:
+                prompt_tokens, generated_tokens = self.prompt_tokens, self.generated_tokens
+                self.prompt_tokens = self.generated_tokens = 0
+            running, waiting, details = self.state()
+            if prompt_tokens == generated_tokens == running == waiting == 0:
+                continue
+            logger.info(
+                "Prompts: %.1f tokens/s, generation: %.1f tokens/s, requests: %d running, %d waiting%s",
+                prompt_tokens / elapsed,
+                generated_tokens / elapsed,
+                running,
+                waiting,
+                details,
+            )
+
+    def state(self) -> tuple[int, int, str]:
+        """The requests running and waiting, and what more the stats line says."""
+        return int(self.running), self.queue.qsize(), ""
 
     def _process_requests(self) -> None:
         while True:
@@ -832,9 +880,12 @@ class GenerateRunner:
                 continue
             kwargs = {}
             if stream:
-                kwargs["streamer"] = _TokenStreamer(request_id, self.send_results, self.cancelled_request_ids)
+                kwargs["streamer"] = _TokenStreamer(request_id, self)
+            self.running = True
             try:
                 result = function(self.model, self.processor, *args, **kwargs)
+                if not stream and isinstance(result, list):  # generated tokens, counted as they stream otherwise
+                    self.count_tokens(generated=len(result))
             except _GenerationCancelled:
                 result = None
             except ValueError as error:  # the request's fault: crosses as one, for a 400
@@ -842,6 +893,7 @@ class GenerateRunner:
             except Exception as error:
                 logger.exception("A request failed")
                 result = RuntimeError(f"{type(error).__name__}: {error}")  # as text: any error crosses to the server
+            self.running = False
             self.cancelled_request_ids.discard(request_id)
             self.send_results([], [], [(request_id, result)])
 
@@ -863,7 +915,6 @@ class CBGenerateRunner(GenerateRunner):
     ):
         super().__init__(model, processor, send_results)
         self.active_requests: dict[int, list] = {}
-        self.lock = threading.Lock()
         self.manager = self._start_continuous_batching(model, cb_config)
 
     def generate(self, request_id: int, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
@@ -874,6 +925,7 @@ class CBGenerateRunner(GenerateRunner):
             return
         with self.lock:
             self.active_requests[request_id] = [stream, 0]
+        self.count_tokens(prompt=prompt_length(inputs))
         batching_kwargs = self._build_continuous_batching_kwargs(generation_kwargs)
         # The batching manager's ids are strings
         self.manager.add_request(inputs["input_ids"], request_id=str(request_id), streaming=stream, **batching_kwargs)
@@ -903,8 +955,17 @@ class CBGenerateRunner(GenerateRunner):
             "eos_token_id": generation_kwargs["eos_token_id"],
             **sampling,
         }
-        logger.info(f"Continuous batching settings of the request: {batching_kwargs}, ignored: {ignored}")
+        logger.debug(f"Continuous batching settings of the request: {batching_kwargs}, ignored: {ignored}")
         return batching_kwargs
+
+    def state(self) -> tuple[int, int, str]:
+        """The requests the batching manager runs and holds, and how full its KV cache is."""
+        batch_processor = self.manager.batch_processor
+        if batch_processor is None:  # its worker hasn't started yet
+            return 0, 0, ""
+        used = 100 * (1 - batch_processor.cache.compute_free_capacity())
+        scheduler = batch_processor.scheduler
+        return len(scheduler.active_requests), len(scheduler.waiting_requests), f", KV cache: {used:.1f}% used"
 
     def _fail_if_worker_died(self, request_id: int) -> bool:
         """Fails the request if the batching manager's worker died, as it can't take requests anymore."""
@@ -965,6 +1026,7 @@ class CBGenerateRunner(GenerateRunner):
                 finished.append((request_id, error))
                 return
             generated = output.generated_tokens
+            self.generated_tokens += len(generated) - sent
             if stream:
                 ids.extend([request_id] * (len(generated) - sent))
                 tokens.extend(generated[sent:])
@@ -1147,6 +1209,26 @@ class BaseHandler:
     def _chat_template_kwargs(self, body: dict) -> dict:
         """The chat template's arguments: the server's defaults, overridden by the request's."""
         return {**self.chat_template_kwargs, **(body.get("chat_template_kwargs") or {})}
+
+    @staticmethod
+    def _log_request(
+        request_id: str, engine: "EngineClient", inputs: dict, generation_kwargs: dict, stream: bool, body: dict
+    ) -> None:
+        """A line per request at info: its id, model, prompt length and generation settings; its body at debug."""
+        if not request_logger.isEnabledFor(logging.INFO):
+            return
+        settings = {name: value for name, value in generation_kwargs.items() if name != "eos_token_id"}
+        request_logger.info(
+            "Request %s: model %s, %d prompt tokens, %s, stream %s, %s",
+            request_id,
+            engine.model_id,
+            prompt_length(inputs),
+            "continuous batching" if engine.use_cb else "generate",
+            bool(stream),
+            settings,
+        )
+        if request_logger.isEnabledFor(logging.DEBUG):
+            request_logger.debug("Request %s body: %s", request_id, json.dumps(body, default=str)[:4000])
 
     def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
         """

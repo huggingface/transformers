@@ -112,7 +112,15 @@ class Serve:
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
         enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
-        log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "warning",
+        log_level: Annotated[
+            str, typer.Option(help="Logging level of serve's messages (e.g. 'info', 'warning')")
+        ] = "info",
+        enable_log_requests: Annotated[
+            bool,
+            typer.Option(
+                help="Log each request at info (model, prompt length, generation settings), its body at debug."
+            ),
+        ] = False,
         default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
         api_server_count: Annotated[
             int,
@@ -130,10 +138,11 @@ class Serve:
         from transformers import ContinuousBatchingConfig
 
         from .serving.model_manager import ModelLoader
-        from .serving.utils import GenerationState
+        from .serving.utils import GenerationState, set_serve_log_level
 
         self.log_level = logging.log_levels[log_level.lower()]
-        logging.set_verbosity(self.log_level)
+        self.enable_log_requests = enable_log_requests
+        set_serve_log_level(self.log_level, enable_log_requests)
 
         cb_options = {
             "block_size": cb_block_size,
@@ -183,9 +192,9 @@ class Serve:
         from .serving.server import build_server
         from .serving.systemone import SystemOneHandler
         from .serving.transcription import TranscriptionHandler
-        from .serving.utils import exit_with_parent, freeze_garbage_collector
+        from .serving.utils import exit_with_parent, freeze_garbage_collector, set_serve_log_level
 
-        logging.set_verbosity(self.log_level)  # again for an API server's process, which starts with the default
+        set_serve_log_level(self.log_level, self.enable_log_requests)
         exit_with_parent()
 
         model_manager = ModelManager(

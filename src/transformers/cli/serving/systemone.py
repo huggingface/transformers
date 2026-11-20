@@ -21,7 +21,6 @@ for every allowed answer, by running the served model through [`DecisionPipeline
 from typing import TYPE_CHECKING, Any
 
 from ...decision import DecisionConfig, parse_questions
-from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
 
@@ -30,15 +29,12 @@ if is_serve_available():
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .utils import BaseHandler, answer_questions
+from .utils import BaseHandler, answer_questions, request_logger
 
 
 if TYPE_CHECKING:
     from .model_manager import ModelManager
     from .utils import GenerationState
-
-
-logger = logging.get_logger(__name__)
 
 
 class SystemOneRequest(BaseModel):
@@ -103,7 +99,7 @@ class SystemOneHandler(BaseHandler):
         """
         request = self._validate_request(body)
         engine = self._get_engine(body)
-        logger.warning(f"[Request received] Model: {engine.model_id}, questions: {len(request.questions)}")
+        request_logger.info("Request %s: model %s, %d questions", request_id, engine.model_id, len(request.questions))
 
         try:
             answers, input_tokens = await engine.submit(

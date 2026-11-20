@@ -94,14 +94,13 @@ class CompletionHandler(BaseHandler):
             raise HTTPException(status_code=400, detail="prompt must be a string.")
 
         engine = self._get_engine(body)
-        use_cb = engine.use_cb
-        logger.warning(f"[Request received] Model: {engine.model_id}, CB: {use_cb}")
         tokenizer = getattr(engine.processor, "tokenizer", engine.processor)
-        inputs = tokenizer(prompt, return_tensors=None if use_cb else "pt")
+        inputs = tokenizer(prompt, return_tensors=None if engine.use_cb else "pt")
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         suffix = body.get("suffix")
         streaming = body.get("stream")
+        self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
 
         if streaming:
             return self._streaming(request_id, engine, inputs, generation_kwargs, suffix)
