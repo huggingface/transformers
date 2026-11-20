@@ -302,42 +302,33 @@ class ExpertsOffloadStore:
         return self.handles[file]
 
     def _prefetch_batch(self, layer, futures):
+        """Read a batch of experts with one prefetch loader per file (a list of row slices per bank) and hand each
+        expert out as soon as all its params have landed, in readiness order."""
         try:
-            # One loader per file (and per round when a key is wanted with several row ranges: stacked banks)
-            rounds = []  # [{file: {key: rows}}]
+            self._mark("batch_start", layer, experts=len(futures))
+            plans, where = {}, {}  # file -> {key: [rows]}; (key, position) -> (expert, param, dtype)
             for expert in futures:
                 for reader in self.readers[layer]:
-                    for _, rows, _, key in reader.sources(expert):
-                        file = self.key_files[key]
-                        index = next(i for i, plan in enumerate(rounds + [{}]) if key not in plan.get(file, {}))
-                        if index == len(rounds):
-                            rounds.append({})
-                        rounds[index].setdefault(file, {})[key] = rows
-            self._mark("batch_start", layer, experts=len(futures))
-            loaders = {}
-            for index, plan in enumerate(rounds):
-                for file, keys in plan.items():
-                    loaders[(index, file)] = self._handle(file).prefetch(keys, device=str(self.device), threads=16)
+                    ((_, rows, dtype, key),) = reader.sources(expert)
+                    slices = plans.setdefault(self.key_files[key], {}).setdefault(key, [])
+                    where[(key, len(slices))] = (expert, reader.param, dtype)
+                    slices.append(rows)
+            loaders = [
+                self._handle(file).prefetch(plan, device=str(self.device), threads=16) for file, plan in plans.items()
+            ]
             self._mark("loaders_started", layer, loaders=len(loaders))
-            taken = {}
-            for expert, future in futures.items():
-                if future.cancelled():  # a guess its layer did not pick: not handed out
-                    continue
-                self.reads += 1
-                out = {}
-                self._mark("take_start", layer, expert=expert)
-                for reader in self.readers[layer]:
-                    tensors = []
-                    for _, rows, dtype, key in reader.sources(expert):
-                        file = self.key_files[key]
-                        index = taken.get((file, key), 0)
-                        taken[(file, key)] = index + 1
-                        tensors.append(loaders[(index, file)].take(key).to(dtype))
-                    out[reader.param] = tensors[0][0]
-                self._mark("take_end", layer, expert=expert, bytes=sum(t.nbytes for t in out.values()))
-                if not future.cancelled():
-                    future.set_result(out)
-            for loader in loaders.values():
+            outs = {expert: {} for expert in futures}
+            num_params = len(self.readers[layer])
+            for loader in loaders:
+                for (key, position), tensor in loader:
+                    expert, param, dtype = where[(key, position)]
+                    outs[expert][param] = tensor[0].to(dtype)
+                    if len(outs[expert]) == num_params and not futures[expert].cancelled():
+                        self.reads += 1
+                        self._mark(
+                            "take_end", layer, expert=expert, bytes=sum(t.nbytes for t in outs[expert].values())
+                        )
+                        futures[expert].set_result(outs.pop(expert))
                 loader.close()
         except BaseException as error:
             for future in futures.values():
