@@ -93,7 +93,7 @@ Open a [New model addition](https://github.com/huggingface/transformers/issues/n
 
 Now is a good time to get familiar with BrandNewLlama. It is helpful to read a models research paper to understand its technical design and implementation. You don't necessarily have to worry too much about the theoretical details. Instead, focus on the practical ones. Use the questions below to guide your reading.
 
-- What type of model is BrandNewLlama? Is it a encoder, decoder, or encoder-decoder model?
+- What type of model is BrandNewLlama? Is it an encoder, decoder, or encoder-decoder model?
 - What tasks can BrandNewLlama be used for?
 - What makes BrandNewLlama different from other models?
 - What models in Transformers are most similar to BrandNewLlama?
@@ -380,7 +380,7 @@ class SimpleModel(nn.Module):
         self.layer_norm = nn.LayerNorm(10)
 ```
 
-PyTorch layer names are defined by the class attribute name of the layer (`dense`, `intermediate`, `layer_norm`). Create a instance of `SimpleModel` to fill all the layers with random weights.
+PyTorch layer names are defined by the class attribute name of the layer (`dense`, `intermediate`, `layer_norm`). Create an instance of `SimpleModel` to fill all the layers with random weights.
 
 ```py
 model = SimpleModel()
@@ -552,7 +552,7 @@ If you do need to implement a new image processor, each model has two processor 
 - `image_processing_<model>.py`: the **default** torchvision-backed processor (`<Model>ImageProcessor`), inheriting from [`TorchvisionBackend`]. This replaces the old "fast" processor.
 - `image_processing_pil_<model>.py`: the PIL/NumPy alternative processor (`<Model>ImageProcessorPil`), inheriting from [`PilBackend`]. This replaces the old "slow" processor.
 
-The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings. Refer to the [IMAGE_PROCESSOR_REFACTORING_GUIDE.md](https://github.com/huggingface/transformers/blob/main/IMAGE_PROCESSOR_REFACTORING_GUIDE.md) for a step-by-step walkthrough and complete examples.
+The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings.
 
 Add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well.
 

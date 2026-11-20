@@ -145,7 +145,7 @@ class _StubExporter(HfExporter):
     program_suffix = ".txt"
 
     def export_program(self, model, sample_inputs, config):
-        return "program", ExportMetadata(input_names=list(sample_inputs))
+        return "program", ExportMetadata(kwargs={name: {} for name in sample_inputs})
 
     @classmethod
     def save_program(cls, program, path):
@@ -192,7 +192,7 @@ class ExportedModelTest(unittest.TestCase):
         exported = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
         self.assertEqual(list(exported.components), ["model"])
         self.assertEqual(exported.program, "program")
-        self.assertEqual(exported.components["model"].metadata.input_names, ["input_ids"])
+        self.assertEqual(list(exported.components["model"].metadata.kwargs), ["input_ids"])
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
@@ -202,7 +202,7 @@ class ExportedModelTest(unittest.TestCase):
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
-            "prefill": ExportedComponent("prefill program", ExportMetadata(input_names=["input_ids"])),
+            "prefill": ExportedComponent("prefill program", ExportMetadata(architecture="Stub")),
             "decode": ExportedComponent("decode program", ExportMetadata()),
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
@@ -234,9 +234,37 @@ class ExportedModelTest(unittest.TestCase):
                     ExportedModel.from_pretrained(directory, trust_remote_code=True)
         self.assertTrue(load_config.call_args.kwargs["trust_remote_code"])
 
+    def test_from_pretrained_needs_trust_remote_code_for_programs_that_run_code(self):
+        """A format whose programs run code when loaded (pickled `.pt2`) is refused before any program is read, even
+        from a local directory, unless `trust_remote_code=True`."""
+
+        class _PickledStubExporter(_StubExporter):
+            requires_trust_remote_code = True
+
+        components = {"model": ExportedComponent("program", ExportMetadata())}
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend(_PickledStubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportedModel(components, "stub").save_pretrained(directory)
+                with mock.patch.object(_PickledStubExporter, "load_program") as load_program:
+                    with self.assertRaisesRegex(ValueError, "trust_remote_code=True"):
+                        ExportedModel.from_pretrained(directory)
+                load_program.assert_not_called()
+                loaded = ExportedModel.from_pretrained(directory, trust_remote_code=True)
+        self.assertEqual(loaded.components["model"].program, "program")
+
+    def test_only_pickled_programs_need_trust_remote_code(self):
+        """Only the Dynamo exporter's `.pt2` programs are pickled: the exporters built on it write programs that run no
+        code when loaded, so they load without `trust_remote_code=True`."""
+        from transformers.exporters import DynamoExporter, ExecutorchExporter, OnnxExporter, OpenVINOExporter
+
+        self.assertTrue(DynamoExporter.requires_trust_remote_code)
+        for exporter in (OnnxExporter, OpenVINOExporter, ExecutorchExporter):
+            self.assertFalse(exporter.requires_trust_remote_code, exporter.__name__)
+
     def test_from_pretrained_loads_a_newer_manifest(self):
         """An export from a newer transformers, with a field this version doesn't know, loads with a warning."""
-        components = {"model": ExportedComponent("program", ExportMetadata(input_names=["input_ids"]))}
+        components = {"model": ExportedComponent("program", ExportMetadata(architecture="Stub"))}
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend(_StubExporter)
             with tempfile.TemporaryDirectory() as directory:
@@ -248,7 +276,7 @@ class ExportedModelTest(unittest.TestCase):
                 with self.assertLogs("transformers.exporters.base", level="WARNING") as logs:
                     loaded = ExportedModel.from_pretrained(directory)
         self.assertIn("newer format", logs.output[0])
-        self.assertEqual(loaded.components["model"].metadata.input_names, ["input_ids"])
+        self.assertEqual(loaded.components["model"].metadata.architecture, "Stub")
 
     def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
         with tempfile.TemporaryDirectory() as directory:

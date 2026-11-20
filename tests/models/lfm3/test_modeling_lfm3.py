@@ -35,11 +35,16 @@ if is_torch_available():
 class Lfm3ModelTester(CausalLMModelTester):
     base_model_class = Lfm3Model
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.layer_types = ["full_attention", "sliding_attention", "conv"]
-        self.num_hidden_layers = len(self.layer_types)
-        self.conv_L_cache = 7
+    small_config_overrides = {
+        "layer_types": ["full_attention", "sliding_attention", "conv"],
+        "conv_L_cache": 7,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_hidden_layers"] = len(values["layer_types"])
+        return values
 
 
 @require_torch
@@ -108,7 +113,7 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
                 altered_last = model(input_ids=altered, use_cache=False).logits[:, -1]
                 cached = model(
                     input_ids=input_ids[:, -1:],
-                    past_key_values=model(input_ids=input_ids[:, :-1], use_cache=True).past_key_values,
+                    cache=model(input_ids=input_ids[:, :-1], use_cache=True).cache,
                 ).logits[:, -1]
             # the first token is far outside the sliding window and the conv taps: only full attention can see it
             self.assertFalse(torch.allclose(last, altered_last, rtol=1e-4, atol=1e-4), layer_types)

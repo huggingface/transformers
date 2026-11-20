@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .align import *
     from .altclip import *
     from .apertus import *
+    from .apertus1p5 import *
     from .arcee import *
     from .aria import *
     from .audio_spectrogram_transformer import *
@@ -130,7 +131,9 @@ if TYPE_CHECKING:
     from .distilbert import *
     from .doge import *
     from .donut import *
+    from .dory import *
     from .dots1 import *
+    from .dots3_note import *
     from .dpr import *
     from .dpt import *
     from .edgetam import *
@@ -153,6 +156,7 @@ if TYPE_CHECKING:
     from .esmfold2 import *
     from .eurobert import *
     from .evolla import *
+    from .exaone import *
     from .exaone4 import *
     from .exaone4_5 import *
     from .exaone_moe import *
@@ -207,6 +211,7 @@ if TYPE_CHECKING:
     from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
+    from .granite_docling import *
     from .granite_speech import *
     from .granite_speech5 import *
     from .granite_speech_plus import *
@@ -231,6 +236,7 @@ if TYPE_CHECKING:
     from .hunyuan_vl import *
     from .hy_v3 import *
     from .hy_v4 import *
+    from .hy_v4_vl import *
     from .hyperclovax import *
     from .hyperclovax_vision_v2 import *
     from .ibert import *
@@ -241,9 +247,12 @@ if TYPE_CHECKING:
     from .imagegpt import *
     from .informer import *
     from .inkling import *
+    from .inkling2 import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internlm3 import *
     from .internvl import *
+    from .iquestcoder import *
     from .jais2 import *
     from .jamba import *
     from .janus import *
@@ -257,6 +266,7 @@ if TYPE_CHECKING:
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
     from .laguna import *
+    from .lara_mini import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
@@ -363,6 +373,8 @@ if TYPE_CHECKING:
     from .olmo_hybrid import *
     from .olmoe import *
     from .omdet_turbo import *
+    from .omniasr import *
+    from .omniasr_ctc import *
     from .oneformer import *
     from .openai import *
     from .openai_privacy_filter import *
@@ -459,6 +471,7 @@ if TYPE_CHECKING:
     from .sam3_video import *
     from .sam_hq import *
     from .sapiens2 import *
+    from .sarvam_mla import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *
@@ -547,6 +560,7 @@ if TYPE_CHECKING:
     from .wav2vec2_phoneme import *
     from .wav2vec2_with_lm import *
     from .wavlm import *
+    from .wavtokenizer import *
     from .whisper import *
     from .x_clip import *
     from .xcodec import *

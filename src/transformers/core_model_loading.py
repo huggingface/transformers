@@ -1150,6 +1150,37 @@ class GroupWeightRename(WeightRenaming):
         return result
 
 
+class Inkling2IndexOffsetWeightRename(WeightRenaming):
+    """
+    Special case of WeightRenaming that also shifts the captured index by `offset`. Use this when a checkpoint stores
+    per-layer weights in a list that does not start at layer 0, e.g. `attn_queries.{i}` belonging to `layers.{i + 1}`.
+    """
+
+    __slots__ = ("offset",)
+
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str], offset: int):
+        self.offset = offset
+        super().__init__(source_patterns=source_patterns, target_patterns=target_patterns)
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        matched = self._scoped_match(source_key)
+        if matched is None:
+            return source_key, None
+
+        prefix_dot, key_to_match, match_object = matched
+        self._was_used = True
+        matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
+        index = int(match_object.group(self.compiled_sources.groupindex[matching_group_name] + 1))
+        replacement = self.target_patterns[0].replace(r"\1", str(index + self.offset))
+        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+        if prefix_dot is not None:
+            renamed_key = prefix_dot + renamed_key
+        return renamed_key, self.source_patterns[int(matching_group_name[1:])]
+
+    def reverse_transform(self) -> Inkling2IndexOffsetWeightRename:
+        return self.copy(self._original_target_patterns, self._original_source_patterns, offset=-self.offset)
+
+
 class PrefixChange(WeightRenaming):
     """
     Special case of WeightRenaming, used to simplify adding/removing full parts of a weight name. The regexes
@@ -1195,6 +1226,35 @@ class PrefixChange(WeightRenaming):
         result.scope_prefix = self.scope_prefix
         result.base_model_prefix = self.base_model_prefix
         return result
+
+
+class LayerPairCollapse(WeightRenaming):
+    """
+    Loads checkpoints storing each decoder layer as an attention block `layers.{2i}` and an mlp block `layers.{2i+1}`:
+
+        layers.0.mixer.q_proj.weight -> layers.0.self_attn.q_proj.weight
+        layers.1.mixer.up_proj.weight -> layers.0.mlp.up_proj.weight
+        layers.1.mlp_alpha -> layers.0.lambda_2
+    """
+
+    __slots__ = ()
+    pattern = re.compile(r"layers\.(\d+)\.(mixer|attn_alpha|mlp_alpha)(?=\.|$)")
+
+    def __init__(self):
+        super().__init__(source_patterns=r"layers\.(\d+)", target_patterns=r"layers.\1")
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        if (match := self.pattern.search(source_key)) is None:
+            return source_key, None
+        self._was_used = True
+        index, name = int(match[1]), match[2]
+        name = {"attn_alpha": "lambda_1", "mlp_alpha": "lambda_2"}.get(name, ("self_attn", "mlp")[index % 2])
+        renamed = f"layers.{index // 2}.{name}"
+        return source_key[: match.start()] + renamed + source_key[match.end() :], self.source_patterns[0]
+
+    def reverse_transform(self) -> WeightTransform:
+        # TODO: save back to the two-block layout. Our names never match `pattern`, so saving keeps our layout
+        return self
 
 
 class WeightConverter(WeightTransform):

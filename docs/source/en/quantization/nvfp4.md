@@ -16,58 +16,55 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
-loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
-the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are
-not replaced.
+NVFP4 is NVIDIA's 4-bit floating-point format. Each block of 16 weights shares an FP8 scale, and each tensor has an FP32 scale on top. Transformers quantizes the weights while the model loads and quantizes activations on the fly, so prefill runs as a W4A4 matmul on Blackwell tensor cores and decode runs as a W4A16 matmul. Use it to run 4-bit models on a Blackwell GPU.
 
-> [!TIP]
-> NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
+The table below summarizes what NVFP4 supports in Transformers.
 
-Install Accelerate and a compatible version of `kernels`.
+| | |
+|---|---|
+| Config | [`NVFP4Config`] |
+| `quant_method` | `nvfp4` |
+| Workflow | Quantize while loading |
+| Bits | 4 |
+| Hardware | One CUDA GPU with compute capability 10.0+ (Blackwell) |
+| Save | ❌ |
+| Fine-tune | ❌ |
+| Auto-compile | ✅ |
+
+## Install the NVFP4 kernels
+
+Transformers downloads the NVFP4 kernels from the [kernels-community/nvfp4-gemm](https://huggingface.co/kernels-community/nvfp4-gemm) repository on the Hub. Install the [kernels](https://huggingface.co/docs/kernels/index) library. The kernel needs a build that matches your PyTorch and CUDA versions.
 
 ```bash
-pip install --upgrade accelerate kernels
+pip install -U "transformers[kernels]"
 ```
 
-Pass [`NVFP4Config`] to [`~PreTrainedModel.from_pretrained`] with a single CUDA device. Weights are quantized as they
-are loaded, so the source checkpoint should contain floating-point weights.
+## Quantize a model with NVFP4
+
+Create a [`NVFP4Config`] and pass it to [`~PreTrainedModel.from_pretrained`] with a `device_map` that places the whole model on one CUDA GPU. The source checkpoint must have floating-point weights.
 
 ```py
-import torch
+from transformers import AutoModelForCausalLM, NVFP4Config
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
-
-
-model_id = "meta-llama/Llama-3.2-1B"
 quantization_config = NVFP4Config()
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="cuda",
+    "Qwen/Qwen3-8B",
     quantization_config=quantization_config,
+    device_map="cuda",
 )
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
-output = model.generate(**inputs, max_new_tokens=20)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use `modules_to_not_convert` to keep selected modules in their original precision.
+NVFP4 replaces each `torch.nn.Linear` layer that has no bias and whose `in_features` and `out_features` are both divisible by 16. Other linear layers keep their original precision. [`NVFP4Config`] has no parameters that change how the weights are quantized.
 
-```py
-quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
-```
+## Limitations
 
-NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
-the model before measuring generation throughput.
+- NVFP4 needs a CUDA GPU with compute capability 10.0 or later. Loading without a CUDA GPU or on an older GPU raises a `RuntimeError`.
+- NVFP4 runs on one GPU. A `device_map` that spans several GPUs, or tensor parallelism, raises a `ValueError`.
+- NVFP4 can't offload to the CPU or disk. A `device_map` that includes `"cpu"` or `"disk"`, or no `device_map` at all, raises a `ValueError`.
+- NVFP4 can't load pre-quantized NVFP4 checkpoints. Loading one raises a `ValueError`.
+- NVFP4 models can't be saved or fine-tuned.
 
-## Current limitations
+## Resources
 
-- Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
-  the sharding behavior of the NVFP4 scale metadata is defined.
-- CPU and disk offload are not supported.
-- Pre-quantized NVFP4 checkpoints are not supported.
-- NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+- [Introducing NVFP4 for Efficient and Accurate Low-Precision Inference](https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/) blog post
+- [kernels-community/nvfp4-gemm](https://huggingface.co/kernels-community/nvfp4-gemm) Hub kernel

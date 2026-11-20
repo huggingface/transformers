@@ -514,7 +514,6 @@ class VideoPrismPreTrainedModel(VivitPreTrainedModel):
     _supports_sdpa = False
     _input_embed_layer = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv3d)):
@@ -704,7 +703,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
                 config=self.config,
                 inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
-                past_key_values=None,
+                cache=None,
             )
 
         for layer in self.layers:

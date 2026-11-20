@@ -38,6 +38,7 @@ Each backend has a device string that you pass to `device_map` or `device`. CPU 
 | Huawei Ascend NPU                | `npu`         | `torch-npu`           |
 | Cambricon MLU                    | `mlu`         | `torch-mlu`           |
 | Moore Threads GPU                | `musa`        | `torch-musa`          |
+| Biren SUPA GPU                   | `supa`        | `torch-supa`          |
 
 > [!TIP]
 > If a hardware backend is missing from this table and you believe Transformers supports it, please [open an issue](https://github.com/huggingface/transformers/issues/new/choose).

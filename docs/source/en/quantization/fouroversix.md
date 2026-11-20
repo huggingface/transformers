@@ -15,50 +15,96 @@ rendered properly in your Markdown viewer.
 
 # Four Over Six
 
-[Four Over Six](https://github.com/mit-han-lab/fouroversix) is a library for performing fast and accurate FP4 quantization, particularly with the NVFP4 format on NVIDIA Blackwell GPUs.
-Our method adaptively scales NVFP4 blocks to either 4 or 6 to reduce quantization error on near-maximal values in each block, as described in our [preprint](https://arxiv.org/abs/2512.02010).
+[Four Over Six](https://github.com/mit-han-lab/fouroversix) is a variant of [NVFP4](./nvfp4) quantization that scales the largest value in each block of 16 FP4 values to either 4 or 6, picking whichever gives the lower quantization error. A scale of 6 uses the full FP4 range, while a scale of 4 spreads the error more evenly across the block. Use it to quantize a model to FP4 while it loads, or to keep training a model with FP4 weights.
 
-![Four Over Six visual explanation](https://github.com/mit-han-lab/fouroversix/raw/main/assets/four-over-six.png)
+The table below summarizes what Four Over Six supports in Transformers.
 
-Our implementation runs most efficiently on NVIDIA Blackwell GPUs.
-However, you may run Four Over Six on older hardware, and even on CPUs, without any code changes, as in these cases our framework automatically falls back to an implementation that performs simulation with FP32 matrix multiplication.
+| | |
+|---|---|
+| Config | [`FourOverSixConfig`] |
+| `quant_method` | `fouroversix` |
+| Workflow | Quantize while loading |
+| Bits | 4 |
+| Hardware | CUDA (fastest on NVIDIA Blackwell), with a slower fallback on other devices |
+| Save | ✅ |
+| Fine-tune | Only with `keep_master_weights=True` |
+| Auto-compile | ❌ |
 
-To quantize a model to NVFP4 with 4/6, you may load your model as follows:
+## Install Four Over Six
 
-```python
+Install the fouroversix package without build isolation.
+
+```bash
+pip install fouroversix --no-build-isolation
+```
+
+The install builds CUDA kernels that need a Blackwell GPU. On other hardware, set `SKIP_CUDA_BUILD=1` to install only the slower reference implementation.
+
+```bash
+SKIP_CUDA_BUILD=1 pip install fouroversix --no-build-isolation
+```
+
+## Quantize a model with Four Over Six
+
+Create a [`FourOverSixConfig`] and pass it to [`~PreTrainedModel.from_pretrained`]. The default config quantizes every linear layer except `lm_head` to NVFP4.
+
+```py
 from transformers import AutoModelForCausalLM, FourOverSixConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-8B",
-    device_map="auto",
     quantization_config=FourOverSixConfig(),
+    device_map="cuda",
 )
 ```
 
-We support many different quantization options which are commonly used during NVFP4 quantization, including the random Hadamard transform, 2D block scaling, transposed inputs, and stochastic rounding, as described in our [preprint](https://arxiv.org/abs/2512.02010).
-These may be used by setting the appropriate option in the `FourOverSixConfig` passed above.
-Individual layers can be given custom quantization options by setting `module_config_overrides`, or excluded from quantization by setting `modules_to_not_convert`, as shown below.
+## Configure Four Over Six
 
-## Training
+These [`FourOverSixConfig`] parameters change how the weights and activations are quantized. Most of them also have `weight_`, `activation_`, and `gradient_` variants that override the setting for one kind of tensor.
 
-Our quantized linear layer contains a backward pass implementation, so many models can be trained further with few modifications.
-Make sure to set `keep_master_weights` to `True`, and to exclude layers from quantization as needed (it is often important to keep the last few layers of a network in high precision):
+| Parameter | Default | Effect |
+|---|---|---|
+| `dtype` | `"nvfp4"` | FP4 format for weights, activations, and gradients, either `"nvfp4"` or `"mxfp4"`. |
+| `scale_rule` | `"mse"` | How each block's scale is chosen. `"mse"`, `"mae"`, and `"abs_max"` pick between 4 and 6 by that error measure. `"static_6"` is standard NVFP4 quantization, and `"static_4"` scales every block to 4. |
+| `keep_master_weights` | `False` | Keeps the high-precision weights and quantizes them in every forward pass. Required for training. |
+| `weight_scale_2d` | `False` | Computes weight scales over 2D blocks instead of 1D blocks. Use it for training. |
+| `matmul_backend` | `None` | Matmul backend, either `"cutlass"` or `"pytorch"`. With `None`, CUTLASS is used when it's available. |
+| `module_config_overrides` | `None` | Maps module names to dictionaries of quantization options, so individual layers can use different settings. |
 
-```python
+See [`FourOverSixConfig`] for the rest of the parameters.
+
+## Train with quantized weights
+
+The Four Over Six linear layer has a backward pass, so you can keep training a quantized model. Set `keep_master_weights=True` so the high-precision weights stay in memory and are re-quantized in each forward pass, and set `weight_scale_2d=True` as the config recommends for training.
+
+The Four Over Six authors recommend leaving the last few layers of the network in high precision. The example below also excludes the attention projections of decoder layer 34. Add more layers, like `self_attn.o_proj` and the MLP projections, as needed.
+
+```py
 from transformers import AutoModelForCausalLM, FourOverSixConfig
 
+quantization_config = FourOverSixConfig(
+    keep_master_weights=True,
+    weight_scale_2d=True,
+    modules_to_not_convert=[
+        "lm_head",
+        "model.layers.34.self_attn.q_proj",
+        "model.layers.34.self_attn.k_proj",
+        "model.layers.34.self_attn.v_proj",
+    ],
+)
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-8B",
-    device_map="auto",
-    quantization_config=FourOverSixConfig(
-        keep_master_weights=True,
-        modules_to_not_convert=[
-            "lm_head",
-            "model.layers.34.self_attn.q_proj",
-            "model.layers.34.self_attn.k_proj",
-            "model.layers.34.self_attn.v_proj",
-            # Add more layers here, e.g. self_attn.o_proj, MLP layers
-        ],
-    ),
+    quantization_config=quantization_config,
+    device_map="cuda",
 )
 ```
+
+## Limitations
+
+- Without `keep_master_weights=True`, the quantized model can't be fine-tuned.
+- On hardware other than NVIDIA Blackwell GPUs, Four Over Six simulates FP4 with FP32 matmuls, so you get the accuracy loss of FP4 without the speedup.
+
+## Resources
+
+- [Four Over Six](https://arxiv.org/abs/2512.02010) preprint
+- [fouroversix](https://github.com/mit-han-lab/fouroversix) repository

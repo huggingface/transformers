@@ -27,7 +27,7 @@ limitations under the License.
 
 [FlexOlmo](https://huggingface.co/papers/2507.07024) is a new class of language models (LMs) that supports (1) distributed training without data sharing, where different model parameters are independently trained on closed datasets, and (2) data-flexible inference, where these parameters along with their associated data can be flexibly included or excluded from model inferences with no further training. FlexOlmo employs a mixture-of-experts (MoE) architecture where each expert is trained independently on closed datasets and later integrated through a new domain-informed routing without any joint training. FlexOlmo is trained on FlexMix, a corpus we curate comprising publicly available datasets alongside seven domain-specific sets, representing realistic approximations of closed sets.
 
-You can find all the original FlexOlmo checkpoints under the [FlexOlmo](https://huggingface.co/collections/allenai/flexolmo-68471177a386b6e20a54c55f) collection.
+You can find all the original FlexOlmo checkpoints under the [allenai](https://huggingface.co/allenai/models?search=FlexOlmo) organization.
 
 > [!TIP]
 > Click on the FlexOlmo models in the right sidebar for more examples of how to apply FlexOlmo to different language tasks.
