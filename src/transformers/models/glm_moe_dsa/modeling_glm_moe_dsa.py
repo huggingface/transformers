@@ -363,6 +363,9 @@ _PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1
 # When every request's context fits in index_topk, the indexer selects all visible tokens whatever the scores: only
 # its keys need caching (for later, longer contexts), the query projection, scoring and top-k are skipped
 _PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
+# WP prefill (bench only): batches above 512 query tokens (prefill) also take the per-request path, so nothing reads
+# the engine's [M, N + M] mask any more and the indexer never scores a query against another request's keys
+_PROTO_PREFILL = _os.environ.get("PROTO_PREFILL", "0") == "1"
 
 
 def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
@@ -440,7 +443,7 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
 
     batch_size, num_heads, seq_length, _ = q_pass.shape  # batch_size is 1 under CB
     if module.indexer is not None:
-        if _PROTO_PER_QUERY_INDEXER and seq_length <= 512:
+        if _PROTO_PER_QUERY_INDEXER and (seq_length <= 512 or _PROTO_PREFILL):
             cu_q = kwargs["cu_seq_lens_q"]
             cu_k = kwargs["cu_seq_lens_k"][allocator.layer_type]
             max_k = kwargs["max_length_k"][allocator.layer_type]
