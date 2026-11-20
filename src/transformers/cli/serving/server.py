@@ -15,7 +15,6 @@
 FastAPI app factory.
 """
 
-import uuid
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
     from .transcription import TranscriptionHandler
 
 from .model_manager import ModelManager
-from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState, split_model_id
+from .utils import CancelOnDisconnect, EngineDeadError, ModelNotServedError, RequestIdMiddleware
 
 
 logger = logging.get_logger(__name__)
@@ -49,19 +48,15 @@ def build_server(
     response_handler: "ResponseHandler",
     transcription_handler: "TranscriptionHandler",
     systemone_handler: "SystemOneHandler",
-    generation_state: GenerationState,
     enable_cors: bool = False,
 ) -> "FastAPI":
     """Build and return a configured FastAPI application.
 
     Args:
-        model_manager: Handles model loading, caching, and cleanup.
+        model_manager: The models the server runs
         chat_handler: Handles `/v1/chat/completions` requests.
         response_handler: Handles `/v1/responses` requests.
         systemone_handler: Handles `/v1/systemone` requests.
-        generation_state: Owns the per-model generation managers (regular and CB). Passed
-            in here so `/health` can check whether the CB worker has died and respond with
-            503 instead of a misleading 200.
         enable_cors: If `True`, adds permissive CORS middleware (allow all origins).
 
     Returns:
@@ -75,9 +70,12 @@ def build_server(
 
     app = FastAPI(lifespan=lifespan)
 
-    @app.exception_handler(CBWorkerDeadError)
-    async def _cb_dead_handler(_request: Request, exc: CBWorkerDeadError):
-        # Map CBWorkerDeadError to 503; otherwise it'd fall through to Starlette's default 500.
+    @app.exception_handler(ModelNotServedError)
+    async def _model_not_served_handler(_request: Request, exc: ModelNotServedError):
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(EngineDeadError)
+    async def _engine_dead_handler(_request: Request, exc: EngineDeadError):
         return JSONResponse({"error": str(exc)}, status_code=503)
 
     if enable_cors:
@@ -92,14 +90,8 @@ def build_server(
 
     # ---- Middleware ----
 
-    @app.middleware("http")
-    async def request_id_middleware(request: Request, call_next):
-        """Get or set the request ID in the header."""
-        request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
-        request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers[X_REQUEST_ID] = request_id
-        return response
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(CancelOnDisconnect)
 
     # ---- Routes ----
 
@@ -130,10 +122,8 @@ def build_server(
         model = body.get("model")
         if model is None:
             raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
-        model, gguf_file = split_model_id(model)
-        model_id_and_revision = model_manager.process_model_name(model)
         return StreamingResponse(
-            model_manager.load_model_streaming(model_id_and_revision, gguf_file=gguf_file),
+            model_manager.load_model_streaming(model),
             media_type="text/event-stream",
         )
 
@@ -149,8 +139,8 @@ def build_server(
 
     @app.get("/health")
     def health():
-        if not generation_state.is_cb_alive():
-            return JSONResponse({"status": "unhealthy", "reason": "cb_worker_dead"}, status_code=503)
+        if model_manager.is_dead:
+            return JSONResponse({"status": "unhealthy", "reason": "engine_dead"}, status_code=503)
         return JSONResponse({"status": "ok"})
 
     return app

@@ -15,18 +15,19 @@
 CLI entry point for `transformers serve`.
 """
 
-import asyncio
 import enum
+import gc
 import json
-import threading
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
 from transformers.utils import logging
 from transformers.utils.import_utils import is_serve_available
 
-from .serving.utils import set_torch_seed
+
+if TYPE_CHECKING:
+    import socket
 
 
 logger = logging.get_logger(__name__)
@@ -111,15 +112,77 @@ class Serve:
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
         enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
-        log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "warning",
-        default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
-        non_blocking: Annotated[
-            bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
+        log_level: Annotated[
+            str, typer.Option(help="Logging level of serve's messages (e.g. 'info', 'warning')")
+        ] = "info",
+        enable_log_requests: Annotated[
+            bool,
+            typer.Option(
+                help="Log each request at info (model, prompt length, generation settings), its body at debug."
+            ),
         ] = False,
+        default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
+        api_server_count: Annotated[
+            int,
+            typer.Option(
+                help=(
+                    "API server processes handling HTTP, tokenizing and decoding, each on a core of its own, for "
+                    "when one isn't enough. Needs a model on the command line, which they share, loaded once."
+                )
+            ),
+        ] = 1,
     ) -> None:
         if not is_serve_available():
             raise ImportError("Missing dependencies for serving. Install with `pip install transformers[serving]`")
 
+        from transformers import ContinuousBatchingConfig
+
+        from .serving.model_manager import ModelLoader
+        from .serving.utils import GenerationState, set_serve_log_level
+
+        self.log_level = logging.log_levels[log_level.lower()]
+        self.enable_log_requests = enable_log_requests
+        set_serve_log_level(self.log_level, enable_log_requests)
+
+        cb_options = {
+            "block_size": cb_block_size,
+            "num_blocks": cb_num_blocks,
+            "max_batch_tokens": cb_max_batch_tokens,
+            "max_memory_percent": cb_max_memory_percent,
+            "use_cuda_graph": cb_use_cuda_graph,
+        }
+        cb_set = any(value is not None for value in cb_options.values())
+        self.generation_state = GenerationState(
+            continuous_batching=continuous_batching,
+            compile=compile,
+            cb_config=ContinuousBatchingConfig(**cb_options) if cb_set else None,
+            seed=default_seed,
+        )
+
+        self.loader = ModelLoader(
+            device=device,
+            dtype=dtype,
+            trust_remote_code=trust_remote_code,
+            attn_implementation=attn_implementation,
+            quantization=quantization,
+            continuous_batching=continuous_batching,
+        )
+
+        self.chat_template_kwargs = self.parse_chat_template_kwargs(chat_template_kwargs, reasoning)
+        self.force_model, self.model_timeout, self.decision_config = force_model, model_timeout, decision_config
+        self.host, self.port, self.enable_cors = host, port, enable_cors
+
+        if api_server_count > 1:
+            self.run_api_servers(api_server_count)
+        else:
+            self.run()
+
+    def run(self, socket: "socket.socket | None" = None, engine_connection: tuple | None = None) -> None:
+        """
+        Serves the API: on `socket` if given, else on the command line's host and port. In an API server (see
+        `run_api_servers`), `engine_connection` connects it to the process of the model of the command line: the
+        requests queue, shared by the API servers, this one's results queue, and its number.
+        """
         import uvicorn
 
         from .serving.chat_completion import ChatCompletionHandler
@@ -129,123 +192,140 @@ class Serve:
         from .serving.server import build_server
         from .serving.systemone import SystemOneHandler
         from .serving.transcription import TranscriptionHandler
-        from .serving.utils import GenerationState
+        from .serving.utils import exit_with_parent, freeze_garbage_collector, set_serve_log_level
 
-        # Seed
-        if default_seed is not None:
-            set_torch_seed(default_seed)
+        set_serve_log_level(self.log_level, self.enable_log_requests)
+        exit_with_parent()
 
-        # Logging
-        transformers_logger = logging.get_logger("transformers")
-        transformers_logger.setLevel(logging.log_levels[log_level.lower()])
-
-        self._model_manager = ModelManager(
-            device=device,
-            dtype=dtype,
-            trust_remote_code=trust_remote_code,
-            attn_implementation=attn_implementation,
-            continuous_batching=continuous_batching,
-            quantization=quantization,
-            model_timeout=model_timeout,
-            force_model=force_model,
+        model_manager = ModelManager(
+            self.loader,
+            self.generation_state,
+            model_timeout=self.model_timeout,
+            force_model=self.force_model,
+            engine_connection=engine_connection,
         )
-        from transformers import ContinuousBatchingConfig
-
-        cb_kwargs = {
-            k: v
-            for k, v in {
-                "block_size": cb_block_size,
-                "num_blocks": cb_num_blocks,
-                "max_batch_tokens": cb_max_batch_tokens,
-                "max_memory_percent": cb_max_memory_percent,
-                "use_cuda_graph": cb_use_cuda_graph,
-            }.items()
-            if v is not None
-        }
-        cb_config = ContinuousBatchingConfig(**cb_kwargs) if cb_kwargs else None
-        self._generation_state = GenerationState(
-            continuous_batching=continuous_batching,
-            compile=compile,
-            cb_config=cb_config,
+        chat_handler = ChatCompletionHandler(
+            model_manager=model_manager,
+            generation_state=self.generation_state,
+            chat_template_kwargs=self.chat_template_kwargs,
         )
 
-        if chat_template_kwargs:
-            chat_template_kwargs = json.loads(chat_template_kwargs)
-            if not isinstance(chat_template_kwargs, dict):
-                raise typer.BadParameter("--chat-template-kwargs must be a JSON object")
-        else:
-            chat_template_kwargs = {}
-
-        if reasoning == ReasoningMode.ON:
-            chat_template_kwargs["enable_thinking"] = True
-        elif reasoning == ReasoningMode.OFF:
-            chat_template_kwargs["enable_thinking"] = False
-
-        self._chat_handler = ChatCompletionHandler(
-            model_manager=self._model_manager,
-            generation_state=self._generation_state,
-            chat_template_kwargs=chat_template_kwargs,
+        completion_handler = CompletionHandler(
+            model_manager=model_manager,
+            generation_state=self.generation_state,
         )
 
-        self._completion_handler = CompletionHandler(
-            model_manager=self._model_manager,
-            generation_state=self._generation_state,
+        response_handler = ResponseHandler(
+            model_manager=model_manager,
+            generation_state=self.generation_state,
+            chat_template_kwargs=self.chat_template_kwargs,
         )
 
-        self._response_handler = ResponseHandler(
-            model_manager=self._model_manager,
-            generation_state=self._generation_state,
-            chat_template_kwargs=chat_template_kwargs,
-        )
+        transcription_handler = TranscriptionHandler(model_manager, self.generation_state)
 
-        self._transcription_handler = TranscriptionHandler(self._model_manager, self._generation_state)
-
-        self._systemone_handler = SystemOneHandler(
-            model_manager=self._model_manager,
-            generation_state=self._generation_state,
-            chat_template_kwargs=chat_template_kwargs,
-            decision_config=decision_config,
+        systemone_handler = SystemOneHandler(
+            model_manager=model_manager,
+            generation_state=self.generation_state,
+            chat_template_kwargs=self.chat_template_kwargs,
+            decision_config=self.decision_config,
         )
 
         app = build_server(
-            self._model_manager,
-            self._chat_handler,
-            completion_handler=self._completion_handler,
-            response_handler=self._response_handler,
-            transcription_handler=self._transcription_handler,
-            systemone_handler=self._systemone_handler,
-            generation_state=self._generation_state,
-            enable_cors=enable_cors,
+            model_manager,
+            chat_handler,
+            completion_handler=completion_handler,
+            response_handler=response_handler,
+            transcription_handler=transcription_handler,
+            systemone_handler=systemone_handler,
+            enable_cors=self.enable_cors,
         )
 
-        config = uvicorn.Config(app, host=host, port=port, log_level="info")
-        self.server = uvicorn.Server(config)
+        async def stop_if_an_engine_died() -> None:
+            if model_manager.is_dead:
+                server.should_exit = True
 
-        if non_blocking:
-            self.start_server()
-        else:
-            self.server.run()
+        # uvicorn calls `callback_notify` on the event loop every `timeout_notify` seconds (it checks once a second)
+        config = uvicorn.Config(
+            app,
+            host=self.host,
+            port=self.port,
+            log_level="info",
+            callback_notify=stop_if_an_engine_died,
+            timeout_notify=5,
+        )
+        server = uvicorn.Server(config)
+        freeze_garbage_collector()
+        server.run(sockets=None if socket is None else [socket])
+        gc.unfreeze()  # the server has stopped: if the process goes on (tests), what it held can be freed again
+        if model_manager.is_dead:
+            raise RuntimeError("An engine died (see the error above): stopping the server")
 
-    def start_server(self):
-        def _run():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.server.serve())
+    def run_api_servers(self, count: int) -> None:
+        """
+        Serves the API with `count` API servers, for when one process can't keep up. Each handles HTTP, tokenizes
+        prompts and decodes answers in a process of its own (`run`), on a core of its own, and they share the process
+        of the model of the command line, loaded once. Runs until it's stopped (Ctrl+C or SIGTERM), or until one of
+        these processes stops: it then stops the others, and raises, for whatever runs `transformers serve` to restart
+        it.
+        """
+        import multiprocessing
+        import signal
+        import sys
+        from multiprocessing.connection import wait
 
-        self._thread = threading.Thread(target=_run, name="uvicorn-thread", daemon=False)
-        self._thread.start()
+        import uvicorn
 
-    def reset_loaded_models(self):
-        """Clear all loaded models from memory."""
-        self._model_manager.shutdown()
+        from .serving.model_manager import EngineClient
 
-    def kill_server(self):
-        self._generation_state.shutdown()
-        self._model_manager.shutdown()
-        if not self._thread or not self._thread.is_alive():
-            return
-        self.server.should_exit = True
-        self._thread.join(timeout=2)
+        if self.force_model is None:
+            raise ValueError(
+                "Several API servers need a model on the command line: "
+                "`transformers serve MODEL --api-server-count N`."
+            )
+        # Ctrl+C and SIGTERM exit quietly, through the `finally` below, which stops the processes
+        for stop_signal in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(stop_signal, lambda *_: sys.exit(0))
+
+        socket = uvicorn.Config(app=None, host=self.host, port=self.port).bind_socket()
+        model_process, requests, results = EngineClient.start_process(
+            self.force_model, self.loader, self.generation_state, api_servers=count
+        )
+        spawn = multiprocessing.get_context("spawn")
+        servers = [
+            spawn.Process(
+                target=self.run, args=(socket, (requests, results[index], index)), name=f"api-server-{index}"
+            )
+            for index in range(count)
+        ]
+        processes = [model_process, *servers]
+        for server in servers:
+            server.start()
+        try:
+            ready = wait([process.sentinel for process in processes])
+            stopped = [process for process in processes if process.sentinel in ready]
+            for process in stopped:
+                process.join()  # it's exiting: for its exit code
+            names = ", ".join(f"{process.name} (exit code {process.exitcode})" for process in stopped)
+            raise RuntimeError(f"Process {names} stopped: stopping the server")
+        finally:
+            for process in processes:
+                process.terminate()
+            for process in processes:
+                process.join(30)
+            socket.close()
+
+    @staticmethod
+    def parse_chat_template_kwargs(chat_template_kwargs: str | None, reasoning: ReasoningMode) -> dict:
+        """
+        The kwargs `apply_chat_template` gets for every request (a request's own `chat_template_kwargs` override them):
+        `--chat-template-kwargs`, a JSON object, with `enable_thinking` set by `--reasoning`, unless it's 'auto'.
+        """
+        kwargs = json.loads(chat_template_kwargs) if chat_template_kwargs else {}
+        if not isinstance(kwargs, dict):
+            raise typer.BadParameter("--chat-template-kwargs must be a JSON object")
+        if reasoning != ReasoningMode.AUTO:
+            kwargs["enable_thinking"] = reasoning == ReasoningMode.ON
+        return kwargs
 
 
 Serve.__doc__ = """

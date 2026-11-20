@@ -18,6 +18,7 @@ Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -56,9 +57,8 @@ if is_serve_available():
 
 
 from .utils import (
-    BaseGenerateManager,
     BaseHandler,
-    Modality,
+    EventStream,
     ReasoningText,
     ToolCall,
     _StreamError,
@@ -68,7 +68,9 @@ from .utils import (
 
 
 if TYPE_CHECKING:
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import GenerationConfig
+
+    from .model_manager import EngineClient
 
 
 logger = logging.get_logger(__name__)
@@ -141,6 +143,20 @@ class _ResponseStreamBuilder:
 
     def start_reasoning(self) -> list[str]:
         self.reasoning_open = True
+        self.reasoning_delta_template = BaseHandler.sse_template(
+            BaseHandler.chunk_to_sse(
+                ResponseReasoningTextDeltaEvent(
+                    type="response.reasoning_text.delta",
+                    item_id=self.reasoning_id,
+                    sequence_number=-1,
+                    output_index=self.output_index,
+                    content_index=0,
+                    delta="<text>",
+                )
+            ),
+            delta="<text>",
+            sequence_number=-1,
+        )
         return [
             self._emit(
                 ResponseOutputItemAddedEvent(
@@ -154,20 +170,16 @@ class _ResponseStreamBuilder:
             )
         ]
 
+    def _delta(self, template: str, text: str) -> str:
+        """The event of a token of text or reasoning, from its `template` (see `BaseHandler.sse_template`): one per
+        token, so it isn't built as the others are (`_emit`)."""
+        sse = template.format(delta=json.dumps(text, ensure_ascii=False), sequence_number=self.seq)
+        self.seq += 1
+        return sse
+
     def reasoning_delta(self, text: str) -> list[str]:
         self.full_reasoning += text
-        return [
-            self._emit(
-                ResponseReasoningTextDeltaEvent(
-                    type="response.reasoning_text.delta",
-                    item_id=self.reasoning_id,
-                    sequence_number=self.seq,
-                    output_index=self.output_index,
-                    content_index=0,
-                    delta=text,
-                )
-            )
-        ]
+        return [self._delta(self.reasoning_delta_template, text)]
 
     def finish_reasoning(self) -> list[str]:
         self.reasoning_item = ResponseReasoningItem(
@@ -203,6 +215,21 @@ class _ResponseStreamBuilder:
 
     def start_message(self) -> list[str]:
         self.message_open = True
+        self.text_delta_template = BaseHandler.sse_template(
+            BaseHandler.chunk_to_sse(
+                ResponseTextDeltaEvent(
+                    type="response.output_text.delta",
+                    item_id=self.msg_id,
+                    sequence_number=-1,
+                    output_index=self.output_index,
+                    content_index=0,
+                    delta="<text>",
+                    logprobs=[],
+                )
+            ),
+            delta="<text>",
+            sequence_number=-1,
+        )
         return [
             self._emit(
                 ResponseOutputItemAddedEvent(
@@ -228,19 +255,7 @@ class _ResponseStreamBuilder:
 
     def text_delta(self, text: str) -> list[str]:
         self.content += text
-        return [
-            self._emit(
-                ResponseTextDeltaEvent(
-                    type="response.output_text.delta",
-                    item_id=self.msg_id,
-                    sequence_number=self.seq,
-                    output_index=self.output_index,
-                    content_index=0,
-                    delta=text,
-                    logprobs=[],
-                )
-            )
-        ]
+        return [self._delta(self.text_delta_template, text)]
 
     def finish_message(self) -> list[str]:
         output_text_part = ResponseOutputText(type="output_text", text=self.content, annotations=[])
@@ -375,93 +390,18 @@ class ResponseHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        model_id, model, processor = self._resolve_model(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        use_cb = self.generation_state.use_continuous_batching(model, modality)
-        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
-        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-
-        # Two-step input conversion (chat completions skips step 1 since messages are already standard):
-        # 1. Normalize Responses API input (string/list/dict + instructions) → standard messages list
-        # 2. Transform message content for the HF processor (VLM image handling, text joining, etc.)
-        messages = self._normalize_input(body)
-        processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
-
-        has_video = any(
-            c.get("type") == "video"
-            for msg in processor_inputs
-            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
-        )
-
-        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
-        # Merge order (later wins): custom default -> server default → request-level kwargs.
-        chat_template_kwargs: dict = {}
-        if has_video:
-            chat_template_kwargs["num_frames"] = 32
-        chat_template_kwargs.update(self.chat_template_kwargs)
-        chat_template_kwargs.update(body.get("chat_template_kwargs") or {})
-        # updates the flat tool structure to the one expected by the `apply_chat_template` method.
-        tools = self._normalize_tools(body.get("tools"))
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=tools,
-            return_tensors=None if use_cb else "pt",
-            return_dict=True,
-            tokenize=True,
-            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
-            **chat_template_kwargs,
-        )
-        if not use_cb:
-            inputs = inputs.to(model.device)  # type: ignore[union-attr]
-
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
-        # TODO: remove when CB supports per-request generation config
-        if use_cb:
-            gen_manager.init_cb(model, gen_config)
+        engine = self._get_engine(body)
+        # The Responses API's input (a string, items, instructions) as chat messages, then rendered like a chat's
+        inputs = await self.run_in_thread(self.render_messages, engine, self._normalize_input(body), body)
+        generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
         streaming = body.get("stream", True)
+        self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
         if streaming:
-            return self._streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                body,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=tools,
-            )
+            return self._streaming(request_id, engine, body, inputs, generation_kwargs)
         else:
-            return await self._non_streaming(
-                request_id,
-                model,
-                processor,
-                model_id,
-                body,
-                inputs,
-                gen_config,
-                gen_manager=gen_manager,
-                tools=tools,
-            )
+            return await self._non_streaming(request_id, engine, body, inputs, generation_kwargs)
 
     # ----- input conversion -----
-
-    @staticmethod
-    def _normalize_tools(tools: list[dict] | None) -> list[dict] | None:
-        """Normalize Responses API tool definitions for ``apply_chat_template``.
-
-        The Responses API uses a flat format: ``{"type": "function", "name": ..., "parameters": ...}``
-        while ``apply_chat_template`` expects a nested format:
-        ``{"type": "function", "function": {"name": ..., "parameters": ...}}``.
-        Already-nested tools are passed through unchanged.
-        """
-        if not tools:
-            return tools
-        return [
-            {"type": "function", "function": {k: v for k, v in t.items() if k != "type"}} if "function" not in t else t
-            for t in tools
-        ]
 
     @staticmethod
     def _normalize_input(body: dict) -> list[dict]:
@@ -564,25 +504,16 @@ class ResponseHandler(BaseHandler):
     def _streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         body: dict,
         inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
-        tools=None,
+        generation_kwargs: dict,
     ) -> StreamingResponse:
-        """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
-        response_parser = build_response_parser(processor, model, inputs["input_ids"], tools=tools)
-        queue, streamer = gen_manager.generate_streaming(
-            model,
-            processor,
-            inputs,
-            gen_config,
-            request_id=request_id,
-            response_parser=response_parser,
-        )
+        """Generate a streaming Responses API reply (SSE), decoded by a `Detokenizer`."""
+        processor, model_id = engine.processor, engine.model_id
+        tools = self._normalize_tools(body.get("tools"))
+        response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
+        queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
@@ -664,34 +595,29 @@ class ResponseHandler(BaseHandler):
                 streamer.cancel()
                 raise
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        return EventStream(event_stream(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 
     async def _non_streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         body: dict,
         inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
-        tools=None,
+        generation_kwargs: dict,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
-        content, input_len, generated_ids = await gen_manager.generate_non_streaming(
-            model, processor, inputs, gen_config, request_id=request_id
-        )
+        processor, model_id = engine.processor, engine.model_id
+        content, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
             processor,
-            model,
+            engine.model_config,
             generated_ids,
             input_ids=inputs["input_ids"],
             cleaned_content=content,
-            tools=tools,
+            tools=self._normalize_tools(body.get("tools")),
         )
 
         output_items = []
@@ -749,14 +675,14 @@ class ResponseHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply Responses API params (``max_output_tokens``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+        """Adds the Responses API params (``max_output_tokens``) to the shared ones."""
+        generation_kwargs = super()._build_generation_kwargs(body, default)
 
         if body.get("max_output_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_output_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_output_tokens"])
 
-        return generation_config
+        return generation_kwargs
 
 
 def compute_usage(input_tokens: int, output_tokens: int) -> ResponseUsage:

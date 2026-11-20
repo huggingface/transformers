@@ -17,21 +17,25 @@ Tests for the serving layer.
 """
 
 import asyncio
+import atexit
 import json
+import multiprocessing
 import socket
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
+from parameterized import parameterized
 
 from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
-from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelManager, TimedModel
+from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelLoader, ModelManager
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.systemone import SystemOneHandler
@@ -39,18 +43,26 @@ from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
     BaseHandler,
+    EngineDeadError,
+    GenerateRunner,
     GenerationState,
     Modality,
+    ModelNotServedError,
     ToolCall,
+    answer_questions,
     build_response_parser,
+    canonical_model_id,
+    decision_pipeline,
     get_gen_models,
     get_response_template,
     parse_assistant_message,
+    parse_model_id,
+    request_logger,
     response_events_to_chunks,
-    split_model_id,
-    split_revision,
+    set_serve_log_level,
 )
 from transformers.testing_utils import (
+    CaptureLogger,
     require_audio,
     require_multipart,
     require_serve,
@@ -61,6 +73,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
@@ -81,21 +94,36 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
-def _start_serve(**kwargs) -> tuple["Serve", int]:
-    """Start a non-blocking Serve instance on a free port and wait until healthy.
+def _start_serve(**kwargs) -> tuple[multiprocessing.process.BaseProcess, int]:
+    """Starts `Serve(**kwargs)` in a process of its own, on a free port, and waits until it's healthy.
 
-    Returns ``(serve, port)``.
+    Returns ``(server, port)``.
     """
     port = _find_free_port()
-    serve = Serve(port=port, non_blocking=True, **kwargs)
-    for _ in range(30):
+    spawn = multiprocessing.get_context("spawn")
+    server = spawn.Process(target=Serve, kwargs={"port": port, **kwargs})
+    server.start()
+    atexit.register(_stop_serve, server)  # if the tests are interrupted
+    for _ in range(300):
         try:
             if httpx.get(f"http://localhost:{port}/health", timeout=2).status_code == 200:
-                return serve, port
+                return server, port
         except Exception:  # noqa: S110
             pass
+        if not server.is_alive():
+            break
         time.sleep(1)
+    _stop_serve(server)
     raise RuntimeError(f"Server on port {port} did not become healthy in time")
+
+
+def _stop_serve(server: multiprocessing.process.BaseProcess) -> None:
+    """Stops a server started with `_start_serve`."""
+    server.terminate()
+    server.join(60)
+    if server.is_alive():
+        server.kill()
+        server.join()
 
 
 class ServeIntegrationTestCase(MemoryCleanupMixin, unittest.TestCase):
@@ -109,14 +137,13 @@ class ServeIntegrationTestCase(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.serve, port = _start_serve(**cls.serve_kwargs())
+        cls.server, port = _start_serve(**cls.serve_kwargs())
         cls.base_url = f"http://localhost:{port}"
         cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
     @classmethod
     def tearDownClass(cls):
-        # `kill_server()` already flushes; the mixin then drops the attributes still pointing at it.
-        cls.serve.kill_server()
+        _stop_serve(cls.server)
         super().tearDownClass()
 
 
@@ -419,7 +446,7 @@ class TestGenerativeModelList(unittest.TestCase):
             self.addCleanup(model_manager.shutdown)
             # What loading `org/a` and a local checkpoint leaves in the manager.
             for name in ("org/a@main", local_path):
-                model_manager.loaded_models[name] = TimedModel(MagicMock(), timeout_seconds=-1)
+                model_manager.engines[name] = MagicMock(running=True)
 
             models = model_manager.list_models()
             statuses = {model["id"]: model["status"]["value"] for model in models}
@@ -430,9 +457,9 @@ class TestGenerativeModelList(unittest.TestCase):
 
     def test_list_models_of_a_pinned_server(self):
         # A server pinned to one model lists that model alone, whatever the Hub cache holds.
-        with patch.object(ModelManager, "_load_processor"), patch.object(ModelManager, "_load_model"):
-            model_manager = ModelManager(force_model="org/model")
-        self.addCleanup(model_manager.shutdown)
+        model_manager = ModelManager()
+        model_manager.force_model = "org/model"
+        model_manager.engines["org/model@main"] = MagicMock(running=True)
 
         models = model_manager.list_models()
 
@@ -449,80 +476,80 @@ class TestBuildGenerationConfig(unittest.TestCase):
     def test_max_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_tokens": 7}, GenerationConfig())
-        self.assertEqual(result.max_new_tokens, 7)
+        result = self._make_handler()._build_generation_kwargs({"max_tokens": 7}, GenerationConfig())
+        self.assertEqual(result["max_new_tokens"], 7)
 
     def test_max_completion_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_completion_tokens": 7}, GenerationConfig())
-        self.assertEqual(result.max_new_tokens, 7)
+        result = self._make_handler()._build_generation_kwargs({"max_completion_tokens": 7}, GenerationConfig())
+        self.assertEqual(result["max_new_tokens"], 7)
 
     def test_max_completion_tokens_overrides_max_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config(
+        result = self._make_handler()._build_generation_kwargs(
             {"max_completion_tokens": 7, "max_tokens": 50}, GenerationConfig()
         )
-        self.assertEqual(result.max_new_tokens, 7)
+        self.assertEqual(result["max_new_tokens"], 7)
 
     def test_temperature_zero_disables_sampling(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"temperature": 0.0}, GenerationConfig(do_sample=True))
-        self.assertFalse(result.do_sample)
+        result = self._make_handler()._build_generation_kwargs({"temperature": 0.0}, GenerationConfig(do_sample=True))
+        self.assertFalse(result["do_sample"])
 
     def test_frequency_penalty(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"frequency_penalty": 0.5}, GenerationConfig())
-        self.assertAlmostEqual(result.repetition_penalty, 1.5)
+        result = self._make_handler()._build_generation_kwargs({"frequency_penalty": 0.5}, GenerationConfig())
+        self.assertAlmostEqual(result["repetition_penalty"], 1.5)
 
     def test_logit_bias_tuple_keys(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"logit_bias": {"42": 1.0}}, GenerationConfig())
-        self.assertEqual(result.sequence_bias, {(42,): 1.0})
+        result = self._make_handler()._build_generation_kwargs({"logit_bias": {"42": 1.0}}, GenerationConfig())
+        self.assertEqual(result["sequence_bias"], {(42,): 1.0})
 
     def test_stop_strings(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"stop": ["<END>"]}, GenerationConfig())
-        self.assertEqual(result.stop_strings, ["<END>"])
+        result = self._make_handler()._build_generation_kwargs({"stop": ["<END>"]}, GenerationConfig())
+        self.assertEqual(result["stop_strings"], ["<END>"])
 
     def test_generation_config_json_overrides(self):
         from transformers import GenerationConfig
 
         custom = GenerationConfig(max_new_tokens=5, do_sample=False)
-        result = self._make_handler()._build_generation_config(
+        result = self._make_handler()._build_generation_kwargs(
             {"generation_config": custom.to_json_string()}, GenerationConfig(max_new_tokens=100)
         )
-        self.assertEqual(result.max_new_tokens, 5)
-        self.assertFalse(result.do_sample)
+        self.assertEqual(result["max_new_tokens"], 5)
+        self.assertFalse(result["do_sample"])
 
     def test_generation_config_json_no_defaults_applied(self):
         """When generation_config JSON is passed, serving defaults should NOT be applied."""
         from transformers import GenerationConfig
 
         custom = GenerationConfig(max_new_tokens=10)
-        result = self._make_handler()._build_generation_config(
+        result = self._make_handler()._build_generation_kwargs(
             {"generation_config": custom.to_json_string()}, GenerationConfig()
         )
         # Should keep 10, not bump to 1024
-        self.assertEqual(result.max_new_tokens, 10)
+        self.assertEqual(result["max_new_tokens"], 10)
 
     def test_default_bumps_short_max_new_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({}, GenerationConfig(max_new_tokens=20))
-        self.assertEqual(result.max_new_tokens, 1024)
+        result = self._make_handler()._build_generation_kwargs({}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result["max_new_tokens"], 1024)
 
     def test_user_max_tokens_overrides_default(self):
         """User's max_tokens should win over the serving default."""
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
-        self.assertEqual(result.max_new_tokens, 50)
+        result = self._make_handler()._build_generation_kwargs({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result["max_new_tokens"], 50)
 
 
 @require_serve
@@ -549,103 +576,195 @@ class TestValidation(unittest.TestCase):
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
 
-class TestResolveModel(unittest.TestCase):
+class TestGetEngine(unittest.TestCase):
     def _make_handler(self, force_model=None):
-        mm = MagicMock()
+        mm = ModelManager(MagicMock(), GenerationState())
         mm.force_model = force_model
-        mm.process_model_name.side_effect = ModelManager.process_model_name
-        mm.load_model_and_processor.return_value = (MagicMock(), MagicMock())
+        engine_client = patch(
+            "transformers.cli.serving.model_manager.EngineClient",
+            side_effect=lambda model_id, *args, **kwargs: MagicMock(model_id=model_id),
+        )
+        engine_client.start()
+        self.addCleanup(engine_client.stop)
         return ChatCompletionHandler(model_manager=mm, generation_state=GenerationState())
 
     def test_force_model_overrides_when_model_omitted(self):
         handler = self._make_handler(force_model="org/pinned")
         body = {}
-        model_id, _, _ = handler._resolve_model(body)
-        self.assertEqual(model_id, "org/pinned@main")
+        self.assertEqual(handler._get_engine(body).model_id, "org/pinned@main")
         self.assertEqual(body["model"], "org/pinned")
 
     def test_force_model_allows_matching_request(self):
         handler = self._make_handler(force_model="org/pinned")
-        body = {"model": "org/pinned"}
-        model_id, _, _ = handler._resolve_model(body)
-        self.assertEqual(model_id, "org/pinned@main")
+        self.assertEqual(handler._get_engine({"model": "org/pinned"}).model_id, "org/pinned@main")
 
     def test_force_model_rejects_mismatched_request(self):
         handler = self._make_handler(force_model="org/pinned")
-        with self.assertRaises(HTTPException) as ctx:
-            handler._resolve_model({"model": "other/model"})
-        self.assertEqual(ctx.exception.status_code, 400)
-        self.assertIn("org/pinned", ctx.exception.detail)
-        self.assertIn("other/model", ctx.exception.detail)
+        with self.assertRaises(ModelNotServedError) as ctx:
+            handler._get_engine({"model": "other/model"})
+        self.assertIn("org/pinned", str(ctx.exception))
+        self.assertIn("other/model", str(ctx.exception))
+
+    def test_closed_loading_stream_unsubscribes(self):
+        # A client that disconnects mid-load stops receiving the load's events, and the load goes on for the others
+        release = threading.Event()
+
+        def start(on_progress):
+            on_progress({"status": "loading"})
+            release.wait()
+
+        engine = MagicMock(model_id="org/model@main", running=False, start=start)
+
+        async def collect(stream):
+            return [event async for event in stream]
+
+        async def run():
+            mm = ModelManager(MagicMock(), GenerationState())
+            with patch.object(mm, "get_engine", return_value=engine):
+                first = mm.load_model_streaming("org/model")
+                await anext(first)  # the load is running
+                second = asyncio.create_task(collect(mm.load_model_streaming("org/model")))
+                await asyncio.sleep(0)  # the second request joins the load
+                await first.aclose()
+                subscribers = len(mm._loading_subscribers["org/model@main"])
+                release.set()
+                await second  # ends with the load
+            return subscribers, mm._loading_subscribers
+
+        try:
+            subscribers, remaining = asyncio.run(run())
+        finally:
+            release.set()
+        self.assertEqual(subscribers, 1)
+        self.assertEqual(remaining, {})
 
 
-class TestModelManager(unittest.TestCase):
-    def test_process_model_name_adds_main(self):
-        self.assertEqual(ModelManager.process_model_name("org/model"), "org/model@main")
-
-    def test_process_model_name_preserves_revision(self):
-        self.assertEqual(ModelManager.process_model_name("org/model@dev"), "org/model@dev")
-
+class TestModelLoader(unittest.TestCase):
     def test_local_path_with_at_symbol(self):
         # The `@` of an existing local path is part of the path, not a revision.
         with tempfile.TemporaryDirectory(prefix="ckpt@1000_") as local_path:
-            self.assertEqual(ModelManager.process_model_name(local_path), local_path)
-            self.assertEqual(split_revision(local_path), (local_path, None))
+            self.assertEqual(canonical_model_id(local_path), local_path)
+            self.assertEqual(parse_model_id(local_path), (local_path, None, None))
 
-    def test_split_revision(self):
-        self.assertEqual(split_revision("org/model@main"), ("org/model", "main"))
-        self.assertEqual(split_revision("org/model@refs/pr/12"), ("org/model", "refs/pr/12"))
-
-    def test_split_model_id(self):
-        self.assertEqual(split_model_id("org/model"), ("org/model", None))
-        self.assertEqual(split_model_id("org/model:weights.gguf"), ("org/model", "weights.gguf"))
+    def test_parse_model_id(self):
+        self.assertEqual(parse_model_id("org/model"), ("org/model", None, None))
+        self.assertEqual(parse_model_id("org/model@refs/pr/12"), ("org/model", "refs/pr/12", None))
+        self.assertEqual(parse_model_id("org/model@dev:weights.gguf"), ("org/model", "dev", "weights.gguf"))
         # The colon of a local path is part of the path, not a GGUF file.
-        self.assertEqual(split_model_id("/runs/run:1/ckpt"), ("/runs/run:1/ckpt", None))
-        self.assertEqual(split_model_id("/runs/run:1/ckpt:weights.gguf"), ("/runs/run:1/ckpt", "weights.gguf"))
+        self.assertEqual(parse_model_id("/runs/run:1/ckpt"), ("/runs/run:1/ckpt", None, None))
+        self.assertEqual(parse_model_id("/runs/run:1/ckpt:weights.gguf"), ("/runs/run:1/ckpt", None, "weights.gguf"))
+
+    def test_canonical_model_id(self):
+        self.assertEqual(canonical_model_id("org/model"), "org/model@main")
+        self.assertEqual(canonical_model_id("org/model@dev"), "org/model@dev")
+        self.assertEqual(canonical_model_id("org/model:weights.gguf"), "org/model@main:weights.gguf")
 
     def test_quantization_config_4bit(self):
-        mm = ModelManager(quantization="bnb-4bit")
-        cfg = mm.get_quantization_config()
+        cfg = ModelLoader(quantization="bnb-4bit").get_quantization_config()
         self.assertTrue(cfg.load_in_4bit)
 
     def test_quantization_config_8bit(self):
-        mm = ModelManager(quantization="bnb-8bit")
-        cfg = mm.get_quantization_config()
+        cfg = ModelLoader(quantization="bnb-8bit").get_quantization_config()
         self.assertTrue(cfg.load_in_8bit)
 
     def test_quantization_config_none(self):
-        mm = ModelManager()
-        self.assertIsNone(mm.get_quantization_config())
+        self.assertIsNone(ModelLoader().get_quantization_config())
 
     def test_metal_flash_attn_default_only_with_continuous_batching(self):
-        resolve = ModelManager._resolve_attn_implementation
+        resolve = ModelLoader._resolve_attn_implementation
         with patch("transformers.utils.import_utils.is_kernels_available", return_value=True):
             self.assertEqual(resolve(None, "mps", continuous_batching=True), METAL_FLASH_ATTN)
             self.assertIsNone(resolve(None, "mps", continuous_batching=False))
             self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
 
 
-class TestTimedModel(unittest.TestCase):
-    def test_delete_model(self):
-        mock_model = MagicMock()
-        deleted = []
-        timed = TimedModel(
-            mock_model, timeout_seconds=9999, processor=MagicMock(), on_unload=lambda: deleted.append(True)
-        )
-        self.assertIsNotNone(timed.model)
-        timed.delete_model()
-        self.assertIsNone(timed.model)
-        self.assertEqual(len(deleted), 1)
-
-    def test_timeout_zero_no_delete(self):
-        mock_model = MagicMock()
-        timed = TimedModel(mock_model, timeout_seconds=0, processor=MagicMock())
-        timed._timeout_reached()
-        self.assertIsNotNone(timed.model)
-        timed._timer.cancel()
-
-
+@slow
 @require_serve
+@require_torch_accelerator
+class TestProcessLifecycle(unittest.TestCase):
+    """What happens to a server when one of its processes stops. Each test starts a server of its own."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    def _start_serve(self, **kwargs) -> tuple[multiprocessing.process.BaseProcess, str]:
+        server, port = _start_serve(device=f"{torch_device}:0", **kwargs)
+        self.addCleanup(_stop_serve, server)
+        return server, f"http://localhost:{port}"
+
+    def _chat(self, base_url: str) -> str:
+        body = {"model": self.MODEL, "messages": [{"role": "user", "content": "Say hi"}], "max_tokens": 5}
+        response = httpx.post(f"{base_url}/v1/chat/completions", json=body, timeout=120)
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["choices"][0]["message"]["content"]
+
+    @staticmethod
+    def _child_processes(server: multiprocessing.process.BaseProcess) -> list:
+        """The processes a server started, oldest first: the engine, then the API servers if it has several."""
+        import psutil
+
+        children = psutil.Process(server.pid).children(recursive=True)
+        children = [child for child in children if "resource_tracker" not in " ".join(child.cmdline())]
+        return sorted(children, key=lambda child: child.create_time())
+
+    def _assert_all_stopped(self, processes: list) -> None:
+        import psutil
+
+        _, alive = psutil.wait_procs(processes, timeout=30)
+        self.assertEqual(alive, [])
+
+    def test_engine_killed_fails_its_requests_and_stops_the_server(self):
+        server, base_url = self._start_serve(force_model=self.MODEL)
+        (engine,) = self._child_processes(server)
+        body = {
+            "model": self.MODEL,
+            "messages": [{"role": "user", "content": "Count from 1 to 1000."}],
+            "max_tokens": 2000,
+            "stream": True,
+        }
+        with httpx.stream("POST", f"{base_url}/v1/chat/completions", json=body, timeout=30) as response:
+            lines = response.iter_lines()
+            received = [next(lines)]  # it's generating
+            engine.kill()
+            received.extend(lines)  # ends, without waiting for the timeout
+        self.assertIn("crashed", received[-1] or received[-2])
+        server.join(30)
+        self.assertEqual(server.exitcode, 1)
+
+    def test_api_server_killed_stops_everything(self):
+        server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        processes[-1].kill()
+        server.join(30)
+        self.assertEqual(server.exitcode, 1)
+        self._assert_all_stopped(processes)
+
+    def test_server_killed_leaves_no_process(self):
+        server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        server.kill()
+        self._assert_all_stopped(processes)
+
+    def test_server_stopped_leaves_no_process(self):
+        server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        server.terminate()
+        server.join(60)
+        self.assertEqual(server.exitcode, 0)
+        self._assert_all_stopped(processes)
+
+    def test_idle_engine_stops_and_starts_again(self):
+        server, base_url = self._start_serve(model_timeout=3)
+        self._chat(base_url)
+        processes = self._child_processes(server)
+        self.assertEqual(len(processes), 1)
+        self._assert_all_stopped(processes)
+        self._chat(base_url)
+        self.assertEqual(len(self._child_processes(server)), 1)
+
+
 class TestChunkSSE(unittest.TestCase):
     def _make_handler(self):
         return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
@@ -681,11 +800,56 @@ class TestChunkSSE(unittest.TestCase):
 
 
 @require_serve
+class _StopLogging(Exception):
+    pass
+
+
+@require_serve
+class TestLogging(unittest.TestCase):
+    def tearDown(self):
+        set_serve_log_level(logging.NOTSET, log_requests=True)  # back to the library's level
+
+    @parameterized.expand([("info", False, 0), ("info", True, 1), ("debug", True, 2), ("warning", True, 0)])
+    def test_request_lines(self, level, log_requests, lines):
+        library_level = logging.get_verbosity()
+        set_serve_log_level(logging.log_levels[level], log_requests)
+        engine = MagicMock(model_id="Qwen/Qwen2.5-0.5B-Instruct@main", use_cb=False)
+        generation_kwargs = {"max_new_tokens": 8, "do_sample": False, "eos_token_id": 2}
+        body = {"model": "Qwen/Qwen2.5-0.5B-Instruct", "stream": True}
+        with CaptureLogger(request_logger) as captured:
+            BaseHandler._log_request("req-1", engine, {"input_ids": [1, 2, 3]}, generation_kwargs, True, body)
+        expected = [
+            "Request req-1: model Qwen/Qwen2.5-0.5B-Instruct@main, 3 prompt tokens, generate, stream True, "
+            "{'max_new_tokens': 8, 'do_sample': False}",
+            'Request req-1 body: {"model": "Qwen/Qwen2.5-0.5B-Instruct", "stream": true}',
+        ]
+        self.assertEqual(captured.out.splitlines(), expected[:lines])
+        self.assertEqual(logging.get_verbosity(), library_level)  # serve's level only
+
+    def test_stats_line(self):
+        set_serve_log_level(logging.INFO)
+        runner = GenerateRunner(MagicMock(), None, MagicMock())
+        runner.count_tokens(prompt=2000, generated=500)
+        # Two 10-second windows: the tokens above, then nothing (no line)
+        with (
+            patch("transformers.cli.serving.utils.time.perf_counter", side_effect=[0.0, 10.0, 20.0]),
+            patch("transformers.cli.serving.utils.time.sleep", side_effect=[None, None, _StopLogging]),
+            CaptureLogger(logging.get_logger("transformers.cli.serving.utils")) as captured,
+            self.assertRaises(_StopLogging),
+        ):
+            runner.log_stats()
+        self.assertEqual(
+            captured.out.splitlines(),
+            ["Prompts: 200.0 tokens/s, generation: 50.0 tokens/s, requests: 0 running, 0 waiting"],
+        )
+
+
 @require_serve
 class TestAppRoutes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model_manager = MagicMock(spec=ModelManager)
+        cls.model_manager.is_dead = False
         cls.model_manager.list_models.return_value = [
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
@@ -701,7 +865,6 @@ class TestAppRoutes(unittest.TestCase):
             cls.response_handler,
             cls.transcription_handler,
             systemone_handler=cls.systemone_handler,
-            generation_state=GenerationState(),
         )
         cls.transport = httpx.ASGITransport(app=cls.app)
 
@@ -796,11 +959,10 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
         model = tiny_qwen2(tokenizer)
         decision_config = DecisionConfig(temperature={"noul": 1.5})
-        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
         request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
-        pipe = handler._pipeline("x", model, tokenizer)
-        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
-        answers, input_tokens = handler._answer(pipe, request)
+        pipe = decision_pipeline(model, tokenizer, decision_config)
+        self.assertIs(decision_pipeline(model, tokenizer, decision_config), pipe)
+        answers, input_tokens = answer_questions(model, tokenizer, request, decision_config)
         expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
         self.assertEqual(answers, expected)
         self.assertGreater(input_tokens, 0)
@@ -815,7 +977,7 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         with tempfile.TemporaryDirectory() as repo:
             DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
             model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
-            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+            pipe = decision_pipeline(model, tokenizer, None)
         self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
         self.assertEqual(pipe.decision_config.chat_template, template)
 
@@ -835,8 +997,7 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
                 json.dumps({"codes": ["A", "B"], "temperature": 2.0}), encoding="utf-8"
             )
             save_file({"weight": torch.randn(2, 16)}, f"{repo}/readout.safetensors", metadata={"format": "pt"})
-            manager = ModelManager(device="cpu")
-            model, _ = manager.load_model_and_processor(manager.process_model_name(repo))
+            model, _ = ModelLoader(device="cpu").load_model_and_processor(canonical_model_id(repo))
             decide = pipeline("decision", model=repo, device="cpu")
         self.assertIsInstance(model, JevForDecision)
         self.assertIsInstance(decide.model, JevForDecision)
@@ -1170,7 +1331,7 @@ class TestCompletion(ServeIntegrationTestCase):
     @require_torch_accelerator
     def test_cb_streaming(self):
         """Streaming completion with CB produces text."""
-        serve, port = _start_serve(
+        server, port = _start_serve(
             force_model=self.MODEL,
             device=f"{torch_device}:0",
             continuous_batching=True,
@@ -1187,12 +1348,12 @@ class TestCompletion(ServeIntegrationTestCase):
             self.assertTrue(any(t != "" for t in texts))
             self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
         finally:
-            serve.kill_server()
+            _stop_serve(server)
 
     @require_torch_accelerator
     def test_cb_non_streaming(self):
         """Non-streaming completion with CB returns a full response."""
-        serve, port = _start_serve(
+        server, port = _start_serve(
             force_model=self.MODEL,
             device=f"{torch_device}:0",
             continuous_batching=True,
@@ -1205,7 +1366,7 @@ class TestCompletion(ServeIntegrationTestCase):
             self.assertTrue(len(result.choices[0].text) > 0)
             self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
         finally:
-            serve.kill_server()
+            _stop_serve(server)
 
 
 @require_serve
@@ -1296,14 +1457,14 @@ class TestResponseGenerationConfig(unittest.TestCase):
     def test_max_output_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({"max_output_tokens": 42}, GenerationConfig())
-        self.assertEqual(result.max_new_tokens, 42)
+        result = self._make_handler()._build_generation_kwargs({"max_output_tokens": 42}, GenerationConfig())
+        self.assertEqual(result["max_new_tokens"], 42)
 
     def test_default_bumps_short_max_new_tokens(self):
         from transformers import GenerationConfig
 
-        result = self._make_handler()._build_generation_config({}, GenerationConfig(max_new_tokens=20))
-        self.assertEqual(result.max_new_tokens, 1024)
+        result = self._make_handler()._build_generation_kwargs({}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result["max_new_tokens"], 1024)
 
 
 @require_serve
@@ -1528,7 +1689,7 @@ class TestLoadModel(ServeIntegrationTestCase):
     def setUp(self):
         super().setUp()
         # Clear model cache so each test starts fresh
-        self.serve.reset_loaded_models()
+        httpx.post(f"{self.base_url}/reset", timeout=60)
 
     def _load_model(self, model: str):
         with httpx.stream("POST", f"{self.base_url}/load_model", json={"model": model}, timeout=120) as resp:
@@ -1989,22 +2150,20 @@ class TestToolCallUnit(unittest.TestCase):
 
     def test_get_response_template_fallback(self):
         """Fallback template is returned for known model families (Qwen)."""
-        model = MagicMock()
-        model.config.model_type = "qwen2"
+        config = MagicMock(model_type="qwen2")
         # Tokenizer without `response_template` set -> falls back to the table.
         processor = MagicMock(spec=["tokenizer"])
         processor.tokenizer = MagicMock(spec=[])
-        template = get_response_template(processor, model)
+        template = get_response_template(processor, config)
         self.assertIsNotNone(template)
         self.assertIn("tool_calls", template["fields"])
 
     def test_get_response_template_unsupported(self):
         """None is returned for models with no template and no fallback."""
-        model = MagicMock()
-        model.config.model_type = "llama"
+        config = MagicMock(model_type="llama")
         processor = MagicMock(spec=["tokenizer"])
         processor.tokenizer = MagicMock(spec=[])
-        self.assertIsNone(get_response_template(processor, model))
+        self.assertIsNone(get_response_template(processor, config))
 
     def test_parse_assistant_message_tool_call(self):
         """parse_assistant_message extracts a single tool call from raw text."""
@@ -2019,10 +2178,9 @@ class TestToolCallUnit(unittest.TestCase):
         }
         processor = MagicMock()
         processor.tokenizer = tokenizer
-        model = MagicMock()
-        model.config.model_type = "qwen2"
+        config = MagicMock(model_type="qwen2")
         content, reasoning, tool_calls = parse_assistant_message(
-            processor, model, generated_ids=text, input_ids=[1, 2, 3], cleaned_content=""
+            processor, config, generated_ids=text, input_ids=[1, 2, 3], cleaned_content=""
         )
         self.assertIsNone(reasoning)
         self.assertEqual(len(tool_calls), 1)
@@ -2080,10 +2238,9 @@ class TestToolCallUnit(unittest.TestCase):
         }
         processor = MagicMock()
         processor.tokenizer = tokenizer
-        model = MagicMock()
-        model.config.model_type = "qwen2"
+        config = MagicMock(model_type="qwen2")
         _content, _reasoning, tool_calls = parse_assistant_message(
-            processor, model, generated_ids="ignored", input_ids=[1, 2, 3], cleaned_content=""
+            processor, config, generated_ids="ignored", input_ids=[1, 2, 3], cleaned_content=""
         )
         self.assertEqual(len(tool_calls), 2)
         self.assertIsInstance(tool_calls[0], ToolCall)
@@ -2141,58 +2298,46 @@ class TestToolCallUnit(unittest.TestCase):
             self.assertEqual(len(message["tool_calls"]), 2)
 
 
-class TestCBWorkerDeadServerIntegration(unittest.TestCase):
-    """End-to-end FastAPI behavior when the CB worker has died.
+class TestEngineDeadServerIntegration(unittest.TestCase):
+    """End-to-end FastAPI behavior when a model's engine has died.
 
-    Asserts the wiring from a ``CBWorkerDeadError`` raised in a request handler
-    (or a dead CB worker observed by ``/health``) to a 503 response carrying the cause —
-    the contract orchestrators rely on to recycle the pod.
+    Asserts the wiring from an ``EngineDeadError`` raised in a request handler (or a dead engine observed by
+    ``/health``) to a 503 response carrying the cause, the contract orchestrators rely on to recycle the pod.
     """
 
-    def _build_app(self, generation_state, chat_handler=None):
-        from transformers.cli.serving.server import build_server
-
+    def _build_app(self, model_manager, chat_handler=None):
         return build_server(
-            model_manager=MagicMock(),
+            model_manager=model_manager,
             chat_handler=chat_handler or MagicMock(),
             completion_handler=MagicMock(),
             response_handler=MagicMock(),
             transcription_handler=MagicMock(),
             systemone_handler=MagicMock(spec=SystemOneHandler),
-            generation_state=generation_state,
         )
 
-    def test_health_returns_503_when_cb_dead(self):
+    def test_health_returns_503_when_an_engine_is_dead(self):
         from fastapi.testclient import TestClient
 
-        from transformers.cli.serving.utils import CBGenerateManager
+        model_manager = ModelManager()
+        model_manager.engines["model@main"] = MagicMock(is_dead=True, fatal_error="CUDA illegal memory access")
 
-        state = GenerationState(continuous_batching=True)
-        # Manager whose underlying CB has a fatal_error set -> is_alive() returns False.
-        mgr = CBGenerateManager()
-        mgr._cb = MagicMock()
-        mgr._cb.background_thread_status.fatal_error = RuntimeError("CUDA illegal memory access")
-        state._cb_manager = mgr
-
-        resp = TestClient(self._build_app(state)).get("/health")
+        resp = TestClient(self._build_app(model_manager)).get("/health")
 
         self.assertEqual(resp.status_code, 503)
-        self.assertEqual(resp.json(), {"status": "unhealthy", "reason": "cb_worker_dead"})
+        self.assertEqual(resp.json(), {"status": "unhealthy", "reason": "engine_dead"})
 
     def test_chat_endpoint_returns_503_with_cause(self):
-        """A CBWorkerDeadError raised from the chat route maps to 503 with the cause in the body."""
+        """An EngineDeadError raised from the chat route maps to 503 with the cause in the body."""
         from fastapi.testclient import TestClient
-
-        from transformers.cli.serving.utils import CBWorkerDeadError
 
         chat_handler = MagicMock()
 
         async def handle_request(_body, _request_id):
-            raise CBWorkerDeadError("CB worker is dead and cannot accept request: CUDA illegal memory access")
+            raise EngineDeadError("CB worker is dead and cannot accept request: CUDA illegal memory access")
 
         chat_handler.handle_request = handle_request
 
-        client = TestClient(self._build_app(GenerationState(continuous_batching=True), chat_handler=chat_handler))
+        client = TestClient(self._build_app(ModelManager(), chat_handler=chat_handler))
         resp = client.post(
             "/v1/chat/completions",
             json={"model": "x", "messages": [{"role": "user", "content": "hi"}]},
@@ -2956,7 +3101,7 @@ class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
         self.assertIn("Alice", resp.choices[0].message.content)
 
     def test_request_cancellation(self):
-        """Opening a stream and closing it early triggers CB cancellation."""
+        """Closing a stream early doesn't crash and the server stays healthy."""
 
         request_id = "test-cb-cancel"
 
@@ -2978,19 +3123,6 @@ class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
                 chunks_read += 1
                 if chunks_read >= 3:
                     break
-
-        # Poll for cancellation in the CB scheduler
-        scheduler = self.serve._generation_state._cb_manager.scheduler
-        deadline = time.time() + 8.0
-        while time.time() < deadline:
-            if scheduler.request_is_cancelled(request_id):
-                break
-            time.sleep(0.1)
-
-        self.assertTrue(
-            scheduler.request_is_cancelled(request_id),
-            f"Request {request_id} not cancelled in scheduler after stream close.",
-        )
 
         # Server should still be healthy and serve subsequent requests
         resp = self.client.chat.completions.create(
@@ -3060,7 +3192,7 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
         self.assertIn("Alice", content)
 
     def test_request_cancellation(self):
-        """Opening a stream and closing it early triggers CB cancellation."""
+        """Closing a stream early doesn't crash and the server stays healthy."""
 
         request_id = "test-cb-resp-cancel"
 
@@ -3084,19 +3216,6 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
                 if b"output_text.delta" in received:
                     break
 
-        # Poll for cancellation in the CB scheduler
-        scheduler = self.serve._generation_state._cb_manager.scheduler
-        deadline = time.time() + 8.0
-        while time.time() < deadline:
-            if scheduler.request_is_cancelled(request_id):
-                break
-            time.sleep(0.1)
-
-        self.assertTrue(
-            scheduler.request_is_cancelled(request_id),
-            f"Request {request_id} not cancelled in scheduler after stream close.",
-        )
-
         # Server should still serve subsequent requests
         resp = self.client.responses.create(
             model=self.MODEL,
@@ -3105,3 +3224,14 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
             max_output_tokens=10,
         )
         self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestSeveralApiServers(TestContinuousBatchingChatCompletion):
+    """The continuous batching chat tests again, through two API servers sharing one engine."""
+
+    @classmethod
+    def serve_kwargs(cls) -> dict:
+        return {**super().serve_kwargs(), "api_server_count": 2}

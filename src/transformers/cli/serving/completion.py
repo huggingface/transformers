@@ -20,6 +20,7 @@ fill-in-the-middle text insertion.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -35,11 +36,13 @@ if is_serve_available():
     from openai.types.completion_create_params import CompletionCreateParamsBase
 
 
-from .utils import BaseGenerateManager, BaseHandler, _StreamError
+from .utils import BaseHandler, EventStream, _StreamError
 
 
 if TYPE_CHECKING:
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import GenerationConfig
+
+    from .model_manager import EngineClient
 
 
 class TransformersTextCompletionCreateParams(CompletionCreateParamsBase, total=False):
@@ -90,48 +93,36 @@ class CompletionHandler(BaseHandler):
         if not isinstance(prompt, str):
             raise HTTPException(status_code=400, detail="prompt must be a string.")
 
-        model_id, model, processor = self._resolve_model(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
-        use_cb = self.generation_state.use_continuous_batching(model, modality)
-        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
-        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-
-        tokenizer = getattr(processor, "tokenizer", processor)
-        inputs = tokenizer(prompt, return_tensors=None if use_cb else "pt")
-        if not use_cb:
-            inputs = inputs.to(model.device)
-
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
-        if use_cb:
-            gen_manager.init_cb(model, gen_config)
+        engine = self._get_engine(body)
+        tokenizer = getattr(engine.processor, "tokenizer", engine.processor)
+        inputs = await self.run_in_thread(tokenizer, prompt, return_tensors=None if engine.use_cb else "pt")
+        generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         suffix = body.get("suffix")
         streaming = body.get("stream")
+        self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
 
         if streaming:
-            return self._streaming(request_id, model, processor, model_id, inputs, gen_config, gen_manager, suffix)
+            return self._streaming(request_id, engine, inputs, generation_kwargs, suffix)
         else:
-            return await self._non_streaming(
-                request_id, model, processor, model_id, inputs, gen_config, gen_manager, suffix
-            )
+            return await self._non_streaming(request_id, engine, inputs, generation_kwargs, suffix)
 
     # ----- streaming -----
 
     def _streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
+        generation_kwargs: dict,
         suffix: str | None = None,
     ) -> "StreamingResponse":
         """Stream tokens as SSE."""
-        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        model_id = engine.model_id
+        queue, streamer = engine.generate_streaming(inputs, generation_kwargs)
         input_ids = inputs["input_ids"]
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        text_template = self.sse_template(self._build_chunk_sse(request_id, model_id, text="<text>"), text="<text>")
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
@@ -155,12 +146,13 @@ class CompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        sse_parts.append(self._build_chunk_sse(request_id, model_id, text=text))
+                        sse_parts.append(text_template.format(text=json.dumps(text, ensure_ascii=False)))
 
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+                max_new_tokens = generation_kwargs.get("max_new_tokens")
+                hit_max = max_new_tokens is not None and streamer.total_tokens >= max_new_tokens
                 finish_reason = "length" if hit_max else "stop"
 
                 if suffix is not None:
@@ -175,31 +167,28 @@ class CompletionHandler(BaseHandler):
                 streamer.cancel()
                 raise
 
-        return StreamingResponse(sse_gen(), media_type="text/event-stream")
+        return EventStream(sse_gen(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 
     async def _non_streaming(
         self,
         request_id: str,
-        model: "PreTrainedModel",
-        processor: "ProcessorMixin | PreTrainedTokenizerFast",
-        model_id: str,
+        engine: "EngineClient",
         inputs: dict,
-        gen_config: "GenerationConfig",
-        gen_manager: BaseGenerateManager,
+        generation_kwargs: dict,
         suffix: str | None = None,
     ) -> "JSONResponse":
         """Run generation and return a JSONResponse."""
-        text, input_len, generated_ids = await gen_manager.generate_non_streaming(
-            model, processor, inputs, gen_config, request_id=request_id
-        )
+        model_id = engine.model_id
+        text, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
         if suffix is not None:
             text = text + suffix
 
         completion_tokens = len(generated_ids)
-        hit_max = gen_config.max_new_tokens is not None and completion_tokens >= gen_config.max_new_tokens
+        max_new_tokens = generation_kwargs.get("max_new_tokens")
+        hit_max = max_new_tokens is not None and completion_tokens >= max_new_tokens
         finish_reason = "length" if hit_max else "stop"
 
         usage = CompletionUsage(
@@ -261,15 +250,15 @@ class CompletionHandler(BaseHandler):
 
     # ----- generation config -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
-        """Apply legacy completion params (``max_tokens``, ``frequency_penalty``, ``stop``) on top of base config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+    def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
+        """Adds the legacy completion params (``max_tokens``, ``frequency_penalty``, ``stop``) to the shared ones."""
+        generation_kwargs = super()._build_generation_kwargs(body, default)
 
         if body.get("max_tokens") is not None:
-            generation_config.max_new_tokens = int(body["max_tokens"])
+            generation_kwargs["max_new_tokens"] = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_kwargs["repetition_penalty"] = 1.0 + float(body["frequency_penalty"])
         if body.get("stop") is not None:
-            generation_config.stop_strings = body["stop"]
+            generation_kwargs["stop_strings"] = body["stop"]
 
-        return generation_config
+        return generation_kwargs

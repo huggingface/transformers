@@ -29,11 +29,13 @@ if is_serve_available():
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
 
 from .model_manager import ModelManager
-from .utils import DirectStreamer, GenerateManager, GenerationState, _StreamError
+from .utils import GenerationState, _StreamError, transcribe
 
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedModel, ProcessorMixin
+    from transformers import ProcessorMixin
+
+    from .model_manager import EngineClient
 
 
 logger = logging.get_logger(__name__)
@@ -62,14 +64,14 @@ class TranscriptionHandler:
 
     Standalone (does not extend :class:`BaseHandler`) because audio requests use
     multipart form data, not JSON bodies, and don't need generation config or
-    validation. Shares the :class:`GenerationState` for thread safety.
+    validation. The model runs in its own process (see `ModelManager.get_engine`).
     """
 
     def __init__(self, model_manager: ModelManager, generation_state: GenerationState):
         """
         Args:
-            model_manager (`ModelManager`): Handles model loading, caching, and lifecycle.
-            generation_state (`GenerationState`): Shared generation state for thread safety.
+            model_manager (`ModelManager`): The models the server runs.
+            generation_state (`GenerationState`): How the models generate.
         """
         self.model_manager = model_manager
         self.generation_state = generation_state
@@ -111,80 +113,40 @@ class TranscriptionHandler:
                 raise HTTPException(status_code=422, detail="Expected model name as string")
             stream = str(form.get("stream", "false")).lower() == "true"
 
-        model_id_and_revision = self.model_manager.process_model_name(model)
-        audio_model, audio_processor = self.model_manager.load_model_and_processor(model_id_and_revision)
-        base_manager = self.generation_state.get_manager(model_id_and_revision)
-        if not isinstance(base_manager, GenerateManager):
-            raise HTTPException(status_code=400, detail="Audio transcription requires sequential generation (not CB)")
-        gen_manager = base_manager
-        audio_inputs = self._prepare_audio_inputs(file_bytes, audio_processor, audio_model)
-
+        engine = self.model_manager.get_engine(model)
+        audio_inputs = self._prepare_audio_inputs(file_bytes, engine.processor)
         if stream:
-            return self._streaming(gen_manager, audio_model, audio_processor, audio_inputs)
-        return await self._non_streaming(gen_manager, audio_model, audio_processor, audio_inputs)
+            return self._streaming(engine, audio_inputs)
+        return await self._non_streaming(engine, audio_inputs)
 
     @staticmethod
-    def _prepare_audio_inputs(
-        file_bytes: bytes, audio_processor: "ProcessorMixin", audio_model: "PreTrainedModel"
-    ) -> dict:
+    def _prepare_audio_inputs(file_bytes: bytes, audio_processor: "ProcessorMixin") -> dict:
         """Load audio bytes and convert to model inputs."""
         sampling_rate = audio_processor.feature_extractor.sampling_rate
         audio_array = load_audio(base64.b64encode(file_bytes).decode("ascii"), sampling_rate=sampling_rate)
-        audio_inputs = audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt").to(
-            audio_model.device
-        )
-        audio_inputs["input_features"] = audio_inputs["input_features"].to(audio_model.dtype)
-        return audio_inputs
+        return dict(audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt"))
 
-    async def _non_streaming(
-        self,
-        gen_manager: GenerateManager,
-        audio_model: "PreTrainedModel",
-        audio_processor: "ProcessorMixin",
-        audio_inputs: dict,
-    ) -> JSONResponse:
-        # Audio models have different inputs (input_features) and decode (batch_decode)
-        # than text models, so we use async_submit() directly instead of
-        # generate_non_streaming()
+    async def _non_streaming(self, engine: "EngineClient", audio_inputs: dict) -> JSONResponse:
         from openai.types.audio import Transcription
 
-        generated_ids = await gen_manager.async_submit(audio_model.generate, **audio_inputs)
-        text = audio_processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        generated_ids = await engine.submit(transcribe, audio_inputs)
+        text = engine.processor.batch_decode([generated_ids], skip_special_tokens=True)[0]
         return JSONResponse(Transcription(text=text).model_dump(exclude_none=True))
 
-    def _streaming(
-        self,
-        gen_manager: GenerateManager,
-        audio_model: "PreTrainedModel",
-        audio_processor: "ProcessorMixin",
-        audio_inputs: dict,
-    ) -> StreamingResponse:
-        # Same as _non_streaming — uses submit() directly because audio inputs
-        # differ from text.
-        import asyncio
-
-        tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue)
-        gen_kwargs = {**audio_inputs, "streamer": streamer}
-
-        def _run():
-            try:
-                audio_model.generate(**gen_kwargs)
-            except Exception as e:
-                loop.call_soon_threadsafe(queue.put_nowait, _StreamError(str(e)))
-
-        gen_manager.submit(_run)
+    def _streaming(self, engine: "EngineClient", audio_inputs: dict) -> StreamingResponse:
+        queue, streamer = engine.submit_streaming(transcribe, audio_inputs)
 
         async def sse_gen():
-            while True:
-                text = await queue.get()
-                if text is None:
-                    break
-                if isinstance(text, _StreamError):
-                    yield f'data: {{"error": "{text.msg}"}}\n\n'
-                    return
-                yield f"data: {text}\n\n"
+            try:
+                while True:
+                    text = await queue.get()
+                    if text is None:
+                        break
+                    if isinstance(text, _StreamError):
+                        yield f'data: {{"error": "{text.msg}"}}\n\n'
+                        return
+                    yield f"data: {text}\n\n"
+            finally:  # the client left: stop transcribing
+                streamer.cancel()
 
         return StreamingResponse(sse_gen(), media_type="text/event-stream")

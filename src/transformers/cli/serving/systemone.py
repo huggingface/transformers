@@ -21,7 +21,6 @@ for every allowed answer, by running the served model through [`DecisionPipeline
 from typing import TYPE_CHECKING, Any
 
 from ...decision import DecisionConfig, parse_questions
-from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
 
@@ -30,18 +29,12 @@ if is_serve_available():
     from fastapi.responses import JSONResponse
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .utils import BaseHandler, GenerateManager
+from .utils import BaseHandler, answer_questions, request_logger
 
 
 if TYPE_CHECKING:
-    from transformers import PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
-    from transformers.pipelines import DecisionPipeline
-
     from .model_manager import ModelManager
     from .utils import GenerationState
-
-
-logger = logging.get_logger(__name__)
 
 
 class SystemOneRequest(BaseModel):
@@ -60,8 +53,9 @@ class SystemOneRequest(BaseModel):
 class SystemOneHandler(BaseHandler):
     """Handler for the `/v1/systemone` endpoint.
 
-    Requests are answered by a [`DecisionPipeline`] around the served model, so the prompts, images, heads and answers
-    are the pipeline's. Returns one JSON response; streaming is not supported.
+    Requests are answered by a [`DecisionPipeline`] around the served model, in the model's process (see
+    `answer_questions`), so the prompts, images, heads and answers are the pipeline's. Returns one JSON response;
+    streaming is not supported.
     """
 
     def __init__(
@@ -76,7 +70,6 @@ class SystemOneHandler(BaseHandler):
         self.decision_config = (
             DecisionConfig.from_file(decision_config) if isinstance(decision_config, str) else decision_config
         )
-        self.pipelines: dict[str, DecisionPipeline] = {}
 
     def _validate_request(self, body: dict) -> SystemOneRequest:
         """Validate the entire request, questions included, before resolving or loading a model."""
@@ -94,30 +87,6 @@ class SystemOneHandler(BaseHandler):
             raise HTTPException(status_code=422, detail=detail) from error
         return request
 
-    def _pipeline(
-        self, model_id: str, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast"
-    ) -> "DecisionPipeline":
-        """The decision pipeline of the model, built again when the model was reloaded."""
-        from transformers import ProcessorMixin
-        from transformers.pipelines import DecisionPipeline
-
-        pipe = self.pipelines.get(model_id)
-        if pipe is None or pipe.model is not model:
-            pipe = self.pipelines[model_id] = DecisionPipeline(
-                model=model,
-                tokenizer=getattr(processor, "tokenizer", processor),
-                processor=processor if isinstance(processor, ProcessorMixin) else None,
-                decision_config=self.decision_config,
-            )
-        return pipe
-
-    @staticmethod
-    def _answer(pipe: "DecisionPipeline", request: dict[str, Any]) -> tuple[dict[str, Any], int]:
-        """The pipeline's steps, in the inference thread: the answers and the number of input tokens."""
-        model_inputs = pipe.preprocess(request)
-        answers = pipe.postprocess(pipe.forward(model_inputs))
-        return answers, sum(inputs["input_ids"].shape[-1] for inputs, _ in model_inputs["prompts"])
-
     async def handle_request(self, body: dict, request_id: str) -> "JSONResponse":
         """Validate the request, load the model, and answer every question.
 
@@ -129,14 +98,12 @@ class SystemOneHandler(BaseHandler):
             `JSONResponse`: `model`, `answers` keyed by question name, and `usage`.
         """
         request = self._validate_request(body)
-        model_id, model, processor = self._resolve_model(body)
-        logger.warning(f"[Request received] Model: {model_id}, questions: {len(request.questions)}")
+        engine = self._get_engine(body)
+        request_logger.info("Request %s: model %s, %d questions", request_id, engine.model_id, len(request.questions))
 
-        gen_manager: GenerateManager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
-        pipe = self._pipeline(model_id, model, processor)
         try:
-            answers, input_tokens = await gen_manager.async_submit(
-                self._answer, pipe, request.model_dump(include={"state", "questions", "assets"})
+            answers, input_tokens = await engine.submit(
+                answer_questions, request.model_dump(include={"state", "questions", "assets"}), self.decision_config
             )
         except ValueError as error:  # e.g. labels that aren't single tokens, or images for a text model
             raise HTTPException(status_code=400, detail=str(error)) from error
