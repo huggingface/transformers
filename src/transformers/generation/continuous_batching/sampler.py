@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import torch
 from torch import nn
@@ -68,7 +68,7 @@ class ContinuousBatchingSampler:
         self.return_logprobs = return_logprobs
         self.fused_args = self._find_fused_args() if do_sample and not return_logprobs else None
 
-    def _find_fused_args(self) -> dict[str, tuple[int, ContinuousBatchingLogitsProcessor]] | None:
+    def _find_fused_args(self) -> dict[str, tuple[int, Any]] | None:
         """The argument row and processor of the per-request temperature, top-k and top-p, when they can be applied to
         a window of the logits: a per-request top-k, the per-request processors in the order temperature, top-k, top-p
         (temperature and top-p are optional), and no processor after them."""
