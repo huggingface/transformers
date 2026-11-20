@@ -857,6 +857,119 @@ class TrainerCheckpointRotationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
 
+    def test_full_checkpoint_limit(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                max_steps=6,
+                save_steps=1,
+                save_total_limit=4,
+                save_full_checkpoint_limit=2,
+            )
+            trainer.train()
+
+            checkpoints = sort_checkpoints(tmp_dir)
+            self.assertEqual(
+                [Path(checkpoint).name for checkpoint in checkpoints], [f"checkpoint-{n}" for n in range(3, 7)]
+            )
+            for checkpoint in checkpoints:
+                self.assertTrue((Path(checkpoint) / SAFE_WEIGHTS_NAME).is_file())
+                for filename in ("optimizer.pt", "scheduler.pt", "rng_state.pth"):
+                    self.assertEqual((Path(checkpoint) / filename).is_file(), checkpoint in checkpoints[-2:])
+                restored = RegressionPreTrainedModel.from_pretrained(checkpoint)
+                self.assertIsInstance(restored, RegressionPreTrainedModel)
+
+            resumed = get_regression_trainer(output_dir=tmp_dir, max_steps=6, save_strategy="no")
+            resumed.train(resume_from_checkpoint=checkpoints[-2])
+            self.assertEqual(resumed.state.global_step, 6)
+
+            for resumed_weight, expected_weight in zip(resumed.model.parameters(), trainer.model.parameters()):
+                torch.testing.assert_close(resumed_weight, expected_weight)
+
+    def test_full_checkpoint_limit_preserves_best_and_latest(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            scores = iter([3.0, 2.0, 1.0])
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                max_steps=3,
+                save_steps=1,
+                eval_strategy="steps",
+                eval_steps=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="score",
+                compute_metrics=lambda _: {"score": next(scores)},
+                save_total_limit=1,
+                save_full_checkpoint_limit=1,
+            )
+            trainer.train()
+            self.assertEqual(
+                [Path(checkpoint).name for checkpoint in sort_checkpoints(tmp_dir)], ["checkpoint-1", "checkpoint-3"]
+            )
+            self.assertTrue((Path(tmp_dir) / "checkpoint-1" / SAFE_WEIGHTS_NAME).is_file())
+            self.assertFalse((Path(tmp_dir) / "checkpoint-1" / "optimizer.pt").exists())
+            self.assertTrue((Path(tmp_dir) / "checkpoint-3" / "optimizer.pt").is_file())
+            best = RegressionPreTrainedModel.from_pretrained(Path(tmp_dir) / "checkpoint-1")
+            for actual, expected in zip(trainer.model.parameters(), best.parameters()):
+                torch.testing.assert_close(actual, expected)
+
+    def test_full_checkpoint_limit_training_state_files(self):
+        for limit in (None, 1):
+            with self.subTest(limit=limit), tempfile.TemporaryDirectory() as tmp_dir:
+                trainer = get_regression_trainer(output_dir=tmp_dir, save_full_checkpoint_limit=limit)
+                state_files = (
+                    "optimizer.pt",
+                    "scheduler.pt",
+                    "scaler.pt",
+                    "rng_state.pth",
+                    "rng_state_0.pth",
+                    "rng_state_1.pth",
+                )
+                model_files = (
+                    SAFE_WEIGHTS_NAME,
+                    "config.json",
+                    "trainer_state.json",
+                    "training_args.bin",
+                    "notes.txt",
+                )
+                for step in (5, 10):
+                    checkpoint = Path(tmp_dir) / f"checkpoint-{step}"
+                    checkpoint.mkdir()
+                    for filename in state_files + model_files:
+                        (checkpoint / filename).write_text("test", encoding="utf-8")
+                    os.utime(checkpoint, (step, step))
+                trainer._rotate_full_checkpoints(tmp_dir)
+                self.assertEqual(
+                    [Path(checkpoint).name for checkpoint in sort_checkpoints(tmp_dir, use_mtime=True)],
+                    ["checkpoint-5", "checkpoint-10"],
+                )
+                for step in (5, 10):
+                    checkpoint = Path(tmp_dir) / f"checkpoint-{step}"
+                    for filename in state_files:
+                        self.assertEqual((checkpoint / filename).exists(), limit is None or step == 10)
+                    for filename in model_files:
+                        self.assertEqual((checkpoint / filename).read_text(encoding="utf-8"), "test")
+
+    def test_full_checkpoint_limit_validation(self):
+        for limit in (0, -1, 1.5, True):
+            with self.subTest(limit=limit), self.assertRaisesRegex(ValueError, "save_full_checkpoint_limit"):
+                TrainingArguments("..", save_full_checkpoint_limit=limit)
+        with self.assertRaisesRegex(ValueError, "save_only_model"):
+            TrainingArguments("..", save_full_checkpoint_limit=1, save_only_model=True)
+
+    def test_full_checkpoint_limit_unsupported_backends(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir, save_full_checkpoint_limit=1)
+            for backend in ("deepspeed_plugin", "fsdp_plugin"):
+                state = Mock(deepspeed_plugin=None, fsdp_plugin=None)
+                setattr(state, backend, Mock())
+                accelerator = Mock(state=state, gather_for_metrics=lambda values: values)
+                with (
+                    self.subTest(backend=backend),
+                    patch("transformers.trainer.Accelerator", return_value=accelerator),
+                    self.assertRaisesRegex(ValueError, "save_full_checkpoint_limit"),
+                ):
+                    trainer.create_accelerator_and_postprocess()
+
     def test_compare_trainer_and_checkpoint_args_logging(self):
         logger = logging.get_logger()
 

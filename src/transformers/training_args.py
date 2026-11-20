@@ -490,6 +490,14 @@ class TrainingArguments:
             Maximum number of checkpoints to keep. Deletes older checkpoints in `output_dir`. When
             `load_best_model_at_end=True`, the best checkpoint is always retained plus the most
             recent ones. For example, `save_total_limit=5` keeps the 4 most recent plus the best
+        save_full_checkpoint_limit (`int`, *optional*):
+            Keep optimizer, scheduler, scaler, and RNG states only in the most recent full checkpoints.
+            Older checkpoints retain their model weights and metadata until removed by `save_total_limit`,
+            but can no longer resume training. Must be a positive integer. When unset, all retained
+            checkpoints keep their training state. For example, `save_total_limit=5` and
+            `save_full_checkpoint_limit=2` keep five model snapshots, with two resumable checkpoints.
+            The latest checkpoint is retained even when `save_total_limit=1` and the best model is older.
+            Not compatible with `save_only_model=True`, DeepSpeed, FSDP, XLA, or SageMaker model parallelism.
         enable_jit_checkpoint (`bool`, *optional*, defaults to `False`):
             Enable Just-In-Time checkpointing on SIGTERM signal for graceful termination on
             preemptible workloads. **Important**: Configure your orchestrator's graceful shutdown
@@ -1204,6 +1212,12 @@ class TrainingArguments:
             "help": "Maximum number of checkpoints to keep. Deletes older checkpoints in `output_dir`. The best checkpoint is always retained when `load_best_model_at_end=True`."
         },
     )
+    save_full_checkpoint_limit: int | None = field(
+        default=None,
+        metadata={
+            "help": "Maximum number of checkpoints retaining optimizer, scheduler, scaler, and RNG states. Older model snapshots are kept subject to save_total_limit."
+        },
+    )
     enable_jit_checkpoint: bool = field(
         default=False,
         metadata={
@@ -1722,6 +1736,16 @@ class TrainingArguments:
 
     def _validate_args(self):
         """Validate argument combinations and value constraints."""
+        if self.save_full_checkpoint_limit is not None:
+            if (
+                not isinstance(self.save_full_checkpoint_limit, int)
+                or isinstance(self.save_full_checkpoint_limit, bool)
+                or self.save_full_checkpoint_limit <= 0
+            ):
+                raise ValueError("`save_full_checkpoint_limit` must be a positive integer.")
+            if self.save_only_model:
+                raise ValueError("`save_full_checkpoint_limit` cannot be used with `save_only_model=True`.")
+
         if self.torch_empty_cache_steps is not None:
             if not (isinstance(self.torch_empty_cache_steps, int) and self.torch_empty_cache_steps > 0):
                 raise ValueError(
