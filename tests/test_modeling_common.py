@@ -877,6 +877,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
             "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
+            "DeepseekV41ModelTest": 5,  # One layer per attention type, plus a second "compressed_attention" so the KV-sharing layers have two sources to tell apart
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
