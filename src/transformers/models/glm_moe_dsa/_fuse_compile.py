@@ -29,10 +29,21 @@ import torch
 import torch.nn.functional as F
 
 
+try:  # the fused Triton kernels (FUSE_KERNELS=1) register their ops at import
+    from . import _fuse_kernels  # noqa: F401
+except ImportError:
+    _fuse_kernels = None
+
 MODE = os.environ.get("FUSE_COMPILE", "0")
 DYNAMIC = os.environ.get("FUSE_COMPILE_DYNAMIC", "0") == "1"
 FULLGRAPH = os.environ.get("FUSE_COMPILE_FULLGRAPH", "1") == "1"
 TP_MODE = os.environ.get("FUSE_COMPILE_TP", "twin")
+# FUSE_KERNELS=1: the per-layer function is `_decode_layer_fused`, whose fixed chains are the Triton kernels of
+#   `_fuse_kernels.py` (works with FUSE_COMPILE=eager, and inside the compiled layer with default / max).
+# FUSE_TOPK_LENGTH=1: FlashMLA gets the number of valid entries of each top-k list (same as wp2-prefill's
+#   PROTO_TOPK_LENGTH on the regular path) and the head-padded query is a zeroed buffer kept per step shape.
+KERNELS = os.environ.get("FUSE_KERNELS", "0") == "1"
+TOPK_LENGTH = os.environ.get("FUSE_TOPK_LENGTH", "0") == "1"
 
 _flash_mla = None
 _rotary = None  # `apply_rotary_pos_emb_interleave` of the modeling file, set on first use (no circular import)
@@ -59,19 +70,23 @@ def _cache_write(
         cache_rows[:, kv_lora + rope :].index_copy_(0, write_index, index_key)
 
 
-def _sparse_mla(q: torch.Tensor, cache_rows: torch.Tensor, rows: torch.Tensor, scale: float, d_qk: int, d_v: int) -> torch.Tensor:
+def _sparse_mla(
+    q: torch.Tensor, cache_rows: torch.Tensor, rows: torch.Tensor, counts: torch.Tensor | None, scale: float, d_qk: int,
+    d_v: int,
+) -> torch.Tensor:
     """FlashMLA sparse on the cache rows: q [M, heads, d_qk] absorbed queries, rows [M, topk] physical rows (-1 = empty
-    slot). Returns the latent output [M, heads, d_v]."""
+    slot), counts [M] int32 valid entries at the start of each list (or None: the kernel walks the whole list).
+    Returns the latent output [M, heads, d_v]."""
     global _flash_mla
     if _flash_mla is None:
         from vllm.third_party.flashmla import flash_mla_interface
 
         _flash_mla = flash_mla_interface
     latent_rows = cache_rows.as_strided((cache_rows.shape[0], 1, d_qk), (cache_rows.stride(0), 0, 1))
-    return _flash_mla.flash_mla_sparse_fwd(q, latent_rows, rows[:, None, :], scale, d_v=d_v)[0]
+    return _flash_mla.flash_mla_sparse_fwd(q, latent_rows, rows[:, None, :], scale, d_v=d_v, topk_length=counts)[0]
 
 
-def _sparse_mla_fake(q, cache_rows, rows, scale, d_qk, d_v):
+def _sparse_mla_fake(q, cache_rows, rows, counts, scale, d_qk, d_v):
     assert q.dim() == 3 and cache_rows.dim() == 2 and rows.dim() == 2
     return q.new_empty((q.shape[0], q.shape[1], d_v))
 
@@ -109,7 +124,7 @@ torch.library.custom_op("transformers::fuse_tp_all_reduce", _tp_all_reduce, muta
 # --- the layer, as one traceable function ----------------------------------------------------------------------------
 
 
-def _decode_layer(layer, hidden_states, cos, sin, cache_rows, write_index, rows, w_kv_b, h_pad: int, tp: bool):
+def _decode_layer(layer, hidden_states, cos, sin, cache_rows, write_index, rows, counts, w_kv_b, h_pad: int, tp: bool):
     """`GlmMoeDsaDecoderLayer.forward` on the prototype's decode path (`_proto_sparse_mla_attention` with the indexer
     scoring skipped), same operations in the same order. Nothing here may depend on which layer it is."""
     attn = layer.self_attn
@@ -145,7 +160,9 @@ def _decode_layer(layer, hidden_states, cos, sin, cache_rows, write_index, rows,
     q_abs = q_pass.new_zeros(seq_length, max(h_pad, num_heads), d_qk)
     q_abs[:, :num_heads, : attn.kv_lora_rank] = torch.einsum("hsn,hnc->shc", q_pass[0], w_uk)
     q_abs[:, :num_heads, attn.kv_lora_rank :] = q_rot[0].transpose(0, 1)
-    out_latent = torch.ops.transformers.fuse_sparse_mla(q_abs, cache_rows, rows, attn.scaling, d_qk, attn.kv_lora_rank)
+    out_latent = torch.ops.transformers.fuse_sparse_mla(
+        q_abs, cache_rows, rows, counts, attn.scaling, d_qk, attn.kv_lora_rank
+    )
     out_latent = out_latent[:, :num_heads]
     attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv).reshape(batch_size, seq_length, -1)
     attn_output = attn.o_proj(attn_output)
@@ -161,18 +178,64 @@ def _decode_layer(layer, hidden_states, cos, sin, cache_rows, write_index, rows,
     return residual + hidden_states
 
 
+def _decode_layer_fused(
+    layer, residual, hidden_states, cos, sin, cache_rows, write_index, rows, counts, w_kv_b, q_abs, next_weight,
+    next_eps: float, tp: bool,
+):
+    """Same layer with its fixed chains as fused kernels (FUSE_KERNELS=1). `hidden_states` is `residual` already
+    normed by this layer's `input_layernorm` (done by the previous layer's last kernel); returns this layer's output
+    and the same output normed with `next_weight` (the next layer's `input_layernorm`, or the final norm). `q_abs` is
+    the zeroed head-padded query buffer of the step, [M, 64 (or heads), kv_lora + rope]: only its real heads are written."""
+    attn = layer.self_attn
+    ops = torch.ops.transformers
+    seq_length = hidden_states.shape[1]
+    indexer = attn.indexer
+    index_key = ln_weight = ln_bias = None
+    ln_eps = 0.0
+    if indexer is not None:  # the indexer's key of the new tokens, cached for later, longer contexts
+        index_key, ln_weight, ln_bias, ln_eps = indexer.wk(hidden_states), indexer.k_norm.weight, indexer.k_norm.bias, indexer.k_norm.eps
+    # q_a norm; kv_a norm + key rotary + cache write; indexer key norm + rotary + cache write: one kernel
+    q_resid = ops.fuse_norm_rope_write(
+        attn.q_a_proj(hidden_states), attn.q_a_layernorm.weight, attn.kv_a_proj_with_mqa(hidden_states),
+        attn.kv_a_layernorm.weight, cos, sin, write_index, cache_rows, index_key, ln_weight, ln_bias,
+        attn.q_a_layernorm.variance_epsilon, attn.kv_a_layernorm.variance_epsilon, ln_eps,
+    )
+    q_b = attn.q_b_proj(q_resid)  # [1, M, heads * (nope + rope)]
+    q_pass = q_b.view(seq_length, -1, attn.qk_head_dim)[:, :, : attn.qk_nope_head_dim].transpose(0, 1)  # [heads, M, nope]
+    num_heads = q_pass.shape[0]
+    w_uk, w_uv = w_kv_b[:, : attn.qk_nope_head_dim], w_kv_b[:, attn.qk_nope_head_dim :]
+    q_lat = torch.bmm(q_pass, w_uk)  # [heads, M, kv_lora]: the query absorbs kv_b_proj's key half
+    # query rotary + pack [absorbed latent | rotated rope] into the padded buffer: one kernel
+    ops.fuse_q_pack(q_b, q_lat, cos, sin, q_abs, attn.qk_nope_head_dim)
+    d_qk = attn.kv_lora_rank + attn.qk_rope_head_dim
+    out_latent = ops.fuse_sparse_mla(q_abs, cache_rows, rows, counts, attn.scaling, d_qk, attn.kv_lora_rank)
+    # value half of kv_b_proj: [heads, M, kv_lora] @ [heads, kv_lora, v]
+    attn_output = torch.bmm(out_latent[:, :num_heads].transpose(0, 1), w_uv.transpose(1, 2))
+    attn_output = attn.o_proj(attn_output.transpose(0, 1).reshape(1, seq_length, -1))
+    if tp:
+        ops.fuse_tp_all_reduce(attn_output)
+    # residual add + post-attention norm: one kernel
+    residual, hidden_states = ops.fuse_add_rms_norm(
+        residual, attn_output, layer.post_attention_layernorm.weight, layer.post_attention_layernorm.variance_epsilon
+    )
+    hidden_states = layer.mlp(hidden_states)
+    if tp:
+        ops.fuse_tp_all_reduce(hidden_states)
+    # residual add + the next layer's input norm: one kernel
+    return ops.fuse_add_rms_norm(residual, hidden_states, next_weight, next_eps)
+
+
 def _layer_fn():
+    fn = _decode_layer_fused if KERNELS else _decode_layer
     if MODE == "eager":
-        return _decode_layer
-    key = (MODE, DYNAMIC, FULLGRAPH)
+        return fn
+    key = (MODE, DYNAMIC, FULLGRAPH, KERNELS)
     if key not in _compiled:
         mode = {"default": "default", "max": "max-autotune-no-cudagraphs"}[MODE]
         # Static shapes: one artifact per layer kind and padded batch size, more than dynamo's default of 8 per frame.
         # The limit is passed per region: `torch._dynamo.config` overrides are thread-local and every CB manager runs
         # its own engine thread, so a value set in one thread is not seen by the next manager's.
-        _compiled[key] = torch.compile(
-            _decode_layer, mode=mode, dynamic=DYNAMIC, fullgraph=FULLGRAPH, recompile_limit=64
-        )
+        _compiled[key] = torch.compile(fn, mode=mode, dynamic=DYNAMIC, fullgraph=FULLGRAPH, recompile_limit=64)
     return _compiled[key]
 
 
@@ -210,7 +273,7 @@ def _prepare(model, cache):
             tp, run_layers_on = True, [_localize(layer) for layer in layers]
     state = {
         "cache": cache, "allocator": allocator, "views": views, "w_kv_b": weights, "h_pad": h_pad, "tp": tp,
-        "layers": run_layers_on,
+        "layers": run_layers_on, "q_abs": {},
     }
     model._fuse_compile_state = state
     return state
@@ -263,6 +326,11 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     rows = torch.where(visible, read_index[pos], -1).to(torch.int32)
     if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
         rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
+    # the valid rows of a list are its first `n_visible` entries: the kernel stops there instead of walking the -1
+    counts = n_visible.clamp(min=1, max=rows.shape[-1]).to(torch.int32) if TOPK_LENGTH else None
+
+    if KERNELS:
+        return _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts)
 
     cos, sin = position_embeddings
     fn = _layer_fn()
@@ -275,15 +343,52 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
         if ranges:
             with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
                 hidden_states = fn(
-                    layer, hidden_states, cos, sin, state["views"][i], write_index, rows, state["w_kv_b"][i],
+                    layer, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, state["w_kv_b"][i],
                     state["h_pad"], tp,
                 )
             continue
         hidden_states = fn(
-            layer, hidden_states, cos, sin, state["views"][i], write_index, rows, state["w_kv_b"][i], state["h_pad"],
-            tp,
+            layer, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, state["w_kv_b"][i],
+            state["h_pad"], tp,
         )
         if timings is not None:
             timings.append(round(time.perf_counter() - start, 3))
     STATS["steps"] += 1
     return hidden_states
+
+
+def _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts):
+    """Layer loop of FUSE_KERNELS=1: every layer hands the next one its output and that output already normed."""
+    cos, sin = position_embeddings
+    layers = state["layers"]
+    attn = layers[0].self_attn
+    num_tokens = hidden_states.shape[1]
+    num_heads = state["w_kv_b"][0].shape[0]
+    key = (num_tokens, max(state["h_pad"], num_heads))
+    q_abs = state["q_abs"].get(key)
+    if q_abs is None:  # zeroed once and kept with the cache state: the padded heads stay zero, CUDA graphs keep its address
+        q_abs = hidden_states.new_zeros(key[0], key[1], attn.kv_lora_rank + attn.qk_rope_head_dim)
+        state["q_abs"][key] = q_abs
+    norms = [layer.input_layernorm for layer in layers[1:]] + [model.norm]
+    fn = _layer_fn()
+    tp = state["tp"]
+    timings = STATS.get("layer_seconds")
+    ranges = STATS.get("ranges")
+    residual = hidden_states
+    hidden_states = layers[0].input_layernorm(hidden_states)
+    for i, layer in enumerate(layers):
+        if timings is not None:
+            start = time.perf_counter()
+        args = (
+            layer, residual, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, state["w_kv_b"][i],
+            q_abs, norms[i].weight, norms[i].variance_epsilon, tp,
+        )
+        if ranges:
+            with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
+                residual, hidden_states = fn(*args)
+            continue
+        residual, hidden_states = fn(*args)
+        if timings is not None:
+            timings.append(round(time.perf_counter() - start, 3))
+    STATS["steps"] += 1
+    return residual  # the model applies its final norm itself (the last kernel's normed output is not used)

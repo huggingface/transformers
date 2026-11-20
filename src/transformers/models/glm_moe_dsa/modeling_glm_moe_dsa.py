@@ -652,6 +652,12 @@ class GlmMoeDsaMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        if _fuse_compile.KERNELS and not torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16:
+            # [scratch, bench only] FUSE_KERNELS: silu(gate) * up in one kernel (inference only)
+            gate, up = self.gate_proj(x), self.up_proj(x)
+            if type(gate) is torch.Tensor and self.config.hidden_act == "silu":
+                return self.down_proj(torch.ops.transformers.fuse_silu_mul(gate, up))
+            return self.down_proj(self.act_fn(gate) * up)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -671,6 +677,22 @@ class GlmMoeDsaTopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
+        if (
+            _fuse_compile.KERNELS
+            and self.num_group == 1
+            and self.topk_group == 1
+            and not torch.is_grad_enabled()
+            and hidden_states.is_cuda
+            and hidden_states.dtype == self.weight.dtype == torch.bfloat16
+        ):
+            # [scratch, bench only] FUSE_KERNELS (inference only): the bf16 GEMM accumulates and returns fp32 (no fp32
+            # copy of the input and of the weight per call), then one kernel does sigmoid, bias, top-k, gather,
+            # normalize and scale
+            router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
+            topk_indices, topk_weights = torch.ops.transformers.fuse_router(
+                router_logits, self.e_score_correction_bias, self.top_k, self.routed_scaling_factor, self.norm_topk_prob
+            )
+            return router_logits, topk_weights, topk_indices
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
