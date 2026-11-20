@@ -57,7 +57,6 @@ from huggingface_hub import snapshot_download  # noqa: E402
 from safetensors import safe_open  # noqa: E402
 
 import transformers  # noqa: E402
-from dense_quant import quantize_dense  # noqa: E402
 from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
 
 
@@ -296,6 +295,8 @@ for index, config in enumerate(configs, 1):
         if args.use_kernels:
             model.set_use_kernels(True)
         if args.quantize_dense:
+            from dense_quant import quantize_dense  # this folder (on HF Jobs: mounted, on PYTHONPATH)
+
             quantize_dense(model, args.quantize_dense)
         if compile_:  # `generate` compiles the decode step with a static cache (CUDA graphs: reduce-overhead)
             torch._inductor.config.graph_partition = True  # CUDA graphs split around `cudagraph_unsafe` ops
