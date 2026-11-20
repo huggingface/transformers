@@ -13,6 +13,8 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
+from math import ceil
+from typing import Any
 
 import torch
 from torch import nn
@@ -30,6 +32,7 @@ from .utils import (
     memory_pool_context,
     pad_to_interval,
     pad_to_pow2,
+    pop_peak_memory,
     stream_context,
 )
 
@@ -51,7 +54,12 @@ def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
 
 class ModelRunner:
     """This class is the continuous batching entry point for running the model. As a rule of thumb, anything running on
-    the device should happen from this class."""
+    the device should happen from this class. The class is also used to size the cache through a few probe forwards."""
+
+    # Parameters for the cache sizing probe
+    _probe_max_rows = 32
+    _probe_query_tokens = (16, 64)
+    _probe_read_tokens = 16384
 
     def __init__(
         self,

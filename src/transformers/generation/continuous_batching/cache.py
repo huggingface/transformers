@@ -146,7 +146,7 @@ class PagedAttentionCache:
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0  # if not resolved, off
 
         if self.max_batch_tokens is None:
-            raise ValueError(f"The continuous batching config must have a resolved {self.max_batch_tokens = }."))
+            raise ValueError(f"The continuous batching config must have a resolved {self.max_batch_tokens = }.")
 
         # Construct the necessary cache allocator for each attention type
         self.cache_allocators: dict[str, CacheAllocator] = {}
@@ -236,6 +236,52 @@ class PagedAttentionCache:
             allow_block_sharing=continuous_batching_config.allow_block_sharing,
         )
         return allocator
+
+    def max_num_sectors(
+        self,
+        available_bytes: int,
+        probe_static_bytes: int | None,
+        bytes_per_cache_token: int,
+        decoder_peak: int,
+        read_cost: float,
+        post_peak: float,
+    ) -> int:
+        """Returns the largest number of sectors a cache with the same allocators can have, for continuous batching to
+        fit in `available_bytes`. This cache is the probe that measured the memory of a batch:
+            - probe_static_bytes: the bytes allocated to build the probe (this cache and the IO tensors), None if unknown
+            - bytes_per_cache_token: the bytes of the IO tensors that have one column per cache token
+            - decoder_peak: the decoder peak of a batch reading no cache
+            - read_cost: the growth of the decoder peak per cache token read
+            - post_peak: the peak of the LM head onwards (LM head, logits processing and sampling)
+        """
+        # Each sector costs its own bytes, plus the columns of the IO tensors sized after the cache
+        sector_cost = self.bytes_per_sector + self.tokens_per_sector * bytes_per_cache_token
+
+        # If probe measurements are available, adjust them for the cost of the probe's cache
+        static_bytes = (probe_static_bytes - self.num_sectors * sector_cost) if probe_static_bytes is not None else 0
+        # At least allocate two sectors worth of static bytes for the trash sectors
+        static_bytes = max(2 * self.bytes_per_sector, static_bytes)
+
+        budget = available_bytes - static_bytes
+        # In the worst case, a step reads the whole cache, which adds to the decoder peak but not to the LM head peak
+        sectors_for_decoder = (budget - decoder_peak) / (sector_cost + self.tokens_per_sector * read_cost)
+        sectors_for_lm_head = (budget - post_peak) / sector_cost
+        num_sectors = int(min(sectors_for_decoder, sectors_for_lm_head))
+
+        mb = 1024**2
+        logger.info(
+            f"Cache sizing: {available_bytes // mb} MB available, {static_bytes // mb} MB of static tensors, decoder "
+            f"peak of {decoder_peak // mb} MB + {read_cost:.0f} B per cache token read, LM head peak of "
+            f"{int(post_peak) // mb} MB. Cache of {num_sectors} sectors of {self.bytes_per_sector // mb} MB."
+        )
+        if num_sectors <= 0:
+            batch_bytes = int(static_bytes + max(decoder_peak, post_peak))
+            raise MemoryError(
+                f"Not enough memory for the cache: {available_bytes // mb} MB are available but a batch of "
+                f"{self.max_batch_tokens} tokens already needs {batch_bytes // mb} MB. Lower `max_batch_tokens` or "
+                "`max_requests_per_batch`, or raise `max_memory_percent`."
+            )
+        return num_sectors
 
     def _infer_read_cache_limit(self) -> int | None:
         """The maximum number of tokens that can be read from the cache for a single request."""
