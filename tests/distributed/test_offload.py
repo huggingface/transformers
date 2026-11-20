@@ -73,6 +73,16 @@ class ExpertsOffloadTest(unittest.TestCase):
                         self.assertEqual(sum(p.num_slots for p in store.pools.values()), slots)
                         self.assertGreater(store.reads, 0)
 
+    def test_pinned_layers_stay_resident(self):
+        with tempfile.TemporaryDirectory() as path:
+            self.model.save_pretrained(path)
+            model, store = self.load(path, 8 + 3)  # layer 0 pinned (8 experts), 3 shared slots
+            store.pin_layers = 1
+            torch.testing.assert_close(self.generate(model), self.expected)
+            pool = store.pool_of[store.order[0]]
+            self.assertTrue(pool.complete(store.order[0], 8))
+            self.assertEqual(store.pool_of[store.order[1]].num_slots, 3)
+
     def test_lfu_matches_eager(self):
         with tempfile.TemporaryDirectory() as path:
             self.model.save_pretrained(path)

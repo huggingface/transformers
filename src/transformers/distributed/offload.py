@@ -86,6 +86,8 @@ class _Pool:
         self.layout = layout
         self.num_slots = num_slots
         self.policy = policy
+        self.tables: dict[str, torch.Tensor] = {}  # layer -> host expert -> slot table (`num_slots`: not resident)
+        self.dirty: set[str] = set()  # layers whose device table is stale
         self.counts: dict[tuple[str, int], float] = {}  # lookups per expert, halved every `num_slots` lookups (lfu)
         self.lookups = 0
         self.banks = None
@@ -126,15 +128,32 @@ class _Pool:
             if victim is None:
                 return None
             self.free.append(self.cache.pop(victim))
+            self.tables[victim[0]][victim[1]] = self.num_slots
+            self.dirty.add(victim[0])
         slot = self.free.pop()
         self.cache[key] = slot
+        self.tables[key[0]][key[1]] = slot
+        self.dirty.add(key[0])
         return slot
+
+    def complete(self, layer, num_experts) -> bool:
+        """Every expert of `layer` is resident and can never be evicted (its own pool, see `pin_layers`)."""
+        return self.num_slots == num_experts and len(self.cache) == num_experts
 
 
 class ExpertsOffloadStore:
     """Expert slot pools, checkpoint readers and the read schedule of every offloaded experts module."""
 
-    def __init__(self, device, cache_bytes: int, io_threads: int = 4, lookahead: int = 1, policy: str = "lru"):
+    def __init__(
+        self,
+        device,
+        cache_bytes: int,
+        io_threads: int = 4,
+        lookahead: int = 1,
+        policy: str = "lru",
+        pin_layers: int = 0,
+    ):
+        self.pin_layers = pin_layers  # the first layers keep all their experts: shallow routing predicts worst
         if policy not in ("lru", "lfu"):
             raise ValueError(f"Unknown expert cache policy {policy!r}: use 'lru' or 'lfu'")
         self.policy = policy
@@ -157,6 +176,7 @@ class ExpertsOffloadStore:
         self.readers: dict[str, list] = {}  # module name -> [read(expert) -> {param: tensor}]
         self.pools: dict[str, _Pool] = {}
         self.pool_of: dict[str, _Pool] = {}  # module name -> its pool
+        self.device_tables: dict[str, torch.Tensor] = {}  # module name -> expert -> slot, on the device
         self.pending = {}  # (layer, expert) -> Future of its device tensors
         self.hits = self.misses = self.reads = 0
         # Host time blocked on the routing copy (device sync) and on expert reads, see `stats`
@@ -199,15 +219,32 @@ class ExpertsOffloadStore:
             layouts.setdefault(repr(probes[kind]), (probes[kind], []))[1].append(name)
         self.reads = 0
         budget = self.cache_bytes - self.resident_bytes
+        # Pinned layers: an exclusive pool each, of all their experts
+        for name in self.order[: self.pin_layers]:
+            layout = next(layout for layout, names in layouts.values() if name in names)
+            names = next(names for _, names in layouts.values() if name in names)
+            names.remove(name)
+            pool = _Pool(layout, self.layers[name].num_experts, self.policy)
+            budget -= pool.num_slots * sum(
+                torch.Size(shape).numel() * dtype.itemsize for shape, dtype in layout.values()
+            )
+            self.pools[f"pinned {name}"] = pool
+            self.pool_of[name] = pool
+        layouts = {key: value for key, value in layouts.items() if value[1]}
+        shared = sum(len(names) for _, names in layouts.values())
         for key, (layout, names) in layouts.items():
             expert_bytes = sum(torch.Size(shape).numel() * dtype.itemsize for shape, dtype in layout.values())
             total = sum(self.layers[name].num_experts for name in names)
-            num_slots = min(total, int(budget * len(names) / len(self.layers)) // expert_bytes)
+            num_slots = min(total, int(budget * len(names) / shared) // expert_bytes)
             if num_slots < 1:
                 raise ValueError(f"No room for one expert in {budget} bytes of `max_memory` for streamed experts")
             self.pools[key] = pool = _Pool(layout, num_slots, self.policy)
             for name in names:
                 self.pool_of[name] = pool
+        for name, pool in self.pool_of.items():
+            num_experts = self.layers[name].num_experts
+            pool.tables[name] = torch.full((num_experts,), pool.num_slots, dtype=torch.long)
+            self.device_tables[name] = pool.tables[name].to(self.device)
         logger.info(f"Streaming experts through {[p.num_slots for p in self.pools.values()]} device slots")
 
     def add_reader(self, target_name: str, mapping, reads: dict[str, list], hf_quantizer=None):
@@ -266,6 +303,104 @@ class ExpertsOffloadStore:
             if (layer, expert) not in cache:
                 self.fetch(layer, expert)
 
+    def setup_layer(self, name):
+        """First call of a layer: size the pools, then swap its meta banks for the pool's (as buffers, so compile sees
+        them as inputs) with the expert -> slot table."""
+        if not self.pools:
+            self.allocate()
+        module, pool = self.layers[name], self.pool_of[name]
+        if self.params[name][0] not in module._parameters:
+            return
+        pool.materialize(self.device)
+        for param in pool.layout:
+            module._parameters.pop(param, None)
+            module.register_buffer(param, pool.banks[param], persistent=False)
+        module.register_buffer("offload_table", self.device_tables[name], persistent=False)
+        module.num_experts = pool.num_slots
+        module._is_expert_parallel = True
+        if name in self.order[: self.pin_layers]:  # pinned: all its experts now, never a miss after
+            futures = [self.fetch(name, e) for e in range(module.offload_num_experts)]
+            for expert, future in enumerate(futures):
+                self._install(pool, pool.slot_for((name, expert), ()), future)
+                self.pending.pop((name, expert), None)
+            self._refresh_tables(pool)
+
+    def _install(self, pool, slot, future):
+        """Copy a read expert into `slot` once its read (and host-to-device copy) is done."""
+        start = time.perf_counter()
+        tensors, copied = future.result()
+        self.wait_seconds += time.perf_counter() - start
+        if copied is not None:  # the device waits for the copy, the host does not
+            torch.cuda.current_stream(self.device).wait_event(copied)
+        for param, tensor in tensors.items():
+            if copied is not None:  # allocated on the copy stream, freed after this stream used it
+                tensor.record_stream(torch.cuda.current_stream(self.device))
+            pool.banks[param][slot].copy_(tensor, non_blocking=True)
+
+    def _refresh_tables(self, pool):
+        """Copy the host slot tables changed by installs and evictions to the device (queued, in stream order)."""
+        for layer in pool.dirty:
+            snapshot = pool.tables[layer].clone()
+            if self.device.type == "cuda":
+                snapshot = snapshot.pin_memory()
+            self.device_tables[layer].copy_(snapshot, non_blocking=True)
+        pool.dirty.clear()
+
+    def misses_pass(self, name, module, original_forward, hidden_states, top_k_index, top_k_weights, output):
+        pool = self.pool_of[name]
+        num_experts = module.offload_num_experts
+        if pool.complete(name, num_experts):
+            self.hits += top_k_index.numel()
+            return
+        # 1. One host copy (pass 1 is already queued, the device works meanwhile): routing + next layers' guesses
+        routes = [top_k_index.reshape(-1)]
+        ahead = self.next_layers(name)
+        decode = top_k_index.numel() < num_experts
+        guessed = [n for n in ahead if decode and self.routers[n] is not None]
+        for next_name in guessed:
+            logits = torch.nn.functional.linear(hidden_states, self.routers[next_name].weight)
+            routes.append(logits.topk(top_k_index.shape[-1], dim=-1).indices.flatten())
+        start = time.perf_counter()
+        routes = torch.cat(routes).cpu()
+        self.sync_seconds += time.perf_counter() - start
+        routing = routes[: top_k_index.numel()].view(top_k_index.shape)
+        experts = torch.unique(routing).tolist()
+        misses = [e for e in experts if (name, e) not in pool.cache]
+        self.hits += len(experts) - len(misses)
+        self.misses += len(misses)
+        for e in experts:
+            if (name, e) in pool.cache:
+                pool.cache.move_to_end((name, e))
+        pool.count([(name, e) for e in experts])
+        futures = [self.fetch(name, e) for e in misses]
+        # 2. Reads for the next layers overlap this layer's compute
+        for index, next_name in enumerate(guessed):
+            guesses = routes[(index + 1) * top_k_index.numel() : (index + 2) * top_k_index.numel()]
+            self.prefetch(next_name, torch.unique(guesses).tolist())
+        if not decode and ahead:  # a prompt routes to nearly every expert: read the whole next layer
+            self.prefetch(ahead[0], range(self.layers[ahead[0]].offload_num_experts))
+        # 3. Install the misses as their reads land, as many as fit at a time, and add their routes
+        while misses:
+            batch = []
+            for expert, future in zip(misses, futures):
+                slot = pool.slot_for((name, expert), {(name, e) for e in batch})
+                if slot is None:
+                    break
+                self._install(pool, slot, future)
+                self.pending.pop((name, expert), None)
+                if not decode:  # a prompt's experts go to the cold end, the decode set stays
+                    pool.cache.move_to_end((name, expert), last=False)
+                batch.append(expert)
+            table = torch.full((num_experts,), pool.num_slots, dtype=top_k_index.dtype)
+            table[batch] = torch.tensor([pool.cache[(name, e)] for e in batch], dtype=top_k_index.dtype)
+            slots = table[routing].to(self.device, non_blocking=True)
+            output.add_(_run_pool(module, original_forward, hidden_states, slots, top_k_weights, {}))
+            misses, futures = misses[len(batch) :], futures[len(batch) :]
+        self._refresh_tables(pool)
+        # Guesses for this layer that the routing did not pick
+        for key in [key for key in self.pending if key[0] == name]:
+            self.pending.pop(key).cancel()
+
     def next_layers(self, layer):
         index = self.order.index(layer)
         return self.order[index + 1 : index + 1 + self.lookahead]
@@ -283,93 +418,61 @@ class ExpertsOffloadLayer(TensorParallelLayer):
     def install_forward(self, module, store):
         original_forward = module.forward
         name = next(n for n, m in store.layers.items() if m is module)
+        handle = len(_LAYERS)
+        _LAYERS.append((store, name, module, original_forward))
+        setup = torch.compiler.disable(store.setup_layer)
 
         def offload_forward(hidden_states, top_k_index, top_k_weights, **kwargs):
             if torch.is_grad_enabled():
                 raise RuntimeError("Streamed experts are inference-only: use torch.no_grad() / inference_mode()")
-            if not store.pools:
-                store.allocate()
-            pool = store.pool_of[name]
-            if store.params[name][0] in module._parameters:  # first call: the meta banks become the pool's
-                _use_pool(module, pool, store.device)
-            num_experts = module.offload_num_experts
-            # 1. One host copy: this layer's routing and the guesses for the next layers
-            routes = [top_k_index.reshape(-1)]
-            ahead = store.next_layers(name)
-            decode = top_k_index.numel() < num_experts
-            if decode:
-                for next_name in ahead:
-                    router = store.routers[next_name]
-                    if router is not None:
-                        k = top_k_index.shape[-1]
-                        logits = torch.nn.functional.linear(hidden_states, router.weight)
-                        routes.append(logits.topk(k, dim=-1).indices.flatten())
-            start = time.perf_counter()
-            routes = torch.cat(routes).cpu()
-            store.sync_seconds += time.perf_counter() - start
-            routing = routes[: top_k_index.numel()].view(top_k_index.shape)
-            experts = torch.unique(routing).tolist()
-            hits = [e for e in experts if (name, e) in pool.cache]
-            misses = [e for e in experts if (name, e) not in pool.cache]
-            store.hits += len(hits)
-            store.misses += len(misses)
-            for e in hits:
-                pool.cache.move_to_end((name, e))
-            pool.count([(name, e) for e in experts])
-            futures = [store.fetch(name, e) for e in misses]
-            # 2. Reads for the next layers overlap this layer's compute
-            if decode:
-                offset = top_k_index.numel()
-                for next_name in ahead:
-                    if store.routers[next_name] is None:
-                        continue
-                    guesses = routes[offset : offset + top_k_index.numel()]
-                    offset += top_k_index.numel()
-                    store.prefetch(next_name, torch.unique(guesses).tolist())
-            elif ahead:  # a prompt routes to nearly every expert: read the whole next layer
-                store.prefetch(ahead[0], range(store.layers[ahead[0]].offload_num_experts))
-
-            def run(selected):
-                table = torch.full((num_experts,), pool.num_slots, dtype=top_k_index.dtype)
-                table[selected] = torch.tensor([pool.cache[(name, e)] for e in selected], dtype=top_k_index.dtype)
-                slots = table[routing].to(store.device, non_blocking=True)
-                if decode and pool.floating:
-                    # Gathers only the routed slots: `grouped_mm` iterates every slot on the host where it has no
-                    # device kernel (sm < 90), and the pool has thousands of them
-                    return batched_mm_experts_forward(module, hidden_states, slots, top_k_weights)
-                return original_forward(hidden_states, slots, top_k_weights, **kwargs)
-
-            # 3. Pass 1 on the resident experts is queued before waiting on any read
-            output = run(hits) if hits else torch.zeros_like(hidden_states)
-            # 4. Install the misses as their reads land, as many as fit at a time
-            while misses:
-                batch = []
-                for expert, future in zip(misses, futures):
-                    slot = pool.slot_for((name, expert), {(name, e) for e in batch})
-                    if slot is None:
-                        break
-                    start = time.perf_counter()
-                    tensors, copied = future.result()
-                    store.wait_seconds += time.perf_counter() - start
-                    if copied is not None:  # the device waits for the copy, the host does not
-                        torch.cuda.current_stream(store.device).wait_event(copied)
-                    for param, tensor in tensors.items():
-                        if copied is not None:  # allocated on the copy stream, freed after this stream used it
-                            tensor.record_stream(torch.cuda.current_stream(store.device))
-                        pool.banks[param][slot].copy_(tensor, non_blocking=True)
-                    store.pending.pop((name, expert), None)
-                    if not decode:  # a prompt's experts go to the cold end, the decode set stays
-                        pool.cache.move_to_end((name, expert), last=False)
-                    batch.append(expert)
-                output = output + run(batch)
-                misses, futures = misses[len(batch) :], futures[len(batch) :]
-            # Guesses for this layer that the routing did not pick
-            for key in [key for key in store.pending if key[0] == name]:
-                store.pending.pop(key).cancel()
+            if not hasattr(module, "offload_table"):  # first call only: no graph break once set up
+                setup(name)
+            # Pass 1, all on the device (compilable): resident experts through the slot table, misses are sentinels
+            slots = module.offload_table[top_k_index]
+            output = _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs)
+            # Misses: one opaque op, the only host round trip (none for a layer whose experts are all resident)
+            state = [module.offload_table, *(getattr(module, p) for p in store.pool_of[name].layout)]
+            torch.ops.transformers.experts_offload_misses(
+                handle, hidden_states, top_k_index, top_k_weights, output, state
+            )
             return output
 
         module.forward = offload_forward
         return module
+
+
+_LAYERS: list = []  # op handle -> (store, module name, module, its experts forward)
+
+
+def _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs):
+    """The experts on the pool for `slots` (ids `>= num_slots` contribute zero)."""
+    if top_k_weights.numel() < module.offload_num_experts and module.gate_up_proj.is_floating_point():
+        # Gathers only the routed slots: `grouped_mm` iterates every slot on the host where it has no device kernel
+        # (sm < 90), and the pool has thousands of them
+        return batched_mm_experts_forward(module, hidden_states, slots, top_k_weights)
+    return original_forward(hidden_states, slots, top_k_weights, **kwargs)
+
+
+@torch.library.custom_op(
+    "transformers::experts_offload_misses", mutates_args=("output", "state"), tags=(torch.Tag.cudagraph_unsafe,)
+)
+def experts_offload_misses(
+    handle: int,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    output: torch.Tensor,
+    state: list[torch.Tensor],
+) -> None:
+    """Add the routes to non-resident experts into `output`, after reading and installing them (`state`: the slot
+    table and pool banks it writes). Also starts the reads of the next layers."""
+    store, name, module, original_forward = _LAYERS[handle]
+    store.misses_pass(name, module, original_forward, hidden_states, top_k_index, top_k_weights, output)
+
+
+@experts_offload_misses.register_fake
+def _(handle, hidden_states, top_k_index, top_k_weights, output, state) -> None:
+    return None
 
 
 def _find_router(parent: nn.Module, experts: nn.Module):
@@ -380,16 +483,6 @@ def _find_router(parent: nn.Module, experts: nn.Module):
             if weight.shape[0] == experts.num_experts:
                 return child
     return None
-
-
-def _use_pool(module, pool, device):
-    """Swap the module's meta banks for the pool banks: its forward then indexes slots, not experts."""
-    pool.materialize(device)
-    for param in pool.layout:
-        module._parameters.pop(param, None)
-        setattr(module, param, pool.banks[param])
-    module.num_experts = pool.num_slots
-    module._is_expert_parallel = True
 
 
 def apply_experts_offload(model: nn.Module, patterns: list[str], device, cache_bytes: int, **kwargs):
