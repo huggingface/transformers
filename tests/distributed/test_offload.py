@@ -83,6 +83,19 @@ class ExpertsOffloadTest(unittest.TestCase):
             self.assertTrue(pool.complete(store.order[0], 8))
             self.assertEqual(store.pool_of[store.order[1]].num_slots, 3)
 
+    def test_streamed_embedding_rows(self):
+        """An embedding on "disk" reads only the rows it looks up."""
+        self.assertFalse(self.model.config.tie_word_embeddings)
+        with tempfile.TemporaryDirectory() as path:
+            self.model.save_pretrained(path)
+            model = Qwen3MoeForCausalLM.from_pretrained(
+                path,
+                device_map={"": "cpu", "experts": "disk", "embed_tokens": "disk"},
+                max_memory={"cpu": self.resident + 5 * self.expert_bytes},
+            )
+            self.assertIn("model.embed_tokens", model._experts_offload.embeddings)
+            torch.testing.assert_close(self.generate(model), self.expected)
+
     def test_lfu_matches_eager(self):
         with tempfile.TemporaryDirectory() as path:
             self.model.save_pretrained(path)

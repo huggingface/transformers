@@ -36,6 +36,7 @@ The experts module's own forward (any `experts_implementation`) runs on the pool
 
 from __future__ import annotations
 
+import bisect
 import copy
 import fnmatch
 import time
@@ -66,15 +67,15 @@ def expert_params(module: nn.Module) -> list[str]:
     ]
 
 
-def split_offloaded_experts(device_map):
+def split_streamed_modules(device_map):
     """Pop the `{"<experts module pattern>": "disk"}` entries of `device_map`; returns `(device_map, patterns)`."""
     if not isinstance(device_map, dict):
         return device_map, []
-    patterns = [key for key, value in device_map.items() if value == "disk" and "experts" in key]
+    patterns = [key for key, value in device_map.items() if value == "disk"]
     rest = {key: value for key, value in device_map.items() if key not in patterns}
-    if patterns and (not rest or "disk" in rest.values()):
+    if patterns and not rest:
         raise ValueError(
-            'Streamed experts need the rest of the model on one device, e.g. {"": "mps", "experts": "disk"}'
+            'Streamed modules need the rest of the model on one device, e.g. {"": "mps", "experts": "disk"}'
         )
     return rest, patterns
 
@@ -168,10 +169,10 @@ class ExpertsOffloadStore:
         self.lookahead = lookahead
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload")
         self.layers: dict[str, nn.Module] = {}  # module name -> experts module, in forward order
-        self.routers: dict[str, nn.Module | None] = {}
-        self.params: dict[
-            str, list[str]
-        ] = {}  # module name -> its per-expert params  # module name -> its router, to guess its experts ahead
+        self.routers: dict[str, nn.Module | None] = {}  # module name -> its router, to guess its experts ahead
+        self.params: dict[str, list[str]] = {}  # module name -> its streamed params (per-expert, or `weight`)
+        self.embeddings: dict[str, nn.Module] = {}  # streamed embeddings: only the looked-up rows are read
+        self.row_readers: dict[str, _RowReader] = {}
         self.order: list[str] = []
         self.readers: dict[str, list] = {}  # module name -> [read(expert) -> {param: tensor}]
         self.pools: dict[str, _Pool] = {}
@@ -198,7 +199,7 @@ class ExpertsOffloadStore:
 
     def owns(self, param_name: str) -> bool:
         module_name, _, param = param_name.rpartition(".")
-        return module_name in self.layers and param in self.params[module_name]
+        return param in self.params.get(module_name, ())
 
     def add_layer(self, name: str, module: nn.Module, router: nn.Module | None):
         self.layers[name] = module
@@ -257,6 +258,9 @@ class ExpertsOffloadStore:
         from ..core_model_loading import WeightConverter
 
         module_name = target_name.rpartition(".")[0]
+        if module_name in self.embeddings:
+            self.row_readers[module_name] = _RowReader(reads, self.read_device)
+            return
         if isinstance(mapping, WeightConverter):
 
             def read(expert):
@@ -492,6 +496,37 @@ def _(handle, hidden_states, top_k_index, top_k_weights, output, state) -> None:
     return None
 
 
+class _RowReader:
+    """Rows of a table the checkpoint stores as slices concatenated on dim 0 (one slice, or e.g. 128 shards)."""
+
+    def __init__(self, reads: dict[str, list], device):
+        ((_, slices),) = reads.items()
+        self.slices = list(slices)
+        self.offsets = [0]
+        for slice_, _ in self.slices:
+            self.offsets.append(self.offsets[-1] + slice_.get_shape()[0])
+        self.device = device
+
+    def read(self, rows: list[int]) -> torch.Tensor:
+        out = []
+        for row in rows:
+            shard = bisect.bisect_right(self.offsets, row) - 1
+            slice_, dtype = self.slices[shard]
+            local = row - self.offsets[shard]
+            out.append(slice_[local : local + 1].to(self.device, dtype))
+        return torch.cat(out)
+
+
+def _streamed_embedding_forward(store, name, module):
+    @torch.compiler.disable
+    def forward(input_ids):
+        unique, inverse = torch.unique(input_ids.reshape(-1), return_inverse=True)
+        rows = store.row_readers[name].read(unique.tolist()).to(store.device)
+        return rows[inverse].view(*input_ids.shape, -1)
+
+    return forward
+
+
 def _find_router(parent: nn.Module, experts: nn.Module):
     """The router next to `experts` (its parent's child with a `(num_experts, hidden)` weight), if any."""
     for child in parent.children():
@@ -515,8 +550,14 @@ def apply_experts_offload(model: nn.Module, patterns: list[str], device, cache_b
         ):
             module.offload_num_experts = module.num_experts
             store.add_layer(name, module, _find_router(modules[name.rpartition(".")[0]], module))
-    if not store.layers:
-        raise ValueError(f"No experts module matches {patterns}")
+        elif isinstance(module, torch.nn.Embedding) and any(
+            fnmatch.fnmatch(name, p) or fnmatch.fnmatch(name, f"*.{p}") for p in patterns
+        ):
+            store.embeddings[name] = module
+            store.params[name] = ["weight"]
+            module.forward = _streamed_embedding_forward(store, name, module)
+    if not store.layers and not store.embeddings:
+        raise ValueError(f"No experts module or embedding matches {patterns}")
     # Tied params (e.g. `lm_head.weight`) are not tied yet on the meta model: count them once
     tied = set(getattr(model, "all_tied_weights_keys", None) or {})
     resident = sum(

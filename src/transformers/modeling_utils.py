@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
-from .distributed.offload import apply_experts_offload, split_offloaded_experts
+from .distributed.offload import apply_experts_offload, split_streamed_modules
 from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_are_equal
 from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import is_local_dist_rank_0
@@ -4271,7 +4271,7 @@ class PreTrainedModel(
                 cache_dir=cache_dir,
             )
             download_kwargs["revision"] = revision
-        device_map, offloaded_experts = split_offloaded_experts(device_map)
+        device_map, offloaded_experts = split_streamed_modules(device_map)
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
