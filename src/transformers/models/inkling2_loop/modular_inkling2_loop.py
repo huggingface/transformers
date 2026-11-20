@@ -283,7 +283,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
             **kwargs,
         )
         hidden_states = self.post_attention_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         )
 
         residual = hidden_states = hidden_states.float()
@@ -297,7 +297,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
             hidden_states = self.mlp_message_gate(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         )
         return (residual + hidden_states).to(dtype)
 
@@ -355,7 +355,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             **kwargs,
         )
         hidden_states = self.post_attention_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         )
 
         residual = hidden_states = hidden_states.float()
@@ -369,7 +369,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             hidden_states = self.mlp_message_gate(hidden_states, mlp_message)
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.post_mlp_convolution(
-            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+            hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         )
         return (residual + hidden_states).to(dtype)
 

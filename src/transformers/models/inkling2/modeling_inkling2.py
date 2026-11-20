@@ -382,6 +382,11 @@ class Inkling2DynamicShortConvolution(nn.Module):
         # windows[..., lag] is the token `lag` steps back
         windows = context.unfold(-1, self.conv_kernel_size, 1).flip(-1).transpose(1, 2)
         windows = windows.reshape(batch_size, seq_len, self.num_heads, -1, self.conv_kernel_size)
+        if (seq_idx := kwargs.get("seq_idx")) is not None:
+            seq_idx = seq_idx.to(windows.device)
+            context_seq_idx = torch.cat([seq_idx[:, :1].expand(-1, self.conv_kernel_size - 1), seq_idx], dim=1)
+            window_seq_idx = context_seq_idx.unfold(-1, self.conv_kernel_size, 1).flip(-1)
+            windows = windows * (window_seq_idx == seq_idx[..., None])[:, :, None, None, :]
         hidden_states = (windows * weights).sum(-1).reshape(batch_size, seq_len, hidden_size)
         hidden_states = (hidden_states + residual) / math.sqrt(2 * self.conv_kernel_size + 1)
         return hidden_states.to(input_dtype)
@@ -402,9 +407,10 @@ class Inkling2SlidingKeyValueProjection(nn.Module):
         cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
         cache_offset: int = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         states = self.linear(hidden_states)
-        return self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
+        return self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
 
 
 class Inkling2FullKeyValueProjection(nn.Module):
@@ -432,9 +438,10 @@ class Inkling2FullKeyValueProjection(nn.Module):
         cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
         cache_offset: int = 0,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         states = self.linear(hidden_states)
-        return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset)
+        return self.sconv(states, hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -538,11 +545,11 @@ class Inkling2SlidingAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset).view(
-            hidden_shape
-        )
+        key_states = self.k_proj(
+            key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+        ).view(hidden_shape)
         value_states = self.v_proj(
-            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         ).view(hidden_shape)
 
         query_states = self.q_norm(query_states).transpose(1, 2)
@@ -639,11 +646,11 @@ class Inkling2FullAttention(nn.Module):
         tau = tau[..., None, None]
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset).view(
-            hidden_shape
-        )
+        key_states = self.k_proj(
+            key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+        ).view(hidden_shape)
         value_states = self.v_proj(
-            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset
+            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         ).view(hidden_shape)
 
         query_states = self.q_norm(query_states)
@@ -844,7 +851,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
             cache=cache,
             **kwargs,
         )
-        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask, **kwargs)
 
         residual = hidden_states = hidden_states.float()
         if self.is_block_boundary:
@@ -854,7 +861,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
-        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask, **kwargs)
         return (residual + hidden_states).to(dtype)
 
 
@@ -907,7 +914,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
             cache=cache,
             **kwargs,
         )
-        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+        hidden_states = self.post_attention_convolution(hidden_states, cache=cache, conv_mask=conv_mask, **kwargs)
 
         residual = hidden_states = hidden_states.float()
         if self.is_block_boundary:
@@ -917,7 +924,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
 
         hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
-        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask)
+        hidden_states = self.post_mlp_convolution(hidden_states, cache=cache, conv_mask=conv_mask, **kwargs)
         return (residual + hidden_states).to(dtype)
 
 
