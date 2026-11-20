@@ -1,7 +1,7 @@
 # AMD Ryzen "Strix Halo" (gfx1151) CI on the DevLab Dispatch ephemeral pool.
 #
-# This file keeps its name on purpose: the pool's runner group allows this
-# workflow path, so we iterate here rather than adding new workflow files.
+# The pool's runner group allows workflows by path, so renaming this file
+# needs that allowlist updated too.
 #
 # The gfx1151 image is built + pushed separately by build-amd-gfx1151-image.yml;
 # the jobs here just PULL it via a job-level `container:`.
@@ -20,7 +20,7 @@
 # summary; SIGKILL 2 min later if a stuck GPU call ignores it). We deliberately
 # do NOT rely on GitHub's job timeout, which marks the job `cancelled` and hides
 # the logs; `timeout-minutes` here is only a loose outer safety net.
-name: AMD Strix Halo probe
+name: AMD Strix Halo CI
 
 on:
   workflow_dispatch:

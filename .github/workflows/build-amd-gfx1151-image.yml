@@ -1,7 +1,7 @@
 # Scheduled build of the AMD Ryzen "Strix Halo" (gfx1151) CI image.
 #
 # Built ONCE here (on a GitHub-hosted builder, off the pool) and pushed to GHCR;
-# the test workflow (amd-strix-halo-probe.yml) then just pulls it. Mirrors how
+# the test workflow (self-scheduled-amd-strix-halo.yml) then just pulls it. Mirrors how
 # build-docker-images.yml builds the MI300 image. Push to a
 # `build_amd_gfx1151_image*` branch (or run it manually) to refresh the image
 # after a Dockerfile change.
