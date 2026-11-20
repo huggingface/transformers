@@ -4416,7 +4416,8 @@ class PreTrainedModel(
 
         if offloaded_experts:
             device = torch.device(next(iter(device_map.values())))
-            budget = (max_memory or {}).get(device.type, (max_memory or {}).get(device.index))
+            memory = max_memory or {}
+            budget = next((memory[k] for k in (str(device), device.type, device.index or 0) if k in memory), None)
             if budget is None:
                 raise ValueError('Streamed experts need a device budget, e.g. `max_memory={"mps": "20GiB"}`')
             apply_experts_offload(model, offloaded_experts, device, convert_file_size_to_int(budget))

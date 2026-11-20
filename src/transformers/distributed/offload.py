@@ -129,6 +129,12 @@ class ExpertsOffloadStore:
             raise ValueError(f"Unknown expert cache policy {policy!r}: use 'lru' or 'lfu'")
         self.policy = policy
         self.device = torch.device(device)
+        if self.device.type == "cuda" and self.device.index is None:
+            self.device = torch.device("cuda", torch.cuda.current_device())
+        # disk -> RAM -> VRAM on CUDA: reads land in host memory, then pinned, then copy on their own stream so they
+        # overlap compute. On MPS (unified memory) the loader's `pread` slices already land on the device.
+        self.read_device = torch.device("cpu") if self.device.type == "cuda" else self.device
+        self.copy_stream = torch.cuda.Stream(self.device) if self.device.type == "cuda" else None
         self.cache_bytes = cache_bytes
         self.lookahead = lookahead
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload")
@@ -199,7 +205,7 @@ class ExpertsOffloadStore:
             def read(expert):
                 one = copy.copy(mapping)
                 one.collected_tensors = {
-                    pattern: [lambda s=slices[expert]: s[0][...].to(self.device, s[1])]
+                    pattern: [lambda s=slices[expert]: s[0][...].to(self.read_device, s[1])]
                     for pattern, slices in reads.items()
                 }
                 out = one.convert(target_name)
@@ -209,16 +215,23 @@ class ExpertsOffloadStore:
             param = target_name.rpartition(".")[2]
 
             def read(expert):
-                return {param: bank[expert : expert + 1].to(self.device, bank_dtype)[0]}
+                return {param: bank[expert : expert + 1].to(self.read_device, bank_dtype)[0]}
 
         self.readers.setdefault(module_name, []).append(read)
 
     def _read(self, layer, expert):
+        """One expert's device tensors and the event their copy records (None when they were read on the device)."""
         self.reads += 1
         out = {}
         for read in self.readers[layer]:
             out.update(read(expert))
-        return out
+        if self.copy_stream is None:
+            return out, None
+        with torch.cuda.stream(self.copy_stream):
+            out = {name: tensor.pin_memory().to(self.device, non_blocking=True) for name, tensor in out.items()}
+            copied = torch.cuda.Event()
+            copied.record(self.copy_stream)
+        return out, copied
 
     def fetch(self, layer, expert):
         """Start reading one expert (once); returns its Future."""
@@ -310,9 +323,13 @@ class ExpertsOffloadLayer(TensorParallelLayer):
                     if slot is None:
                         break
                     start = time.perf_counter()
-                    tensors = future.result()
+                    tensors, copied = future.result()
                     store.wait_seconds += time.perf_counter() - start
+                    if copied is not None:  # the device waits for the copy, the host does not
+                        torch.cuda.current_stream(store.device).wait_event(copied)
                     for param, tensor in tensors.items():
+                        if copied is not None:  # allocated on the copy stream, freed after this stream used it
+                            tensor.record_stream(torch.cuda.current_stream(store.device))
                         pool.banks[param][slot].copy_(tensor, non_blocking=True)
                     store.pending.pop((name, expert), None)
                     if not decode:  # a prompt's experts go to the cold end, the decode set stays
