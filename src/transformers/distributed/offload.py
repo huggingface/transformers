@@ -337,9 +337,11 @@ def apply_experts_offload(model: nn.Module, patterns: list[str], device, cache_b
             store.add_layer(name, module, _find_router(modules[name.rpartition(".")[0]], module))
     if not store.layers:
         raise ValueError(f"No experts module matches {patterns}")
-    resident = sum(p.numel() * p.element_size() for n, p in model.named_parameters() if not store.owns(n)) + sum(
-        b.numel() * b.element_size() for b in model.buffers()
-    )
+    # Tied params (e.g. `lm_head.weight`) are not tied yet on the meta model: count them once
+    tied = set(getattr(model, "all_tied_weights_keys", None) or {})
+    resident = sum(
+        p.numel() * p.element_size() for n, p in model.named_parameters() if not store.owns(n) and n not in tied
+    ) + sum(b.numel() * b.element_size() for b in model.buffers())
     store.allocate(resident)
     style = ExpertsOffloadLayer()
     for module in store.layers.values():
