@@ -42,9 +42,9 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoConfig, AutoModel
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vVisionRotaryEmbedding
-from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     Qwen2VLVisionBlock,
@@ -199,11 +199,11 @@ class Kimi_K25Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Kimi_K25ModelOutputWithPast(LlavaModelOutputWithPast):
+class Kimi_K25ModelOutputWithPast(AriaModelOutputWithPast):
     pass
 
 
-class Kimi_K25CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
+class Kimi_K25CausalLMOutputWithPast(AriaCausalLMOutputWithPast):
     pass
 
 
@@ -625,10 +625,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             **kwargs,
         )
         return Kimi_K25ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -723,6 +720,9 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
+            router_logits=outputs.router_logits,
         )
 
     def _prepare_position_ids_for_generation(self, **kwargs):

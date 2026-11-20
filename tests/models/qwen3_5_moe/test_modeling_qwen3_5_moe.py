@@ -53,22 +53,22 @@ class Qwen3_5MoeTextModelTester(CausalLMModelTester):
         base_model_class = Qwen3_5MoeTextModel
         causal_lm_class = Qwen3_5MoeForCausalLM
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.hidden_act = "silu"
-        self.layer_types = ["full_attention", "linear_attention"]
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
-        self.rope_parameters = {
+    small_config_overrides = {
+        "hidden_act": "silu",
+        "layer_types": ["full_attention", "linear_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+        "rope_parameters": {
             "rope_type": "default",
-            "rope_theta": 10_000,
+            "rope_theta": 10000,
             "mrope_section": [2, 1, 1],
             "mrope_interleaved": True,
-        }
-        self.head_dim = 32
+        },
+        "head_dim": 32,
+    }
 
 
 @require_torch
@@ -197,48 +197,54 @@ class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Qwen3_5MoeForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 32)
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("layer_types", ["full_attention", "linear_attention"])
-        kwargs.setdefault(
-            "rope_parameters",
-            {"rope_type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1], "mrope_interleaved": True},
-        )
-        kwargs.setdefault("linear_conv_kernel_dim", 2)
-        kwargs.setdefault("linear_key_head_dim", 16)
-        kwargs.setdefault("linear_value_head_dim", 16)
-        kwargs.setdefault("linear_num_key_heads", 4)
-        kwargs.setdefault("linear_num_value_heads", 8)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("shared_expert_intermediate_size", 36)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("num_experts", 8)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("num_position_embeddings", 16)
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("vision_intermediate_size", 32)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 16,
+        "patch_size": 16,
+        "num_image_tokens": 32,
+        "tie_word_embeddings": True,
+        "hidden_act": "silu",
+        "head_dim": 32,
+        "intermediate_size": 37,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "layer_types": ["full_attention", "linear_attention"],
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000,
+            "mrope_section": [2, 1, 1],
+            "mrope_interleaved": True,
+        },
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+        "moe_intermediate_size": 16,
+        "shared_expert_intermediate_size": 36,
+        "num_experts_per_tok": 2,
+        "num_experts": 8,
+        "depth": 2,
+        "num_heads": 4,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "num_position_embeddings": 16,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "vision_intermediate_size": 32,
+    }
 
-        self.in_channels = self.num_channels
-        self.out_hidden_size = self.hidden_size
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["in_channels"] = values["num_channels"]
+        values["out_hidden_size"] = values["hidden_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

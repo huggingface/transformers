@@ -1338,6 +1338,35 @@ class PrefixChange(WeightRenaming):
         return result
 
 
+class LayerPairCollapse(WeightRenaming):
+    """
+    Loads checkpoints storing each decoder layer as an attention block `layers.{2i}` and an mlp block `layers.{2i+1}`:
+
+        layers.0.mixer.q_proj.weight -> layers.0.self_attn.q_proj.weight
+        layers.1.mixer.up_proj.weight -> layers.0.mlp.up_proj.weight
+        layers.1.mlp_alpha -> layers.0.lambda_2
+    """
+
+    __slots__ = ()
+    pattern = re.compile(r"layers\.(\d+)\.(mixer|attn_alpha|mlp_alpha)(?=\.|$)")
+
+    def __init__(self):
+        super().__init__(source_patterns=r"layers\.(\d+)", target_patterns=r"layers.\1")
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        if (match := self.pattern.search(source_key)) is None:
+            return source_key, None
+        self._was_used = True
+        index, name = int(match[1]), match[2]
+        name = {"attn_alpha": "lambda_1", "mlp_alpha": "lambda_2"}.get(name, ("self_attn", "mlp")[index % 2])
+        renamed = f"layers.{index // 2}.{name}"
+        return source_key[: match.start()] + renamed + source_key[match.end() :], self.source_patterns[0]
+
+    def reverse_transform(self) -> WeightTransform:
+        # TODO: save back to the two-block layout. Our names never match `pattern`, so saving keeps our layout
+        return self
+
+
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 

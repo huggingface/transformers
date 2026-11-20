@@ -750,5 +750,17 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
             attentions=rwkv_outputs.attentions,
         )
 
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        # Non standard cache name, so need to override here
+        if "state" in outputs:
+            model_kwargs["state"] = outputs.state
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
+
 
 __all__ = ["RwkvForCausalLM", "RwkvModel", "RwkvPreTrainedModel"]

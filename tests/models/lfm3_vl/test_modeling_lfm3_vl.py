@@ -40,29 +40,34 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
     config_class = Lfm3VlConfig
     conditional_generation_class = Lfm3VlForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
         # one 4x4 patch grid per image, merged into a 2x2 grid of language tokens
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("temporal_patch_size", 1)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("in_channels", 3)
+        "image_size": 8,
+        "patch_size": 2,
+        "temporal_patch_size": 1,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 4,
+        "in_channels": 3,
         # head_dim 16: the FA4 kernels need at least 16
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("vision_layer_types", ["conv", "full_attention"])
+        "num_attention_heads": 2,
+        "num_key_value_heads": 1,
+        "vision_layer_types": ["conv", "full_attention"],
         # one text layer per operator type, so the rope-scaling tests see the sliding `rope_parameters` entry
-        kwargs.setdefault("text_layer_types", ["conv", "full_attention", "sliding_attention"])
-        kwargs.setdefault("text_num_hidden_layers", 3)
-        kwargs.setdefault("expected_num_hidden_layers", kwargs["text_num_hidden_layers"] + 1)
-        kwargs.setdefault("conv_L_cache", 3)
-        kwargs.setdefault("projector_hidden_size", 32)
-        super().__init__(parent, **kwargs)
+        "text_layer_types": ["conv", "full_attention", "sliding_attention"],
+        "text_num_hidden_layers": 3,
+        "conv_L_cache": 3,
+        "projector_hidden_size": 32,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("expected_num_hidden_layers", values["text_num_hidden_layers"] + 1)
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

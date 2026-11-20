@@ -49,7 +49,6 @@ class JambaConfig(PreTrainedConfig):
     """
 
     model_type = "jamba"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
         "layers.*.feed_forward.experts.down_proj": "rowwise",

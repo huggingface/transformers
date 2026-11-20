@@ -33,6 +33,7 @@ import transformers.modeling_flash_attention_utils as fa_utils
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
@@ -823,6 +824,39 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
 
+    def test_generate_batch_under_inference_mode(self) -> None:
+        """The background generation thread runs in the caller's `torch.inference_mode()`."""
+        tokenizer, model = get_tokenizer_and_model(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", "sdpa", torch_device, dtype=torch.float32
+        )
+        input_ids = get_generation_inputs(["Where is Paris?"], tokenizer, for_continuous_batching=True)
+        generation_config = GenerationConfig(do_sample=False, max_new_tokens=5, eos_token_id=-1)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False,
+            use_async_batching=False,
+            auto_switch_to_flash=False,
+            num_blocks=16,
+            max_batch_tokens=256,
+        )
+
+        expected = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+        forward_in_inference_mode = []
+        model.register_forward_pre_hook(lambda *_: forward_in_inference_mode.append(torch.is_inference_mode_enabled()))
+        with torch.inference_mode():
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+        self.assertTrue(forward_in_inference_mode)
+        self.assertTrue(all(forward_in_inference_mode))
+        self.assertEqual(len(outputs["req_0"].generated_tokens), 5)
+        self.assertEqual(outputs["req_0"].generated_tokens, expected["req_0"].generated_tokens)
+
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all accelerator availability checks to return False"""
@@ -933,6 +967,21 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
         self.assertIs(helper.tp_all_reduce_min(reduce_tensor), reduce_tensor)
         self.assertTrue(torch.equal(reduce_tensor, torch.tensor([7, 3], dtype=torch.int64)))
+
+    @parameterized.expand(
+        [
+            (AutoModelForCausalLM, "hf-tiny-v2/tiny-random-Qwen3ForCausalLM"),
+            (AutoModelForImageTextToText, "hf-tiny-v2/tiny-random-Gemma3ForConditionalGeneration"),
+        ]
+    )
+    def test_distributed_helper_finds_the_sharded_kv_heads(self, auto_class: type, model_id: str) -> None:
+        """The cache splits the key/value heads across ranks when the model's TP plan shards the key and value
+        projections, whatever the path to the decoder layers: `model.language_model.layers` in a vision-language
+        model."""
+        with torch.device("meta"):
+            model = auto_class.from_config(AutoConfig.from_pretrained(model_id))
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan=model.tp_plan)
+        self.assertTrue(helper.are_kv_heads_tp_ed())
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""

@@ -111,7 +111,6 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -644,9 +643,11 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
 
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.multi_modal_projector = nn.Linear(
+            config.audio_config.hidden_size, config.text_config.hidden_size, dtype=torch.float32
+        )
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
         self.post_init()
 

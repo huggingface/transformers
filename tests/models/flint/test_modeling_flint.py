@@ -42,11 +42,11 @@ class FlintModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = FlintModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.layer_types = ["full_attention", "sliding_attention"]
-        self.mlp_only_layers = [0]
-        self.sliding_window = 32
+    small_config_overrides = {
+        "layer_types": ["full_attention", "sliding_attention"],
+        "mlp_only_layers": [0],
+        "sliding_window": 32,
+    }
 
 
 @require_torch

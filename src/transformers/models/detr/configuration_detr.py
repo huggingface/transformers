@@ -56,7 +56,6 @@ class DetrConfig(PreTrainedConfig):
             init_kwargs={"out_features": ["stage4"]},
         ),
     }
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -84,7 +83,7 @@ class DetrConfig(PreTrainedConfig):
     init_xavier_std: float = 1.0
     auxiliary_loss: bool = False
     position_embedding_type: str = "sine"
-    dilation: bool = False
+    dilation: bool | None = False
     class_cost: int = 1
     bbox_cost: int = 5
     giou_cost: int = 2

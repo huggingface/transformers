@@ -179,8 +179,8 @@ class Inkling2LoopMessageGate(nn.Module):
         super().__init__()
         self.norm = Inkling2LoopUnweightedRMSNorm(eps=config.rms_norm_eps)
         self.down_proj = nn.Linear(2 * config.hidden_size, config.loop_gate_rank, bias=False)
-        self.forget_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False)
-        self.message_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False)
+        self.forget_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False, dtype=torch.float32)
+        self.message_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False, dtype=torch.float32)
 
     def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
         hidden_states, message = hidden_states.float(), message.float()
@@ -198,9 +198,8 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__(config)
         # one query per message (query, key, value and mlp) for each loop layer
-        self.query = nn.Parameter(
-            torch.zeros(config.loop_layer_index_end - config.loop_layer_index_start, 4, config.hidden_size)
-        )
+        shape = (config.loop_layer_index_end - config.loop_layer_index_start, 4, config.hidden_size)
+        self.query = nn.Parameter(torch.zeros(*shape, dtype=torch.float32))
 
     def forward(
         self, block_states: torch.Tensor, partial_block_states: torch.Tensor, loop_layer_idx: int
