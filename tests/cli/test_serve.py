@@ -22,6 +22,7 @@ import json
 import multiprocessing
 import socket
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -603,6 +604,39 @@ class TestGetEngine(unittest.TestCase):
             handler._get_engine({"model": "other/model"})
         self.assertIn("org/pinned", str(ctx.exception))
         self.assertIn("other/model", str(ctx.exception))
+
+    def test_closed_loading_stream_unsubscribes(self):
+        # A client that disconnects mid-load stops receiving the load's events, and the load goes on for the others
+        release = threading.Event()
+
+        def start(on_progress):
+            on_progress({"status": "loading"})
+            release.wait()
+
+        engine = MagicMock(model_id="org/model@main", running=False, start=start)
+
+        async def collect(stream):
+            return [event async for event in stream]
+
+        async def run():
+            mm = ModelManager(MagicMock(), GenerationState())
+            with patch.object(mm, "get_engine", return_value=engine):
+                first = mm.load_model_streaming("org/model")
+                await anext(first)  # the load is running
+                second = asyncio.create_task(collect(mm.load_model_streaming("org/model")))
+                await asyncio.sleep(0)  # the second request joins the load
+                await first.aclose()
+                subscribers = len(mm._loading_subscribers["org/model@main"])
+                release.set()
+                await second  # ends with the load
+            return subscribers, mm._loading_subscribers
+
+        try:
+            subscribers, remaining = asyncio.run(run())
+        finally:
+            release.set()
+        self.assertEqual(subscribers, 1)
+        self.assertEqual(remaining, {})
 
 
 class TestModelLoader(unittest.TestCase):

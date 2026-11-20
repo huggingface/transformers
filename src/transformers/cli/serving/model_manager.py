@@ -494,58 +494,56 @@ class ModelManager:
             yield f"data: {json.dumps({'status': 'error', 'model': model, 'message': str(error)})}\n\n"
             return
         model_id = engine.model_id
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already loaded, its process running
         if engine.running:
             yield f"data: {json.dumps({'status': 'ready', 'model': model_id, 'cached': True})}\n\n"
             return
 
-        # Case 2: load in progress -- join existing subscribers
-        if model_id in self._loading_tasks:
-            self._loading_subscribers[model_id].append(queue)
+        # Case 3: first request -- start the load. A request arriving while it runs (case 2) only subscribes below
+        if model_id not in self._loading_tasks:
+            self._loading_subscribers[model_id] = []
+            loop = asyncio.get_running_loop()
+
+            def enqueue(payload: dict):
+                msg = f"data: {json.dumps(payload)}\n\n"
+
+                def broadcast():
+                    for q in self._loading_subscribers.get(model_id, []):
+                        q.put_nowait(msg)
+
+                loop.call_soon_threadsafe(broadcast)
+
+            async def run_load():
+                try:
+                    await asyncio.to_thread(engine.start, on_progress=enqueue)
+                except Exception as e:
+                    logger.error(f"Failed to load {model_id}: {e}", exc_info=True)
+                    enqueue({"status": "error", "model": model_id, "message": str(e)})
+                finally:
+
+                    def _send_sentinel():
+                        for q in self._loading_subscribers.pop(model_id, []):
+                            q.put_nowait(None)
+                        self._loading_tasks.pop(model_id, None)
+
+                    loop.call_soon_threadsafe(_send_sentinel)
+
+            self._loading_tasks[model_id] = asyncio.create_task(run_load())
+
+        # Stream the load's events to this request, and unsubscribe when it ends or the client disconnects
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._loading_subscribers[model_id].append(queue)
+        try:
             while True:
                 item = await queue.get()
                 if item is None:
                     break
                 yield item
-            return
-
-        # Case 3: first request -- start the load
-        self._loading_subscribers[model_id] = [queue]
-        loop = asyncio.get_running_loop()
-
-        def enqueue(payload: dict):
-            msg = f"data: {json.dumps(payload)}\n\n"
-
-            def broadcast():
-                for q in self._loading_subscribers.get(model_id, []):
-                    q.put_nowait(msg)
-
-            loop.call_soon_threadsafe(broadcast)
-
-        async def run_load():
-            try:
-                await asyncio.to_thread(engine.start, on_progress=enqueue)
-            except Exception as e:
-                logger.error(f"Failed to load {model_id}: {e}", exc_info=True)
-                enqueue({"status": "error", "model": model_id, "message": str(e)})
-            finally:
-
-                def _send_sentinel():
-                    for q in self._loading_subscribers.pop(model_id, []):
-                        q.put_nowait(None)
-                    self._loading_tasks.pop(model_id, None)
-
-                loop.call_soon_threadsafe(_send_sentinel)
-
-        self._loading_tasks[model_id] = asyncio.create_task(run_load())
-
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            yield item
+        finally:
+            subscribers = self._loading_subscribers.get(model_id, [])
+            if queue in subscribers:  # already popped if the load finished
+                subscribers.remove(queue)
 
     def shutdown(self) -> None:
         """Stops the models' processes, freeing their memory."""
