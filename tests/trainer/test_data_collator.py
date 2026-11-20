@@ -596,8 +596,8 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
 # =============================================================================
 
 
-@require_torch
 class TestDataCollatorForMultipleChoice(DataCollatorTestMixin, unittest.TestCase):
+    @require_torch
     def test_reusing_examples_preserves_labels(self):
         collator = DataCollatorForMultipleChoice(BertTokenizer(self.vocab_file))
         for label_name in ("label", "labels"):
@@ -614,6 +614,31 @@ class TestDataCollatorForMultipleChoice(DataCollatorTestMixin, unittest.TestCase
                     self.assertEqual(batch["input_ids"].shape, (2, 2, 3))
 
                 self.assertEqual(features, original)
+
+    def test_numpy_output(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForMultipleChoice(tokenizer, pad_to_multiple_of=4, return_tensors="np")
+
+        for label_name in ("label", "labels"):
+            with self.subTest(label_name=label_name):
+                features = [
+                    {"input_ids": [[1, 2], [1, 4, 2]], label_name: 1},
+                    {"input_ids": [[1, 4, 2], [1, 2]], label_name: 0},
+                ]
+                original = copy.deepcopy(features)
+                batch = collator(features)
+
+                self.assertIsInstance(batch["input_ids"], np.ndarray)
+                self.assertEqual(batch["input_ids"].shape, (2, 2, 4))
+                self.assertEqual(batch["input_ids"][0, 0].tolist(), [1, 2] + [tokenizer.pad_token_id] * 2)
+                self.assertEqual(batch["attention_mask"][0, 0].tolist(), [1, 1, 0, 0])
+                self.assertEqual(batch["labels"].dtype, np.int64)
+                self.assertEqual(batch["labels"].tolist(), [1, 0])
+                self.assertEqual(features, original)
+
+                override_batch = DataCollatorForMultipleChoice(tokenizer)(features, return_tensors="np")
+                self.assertEqual(override_batch["input_ids"].shape, (2, 2, 3))
+                self.assertEqual(override_batch["labels"].tolist(), [1, 0])
 
 
 # =============================================================================
