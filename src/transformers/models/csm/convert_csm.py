@@ -155,7 +155,7 @@ def write_model(
         model_name,
     )
     print(f"Fetching all parameters from the checkpoint at {model_path}...")
-    loaded = torch.load(model_path, map_location="cpu")
+    loaded = torch.load(model_path, map_location="cpu", weights_only=True)
 
     print("Converting model...")
     state_dict = {}

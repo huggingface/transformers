@@ -156,7 +156,7 @@ def load_original_state_dict(repo_id, model_name):
     directory_path = hf_hub_download(repo_id=repo_id, filename=f"{model_name}.pth")
 
     original_state_dict = {}
-    model = torch.load(directory_path, map_location="cpu")["model"]
+    model = torch.load(directory_path, map_location="cpu", weights_only=True)["model"]
     for key in model:
         original_state_dict[key] = model[key]
 

@@ -250,7 +250,7 @@ def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
     """Load the original SAM3 checkpoint."""
     print(f"Loading original checkpoint from {checkpoint_path}")
 
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # Handle different checkpoint formats
     if "model" in checkpoint:

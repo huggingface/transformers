@@ -259,7 +259,7 @@ def convert_and_test_dinov3_checkpoint(args):
 
     model = DINOv3ViTModel(config).eval()
     state_dict_path = hf_hub_download(repo_id=HUB_MODELS[model_name], filename=HUB_CHECKPOINTS[model_name])
-    original_state_dict = torch.load(state_dict_path, mmap=True)
+    original_state_dict = torch.load(state_dict_path, mmap=True, weights_only=True)
 
     original_state_dict = split_qkv(original_state_dict)
     original_keys = list(original_state_dict.keys())
