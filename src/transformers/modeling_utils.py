@@ -3382,8 +3382,9 @@ class PreTrainedModel(
                 gathering weights to CPU first. Every rank must call this method.
                 When `False`, the weights are gathered file by file and every rank writes some of the files.
                 It is only intended to save and resume training, set it to `False` if you want full `save_pretrained`
-                features. With `push_to_hub=True`, the model is also saved as with `distributed_checkpoint=False` in a
-                `consolidated/` subdirectory, in files of at most `max_shard_size`, and rank 0 uploads that directory.
+                features. With `push_to_hub=True`, the checkpoint is also consolidated in a `consolidated/` subdirectory,
+                in files of at most `max_shard_size` in the original format written by all ranks, and rank 0 uploads
+                that directory.
                 Requires `torch>=2.7`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
