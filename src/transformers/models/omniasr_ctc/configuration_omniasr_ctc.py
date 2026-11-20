@@ -57,14 +57,12 @@ class OmniASRCTCConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 10288
-    blank_token_id: int = 0
     ctc_loss_reduction: str = "mean"
     ctc_zero_infinity: bool = False
     initializer_range: float = 0.02
     audio_config: dict | PreTrainedConfig | None = None
-    bos_token_id: int | None = 0
+    blank_token_id: int = 0
     pad_token_id: int | None = 1
-    eos_token_id: int | None = 2
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
