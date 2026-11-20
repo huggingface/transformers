@@ -189,10 +189,6 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_batch_fa2(self):
         EXPECTED_TEXTS = Expectations({
-            ("cuda", None): [
-                "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time. It is a theory that explains how space and time are related to each",
-                "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",
-            ],
             ("xpu", 5): [
                 "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time.\nThe theory of relativity is a theory that explains the relationship between space",
                 "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",
