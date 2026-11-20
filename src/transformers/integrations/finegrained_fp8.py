@@ -322,7 +322,38 @@ class FP8LinearFunction(torch.autograd.Function):
         return grad_output @ weight, None, None, None, None, None, None
 
 
+# WP glue (bench only), off by default: the grouped kernel's tile layout (7 tiny kernels) is computed once per
+# `tokens_per_expert` tensor instead of once per call (the up and down projections of a layer share it), and the
+# expert outputs are scattered back to token order instead of building the inverse permutation and gathering
+_GLUE_EXPERTS = os.environ.get("GLUE_EXPERTS", "0") == "1"
+_GLUE_TILE_LAYOUT = {}
+
+
+def _glue_memoize_tile_layout(grouped_matmul):
+    import sys
+
+    kernel_module = sys.modules[grouped_matmul.__module__]
+    original = kernel_module._grouped_tile_layout
+    if getattr(original, "_glue_memoized", False):
+        return
+
+    def memoized(tokens_per_expert, block_size_m, S, num_experts):
+        if not _GLUE_EXPERTS:
+            return original(tokens_per_expert, block_size_m, S, num_experts)
+        key = (id(tokens_per_expert), block_size_m, S, num_experts)
+        if _GLUE_TILE_LAYOUT.get("key") != key:
+            _GLUE_TILE_LAYOUT["key"] = key
+            _GLUE_TILE_LAYOUT["ref"] = tokens_per_expert  # keeps the id from being reused
+            _GLUE_TILE_LAYOUT["value"] = original(tokens_per_expert, block_size_m, S, num_experts)
+        return _GLUE_TILE_LAYOUT["value"]
+
+    memoized._glue_memoized = True
+    kernel_module._grouped_tile_layout = memoized
+
+
 def fp8_grouped_matmul(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+    if _GLUE_EXPERTS:
+        _glue_memoize_tile_layout(load_finegrained_fp8_kernel().grouped_matmul)
     return load_finegrained_fp8_kernel().grouped_matmul(
         input,
         weight,
@@ -699,9 +730,15 @@ def fp8_grouped_mm_experts_forward(
         weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
-    inv_perm = torch.empty_like(perm)
-    inv_perm[perm] = torch.arange(perm.size(0), device=device)
-    weighted_out = weighted_out[inv_perm]
+    if _GLUE_EXPERTS:
+        # `perm` is a permutation, so scattering row i to row perm[i] is the same reordering, in one kernel
+        restored = torch.empty_like(weighted_out)
+        restored[perm] = weighted_out
+        weighted_out = restored
+    else:
+        inv_perm = torch.empty_like(perm)
+        inv_perm[perm] = torch.arange(perm.size(0), device=device)
+        weighted_out = weighted_out[inv_perm]
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
