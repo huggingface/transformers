@@ -537,6 +537,16 @@ print("Response:", output_text[0][len(prompt) :])
 assert(correct_output_text == output_text)
 ```
 
+#### 4. MoE expert parameters
+
+With a torchao backend that supports automatic expert-parameter selection, a regular `TorchAoConfig`
+also quantizes supported MoE expert weights, such as `gate_up_proj` and `down_proj`, without manual targeting.
+Support depends on the torchao version, quantization configuration, and device; backends without this
+selection support retain the existing Linear and optional embedding selection.
+
+Use `FqnToConfig` for per-layer overrides, as in the examples above, or `modules_to_not_convert` to exclude
+modules from quantization.
+
 ## Serialization
 
 Saving the quantized model with `save_pretrained` (in [safetensors](https://huggingface.co/docs/safetensors/en/index) format) is only supported for torchao >= v0.15. For any version below, it is only possible to manually save as unsafe `.bin` checkpoints with [torch.save](https://docs.pytorch.org/docs/stable/generated/torch.save.html).
