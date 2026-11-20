@@ -37,6 +37,13 @@ from .utils import (
 import os as _glue_os
 
 _GLUE_SAMPLE = _glue_os.environ.get("GLUE_SAMPLE", "0") == "1"
+# [scratch, bench only] With synchronous IOs the inputs of a batch are written with device copies queued on the default
+# stream (`storage[i, :n] = torch.tensor(..., device=...)`), and the forward runs on `compute_stream` without waiting
+# for them: a forward that reads the read index in its first kernels sometimes sees the previous batch's. On when
+# FUSE_COMPILE is (its per-layer path maps the read index to cache rows once, at the start of the step).
+_FUSE_WAIT_DEFAULT_STREAM = _glue_os.environ.get(
+    "CB_WAIT_DEFAULT_STREAM", "0" if _glue_os.environ.get("FUSE_COMPILE", "0") == "0" else "1"
+) == "1"
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -143,6 +150,9 @@ class ModelRunner:
 
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
+
+        if _FUSE_WAIT_DEFAULT_STREAM and compute_stream is not None and compute_stream.device.type == "cuda":
+            compute_stream.wait_stream(torch.cuda.default_stream(compute_stream.device))
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
