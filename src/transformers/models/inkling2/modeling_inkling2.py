@@ -180,6 +180,7 @@ class Inkling2LogScale(nn.Module):
 class Inkling2LogScaledL2Clip(nn.Module):
     """`Inkling2ScaledL2Clip` followed by `Inkling2LogScale`."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(self, config: Inkling2TextConfig, num_heads: int, head_dim: int, threshold: float):
         super().__init__()
         self.scale = nn.Parameter(torch.ones(num_heads, head_dim))
@@ -200,6 +201,7 @@ class Inkling2RelativePositionBias(nn.Module):
     `Inkling2LogScale`.
     """
 
+    # trf-ignore: TRF029 (num_heads depends on the attention layer type)
     def __init__(self, config: Inkling2TextConfig, num_heads: int, rel_extent: int, log_scaling: bool):
         super().__init__()
         self.num_heads = num_heads
@@ -413,6 +415,7 @@ class Inkling2DynamicShortConvolution(nn.Module):
 class Inkling2QueryProjection(nn.Module):
     """Returns query states of the attention layers."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(self, config: Inkling2TextConfig, num_heads: int, head_dim: int, log_scaling: bool):
         super().__init__()
         self.head_dim = head_dim
@@ -432,6 +435,7 @@ class Inkling2QueryProjection(nn.Module):
 class Inkling2KeyValueProjection(nn.Module):
     """Returns key or value states of the attention layers."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(
         self,
         config: Inkling2TextConfig,
@@ -484,6 +488,7 @@ class Inkling2KeyValueProjection(nn.Module):
 class Inkling2GatedOutputProjection(nn.Module):
     """Output projection of the attention layers, applied after gating the attention output with a sigmoid of the layer input."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(self, config: Inkling2TextConfig, num_heads: int, head_dim: int):
         super().__init__()
         self.gate_proj = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)

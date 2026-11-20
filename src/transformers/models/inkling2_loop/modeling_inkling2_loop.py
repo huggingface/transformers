@@ -223,6 +223,7 @@ class Inkling2LoopLogScale(nn.Module):
 class Inkling2LoopLogScaledL2Clip(nn.Module):
     """`Inkling2LoopScaledL2Clip` followed by `Inkling2LoopLogScale`."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(self, config: Inkling2LoopTextConfig, num_heads: int, head_dim: int, threshold: float):
         super().__init__()
         self.scale = nn.Parameter(torch.ones(num_heads, head_dim))
@@ -243,6 +244,7 @@ class Inkling2LoopRelativePositionBias(nn.Module):
     `Inkling2LoopLogScale`.
     """
 
+    # trf-ignore: TRF029 (num_heads depends on the attention layer type)
     def __init__(self, config: Inkling2LoopTextConfig, num_heads: int, rel_extent: int, log_scaling: bool):
         super().__init__()
         self.num_heads = num_heads
@@ -456,6 +458,7 @@ class Inkling2LoopDynamicShortConvolution(nn.Module):
 class Inkling2LoopQueryProjection(nn.Module):
     """Returns query states of the attention layers."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(self, config: Inkling2LoopTextConfig, num_heads: int, head_dim: int, log_scaling: bool):
         super().__init__()
         self.head_dim = head_dim
@@ -475,6 +478,7 @@ class Inkling2LoopQueryProjection(nn.Module):
 class Inkling2LoopKeyValueProjection(nn.Module):
     """Returns key or value states of the attention layers."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(
         self,
         config: Inkling2LoopTextConfig,
@@ -527,6 +531,7 @@ class Inkling2LoopKeyValueProjection(nn.Module):
 class Inkling2LoopGatedOutputProjection(nn.Module):
     """Output projection of the attention layers, applied after gating the attention output with a sigmoid of the layer input."""
 
+    # trf-ignore: TRF029 (num_heads and head_dim depend on the attention layer type)
     def __init__(self, config: Inkling2LoopTextConfig, num_heads: int, head_dim: int):
         super().__init__()
         self.gate_proj = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)
