@@ -146,6 +146,9 @@ class RequestState:
     _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # Initial tokens left to process
     is_cpu_offloaded: bool = False  # True when the request's KV cache is in the CPU swap pool
+    # gap2-mtp prototype: `tokens_to_process` ends with a drafted token ("spec"); the last draft ("shadow")
+    mtp_has_draft: bool = False
+    mtp_draft: int | None = None
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
@@ -322,7 +325,7 @@ class FutureRequestState:
     """Tracks the current state of a request and the relevant information to update it."""
 
     # This makes instantiating this class faster
-    __slots__ = ("state", "has_new_token", "complete_blocks", "query_length")
+    __slots__ = ("state", "has_new_token", "complete_blocks", "query_length", "mtp_has_draft")
 
     def __init__(
         self, state: RequestState, has_new_token: bool, complete_blocks: dict[str, int], query_length: int
@@ -331,6 +334,7 @@ class FutureRequestState:
         self.has_new_token = has_new_token
         self.complete_blocks = complete_blocks
         self.query_length = query_length
+        self.mtp_has_draft = False  # gap2-mtp prototype: the request's last query token is a draft to verify
 
 
 class FutureBatch:

@@ -37,6 +37,7 @@ from .utils import (
 import os as _glue_os
 
 _GLUE_SAMPLE = _glue_os.environ.get("GLUE_SAMPLE", "0") == "1"
+_CB_MTP = _glue_os.environ.get("CB_MTP", "")  # gap2-mtp prototype, see input_outputs.py
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -138,11 +139,13 @@ class ModelRunner:
         compute_stream = self.inputs_and_outputs.compute_stream
 
         # If supported, the model slices hidden states at logits_indices before lm_head, instead of us slicing logits
-        if self.supports_logits_to_keep(model):
+        if self.supports_logits_to_keep(model) and not _CB_MTP:
             batch_data["logits_to_keep"] = batch_data["logits_indices"]
 
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
+        if _CB_MTP:
+            forward_fn = self._forward_verify_sample_and_draft
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
@@ -221,6 +224,83 @@ class ModelRunner:
 
         # Sample next tokens
         self._sample(scores, output_ids)
+
+    def _forward_verify_sample_and_draft(
+        self,
+        model: nn.Module,
+        batch_data: dict,
+        carry_over_ids: torch.Tensor,
+        prev_output_ids: torch.Tensor,
+        output_ids: torch.Tensor,
+    ) -> None:
+        """gap2-mtp prototype: the forward pass, the verification of the drafted tokens fed as second query token,
+        the sampling, and the next draft from the model's MTP module. Static shapes: every logits row computes a
+        first token (row `a`: the token verified or sampled after the request's last trusted token) and a bonus token
+        (row `b`: the token after the draft, only meaningful when the draft is accepted).
+
+        Sampling stays exact: the draft is a point mass, so it is accepted with probability p(draft) under the target
+        distribution and a rejected draft is replaced by a sample from the target distribution without that token.
+        The logprobs written are the target model's logprobs of the emitted tokens."""
+        if self.logit_processor.do_processing:
+            raise NotImplementedError("CB_MTP prototype: logits processors are not supported")
+        mtp = batch_data["mtp"]
+        model_kwargs = {k: v for k, v in batch_data.items() if k != "mtp"}
+        hidden_states = model.model(**model_kwargs).last_hidden_state  # [1, num_q_tokens, hidden], after the final norm
+
+        row_a = batch_data["logits_indices"].long()  # [num_rows]
+        has_draft = mtp["has_draft"].bool()
+        row_b = row_a + mtp["has_draft"]
+        num_rows = row_a.shape[0]
+        logits = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0].float()  # [2 * num_rows, vocab]
+        logits_a, logits_b = logits[:num_rows], logits[num_rows:]
+        draft = batch_data["input_ids"][0, row_b].long()  # only a draft where has_draft
+
+        logprobs_first = logprobs_bonus = None
+        if self.do_sample:
+            logprobs_a = nn.functional.log_softmax(logits_a, dim=-1)
+            draft_logprob = logprobs_a.gather(1, draft[:, None]).squeeze(1)
+            uniform = torch.empty_like(draft_logprob).uniform_()
+            accepted = has_draft & (uniform < draft_logprob.exp())
+            # A rejected draft is resampled from the target distribution without the draft token (the residual
+            # distribution of a point-mass proposal); rows without a draft sample from the full distribution
+            draft_score = torch.where(has_draft, float("-inf"), logits_a.gather(1, draft[:, None]).squeeze(1))
+            noise = torch.empty_like(logits).exponential_().log_()
+            resampled = torch.argmax(logits_a.scatter(1, draft[:, None], draft_score[:, None]) - noise[:num_rows], dim=-1)
+            first_tokens = torch.where(accepted, draft, resampled)
+            bonus_tokens = torch.argmax(logits_b - noise[num_rows:], dim=-1)
+            if self.return_logprobs:
+                logprobs_first = logprobs_a.gather(1, first_tokens[:, None]).squeeze(1)
+                logprobs_bonus = nn.functional.log_softmax(logits_b, dim=-1).gather(1, bonus_tokens[:, None]).squeeze(1)
+        elif self.return_logprobs:
+            # same operations as `_sample`, so the tokens and logprobs compare bit for bit with the non-speculative path
+            probs = nn.functional.softmax(logits, dim=-1)
+            tokens = torch.argmax(probs, dim=-1, keepdim=True)
+            logprobs = probs.gather(dim=1, index=tokens).squeeze(-1).log()
+            first_tokens, bonus_tokens = tokens[:num_rows, 0], tokens[num_rows:, 0]
+            logprobs_first, logprobs_bonus = logprobs[:num_rows], logprobs[num_rows:]
+            accepted = has_draft & (first_tokens == draft)
+        else:
+            tokens = torch.argmax(logits, dim=-1)
+            first_tokens, bonus_tokens = tokens[:num_rows], tokens[num_rows:]
+            accepted = has_draft & (first_tokens == draft)
+
+        # Draft the next token of every request: the MTP module runs over every query token of the step, so its own
+        # cache holds the same positions as the main layers'. Position p pairs with the token at p + 1
+        sampled = torch.cat([first_tokens, bonus_tokens])
+        src = mtp["src"].long()
+        mtp_input_ids = torch.where(src < 0, mtp["shift_ids"].long(), sampled[src.clamp(min=0)])
+        mtp_kwargs = {k: v for k, v in model_kwargs.items() if k != "input_ids"}
+        mtp_hidden_states = model.mtp_forward(hidden_states, mtp_input_ids[None], **mtp_kwargs)
+        draft_rows = torch.where(accepted, row_b, row_a)
+        next_draft = torch.argmax(model.lm_head(mtp_hidden_states[:, draft_rows])[0], dim=-1)
+
+        output_ids[0, :num_rows].copy_(first_tokens)
+        output_ids[2, :num_rows].copy_(bonus_tokens)
+        output_ids[4, :num_rows].copy_(accepted)
+        output_ids[5, :num_rows].copy_(next_draft)
+        if logprobs_first is not None:
+            output_ids[1, :num_rows].copy_(logprobs_first.view(dtype=torch.int32))
+            output_ids[3, :num_rows].copy_(logprobs_bonus.view(dtype=torch.int32))
 
     def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
         """Private method to sample next tokens from the scores."""

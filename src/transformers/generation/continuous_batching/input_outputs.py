@@ -32,6 +32,7 @@ from .utils import (
     build_attention_mask,
     create_device_stream,
     logger,
+    pad_to_interval,
     pad_to_pow2,
     stream_context,
 )
@@ -76,6 +77,16 @@ class PagedAttentionArgs(TypedDict):
     logits_processor_args: torch.Tensor
     use_cache: bool
     is_causal: bool
+
+
+# gap2-mtp prototype (bench only): speculative decoding with the model's MTP module. "shadow" drafts one token per
+# step without using it (acceptance statistics only), "spec" feeds the draft back as a second query token and
+# verifies it. Off by default.
+import os as _mtp_os
+
+_CB_MTP = _mtp_os.environ.get("CB_MTP", "")
+if _CB_MTP not in ("", "shadow", "spec"):
+    raise ValueError(f"CB_MTP must be 'shadow' or 'spec', got {_CB_MTP!r}")
 
 
 class ContinuousBatchingIOs:
@@ -178,6 +189,17 @@ class ContinuousBatchingIOs:
 
         # Output tensor and scalars
         num_output_rows = 2 if self.return_logprobs else 1
+        self.mtp_mode = _CB_MTP
+        if self.mtp_mode:
+            # rows: first token, its logprob, bonus token, its logprob, draft accepted, next draft
+            num_output_rows = 6
+            # per query token: the token that follows it when it is already known (prompt tokens), and where to take
+            # it from among the tokens sampled in the step otherwise (-1: use `mtp_shift_ids`)
+            mtp_kwargs = {"dtype": torch.int32, "device": self.device, "pin_memory": pin_memory}
+            self.mtp_shift_ids = torch.zeros(max_batch_tokens, **mtp_kwargs)
+            self.mtp_src = torch.full((max_batch_tokens,), -1, **mtp_kwargs)
+            # per logits row: 1 when the request's last query token is a draft to verify
+            self.mtp_has_draft = torch.zeros(max_requests_per_batch, **mtp_kwargs)
         # output_ids are sized to the input_ids to perform carry over, + 1 to have a static 0 at the end for carry over
         self.output_ids = torch.empty(
             (num_output_rows, max_batch_tokens + 1), dtype=torch.int32, device=self.device, pin_memory=pin_memory
@@ -274,6 +296,10 @@ class ContinuousBatchingIOs:
         # Reset the logits indices and output ids
         self.logits_indices[:b_size].zero_()
         self.output_ids[:, :b_size].zero_()
+        if self.mtp_mode:
+            self.mtp_shift_ids[:q_len].zero_()
+            self.mtp_src[:q_len].fill_(-1)
+            self.mtp_has_draft[:b_size].zero_()
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -382,6 +408,8 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
+        mtp_shift_ids, mtp_src, mtp_has_draft = [], [], []
+        mtp_num_rows = self._get_num_sequences(use_padding=use_padding)  # logits rows of the step, padding included
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -414,9 +442,28 @@ class ContinuousBatchingIOs:
                     state.request_id, past_length, query_length, read_index, write_index
                 )
 
+            if self.mtp_mode:
+                # The MTP module pairs the hidden state of position p with the token at p + 1: the next query token
+                # of the request, the next prompt token of a split prefill, or a token sampled in this step
+                next_prompt_token = state.remaining_prefill_tokens[0] if state.remaining_prefill_tokens else 0
+                mtp_shift_ids.extend(state.tokens_to_process[1:] + [next_prompt_token])
+                src = [-1] * query_length
+                if future_state.has_new_token:
+                    row = len(logits_indices)
+                    has_draft = state.mtp_has_draft and query_length == 2
+                    if has_draft:
+                        src[-2], src[-1] = row, mtp_num_rows + row  # first sampled token, then the bonus token
+                    else:
+                        src[-1] = row
+                    mtp_has_draft.append(int(has_draft))
+                    future_state.mtp_has_draft = has_draft
+                mtp_src.extend(src)
+
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if future_state.has_new_token:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
+                if self.mtp_mode and future_state.mtp_has_draft:
+                    logits_indices[-1] -= 1  # the row that verifies the draft; the draft's own row is the next one
                 state.tokens_to_process = [TMP_TOKEN_ID]
                 self.req_id_to_new_token_position[state.request_id] = logits_indices[-1]
 
@@ -462,6 +509,10 @@ class ContinuousBatchingIOs:
         self.position_ids[: len(position_ids)] = to_tensor(position_ids)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
+        if self.mtp_mode:
+            self.mtp_shift_ids[: len(mtp_shift_ids)] = to_tensor(mtp_shift_ids)
+            self.mtp_src[: len(mtp_src)] = to_tensor(mtp_src)
+            self.mtp_has_draft[: len(mtp_has_draft)] = to_tensor(mtp_has_draft)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
@@ -481,9 +532,26 @@ class ContinuousBatchingIOs:
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
 
+    def prepare_mtp_batch_update(self) -> tuple[list[int], list[float], list[int], list[float], list[int], list[int]]:
+        """gap2-mtp prototype: per logits row, the first token and its logprob, the bonus token and its logprob,
+        whether the draft was accepted, and the draft for the next step."""
+        out = self.output_ids[:, : self.num_request_in_batch].cpu()
+        return (
+            out[0].tolist(),
+            out[1].contiguous().view(torch.float32).tolist(),
+            out[2].tolist(),
+            out[3].contiguous().view(torch.float32).tolist(),
+            out[4].tolist(),
+            out[5].tolist(),
+        )
+
     def _get_num_sequences(self, use_padding: bool) -> int:
         """Get the number of sequences for the current batch, accounting for padding if there is any."""
         if use_padding:
+            if self.mtp_mode:
+                # gap2-mtp prototype: a decoding request takes two query tokens, so the logits rows follow the number
+                # of requests (padded), not the number of query tokens. It joins the graph key
+                return pad_to_interval(self.num_request_in_batch, 64, self.max_requests_per_batch)
             return min(self.num_q_tokens, self.max_requests_per_batch)
         return self.num_request_in_batch
 
@@ -512,6 +580,13 @@ class ContinuousBatchingIOs:
             use_cache=False,
             is_causal=self.attention_mask is None,  # False for SDPA and eager, True for flash
         )
+
+        if self.mtp_mode:
+            kwargs["mtp"] = {
+                "shift_ids": self.mtp_shift_ids[:q_size],
+                "src": self.mtp_src[:q_size],
+                "has_draft": self.mtp_has_draft[:num_sequences],
+            }
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding
@@ -564,6 +639,8 @@ class ContinuousBatchingIOs:
         if self.use_block_table:
             return (self.num_q_tokens,)
         # Keys for varlen path
+        if self.mtp_mode:
+            return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values(), self._get_num_sequences(True))
         return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values())
 
     def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
