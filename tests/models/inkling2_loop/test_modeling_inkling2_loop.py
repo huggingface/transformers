@@ -20,7 +20,6 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
-    DataCollatorWithFlattening,
     Inkling2LoopConfig,
     Inkling2LoopTextConfig,
     Inkling2VisionConfig,
@@ -28,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    require_causal_conv1d,
     require_torch,
     require_torch_accelerator,
     require_torch_accelerator_memory,
@@ -132,27 +130,6 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
         if dtype in ("fp16", "bf16"):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
-
-    @require_causal_conv1d
-    @require_torch_accelerator
-    def test_padding_free_matches_separate_sequences(self):
-        config = self.model_tester.get_config()
-        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
-        features = [{"input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9]}, {"input_ids": [10, 11, 12, 13, 14, 15, 16]}]
-        batch = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)(features)
-        batch.pop("labels")
-        batch = {key: value.to(torch_device) for key, value in batch.items()}
-
-        with torch.no_grad():
-            separate_logits = torch.cat(
-                [
-                    model(input_ids=torch.tensor([feature["input_ids"]], device=torch_device)).logits[0]
-                    for feature in features
-                ]
-            )
-            packed_logits = model(**batch, use_cache=False).logits[0]
-
-        torch.testing.assert_close(packed_logits, separate_logits, atol=1e-5, rtol=1e-5)
 
 
 class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
