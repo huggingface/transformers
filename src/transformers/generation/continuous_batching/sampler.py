@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 import torch
 from torch import nn
 
+from ..logits_process import TemperatureLogitsWarper, TopKLogitsWarper, TopPLogitsWarper
 from .cb_logits_processors import (
     ContinuousBatchingLogitsProcessor,
     ContinuousBatchingLogitsProcessorList,
@@ -43,16 +44,26 @@ GREEDY_SAMPLING = SamplingMode("greedy")
 # The window of the largest logits the candidates are taken from, when every top-k of a batch fits in it
 MIN_WINDOW = 32
 MAX_WINDOW = 1024
+# The processors applied to a window, with a setting per request (continuous batching's) or for the whole batch
+FUSED_PROCESSORS = {
+    ContinuousBatchingTemperatureLogitsWarper: "temperature",
+    TemperatureLogitsWarper: "temperature",
+    ContinuousBatchingTopKLogitsWarper: "top_k",
+    TopKLogitsWarper: "top_k",
+    ContinuousBatchingTopPLogitsWarper: "top_p",
+    TopPLogitsWarper: "top_p",
+}
+FUSED_ORDER = ("temperature", "top_k", "top_p")
 
 
 class ContinuousBatchingSampler:
     """
     Picks the next token of each request of a batch from its logits, with the request's own sampling settings.
 
-    When the per-request temperature, top-k and top-p are the last logits processors (and no logprobs are returned),
-    it never sorts the vocabulary: a greedy request takes the argmax, and the others are sampled among the largest
-    logits of their row, from the same distribution as the processors followed by a softmax over the vocabulary.
-    Otherwise, the processors are applied to the whole vocabulary.
+    When the temperature, top-k and top-p (per request or for the whole batch) are the last logits processors, and no
+    logprobs are returned, it never sorts the vocabulary: a greedy request takes the argmax, and the others are
+    sampled among the largest logits of their row, from the same distribution as the processors followed by a softmax
+    over the vocabulary. Otherwise, the processors are applied to the whole vocabulary.
 
     Args:
         logit_processor (`ContinuousBatchingLogitsProcessorList`): The logits processors of the batches.
@@ -67,32 +78,39 @@ class ContinuousBatchingSampler:
         self.do_sample = do_sample
         self.return_logprobs = return_logprobs
         self.fused_args = self._find_fused_args() if do_sample and not return_logprobs else None
+        # Applied to the whole vocabulary before the others are applied to a window
+        self.leading_processors = [
+            processor for processor in logit_processor.logits_processor if type(processor) not in FUSED_PROCESSORS
+        ]
 
-    def _find_fused_args(self) -> dict[str, tuple[int, Any]] | None:
-        """The argument row and processor of the per-request temperature, top-k and top-p, when they can be applied to
-        a window of the logits: a per-request top-k, the per-request processors in the order temperature, top-k, top-p
-        (temperature and top-p are optional), and no processor after them."""
-        order = (
-            ContinuousBatchingTemperatureLogitsWarper,
-            ContinuousBatchingTopKLogitsWarper,
-            ContinuousBatchingTopPLogitsWarper,
-        )
-        names = ("temperature", "top_k", "top_p")
+    def _find_fused_args(self) -> dict[str, tuple[int | None, Any]] | None:
+        """The argument row (None for a setting of the whole batch) and processor of the temperature, top-k and top-p,
+        when they can be applied to a window of the logits: a top-k, the processors in the order temperature, top-k,
+        top-p (temperature and top-p are optional), no processor after them, and no per-request one before them."""
         found = {}
-        last_rank = -1
         arg_id = 0
         for processor in self.logit_processor.logits_processor:
-            if not isinstance(processor, ContinuousBatchingLogitsProcessor):
-                if found:  # a processor after them: they don't come last
+            name = FUSED_PROCESSORS.get(type(processor))
+            per_request = isinstance(processor, ContinuousBatchingLogitsProcessor)
+            if name is None:
+                if found or per_request:
                     return None
                 continue
-            rank = next((i for i, cls in enumerate(order) if type(processor) is cls), None)
-            if rank is None or rank <= last_rank:
+            if found and FUSED_ORDER.index(name) <= FUSED_ORDER.index(list(found)[-1]):
                 return None
-            found[names[rank]] = (arg_id, processor)
-            last_rank = rank
-            arg_id += 1
+            found[name] = (arg_id if per_request else None, processor)
+            if per_request:
+                arg_id += 1
         return found if "top_k" in found else None
+
+    def _settings(
+        self, name: str, logits_processor_args: torch.Tensor, logits: torch.Tensor, dtype: torch.dtype
+    ) -> torch.Tensor:
+        """The `name` setting of each row of `logits`, of shape [num_logits, 1]: its request's, or the batch's."""
+        arg_id, processor = self.fused_args[name]
+        if arg_id is None:
+            return torch.full((logits.size(0), 1), getattr(processor, name), dtype=dtype, device=logits.device)
+        return logits_processor_args[arg_id, : logits.size(0)].view(dtype=dtype).unsqueeze(-1)
 
     def prepare_args(self, requests_in_batch: list[FutureRequestState], arg_storage: torch.Tensor) -> SamplingMode:
         """Writes the per-request arguments of the logits processors in `arg_storage`, and returns how the batch's next
@@ -100,8 +118,8 @@ class ContinuousBatchingSampler:
         host_args = self.logit_processor.prepare_tensor_args(requests_in_batch, arg_storage)
         if self.fused_args is None:
             return FULL_SAMPLING
-        top_k_id, _ = self.fused_args["top_k"]
-        top_ks = host_args[top_k_id].tolist()
+        top_k_id, top_k_processor = self.fused_args["top_k"]
+        top_ks = [top_k_processor.top_k] if top_k_id is None else host_args[top_k_id].tolist()
         if all(top_k == 1 for top_k in top_ks):
             return GREEDY_SAMPLING
         # Twice the largest top-k, so that the logits equal to the k-th one are kept, as the processors do
@@ -121,16 +139,14 @@ class ContinuousBatchingSampler:
         if mode.kind == "full":
             self._sample_vocabulary(input_ids, logits, logits_processor_args, output_ids)
             return
-        for processor in self.logit_processor.logits_processor:
-            if not isinstance(processor, ContinuousBatchingLogitsProcessor):
-                logits = processor(input_ids, logits)
+        for processor in self.leading_processors:
+            logits = processor(input_ids, logits)
         next_tokens = logits.argmax(dim=-1)
         if mode.kind == "window":
             values, indices = self._candidates(logits, logits_processor_args, mode.window)
             choice = torch.multinomial(values.softmax(dim=-1), num_samples=1)
             sampled_tokens = indices.gather(dim=-1, index=choice).squeeze(-1)
-            top_k_id, _ = self.fused_args["top_k"]
-            is_greedy = logits_processor_args[top_k_id, : logits.size(0)] == 1
+            is_greedy = self._settings("top_k", logits_processor_args, logits, torch.int32).squeeze(-1) == 1
             next_tokens = torch.where(is_greedy, next_tokens, sampled_tokens)
         output_ids[0, : next_tokens.size(0)].copy_(next_tokens)
 
@@ -140,24 +156,21 @@ class ContinuousBatchingSampler:
         """Applies the temperature, top-k and top-p to the `window` largest logits of each row. Returns the processed
         logits, those filtered out set to the filter value, and their token ids, both of shape [num_logits, window]."""
         window = min(window, logits.size(-1))
-        num_rows = logits.size(0)
         values, indices = torch.topk(logits, window, dim=-1)  # descending
         if "temperature" in self.fused_args:
-            temperature_id, _ = self.fused_args["temperature"]
-            temperature = logits_processor_args[temperature_id, :num_rows].view(dtype=torch.float32)
-            values = values / temperature.unsqueeze(-1)
+            values = values / self._settings("temperature", logits_processor_args, logits, torch.float32)
 
-        top_k_id, top_k_processor = self.fused_args["top_k"]
-        top_k = logits_processor_args[top_k_id, :num_rows]
-        kth_position = (top_k.clamp(min=1, max=window) - 1).unsqueeze(-1).to(dtype=torch.int64)
+        _, top_k_processor = self.fused_args["top_k"]
+        top_k = self._settings("top_k", logits_processor_args, logits, torch.int32)
+        kth_position = (top_k.clamp(min=1, max=window) - 1).to(dtype=torch.int64)
         thresholds = values.gather(dim=-1, index=kth_position)
         values = values.masked_fill(values < thresholds, top_k_processor.filter_value)
 
         if "top_p" in self.fused_args:
-            top_p_id, top_p_processor = self.fused_args["top_p"]
-            top_p = logits_processor_args[top_p_id, :num_rows].view(dtype=torch.float32)
+            _, top_p_processor = self.fused_args["top_p"]
+            top_p = self._settings("top_p", logits_processor_args, logits, torch.float32)
             cumulative_probs = values.flip(-1).softmax(dim=-1).cumsum(dim=-1)  # ascending, as the processor
-            to_remove = cumulative_probs <= (1 - top_p).unsqueeze(-1)
+            to_remove = cumulative_probs <= (1 - top_p)
             to_remove[..., -min(top_p_processor.min_tokens_to_keep, window) :] = False
             values = values.masked_fill(to_remove.flip(-1), top_p_processor.filter_value)
         return values, indices
