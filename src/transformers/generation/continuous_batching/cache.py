@@ -205,6 +205,7 @@ class PagedAttentionCache:
         non_trash_bytes = self.num_sectors * self.bytes_per_sector
         trash_bytes = 2 * self.bytes_per_sector
         self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        self._host_copy: torch.Tensor | None = None  # where the cache waits while it is released, see release_memory
         # Cache pool, which keeps track of the free sectors and their allocation
         self.pool = CachePool(self.num_sectors, len(self.cache_allocators))
         # Distribute the cache across all allocators
@@ -459,6 +460,32 @@ class PagedAttentionCache:
         the complete indexer keys."""
         indexer_key_states = self.layer_to_allocator[layer_idx].update_indexer(indexer_key_states[0], layer_idx)
         return indexer_key_states.unsqueeze(0)
+
+    def release_memory(self) -> int:
+        """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
+        The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
+        write the cache until `restore_memory` copies it back."""
+        if self._host_copy is None:
+            self._host_copy = torch.empty(self.cache_tensor.numel(), dtype=torch.uint8, pin_memory=True)
+        self._host_copy.copy_(self.cache_tensor, non_blocking=True)
+        # The copy reads the memory about to be freed
+        torch.accelerator.synchronize()
+        self._released_address = self.cache_tensor.data_ptr()
+        self.cache_tensor.untyped_storage().resize_(0)
+        return self._host_copy.numel()
+
+    def restore_memory(self) -> bool:
+        """Reallocates the memory freed by `release_memory` and copies the cache back into it. Returns whether the cache
+        came back at the same address, which captured CUDA graphs rely on."""
+        # Whatever used the memory in between can leave it reserved by the caching allocator in pieces, none of them
+        # large enough for the cache: hand them back to the device first
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
+        self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
+        self.cache_tensor.copy_(self._host_copy, non_blocking=True)
+        # The generation loop reads the cache on its own stream
+        torch.accelerator.synchronize()
+        return self.cache_tensor.data_ptr() == self._released_address
 
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
