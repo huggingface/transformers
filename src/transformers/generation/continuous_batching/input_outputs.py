@@ -25,6 +25,7 @@ from .cache import PagedAttentionCache
 from .cache_allocators import FULL_ATTENTION, SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
+from .sampler import FULL_SAMPLING, ContinuousBatchingSampler, SamplingMode
 from .utils import (
     CudaGraphBuffer,
     aligned_divide,
@@ -118,6 +119,7 @@ class ContinuousBatchingIOs:
         self.true_read_sizes = [0 for _ in cache.cache_allocators]
         self.true_write_sizes = [0 for _ in cache.cache_allocators]
         self.use_block_table = False  # True if all requests in batch have query_length == 1
+        self.sampling_mode = FULL_SAMPLING  # how the batch's next tokens are picked, part of the graph key
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
@@ -230,6 +232,7 @@ class ContinuousBatchingIOs:
         other.true_read_sizes = self.true_read_sizes[:]
         other.true_write_sizes = self.true_write_sizes[:]
         other.use_block_table = self.use_block_table
+        other.sampling_mode = self.sampling_mode
         # Transfer scalar attributes
         other.total_seqlen_q = self.total_seqlen_q
         other.total_seqlen_k = dict(self.total_seqlen_k)
@@ -333,7 +336,7 @@ class ContinuousBatchingIOs:
     def prepare_batch_tensors(
         self,
         requests_in_batch: list[FutureRequestState],
-        logits_processors: ContinuousBatchingLogitsProcessorList,
+        sampler: ContinuousBatchingSampler,
         use_decode_fast_path: bool,
         num_q_tokens: int,
         max_kv_read: int,
@@ -419,8 +422,8 @@ class ContinuousBatchingIOs:
 
             self.requests_in_batch.append(future_state)
 
-        # Also prepare the tensor arguments for the logits processors
-        logits_processors.prepare_tensor_args(
+        # Also prepare the tensor arguments for the logits processors, and how the next tokens are picked
+        self.sampling_mode = sampler.prepare_args(
             requests_in_batch=requests_in_batch,
             arg_storage=self._bulk_input_tensor[self.static_inputs :],
         )
@@ -559,9 +562,9 @@ class ContinuousBatchingIOs:
     def _get_graph_key(self) -> tuple[int, ...]:
         # Keys for decode fast path
         if self.use_block_table:
-            return (self.num_q_tokens,)
+            return (self.num_q_tokens, *self.sampling_mode)
         # Keys for varlen path
-        return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values())
+        return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values(), *self.sampling_mode)
 
     def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()
@@ -721,7 +724,7 @@ class ContinuousBatchingAsyncIOs:
     def prepare_batch_tensors(
         self,
         requests_in_batch: list[FutureRequestState],
-        logits_processors: ContinuousBatchingLogitsProcessorList,
+        sampler: ContinuousBatchingSampler,
         use_decode_fast_path: bool,
         num_q_tokens: int,
         max_kv_read: int,
@@ -729,7 +732,7 @@ class ContinuousBatchingAsyncIOs:
     ) -> None:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.host_io.prepare_batch_tensors(
-            requests_in_batch, logits_processors, use_decode_fast_path, num_q_tokens, max_kv_read, use_padding
+            requests_in_batch, sampler, use_decode_fast_path, num_q_tokens, max_kv_read, use_padding
         )
         io_pair.host_io.carry_over_ids.copy_(self.infer_carry_over_ids())
 
@@ -811,6 +814,10 @@ class ContinuousBatchingAsyncIOs:
     @property
     def use_block_table(self) -> bool:
         return self.io_pairs[self.current_pair].host_io.use_block_table
+
+    @property
+    def sampling_mode(self) -> SamplingMode:
+        return self.io_pairs[self.current_pair].device_io.sampling_mode
 
     # The retrieve_device_outputs method is where the D2H transfer happens AND where we switch IO pair
     def retrieve_device_outputs(self) -> None:
