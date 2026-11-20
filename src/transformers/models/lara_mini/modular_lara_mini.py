@@ -37,6 +37,7 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5DecoderLayer,
     Qwen3_5GatedDeltaNet,
     causal_conv1d_fn,
+    causal_conv1d_forward,
     causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -200,7 +201,13 @@ class LaraMiniAttention(Qwen3Attention):
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class LaraMiniGatedDeltaNet(Qwen3_5GatedDeltaNet):
     """Qwen3.5 gated delta net. The published checkpoints fuse its input projections into one `in_proj` (rows
