@@ -67,7 +67,6 @@ class Kolibri1_1Config(PreTrainedConfig):
     """
 
     model_type = "kolibri1_1"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     attribute_map = {
         "num_experts": "num_local_experts",
