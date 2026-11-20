@@ -165,6 +165,7 @@ class Inkling2TextConfig(InklingTextConfig):
     mtp_hidden_states_first = AttributeError()
     local_layer_ids = AttributeError()
     mtp_local_layer_ids = AttributeError()
+    hidden_act = AttributeError()
     number_of_conv_states = 4
 
     def __post_init__(self, **kwargs):

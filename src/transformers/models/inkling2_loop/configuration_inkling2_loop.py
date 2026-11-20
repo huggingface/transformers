@@ -116,7 +116,6 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
     max_position_embeddings: int = 1048576
     rms_norm_eps: float = 1e-6
     conv_kernel_size: int = 4
-    hidden_act: str = "silu"
     moe_intermediate_size: int = 1152
     n_routed_experts: int = 128
     num_experts_per_tok: int = 8
