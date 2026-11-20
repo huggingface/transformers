@@ -49,6 +49,7 @@ if is_serve_available():
 if TYPE_CHECKING:
     import pydantic
     import tokenizers
+    import torch
 
     from transformers import (
         ContinuousBatchingConfig,
@@ -176,6 +177,15 @@ def set_serve_log_level(level: int, log_requests: bool = False) -> None:
     `TRANSFORMERS_VERBOSITY`), so that info stays readable."""
     logging.get_logger("transformers.cli").setLevel(level)
     request_logger.setLevel(level if log_requests else logging.WARNING)  # it only writes info and debug lines
+
+
+def set_torch_threads_for_serving(device: "torch.device") -> None:
+    """One CPU thread for torch when the model runs on an accelerator: each generation step prepares its inputs on the
+    CPU, and waking torch's other threads for that costs more than the work itself. An outside OMP_NUM_THREADS wins."""
+    import torch
+
+    if device.type != "cpu" and "OMP_NUM_THREADS" not in os.environ:
+        torch.set_num_threads(1)
 
 
 def set_torch_seed(seed: int) -> None:

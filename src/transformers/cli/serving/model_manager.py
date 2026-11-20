@@ -54,6 +54,7 @@ from .utils import (
     prompt_length,
     set_serve_log_level,
     set_torch_seed,
+    set_torch_threads_for_serving,
 )
 
 
@@ -384,6 +385,7 @@ class EngineClient:
 
         try:
             model, processor = load(on_progress=writer.send if report_progress else None)
+            set_torch_threads_for_serving(model.device)  # after loading, which uses them all
             if generation_state.use_continuous_batching(model.config, processor):
                 runner = CBGenerateRunner(model, processor, send_results, generation_state.cb_config)
             else:
