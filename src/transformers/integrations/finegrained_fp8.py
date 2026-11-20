@@ -385,11 +385,88 @@ def _apply_if_grad(function, direct, input, *args):
     return direct(input, *args)
 
 
+# --- PROTOTYPE (bench only, not for upstream): faster dense FP8 linears, off unless PROTO_FP8_LINEAR is set -----------
+# PROTO_FP8_LINEAR=bf16      dequantize the dense FP8 linears to bf16 once at load, then plain `F.linear` (cuBLAS)
+# PROTO_FP8_LINEAR=deepgemm  requantize them to power-of-two (UE8M0) block scales at load, as vLLM does, then one Triton
+#                            activation-quant launch + one DeepGEMM launch per call, weight scales laid out once
+# PROTO_FP8_LINEAR=splitk    keep the checkpoint's weights and fp32 scales, split-K Triton GEMM on pre-quantized activations
+_PROTO_FP8_LINEAR = os.environ.get("PROTO_FP8_LINEAR", "")
+_proto_deepgemm = None
+
+
+def _proto_convert_fp8_linears(model: nn.Module) -> None:
+    """Load-time half of the `PROTO_FP8_LINEAR` prototypes. Only plain block-128 `FP8Linear` modules with dynamic
+    activations are touched; experts and grouped linears keep their path."""
+    global _proto_deepgemm
+    if _PROTO_FP8_LINEAR not in ("bf16", "deepgemm"):
+        return
+    from ..distributed.parallel_utils import _use_local_dtensor_params
+
+    if _PROTO_FP8_LINEAR == "deepgemm":
+        import importlib
+
+        _proto_deepgemm = importlib.import_module(os.environ.get("PROTO_DEEPGEMM_MODULE", "vllm.third_party.deep_gemm"))
+        if os.environ.get("PROTO_DEEPGEMM_PDL", "0") == "1":
+            _proto_deepgemm.set_pdl(True)
+    converted = 0
+    with torch.no_grad():
+        for module in model.modules():
+            if type(module) is not FP8Linear or module.block_size is None or tuple(module.block_size) != (128, 128):
+                continue
+            # under tensor parallel the parameters are DTensors: work on this rank's shard. The context wraps the
+            # parameters replaced inside it back into DTensors with their placements.
+            with _use_local_dtensor_params(module):
+                weight, scale = module.weight, module.weight_scale_inv
+                if weight.dtype != _FP8_DTYPE or scale.dtype != torch.float32 or module.activation_scale is not None:
+                    continue
+                if weight.device.type != "cuda":
+                    continue
+                rows, cols = weight.shape
+                if _PROTO_FP8_LINEAR == "bf16":
+                    expanded = scale.repeat_interleave(128, dim=0)[:rows].repeat_interleave(128, dim=1)[:, :cols]
+                    module.weight = nn.Parameter((weight.float() * expanded).to(torch.bfloat16), requires_grad=False)
+                    converted += 1
+                    continue
+                # DeepGEMM's own limits for the plain fp8 GEMM (same gate as vLLM's `should_use_deepgemm_for_fp8_linear`)
+                if not is_sm100() or rows % 64 != 0 or cols % 128 != 0:
+                    continue
+                # round every block scale up to a power of two and re-round the e4m3 values on the new grid (lossy)
+                bits = scale.contiguous().view(torch.int32)
+                scale_pow2 = ((bits + ((1 << 23) - 1)) & ~((1 << 23) - 1)).view(torch.float32)
+                ratio = (scale / scale_pow2).repeat_interleave(128, dim=0)[:rows].repeat_interleave(128, dim=1)[:, :cols]
+                module.weight = nn.Parameter((weight.float() * ratio).to(_FP8_DTYPE), requires_grad=False)
+                module.weight_scale_inv = nn.Parameter(scale_pow2.to(_get_ue8m0_dtype()), requires_grad=False)
+                # per-row packed UE8M0 scales in DeepGEMM's MN-major TMA-aligned layout, built once
+                module._proto_sfb = _proto_deepgemm.transform_sf_into_required_layout(
+                    scale_pow2, rows, cols, [1, 128, 128], None, False, False
+                )
+                converted += 1
+    logger.warning(f"PROTO_FP8_LINEAR={_PROTO_FP8_LINEAR}: converted {converted} FP8Linear modules")
+
+
+def _proto_fp8_linear_forward(module: "FP8Linear", input: torch.Tensor) -> torch.Tensor:
+    from ._proto_fp8_kernels import act_quant_packed_ue8m0, triton_splitk_linear
+
+    input_2d = input.reshape(-1, input.shape[-1])
+    out_features = module.weight.shape[0]  # this rank's shard under tensor parallel, not `module.out_features`
+    if module._proto_sfb is not None:
+        quantized, scales = act_quant_packed_ue8m0(input_2d)
+        output = torch.empty(input_2d.shape[0], out_features, dtype=input.dtype, device=input.device)
+        _proto_deepgemm.fp8_fp4_gemm_nt((quantized, scales), (module.weight, module._proto_sfb), output)
+    else:
+        output = triton_splitk_linear(input_2d, module.weight, module.weight_scale_inv)
+    output = output.view(*input.shape[:-1], out_features)
+    if module.bias is not None:
+        output = output + module.bias
+    return output
+
+
 class FP8Linear(nn.Linear):
     # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
     # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
     # kernels corrupt across devices); removable once the kernel ships a context-free loader.
     _deepgemm_disabled = False
+    _proto_sfb = None  # PROTO_FP8_LINEAR=deepgemm: packed UE8M0 weight scales in DeepGEMM's layout
 
     def __init__(
         self,
@@ -432,6 +509,17 @@ class FP8Linear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
+
+        if (self._proto_sfb is not None and input.dtype == torch.bfloat16) or (
+            _PROTO_FP8_LINEAR == "splitk"
+            and type(self) is FP8Linear
+            and self.block_size is not None
+            and tuple(self.block_size) == (128, 128)
+            and self.weight_scale_inv.dtype == torch.float32
+            and self.activation_scale is None
+        ):
+            if not (torch.is_grad_enabled() and input.requires_grad):
+                return _proto_fp8_linear_forward(self, input)
 
         return _apply_if_grad(
             FP8LinearFunction,

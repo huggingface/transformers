@@ -136,9 +136,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device, _get_ue8m0_dtype
+        from ..integrations.finegrained_fp8 import (
+            _disable_deepgemm_on_multi_device,
+            _get_ue8m0_dtype,
+            _proto_convert_fp8_linears,
+        )
 
         _disable_deepgemm_on_multi_device(model)
+        _proto_convert_fp8_linears(model)  # prototype, no-op unless PROTO_FP8_LINEAR is set
         # MXFP8 checkpoints (e.g. Inkling2) save their ue8m0 scales as bytes
         if self.pre_quantized and self.quantization_config.scale_fmt == "ue8m0":
             for module in model.modules():
