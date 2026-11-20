@@ -28,6 +28,7 @@ from .requests import FutureRequestState, RequestState, RequestStatus, create_wa
 from .utils import (
     accelerator_graph_capture_context,
     create_accelerator_graph,
+    expandable_segments,
     get_memory_pools,
     logger,
     memory_pool_context,
@@ -35,6 +36,7 @@ from .utils import (
     pad_to_pow2,
     pop_peak_memory,
     stream_context,
+    synchronize_device,
 )
 
 
@@ -185,13 +187,16 @@ class ModelRunner:
 
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
-        # Warmup (ensures the right result is computed before capturing the graph)
-        with stream_context(compute_stream), memory_pool_context(self.mem_pool):
-            forward_fn(*args)
-        # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
-        graph = create_accelerator_graph()
-        with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
-            forward_fn(*args)
+        # The graph pool is allocated in expandable segments, otherwise it fragments and wastes memory for as long as
+        # the graphs live, since it is never shared with other allocations
+        with expandable_segments(self.cache.device):
+            # Warmup (ensures the right result is computed before capturing the graph)
+            with stream_context(compute_stream), memory_pool_context(self.mem_pool):
+                forward_fn(*args)
+            # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
+            graph = create_accelerator_graph()
+            with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
+                forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)
 

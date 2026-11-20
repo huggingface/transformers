@@ -11,11 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import queue
 import re
 import threading
 import warnings
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
 from typing import Any, TypeVar
@@ -323,6 +325,49 @@ def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
     """A context manager to use a specific memory pool for allocations. This function assumes that the current device
     supports memory pools."""
     return torch.get_device_module().use_mem_pool(mem_pool)
+
+
+@contextmanager
+def expandable_segments(device: torch.device) -> Iterator[None]:
+    """Turns on expandable segments for the CUDA allocations made in its scope, then turns them off again. A regular
+    segment is a `cudaMalloc` of its own, which never merges with another one, so a large allocation that fits in no
+    free block adds a segment while the smaller free ones stay reserved. An expandable segment grows in place instead,
+    so the memory freed in it can serve any later allocation. This matters for CUDA graph pools, which are never shared
+    with other allocations: what fragmentation holds in them is lost for as long as the graphs live.
+    Does nothing if expandable segments are already on or are not supported (ROCm, `cudaMallocAsync` backend). Also
+    does nothing for distributed runs on pre-Blackwell GPUs, where combining them with NCCL collectives captured in
+    graphs requires `NCCL_GRAPH_REGISTER=0`."""
+    # The allocator settings are readable since torch 2.12, before that we read the environment variables setting them
+    get_settings = getattr(torch._C, "_accelerator_getAllocatorSettings", None)
+    if get_settings is not None:
+        settings = get_settings()
+    else:
+        settings = ",".join(os.environ.get(name, "") for name in ("PYTORCH_ALLOC_CONF", "PYTORCH_CUDA_ALLOC_CONF"))
+    distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
+    use_expandable_segments = (
+        device.type == "cuda"
+        and torch.version.hip is None
+        and torch.cuda.memory.get_allocator_backend() == "native"
+        and "expandable_segments:True" not in settings
+        and not (
+            distributed
+            and torch.distributed.get_world_size() > 1
+            and torch.cuda.get_device_capability(device)[0] < 10
+            and os.environ.get("NCCL_GRAPH_REGISTER") != "0"
+        )
+    )
+    if not use_expandable_segments:
+        yield
+        return
+    # The settings are set through the accelerator API since torch 2.10, the CUDA one is deprecated since
+    set_settings = getattr(torch._C, "_accelerator_setAllocatorSettings", None)
+    if set_settings is None:
+        set_settings = torch.cuda.memory._set_allocator_settings
+    set_settings("expandable_segments:True")
+    try:
+        yield
+    finally:
+        set_settings("expandable_segments:False")
 
 
 def synchronize_device(device: torch.device) -> None:

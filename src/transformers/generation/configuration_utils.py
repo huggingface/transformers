@@ -1704,7 +1704,11 @@ class ContinuousBatchingConfig:
         max_memory_percent (`float`, *optional*):
             Maximum percentage of free GPU memory (after the model is loaded) to use for continuous batching: the KV
             cache, the input / output buffers and the activations. When `None`, resolved at runtime to 0.9, or 0.6 on
-            MPS and CPU where memory is shared with the host.
+            MPS and CPU where memory is shared with the host. The rest of the free memory is a margin for what the
+            sizing does not see, like the memory of CUDA graphs outside of torch. When expandable segments cannot be
+            used for the memory pool of CUDA graphs (eg. on ROCm, with the `cudaMallocAsync` backend or with TP on
+            pre-Blackwell GPUs), that pool also fragments and can waste up to about 1 GB, so values close to 1 should
+            be used with care.
         max_requests_per_batch (`int`, *optional*):
             Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
