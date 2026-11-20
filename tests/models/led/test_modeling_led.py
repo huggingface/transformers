@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
     require_torch_fp16,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -294,6 +295,10 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = LEDModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LEDConfig)
+
+    @skip_tpu("test aborts")
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
     def test_config(self):
         self.config_tester.run_common_tests()

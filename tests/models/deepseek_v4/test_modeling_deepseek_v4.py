@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
@@ -25,6 +27,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_n_accelerators,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -109,6 +112,11 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     # No SequenceClassification / TokenClassification / QA heads on V4.
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_beam_sample_generate_dict_output(self):
+        super().test_beam_sample_generate_dict_output()
 
     @unittest.skip(
         "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "

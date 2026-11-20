@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    skip_tpu,
     slow,
     torch_device,
 )
@@ -347,6 +348,10 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=32)
+
+    @skip_tpu("test aborts")
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
     def test_inputs_embeds_matches_input_ids(self):
         position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
