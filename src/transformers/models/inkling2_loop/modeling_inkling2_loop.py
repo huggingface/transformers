@@ -136,6 +136,24 @@ class Inkling2LoopScaledL2Clip(nn.Module):
         return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
 
 
+class Inkling2LoopLogScale(nn.Module):
+    """
+    Scales the per-head states by `tau = 1 + log_scaling_alpha * log(max((position + 1) / log_scaling_n_floor, 1))`.
+    """
+
+    def __init__(self, config: Inkling2LoopTextConfig):
+        super().__init__()
+        self.log_scaling_alpha = config.log_scaling_alpha
+        self.log_scaling_n_floor = config.log_scaling_n_floor
+
+    def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        scale = 1.0 + self.log_scaling_alpha * torch.log(
+            ((position_ids + 1).float() / self.log_scaling_n_floor).clamp(min=1.0)
+        )
+        return (hidden_states.float() * scale[..., None, None]).to(input_dtype)
+
+
 class Inkling2LoopRelativeLogits(nn.Module):
     """
     Hidden-states conditioned relative position bias. `linear` and `norm` give each token per-head `relative_states`
@@ -149,6 +167,7 @@ class Inkling2LoopRelativeLogits(nn.Module):
         self.rel_extent = rel_extent
         self.linear = nn.Linear(config.hidden_size, num_heads * config.d_rel, bias=False)
         self.norm = Inkling2LoopScaledL2Clip(num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        self.log_scale = Inkling2LoopLogScale(config)
         self.proj = nn.Parameter(torch.empty(config.d_rel, rel_extent))
 
     def forward(
@@ -156,12 +175,12 @@ class Inkling2LoopRelativeLogits(nn.Module):
         hidden_states: torch.Tensor,
         cache: Cache | None = None,
         layer_idx: int = 0,
-        scale: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         relative_states = self.linear(hidden_states).view(*hidden_states.shape[:-1], self.num_heads, -1)
         relative_states = self.norm(relative_states)
-        if scale is not None:
-            relative_states = (relative_states.float() * scale).to(relative_states.dtype)
+        if position_ids is not None:
+            relative_states = self.log_scale(relative_states, position_ids)
 
         q_length = hidden_states.shape[1]
         if cache is None:
@@ -475,6 +494,21 @@ class Inkling2LoopSlidingAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class Inkling2LoopLogScaledL2Clip(nn.Module):
+    """`Inkling2LoopScaledL2Clip` followed by `Inkling2LoopLogScale`."""
+
+    def __init__(self, config: Inkling2LoopTextConfig, num_heads: int, head_dim: int, threshold: float):
+        super().__init__()
+        self.scale = nn.Parameter(torch.ones(num_heads, head_dim))
+        self.l2_clip = Inkling2LoopL2Clip(threshold)
+        self.log_scale = Inkling2LoopLogScale(config)
+
+    def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = self.l2_clip(hidden_states.float() * self.scale.float()).to(input_dtype)
+        return self.log_scale(hidden_states, position_ids)
+
+
 class Inkling2LoopDynamicShortConvolution(nn.Module):
     """
     Short causal convolution whose taps are the sum of static per-channel weights and per-token weights projected from
@@ -588,7 +622,7 @@ class Inkling2LoopFullAttention(nn.Module):
         self.k_proj = Inkling2LoopFullKeyValueProjection(config, layer_idx, conv_idx=0)
         self.v_proj = Inkling2LoopFullKeyValueProjection(config, layer_idx, conv_idx=1)
         self.o_proj = Inkling2LoopGatedOutputProjection(config, self.num_heads, self.head_dim)
-        self.q_norm = Inkling2LoopScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
+        self.q_norm = Inkling2LoopLogScaledL2Clip(config, self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2LoopL2Clip(config.qk_l2_clip_threshold)
         self.rel_logits_proj = Inkling2LoopRelativeLogits(config, self.num_heads, self.rel_extent)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
@@ -619,12 +653,6 @@ class Inkling2LoopFullAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # log scaling of the queries and relative states, in fp32 as in the original
-        tau = 1.0 + self.config.log_scaling_alpha * torch.log(
-            ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
-        )
-        tau = tau[..., None, None]
-
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         key_states = self.k_proj(
             key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
@@ -633,11 +661,12 @@ class Inkling2LoopFullAttention(nn.Module):
             value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
         ).view(hidden_shape)
 
-        query_states = self.q_norm(query_states)
-        query_states = (query_states.float() * tau).to(query_states.dtype).transpose(1, 2)
+        query_states = self.q_norm(query_states, kwargs["position_ids"]).transpose(1, 2)
         key_states = self.k_norm(key_states).transpose(1, 2)
         value_states = self.v_norm(value_states).transpose(1, 2)
-        position_bias = self.rel_logits_proj(hidden_states, cache=cache, layer_idx=cache_layer_idx, scale=tau)
+        position_bias = self.rel_logits_proj(
+            hidden_states, cache=cache, layer_idx=cache_layer_idx, position_ids=kwargs["position_ids"]
+        )
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
@@ -1153,7 +1182,7 @@ class Inkling2LoopPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Inkling2LoopTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Inkling2LoopScaledL2Clip):
+        elif isinstance(module, (Inkling2LoopScaledL2Clip, Inkling2LoopLogScaledL2Clip)):
             init.ones_(module.scale)
         elif isinstance(module, Inkling2LoopDynamicShortConvolution):
             init.zeros_(module.static_weight)
