@@ -1357,6 +1357,7 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
             previous_block_states = block_states[..., num_pre_loop_blocks + 1 :, :]
             previous_hidden_states = hidden_states
             hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
+
             # Each pass uses its own copies of the loop cache layers, appended after the model's layers
             cache_offset = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers - loop_start
             for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
