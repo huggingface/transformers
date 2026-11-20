@@ -542,7 +542,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
         self.cumulative_length_int = 0
         # This needs to be checked dynamically, as it's only True if we never go beyond the window
-        self.is_croppable = max_cache_len <= sliding_window
+        self._is_croppable = max_cache_len <= sliding_window
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -657,6 +657,14 @@ class StaticSlidingWindowLayer(StaticLayer):
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put this layer back as it was."""
+        # Note: since LinearAttention layers have this as a `property`, we also need to access it as a `property` here for mixed classes
+        # such as `LinearAttentionAndStaticSlidingWindowAttentionLayer`, otherwise they complain if we try to set `self.is_croppable` directly
+        # in the `__init__`
+        return self._is_croppable
 
 
 class StaticIndexedLayer(StaticLayer):
