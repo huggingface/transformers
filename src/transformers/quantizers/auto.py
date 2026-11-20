@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-import warnings
 from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -140,17 +139,6 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-LOADING_ATTRIBUTES_CONFIG_TYPES = (
-    GPTQConfig,
-    AwqConfig,
-    AutoRoundConfig,
-    FbgemmFp8Config,
-    CompressedTensorsConfig,
-    Mxfp4Config,
-    MetalConfig,
-    FineGrainedFP8Config,
-)
-
 logger = logging.get_logger(__name__)
 
 
@@ -204,11 +192,8 @@ class AutoHfQuantizer:
     @classmethod
     def from_plan(cls, plan: dict, loading, pre_quantized: bool, checkpoint_names: bool = False):
         """
-        The quantizer of each pattern of `plan`, one per distinct config. The saved plan may mix formats (e.g. fp8 +
-        mxfp4).
-
-        Loading a saved plan, the `quantization_config` passed to `from_pretrained` brings loading attributes: for
-        every pattern (one config or dict, e.g. `{"dequantize": True}`), or per pattern (a plan of them).
+        The quantizer of each pattern of `plan`, one per distinct config. `loading` (the `quantization_config` passed
+        to `from_pretrained`) brings loading attributes to a saved plan: one config or dict for every pattern, or a plan.
         """
         if not is_quantization_plan(loading):
             loading = dict.fromkeys(plan, loading)
@@ -288,56 +273,6 @@ class AutoHfQuantizer:
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         quantization_config = AutoQuantizationConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls.from_config(quantization_config)
-
-    @classmethod
-    def merge_quantization_configs(
-        cls,
-        quantization_config: dict | QuantizationConfigMixin,
-        quantization_config_from_args: QuantizationConfigMixin | None,
-    ):
-        """
-        handles situations where both quantization_config from args and quantization_config from model config are present.
-        """
-        if quantization_config_from_args is not None:
-            warning_msg = (
-                "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
-                " already has a `quantization_config` attribute. The `quantization_config` from the model will be used."
-            )
-        else:
-            warning_msg = ""
-
-        if isinstance(quantization_config, dict):
-            # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
-            if isinstance(quantization_config_from_args, AutoRoundConfig):
-                quantization_config = AutoRoundConfig.from_dict(quantization_config)
-            else:
-                quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
-
-        if (
-            quantization_config_from_args is not None
-            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
-        ):
-            raise ValueError(
-                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
-                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
-            )
-
-        if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
-            quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
-        ):
-            loading_attr_dict = quantization_config_from_args.get_loading_attributes()
-            for attr, val in loading_attr_dict.items():
-                setattr(quantization_config, attr, val)
-
-            if loading_attr_dict:
-                warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
-
-        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
-            warnings.warn(warning_msg)
-        else:
-            # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
-            logger.info(warning_msg)
-        return quantization_config
 
     @staticmethod
     def supports_quant_method(quantization_config_dict):
@@ -486,8 +421,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         if self.patterns is None:
             self.map_module_to_quantizer(model)
 
-        # Dequantized, a weight's scales fold into it before the model's ops: the model's `.weight` converters read
-        # them along. Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
+        # Every format's names (as `rename_layer` leaves them): a layer's checkpoint only has its own
         names = []
         # A format kept serialized (`load_serialized`, an engine's own kernels) converts nothing
         converting = [quantizer for quantizer in self.all_quantizers if not quantizer.load_serialized]
@@ -541,7 +475,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             return transform  # e.g. a merged expert bias: not one of the format's tensors
         if not isinstance(transform, WeightConverter):  # renamed only: a converter of its one key, for the op
             transform = WeightConverter(transform._original_source_patterns, transform._original_target_patterns, [])
-        # Dequantized, the scales fold into the weight before the model's ops
         load, ops = operation(quantizer), transform.operations
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
         before = dequantize or quantizer.load_before_model_ops

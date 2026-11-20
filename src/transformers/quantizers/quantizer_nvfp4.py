@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from ..utils import is_kernels_available, is_torch_available
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, quantized_experts
 
 
 if is_torch_available():
@@ -133,7 +133,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.moe import use_experts_implementation
         from ..integrations.nvfp4 import ALL_NVFP4_EXPERTS_FUNCTIONS, NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
 
         if self.pre_quantized and self.quantization_config.dequantize:
@@ -141,11 +140,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         weight_only = self.quantization_config.weight_only
         if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
             # TODO: quantize experts from a full-precision checkpoint too
-            has_gate = getattr(module, "has_gate", True)
-            experts_class = use_experts_implementation(
-                experts_class=NVFP4Experts, experts_interface=ALL_NVFP4_EXPERTS_FUNCTIONS, has_gate=has_gate
+            return quantized_experts(
+                module, NVFP4Experts, ALL_NVFP4_EXPERTS_FUNCTIONS, module.config, weight_only=weight_only
             )
-            return experts_class(module.config, has_gate=has_gate, weight_only=weight_only)
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
             return NVFP4Linear(
                 module.in_features, module.out_features, weight_only=weight_only, static_input_scale=self.pre_quantized

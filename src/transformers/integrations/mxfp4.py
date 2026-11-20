@@ -660,15 +660,12 @@ class FP4ExpertsInterface(ExpertsInterface):
 ALL_FP4_EXPERTS_FUNCTIONS = FP4ExpertsInterface()
 
 
-def dequantize_mxfp4(weight, scale, dtype):
-    """
-    `(..., N, K // 2)` e2m1 pairs packed in `int8` (low nibble first), times their `(..., N, K // 32)` ue8m0
-    scales
-    """
+def dequantize_mxfp4(weight, scale, dtype, block_size: int = 32):
+    """`(..., N, K // 2)` e2m1 pairs (low nibble first) times their `(..., N, K // block_size)` scales"""
     lut = torch.tensor(FP4_VALUES, dtype=torch.float32, device=weight.device)
     weight = weight.view(torch.uint8)
     values = torch.stack([lut[(weight & 0xF).int()], lut[(weight >> 4).int()]], dim=-1).flatten(-2)
-    return (values.unflatten(-1, (-1, 32)) * scale.float().unsqueeze(-1)).flatten(-2).to(dtype)
+    return (values.unflatten(-1, (-1, block_size)) * scale.float().unsqueeze(-1)).flatten(-2).to(dtype)
 
 
 def dequantize_convertops(blocks, scales, dtype):

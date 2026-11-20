@@ -80,31 +80,19 @@ class BitNetHfQuantizer(HfQuantizer):
             return None
 
         config = self.quantization_config
-        if config.linear_class == "autobitlinear":
-            new_module = AutoBitLinear(
-                in_features=module.in_features,
-                out_features=module.out_features,
-                bias=module.bias is not None,
-                device=module.weight.device,
-                dtype=module.weight.dtype,
-                online_quant=(config.quantization_mode == "online"),
-                use_rms_norm=config.use_rms_norm,
-                rms_norm_eps=config.rms_norm_eps,
-            )
-            if config.quantization_mode == "offline":
-                new_module.requires_grad_(False)
-            return new_module
-
-        new_module = BitLinear(
-            in_features=module.in_features,
-            out_features=module.out_features,
-            bias=module.bias is not None,
-            device=module.weight.device,
-            dtype=module.weight.dtype,
-            use_rms_norm=config.use_rms_norm,
-            rms_norm_eps=config.rms_norm_eps,
-        )
-        return new_module.requires_grad_(False)
+        kwargs = {
+            "in_features": module.in_features,
+            "out_features": module.out_features,
+            "bias": module.bias is not None,
+            "device": module.weight.device,
+            "dtype": module.weight.dtype,
+            "use_rms_norm": config.use_rms_norm,
+            "rms_norm_eps": config.rms_norm_eps,
+        }
+        if config.linear_class != "autobitlinear":
+            return BitLinear(**kwargs).requires_grad_(False)
+        new_module = AutoBitLinear(online_quant=config.quantization_mode == "online", **kwargs)
+        return new_module.requires_grad_(False) if config.quantization_mode == "offline" else new_module
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}

@@ -29,7 +29,7 @@ from ..utils import (
     logging,
 )
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, quantized_experts
 
 
 if is_torch_available():
@@ -196,21 +196,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.moe import use_experts_implementation
         from ..integrations.mxfp4 import ALL_FP4_EXPERTS_FUNCTIONS, Mxfp4Experts, Mxfp4GptOssExperts
 
         if isinstance(module, Mxfp4GptOssExperts):
             return module  # swapped with its MLP by `replace_with_mxfp4_linear`
         if self.quantization_config.dequantize or not self.pre_quantized or not name.endswith(".experts"):
             return None
-        has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
-        experts_class = use_experts_implementation(
-            experts_class=Mxfp4Experts,
-            experts_interface=ALL_FP4_EXPERTS_FUNCTIONS,
-            has_bias=has_bias,
-            has_gate=has_gate,
-        )
-        new_module = experts_class(getattr(module, "config", self.text_config), has_bias=has_bias, has_gate=has_gate)
+        new_module = quantized_experts(module, Mxfp4Experts, ALL_FP4_EXPERTS_FUNCTIONS, self.text_config)
         new_module._hf_quantized_needs_local_tp = True  # ty: ignore[unresolved-attribute]
         return new_module
 
