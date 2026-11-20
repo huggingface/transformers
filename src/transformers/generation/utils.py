@@ -47,7 +47,6 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
-from ..modeling_multimodal_utils import MultimodalMixin
 from ..modeling_outputs import BaseModelOutputWithPooling
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
@@ -1149,8 +1148,12 @@ class GenerationMixin(ContinuousMixin):
             modalily_outputs = mm_encoder_output.get(modality)
             if modalily_outputs is None:
                 continue
-            is_flat = getattr(modalily_outputs, "split_sizes", None) is not None
-            if not is_flat and getattr(modalily_outputs, "pooler_output", None) is None:
+            pooler_output = getattr(modalily_outputs, "pooler_output", None)
+            deepstack_features = getattr(modalily_outputs, "deepstack_features", None)
+            # Granite 4 Vision has only deepstack features
+            features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
+            is_flat = isinstance(features, torch.Tensor) and getattr(modalily_outputs, "split_sizes", None) is not None
+            if not is_flat and pooler_output is None:
                 continue
 
             # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
@@ -1170,6 +1173,14 @@ class GenerationMixin(ContinuousMixin):
                 )
                 continue
 
+            # Per-item outputs: GLM-Image's feature maps, and `get_*_features` outputs passed by users (generate itself
+            # encodes flat), only kept for backward compatibility
+            if getattr(modalily_outputs, "split_sizes", None) is not None:
+                logger.warning_once(
+                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
+                    "`generate` is deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
+                    "`get_video_embeddings`."
+                )
             num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
@@ -1191,12 +1202,8 @@ class GenerationMixin(ContinuousMixin):
             if not is_split_images:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
 
-            # 4. If there are deepstack features, expand them as well. Most models have deeptack features
-            # per layer where each feature is a `list[torch.Tensor]`. GraniteVision has each feature as a
-            # `tuple(layer_idx, list[torch.Tensor])` and we skip it here. FIXME: we need a uniform deepstack layout
-            if getattr(modalily_outputs, "deepstack_features", None) is not None and isinstance(
-                modalily_outputs.deepstack_features[0][0], torch.Tensor
-            ):
+            # 4. If there are deepstack features, expand them as well: per layer, each feature is a `list[torch.Tensor]`
+            if getattr(modalily_outputs, "deepstack_features", None) is not None:
                 # Each deepstack feat is `(total_image_len, dim)` tensor
                 modalily_outputs.deepstack_features = [
                     [
@@ -1224,12 +1231,6 @@ class GenerationMixin(ContinuousMixin):
 
         # IMPORTANT - expand before input ids because the helper counts placeholders within encoded text!
         if (mm_encoder_output := model_kwargs.get("mm_encoder_outputs")) is not None:
-            # Per-item outputs with `split_sizes` (from `get_*_features`) are expanded flat as well
-            merge = getattr(self.base_model, "merge_modality_outputs", MultimodalMixin.merge_modality_outputs)
-            mm_encoder_output = {
-                modality: merge(outputs) if getattr(outputs, "split_sizes", None) is not None else outputs
-                for modality, outputs in mm_encoder_output.items()
-            }
             model_kwargs["mm_encoder_outputs"] = self._expand_multimodal_outputs(
                 input_ids,
                 mm_encoder_output,
@@ -4457,15 +4458,10 @@ def _repeat_flat_outputs(
     outputs: BaseModelOutputWithPooling, rows_per_sample: torch.LongTensor, repeats: int
 ) -> BaseModelOutputWithPooling:
     """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
-    pooler_output, split_sizes = outputs.pooler_output, outputs.split_sizes
+    pooler_output = outputs.pooler_output
     deepstack_features = getattr(outputs, "deepstack_features", None)
-    if split_sizes is None:
-        return outputs
-    # Granite 4 Vision has no pooler output, and `(layer, features)` deepstack pairs
-    if isinstance(pooler_output, torch.Tensor):
-        reference = pooler_output
-    else:
-        reference = deepstack_features[0][1] if isinstance(deepstack_features[0], tuple) else deepstack_features[0]
+    # Granite 4 Vision has only deepstack features
+    reference = pooler_output if isinstance(pooler_output, torch.Tensor) else deepstack_features[0]
     rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
 
     def repeat(features: torch.Tensor) -> torch.Tensor:
@@ -4475,15 +4471,9 @@ def _repeat_flat_outputs(
     if isinstance(pooler_output, torch.Tensor):
         expanded["pooler_output"] = repeat(pooler_output)
     if deepstack_features is not None:
-        expanded["deepstack_features"] = [
-            (feature[0], repeat(feature[1])) if isinstance(feature, tuple) else repeat(feature)
-            for feature in deepstack_features
-        ]
-    # Each item belongs to the sample its last row falls in
-    rows_end = rows_per_sample.to(split_sizes.device).cumsum(0)
-    item_sample = torch.searchsorted(rows_end, split_sizes.cumsum(0) - 1, right=True)
-    items_per_sample = torch.zeros_like(rows_end).index_add_(0, item_sample, torch.ones_like(item_sample))
-    expanded["split_sizes"] = split_sizes[_repeat_index(items_per_sample, repeats, len(split_sizes))]
+        expanded["deepstack_features"] = [repeat(features) for features in deepstack_features]
+    # Nothing reads the item boundaries of the expanded rows
+    expanded["split_sizes"] = None
     # A copy, as the outputs may be the user's (some getters set `split_sizes` on a vision tower's output class)
     outputs = copy.copy(outputs)
     for key, value in expanded.items():

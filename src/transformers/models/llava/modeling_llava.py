@@ -21,7 +21,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -160,10 +160,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
             ).prod(dim=-1)
             image_features = image_features.squeeze(0)
         else:
-            image_outputs.split_sizes = image_features.new_full(
-                (image_features.shape[0],), image_features.shape[1], dtype=torch.long
-            )
-            image_features = image_features.flatten(0, 1)
+            image_features, image_outputs.split_sizes = flatten_items(image_features)
         image_outputs.pooler_output = image_features
 
         return image_outputs

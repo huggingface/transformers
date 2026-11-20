@@ -30,6 +30,7 @@ from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageP
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
@@ -107,10 +108,7 @@ class Cohere2VisionModel(AyaVisionModel):
             selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
         )
 
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

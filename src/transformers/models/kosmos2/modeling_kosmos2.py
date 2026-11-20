@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1377,10 +1377,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel, MultimodalMixin):
         vision_output.pooler_output = image_embeds
         vision_output.projection_attentions = projection_attentions
 
-        vision_output.split_sizes = vision_output.pooler_output.new_full(
-            vision_output.pooler_output.shape[:1], vision_output.pooler_output.shape[1], dtype=torch.long
-        )
-        vision_output.pooler_output = vision_output.pooler_output.flatten(0, 1)
+        vision_output.pooler_output, vision_output.split_sizes = flatten_items(vision_output.pooler_output)
         return vision_output
 
     @can_return_tuple

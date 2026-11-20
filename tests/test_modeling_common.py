@@ -2297,7 +2297,11 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertTrue(hasattr(outputs.image_outputs, "hidden_states"))
             # Some models do not return pooler output, e.g. Mllama
             if hasattr(outputs.image_outputs, "pooler_output"):
-                self.assertEqual(len(outputs.image_outputs.pooler_output), self.model_tester.batch_size)
+                # Flat outputs hold all images' rows in one tensor, and `split_sizes` has one entry per image
+                split_sizes = getattr(outputs.image_outputs, "split_sizes", None)
+                pooler_output = outputs.image_outputs.pooler_output
+                num_images = len(split_sizes) if split_sizes is not None else len(pooler_output)
+                self.assertEqual(num_images, self.model_tester.batch_size)
 
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
