@@ -15,6 +15,7 @@ import os
 import torch
 import triton
 import triton.language as tl
+from triton.tools.tensor_descriptor import TensorDescriptor
 
 
 FP8 = torch.float8_e4m3fn
@@ -141,7 +142,8 @@ def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights):
 # ---- track 2: Triton kernel pair, dispatch fused, one program per (expert, N tile) -------------------------------------
 #
 #   route    (1 launch): counting sort of the S = tokens * top_k routed slots by expert, without atomics
-#   gate_up  (E x I tiles): gather the expert's rows, quantize them, gate and up GEMMs, SiLU, requant to fp8
+#   quant    (1 launch): the activations to e4m3, per (token, 128 columns), once for all the programs that read them
+#   gate_up  (E x I tiles): gather the expert's rows, gate and up GEMMs, SiLU, requant to fp8
 #   down     (E x H tiles): down GEMM on the fp8 intermediate, routing weight, scatter back to (token, slot) rows
 #   topk sum (1 launch): sum the top_k rows of each token
 #
@@ -185,21 +187,48 @@ def _route_kernel(ExpertIds, Perm, ExpertStart, S, NUM_EXPERTS: tl.constexpr, BL
         tl.store(ExpertStart + experts, start, mask=experts <= NUM_EXPERTS)
 
 
-# fp16 operands of the FOLD variants carry activation * scales: this power of two keeps them inside fp16's normal range
-# (products of an activation by a weight block scale sit around 1e-4), and is divided out exactly after the loop
-_FOLD_SHIFT = 1024.0
+_ROUTE_QUADRATIC_MAX_SLOTS = 2048
+_ROUTE_ATOMIC_BLOCK = 256
 
 
 @triton.jit
-def _decode_gate_up_kernel(
+def _route_count_kernel(ExpertIds, Count, S, NUM_EXPERTS: tl.constexpr, BLOCK: tl.constexpr):
+    slots = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    expert = tl.load(ExpertIds + slots, mask=slots < S, other=NUM_EXPERTS).to(tl.int32)
+    tl.atomic_add(Count + expert, 1, mask=(slots < S) & (expert < NUM_EXPERTS))
+
+
+@triton.jit
+def _route_offsets_kernel(Count, ExpertStart, Cursor, NUM_EXPERTS: tl.constexpr, PADDED: tl.constexpr):
+    experts = tl.arange(0, PADDED)
+    count = tl.load(Count + experts, mask=experts < NUM_EXPERTS, other=0)
+    end = tl.cumsum(count, 0)
+    tl.store(ExpertStart, 0)
+    tl.store(ExpertStart + 1 + experts, end, mask=experts < NUM_EXPERTS)
+    tl.store(Cursor + experts, end - count, mask=experts < NUM_EXPERTS)
+
+
+@triton.jit
+def _route_scatter_kernel(ExpertIds, Perm, Cursor, S, NUM_EXPERTS: tl.constexpr, BLOCK: tl.constexpr):
+    # Each slot claims the next position of its expert. The order inside an expert depends on the race, which no
+    # output depends on: every routed row is computed on its own.
+    slots = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    expert = tl.load(ExpertIds + slots, mask=slots < S, other=NUM_EXPERTS).to(tl.int32)
+    valid = (slots < S) & (expert < NUM_EXPERTS)
+    position = tl.atomic_add(Cursor + expert, 1, mask=valid)
+    tl.store(Perm + position, slots, mask=valid)
+
+
+@triton.jit
+def _decode_gate_up_rows_m_kernel(
     Hidden,  # (T, H) activations, bf16 (or e4m3 with PREQUANT)
     HiddenScale,  # (T, H / 128) fp32, only read with PREQUANT
     Perm,  # (S,) int32, expert-sorted position -> flat (token, slot) index
     ExpertStart,  # (E + 1,) int32
     GateUp,  # (E, 2I, H) e4m3
     GateUpScale,  # (E, 2I / 128, H / 128) fp32
-    Inter,  # (S, I) e4m3, expert-sorted
-    InterScale,  # (S, I / 128) fp32
+    Inter,  # (S, I) expert-sorted: e4m3, or fp32 with RAW_OUT
+    InterScale,  # (S, I / 128) fp32, not written with RAW_OUT
     stride_h,
     stride_hs,
     stride_gu_e,
@@ -210,10 +239,9 @@ def _decode_gate_up_kernel(
     HIDDEN_DIM: tl.constexpr,
     INTERMEDIATE_DIM: tl.constexpr,
     BLOCK_M: tl.constexpr,
-    BLOCK_N: tl.constexpr,  # multiple of 128 dividing INTERMEDIATE_DIM
+    BLOCK_N: tl.constexpr,  # 128, or a smaller power of two with RAW_OUT
     PREQUANT: tl.constexpr,
-    FOLD: tl.constexpr,  # needs BLOCK_N == 128
-    SHIFT: tl.constexpr,
+    RAW_OUT: tl.constexpr,  # store SiLU(gate) * up in fp32 and leave the fp8 requant to `act_quant`
 ):
     e = tl.program_id(0).to(tl.int64)
     pid_n = tl.program_id(1)
@@ -225,11 +253,8 @@ def _decode_gate_up_kernel(
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     gate_base = GateUp + e * stride_gu_e + offs_k[:, None] + offs_n[None, :] * stride_gu_n
     up_base = gate_base + INTERMEDIATE_DIM * stride_gu_n
-    if BLOCK_N == 128:
-        # one weight scale per (tile, K block)
-        gate_s_base = GateUpScale + e * stride_gus_e + pid_n * stride_gus_n
-    else:
-        gate_s_base = GateUpScale + e * stride_gus_e + (offs_n // 128) * stride_gus_n
+    # one weight scale per (128 rows, K block): a tile of at most 128 rows has a single one
+    gate_s_base = GateUpScale + e * stride_gus_e + ((pid_n * BLOCK_N) // 128) * stride_gus_n
     up_s_base = gate_s_base + (INTERMEDIATE_DIM // 128) * stride_gus_n
     for m0 in range(start, end, BLOCK_M):
         rows = m0 + tl.arange(0, BLOCK_M)
@@ -250,35 +275,21 @@ def _decode_gate_up_kernel(
             w_up = tl.load(up_base + kb * 128)
             s_gate = tl.load(gate_s_base + kb)
             s_up = tl.load(up_s_base + kb)
-            if FOLD:
-                # The dot runs on fp16 operands either way (fp8 is widened for the MMA): give it the dequantized
-                # activation times the weight block scale, and let the MMA accumulate over K. No fp32 multiply-add
-                # per output element and K block; the fp16 rounding of the operand is 2^-11 relative.
-                a_f = a.to(tl.float32) * a_s[:, None]
-                acc_gate = tl.dot((a_f * (s_gate * SHIFT)).to(tl.float16), w_gate.to(tl.float16), acc_gate)
-                acc_up = tl.dot((a_f * (s_up * SHIFT)).to(tl.float16), w_up.to(tl.float16), acc_up)
-            elif BLOCK_N == 128:
-                acc_gate += tl.dot(a, w_gate) * (a_s * s_gate)[:, None]
-                acc_up += tl.dot(a, w_up) * (a_s * s_up)[:, None]
-            else:
-                acc_gate += tl.dot(a, w_gate) * a_s[:, None] * s_gate[None, :]
-                acc_up += tl.dot(a, w_up) * a_s[:, None] * s_up[None, :]
-        if FOLD:
-            acc_gate = acc_gate * (1.0 / SHIFT)
-            acc_up = acc_up * (1.0 / SHIFT)
-        # SiLU(gate) * up in fp32, then one fp8 requant per (row, 128-wide block)
-        act = tl.reshape(acc_gate * tl.sigmoid(acc_gate) * acc_up, (BLOCK_M, BLOCK_N // 128, 128))
-        act_s = tl.max(tl.abs(act), axis=2) / 448.0
-        act_q = tl.reshape(act / tl.maximum(act_s[:, :, None], 1e-12), (BLOCK_M, BLOCK_N)).to(tl.float8e4nv)
-        tl.store(Inter + rows[:, None] * INTERMEDIATE_DIM + offs_n[None, :], act_q, mask=row_mask[:, None])
-        blocks = pid_n * (BLOCK_N // 128) + tl.arange(0, BLOCK_N // 128)
-        tl.store(
-            InterScale + rows[:, None] * (INTERMEDIATE_DIM // 128) + blocks[None, :], act_s, mask=row_mask[:, None]
-        )
+            acc_gate += tl.dot(a, w_gate) * (a_s * s_gate)[:, None]
+            acc_up += tl.dot(a, w_up) * (a_s * s_up)[:, None]
+        act = acc_gate * tl.sigmoid(acc_gate) * acc_up  # SiLU(gate) * up, fp32
+        if RAW_OUT:
+            tl.store(Inter + rows[:, None] * INTERMEDIATE_DIM + offs_n[None, :], act, mask=row_mask[:, None])
+        else:
+            # one fp8 requant per (row, 128-wide block)
+            act_s = tl.max(tl.abs(act), axis=1) / 448.0
+            act_q = (act / tl.maximum(act_s[:, None], 1e-12)).to(tl.float8e4nv)
+            tl.store(Inter + rows[:, None] * INTERMEDIATE_DIM + offs_n[None, :], act_q, mask=row_mask[:, None])
+            tl.store(InterScale + rows * (INTERMEDIATE_DIM // 128) + pid_n, act_s, mask=row_mask)
 
 
 @triton.jit
-def _decode_down_kernel(
+def _decode_down_rows_m_kernel(
     Inter,  # (S, I) e4m3, expert-sorted
     InterScale,  # (S, I / 128) fp32
     Perm,  # (S,) int32
@@ -294,9 +305,7 @@ def _decode_down_kernel(
     HIDDEN_DIM: tl.constexpr,
     INTERMEDIATE_DIM: tl.constexpr,
     BLOCK_M: tl.constexpr,
-    BLOCK_N: tl.constexpr,  # multiple of 128 dividing HIDDEN_DIM
-    FOLD: tl.constexpr,  # needs BLOCK_N == 128
-    SHIFT: tl.constexpr,
+    BLOCK_N: tl.constexpr,  # power of two dividing HIDDEN_DIM
 ):
     e = tl.program_id(0).to(tl.int64)
     pid_n = tl.program_id(1)
@@ -307,8 +316,9 @@ def _decode_down_kernel(
     offs_k = tl.arange(0, 128)
     offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     w_base = Down + e * stride_d_e + offs_k[:, None] + offs_n[None, :] * stride_d_n
-    if BLOCK_N == 128:
-        w_s_base = DownScale + e * stride_ds_e + pid_n * stride_ds_n
+    if BLOCK_N <= 128:
+        # one weight scale per (128 rows, K block): a tile of at most 128 rows has a single one
+        w_s_base = DownScale + e * stride_ds_e + ((pid_n * BLOCK_N) // 128) * stride_ds_n
     else:
         w_s_base = DownScale + e * stride_ds_e + (offs_n // 128) * stride_ds_n
     for m0 in range(start, end, BLOCK_M):
@@ -324,21 +334,238 @@ def _decode_down_kernel(
             a_s = tl.load(InterScale + rows * (INTERMEDIATE_DIM // 128) + kb, mask=row_mask, other=0.0)
             w = tl.load(w_base + kb * 128)
             w_s = tl.load(w_s_base + kb)
-            if FOLD:
-                a_f = (a.to(tl.float32) * (a_s * (w_s * SHIFT))[:, None]).to(tl.float16)
-                acc = tl.dot(a_f, w.to(tl.float16), acc)
-            elif BLOCK_N == 128:
+            if BLOCK_N <= 128:
                 acc += tl.dot(a, w) * (a_s * w_s)[:, None]
             else:
                 acc += tl.dot(a, w) * a_s[:, None] * w_s[None, :]
         # routing weight and scatter back to the flat (token, slot) row: the top-k sum is then a plain reduction
         slot = tl.load(Perm + rows, mask=row_mask, other=0).to(tl.int64)
         weight = tl.load(Weights + slot, mask=row_mask, other=0.0).to(tl.float32)
-        if FOLD:
-            weight = weight * (1.0 / SHIFT)
         acc = acc * weight[:, None]
         tl.store(
             Out + slot[:, None] * HIDDEN_DIM + offs_n[None, :], acc.to(Out.dtype.element_ty), mask=row_mask[:, None]
+        )
+
+
+# The same two kernels with the weights as the first operand of the dot: tiles of 128 weight rows x BLOCK_M routed rows.
+# Triton lowers an fp8 dot to a native fp8 tensor-core MMA (tcgen05 on Blackwell, wgmma on Hopper) only when the first
+# operand has at least 64 rows and the program at least 4 warps. With the routed rows first (16 or 32 of them at
+# decode) it widens every fp8 byte to fp16 and uses `mma.sync` (`gap2/experts/scripts/probe_dot_shapes.py`).
+
+
+@triton.jit
+def _decode_gate_up_kernel(
+    Hidden,  # (T, H) e4m3 activations (always pre-quantized here)
+    HiddenScale,  # (T, H / 128) fp32
+    Perm,  # (S,) int32, expert-sorted position -> flat (token, slot) index
+    ExpertStart,  # (E + 1,) int32
+    GateUp,  # (E, 2I, H) e4m3
+    GateUpTiles,  # tensor descriptor of the same weights (only read with TMA)
+    GateUpScale,  # (E, 2I / 128, H / 128) fp32
+    Inter,  # (S, I) expert-sorted: e4m3, or fp32 with RAW_OUT
+    InterScale,  # (S, I / 128) fp32, not written with RAW_OUT
+    stride_h,
+    stride_hs,
+    stride_gu_e,
+    stride_gu_n,
+    stride_gus_e,
+    stride_gus_n,
+    NUM_TOP_K: tl.constexpr,
+    HIDDEN_DIM: tl.constexpr,
+    INTERMEDIATE_DIM: tl.constexpr,
+    BLOCK_M: tl.constexpr,  # routed rows per tile (the dot's N)
+    BLOCK_N: tl.constexpr,  # weight rows per tile (the dot's M): 128, or 64 with RAW_OUT
+    PREQUANT: tl.constexpr,
+    RAW_OUT: tl.constexpr,  # store SiLU(gate) * up in fp32 and leave the fp8 requant to `act_quant`
+    TMA: tl.constexpr,  # load the weight tiles through `GateUpTiles` (TMA on Hopper and Blackwell)
+):
+    e = tl.program_id(0).to(tl.int64)
+    pid_n = tl.program_id(1)
+    start = tl.load(ExpertStart + e)
+    end = tl.load(ExpertStart + e + 1)
+    if start >= end:
+        return
+    offs_k = tl.arange(0, 128)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    gate_base = GateUp + e * stride_gu_e + offs_n[:, None] * stride_gu_n + offs_k[None, :]
+    up_base = gate_base + INTERMEDIATE_DIM * stride_gu_n
+    # with TMA, `GateUpTiles` describes the weights as a (E * 2I, H) matrix cut in boxes of BLOCK_N rows x 128 columns
+    gate_row = tl.program_id(0) * (2 * INTERMEDIATE_DIM) + pid_n * BLOCK_N
+    # one weight scale per (128 rows, K block): a tile of at most 128 rows has a single one
+    gate_s_base = GateUpScale + e * stride_gus_e + ((pid_n * BLOCK_N) // 128) * stride_gus_n
+    up_s_base = gate_s_base + (INTERMEDIATE_DIM // 128) * stride_gus_n
+    for m0 in range(start, end, BLOCK_M):
+        rows = m0 + tl.arange(0, BLOCK_M)
+        row_mask = rows < end
+        token = (tl.load(Perm + rows, mask=row_mask, other=0) // NUM_TOP_K).to(tl.int64)
+        a_base = Hidden + offs_k[:, None] + token[None, :] * stride_h
+        acc_gate = tl.zeros((BLOCK_N, BLOCK_M), dtype=tl.float32)
+        acc_up = tl.zeros((BLOCK_N, BLOCK_M), dtype=tl.float32)
+        for kb in range(0, HIDDEN_DIM // 128):
+            a = tl.load(a_base + kb * 128, mask=row_mask[None, :], other=0.0)
+            a_s = tl.load(HiddenScale + token * stride_hs + kb, mask=row_mask, other=0.0)
+            if TMA:
+                w_gate = GateUpTiles.load([gate_row, kb * 128])
+                w_up = GateUpTiles.load([gate_row + INTERMEDIATE_DIM, kb * 128])
+            else:
+                w_gate = tl.load(gate_base + kb * 128)
+                w_up = tl.load(up_base + kb * 128)
+            s_gate = tl.load(gate_s_base + kb)
+            s_up = tl.load(up_s_base + kb)
+            acc_gate += tl.dot(w_gate, a) * (a_s * s_gate)[None, :]
+            acc_up += tl.dot(w_up, a) * (a_s * s_up)[None, :]
+        act = acc_gate * tl.sigmoid(acc_gate) * acc_up  # SiLU(gate) * up, fp32
+        if RAW_OUT:
+            tl.store(Inter + rows[None, :] * INTERMEDIATE_DIM + offs_n[:, None], act, mask=row_mask[None, :])
+        else:
+            # one fp8 requant per (row, 128-wide block)
+            act_s = tl.max(tl.abs(act), axis=0) / 448.0
+            act_q = (act / tl.maximum(act_s[None, :], 1e-12)).to(tl.float8e4nv)
+            tl.store(Inter + rows[None, :] * INTERMEDIATE_DIM + offs_n[:, None], act_q, mask=row_mask[None, :])
+            tl.store(InterScale + rows * (INTERMEDIATE_DIM // 128) + pid_n, act_s, mask=row_mask)
+
+
+@triton.jit
+def _decode_gate_up_fold_kernel(
+    Hidden,  # (T, H) activations, not quantized
+    HiddenScale,  # (T, H / 128) fp32: max |activation| / 448 per (token, 128 columns)
+    Perm,  # (S,) int32, expert-sorted position -> flat (token, slot) index
+    ExpertStart,  # (E + 1,) int32
+    GateUpTiles,  # tensor descriptor of the (E * 2I, H) e4m3 weights, boxes of 128 rows x 128 columns
+    GateUpScale,  # (E, 2I / 128, H / 128) fp32
+    Inter,  # (S, I) e4m3, expert-sorted
+    InterScale,  # (S, I / 128) fp32
+    stride_h,
+    stride_hs,
+    stride_gus_e,
+    stride_gus_n,
+    NUM_TOP_K: tl.constexpr,
+    HIDDEN_DIM: tl.constexpr,
+    INTERMEDIATE_DIM: tl.constexpr,
+    BLOCK_M: tl.constexpr,  # routed rows per tile (the dot's N)
+    K_BLOCKS_PADDED: tl.constexpr,  # next power of two of HIDDEN_DIM / 128
+):
+    """gate_up with one activation scale per (routed row, weight tile) instead of one per (row, 128 columns).
+
+    A block-scaled dot is `sum_kb a_s[kb] * w_s[kb] * dot(a_q[kb], w_q[kb])`: the scales change with the K block, so
+    the usual loop reads the MMA result back and does an fp32 multiply-add per output element and K block. Here the
+    activation is quantized inside the program as `a * w_s[kb] / S`, with `S = max_kb(amax[kb] * w_s[kb]) / 448`
+    known before the loop from the per-block maxima, so every K block shares the scale `S` and the tensor core
+    accumulates over the whole reduction. e4m3 is a floating-point format: a block whose scaled values are small
+    keeps its 3 mantissa bits down to 2^-15 of the row's largest block.
+    """
+    e = tl.program_id(0).to(tl.int64)
+    pid_n = tl.program_id(1)
+    start = tl.load(ExpertStart + e)
+    end = tl.load(ExpertStart + e + 1)
+    if start >= end:
+        return
+    offs_k = tl.arange(0, 128)
+    offs_n = pid_n * 128 + tl.arange(0, 128)
+    gate_row = tl.program_id(0) * (2 * INTERMEDIATE_DIM) + pid_n * 128
+    gate_s_base = GateUpScale + e * stride_gus_e + pid_n * stride_gus_n
+    up_s_base = gate_s_base + (INTERMEDIATE_DIM // 128) * stride_gus_n
+    k_blocks = tl.arange(0, K_BLOCKS_PADDED)
+    k_mask = k_blocks < HIDDEN_DIM // 128
+    s_gate_all = tl.load(gate_s_base + k_blocks, mask=k_mask, other=0.0)
+    s_up_all = tl.load(up_s_base + k_blocks, mask=k_mask, other=0.0)
+    for m0 in range(start, end, BLOCK_M):
+        rows = m0 + tl.arange(0, BLOCK_M)
+        row_mask = rows < end
+        token = (tl.load(Perm + rows, mask=row_mask, other=0) // NUM_TOP_K).to(tl.int64)
+        a_s_all = tl.load(
+            HiddenScale + token[None, :] * stride_hs + k_blocks[:, None],
+            mask=k_mask[:, None] & row_mask[None, :],
+            other=0.0,
+        )
+        scale_gate = tl.max(a_s_all * s_gate_all[:, None], axis=0)
+        scale_up = tl.max(a_s_all * s_up_all[:, None], axis=0)
+        inv_gate = 1.0 / tl.maximum(scale_gate, 1e-30)
+        inv_up = 1.0 / tl.maximum(scale_up, 1e-30)
+        a_base = Hidden + offs_k[:, None] + token[None, :] * stride_h
+        acc_gate = tl.zeros((128, BLOCK_M), dtype=tl.float32)
+        acc_up = tl.zeros((128, BLOCK_M), dtype=tl.float32)
+        for kb in range(0, HIDDEN_DIM // 128):
+            a = tl.load(a_base + kb * 128, mask=row_mask[None, :], other=0.0).to(tl.float32)
+            s_gate = tl.load(gate_s_base + kb)
+            s_up = tl.load(up_s_base + kb)
+            a_gate = tl.minimum(tl.maximum(a * (s_gate * inv_gate)[None, :], -448.0), 448.0).to(tl.float8e4nv)
+            a_up = tl.minimum(tl.maximum(a * (s_up * inv_up)[None, :], -448.0), 448.0).to(tl.float8e4nv)
+            acc_gate = tl.dot(GateUpTiles.load([gate_row, kb * 128]), a_gate, acc_gate)
+            acc_up = tl.dot(GateUpTiles.load([gate_row + INTERMEDIATE_DIM, kb * 128]), a_up, acc_up)
+        gate = acc_gate * scale_gate[None, :]
+        up = acc_up * scale_up[None, :]
+        act = gate * tl.sigmoid(gate) * up  # SiLU(gate) * up, fp32
+        # one fp8 requant per (row, 128-wide block)
+        act_s = tl.max(tl.abs(act), axis=0) / 448.0
+        act_q = (act / tl.maximum(act_s[None, :], 1e-12)).to(tl.float8e4nv)
+        tl.store(Inter + rows[None, :] * INTERMEDIATE_DIM + offs_n[:, None], act_q, mask=row_mask[None, :])
+        tl.store(InterScale + rows * (INTERMEDIATE_DIM // 128) + pid_n, act_s, mask=row_mask)
+
+
+@triton.jit
+def _decode_down_kernel(
+    Inter,  # (S, I) e4m3, expert-sorted
+    InterScale,  # (S, I / 128) fp32
+    Perm,  # (S,) int32
+    ExpertStart,  # (E + 1,) int32
+    Down,  # (E, H, I) e4m3
+    DownTiles,  # tensor descriptor of the same weights (only read with TMA)
+    DownScale,  # (E, H / 128, I / 128) fp32
+    Weights,  # (S,) routing weight per flat (token, slot)
+    Out,  # (S, H) flat (token, slot) rows
+    stride_d_e,
+    stride_d_n,
+    stride_ds_e,
+    stride_ds_n,
+    HIDDEN_DIM: tl.constexpr,
+    INTERMEDIATE_DIM: tl.constexpr,
+    BLOCK_M: tl.constexpr,  # routed rows per tile (the dot's N)
+    BLOCK_N: tl.constexpr,  # weight rows per tile (the dot's M), power of two dividing HIDDEN_DIM
+    TMA: tl.constexpr,  # load the weight tiles through `DownTiles` (TMA on Hopper and Blackwell)
+):
+    e = tl.program_id(0).to(tl.int64)
+    pid_n = tl.program_id(1)
+    start = tl.load(ExpertStart + e)
+    end = tl.load(ExpertStart + e + 1)
+    if start >= end:
+        return
+    offs_k = tl.arange(0, 128)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    w_base = Down + e * stride_d_e + offs_n[:, None] * stride_d_n + offs_k[None, :]
+    # with TMA, `DownTiles` describes the weights as a (E * H, I) matrix cut in boxes of BLOCK_N rows x 128 columns
+    w_row = tl.program_id(0) * HIDDEN_DIM + pid_n * BLOCK_N
+    if BLOCK_N <= 128:
+        # one weight scale per (128 rows, K block): a tile of at most 128 rows has a single one
+        w_s_base = DownScale + e * stride_ds_e + ((pid_n * BLOCK_N) // 128) * stride_ds_n
+    else:
+        w_s_base = DownScale + e * stride_ds_e + (offs_n // 128) * stride_ds_n
+    for m0 in range(start, end, BLOCK_M):
+        rows = m0 + tl.arange(0, BLOCK_M)
+        row_mask = rows < end
+        acc = tl.zeros((BLOCK_N, BLOCK_M), dtype=tl.float32)
+        for kb in range(0, INTERMEDIATE_DIM // 128):
+            a = tl.load(
+                Inter + (kb * 128 + offs_k)[:, None] + rows[None, :] * INTERMEDIATE_DIM,
+                mask=row_mask[None, :],
+                other=0.0,
+            )
+            a_s = tl.load(InterScale + rows * (INTERMEDIATE_DIM // 128) + kb, mask=row_mask, other=0.0)
+            if TMA:
+                w = DownTiles.load([w_row, kb * 128])
+            else:
+                w = tl.load(w_base + kb * 128)
+            w_s = tl.load(w_s_base + kb)
+            if BLOCK_N <= 128:
+                acc += tl.dot(w, a) * (a_s * w_s)[None, :]
+            else:
+                acc += tl.dot(w, a) * w_s[:, None] * a_s[None, :]
+        # routing weight and scatter back to the flat (token, slot) row: the top-k sum is then a plain reduction
+        slot = tl.load(Perm + rows, mask=row_mask, other=0).to(tl.int64)
+        weight = tl.load(Weights + slot, mask=row_mask, other=0.0).to(tl.float32)
+        acc = acc * weight[None, :]
+        tl.store(
+            Out + slot[None, :] * HIDDEN_DIM + offs_n[:, None], acc.to(Out.dtype.element_ty), mask=row_mask[None, :]
         )
 
 
@@ -357,15 +584,16 @@ def _topk_sum_kernel(
     tl.store(Out + t * H + offs_h, acc.to(Out.dtype.element_ty), mask=mask)
 
 
-# Fixed configs, chosen offline (gap2/experts REPORT): no in-band autotune. Keyed on the average number of routed rows
-# per expert, which is known from the shapes alone: (max rows per expert, gate_up config, down config), each config
-# being (BLOCK_M, BLOCK_N, num_warps, num_stages).
+# Fixed configs, chosen offline on one B300 at the GLM-5.3 TP8 rank shapes (gap2/experts REPORT, jobs 460214, 460299,
+# 460353): no in-band autotune. Keyed on the mean number of routed rows per expert, which the shapes give without
+# reading anything back: (max mean rows per expert, gate_up config, down config), each config being
+# (BLOCK_M, BLOCK_N, num_warps, num_stages).
 DECODE_CONFIGS = [
-    (4, (16, 128, 4, 3), (16, 128, 4, 3)),
-    (16, (16, 128, 4, 3), (16, 128, 4, 3)),
-    (48, (32, 128, 8, 3), (32, 128, 8, 3)),
+    (4, (16, 32, 2, 3, "rows"), (16, 128, 2, 3, "rows")),
+    (16, (16, 128, 4, 3, "rows"), (16, 128, 2, 3, "rows")),
+    (48, (64, 64, 4, 3, "rows"), (32, 128, 2, 3, "rows")),
 ]
-DECODE_MAX_SLOTS = 16384  # the routing kernel is quadratic in the number of slots
+DECODE_MAX_SLOTS = 65536
 
 
 def decode_config(num_slots: int, num_experts: int):
@@ -379,54 +607,116 @@ def decode_config(num_slots: int, num_experts: int):
 
 
 def decode_route(top_k_index, num_experts):
-    """`(perm, expert_start)`: expert-sorted position -> flat (token, slot) index, and each expert's first position."""
+    """`(perm, expert_start)`: expert-sorted position -> flat (token, slot) index, and each expert's first position.
+    One launch (comparison sort, deterministic) up to 2048 slots, an atomic counting sort in 4 launches above."""
     num_slots = top_k_index.numel()
-    perm = torch.empty(num_slots, dtype=torch.int32, device=top_k_index.device)
-    expert_start = torch.empty(num_experts + 1, dtype=torch.int32, device=top_k_index.device)
-    _route_kernel[(triton.cdiv(num_slots, _ROUTE_BLOCK) + triton.cdiv(num_experts + 1, _ROUTE_BLOCK),)](
-        top_k_index, perm, expert_start, num_slots,
-        NUM_EXPERTS=num_experts, BLOCK=_ROUTE_BLOCK, CHUNK=_ROUTE_CHUNK, num_warps=4,
-    )  # fmt: skip
+    device = top_k_index.device
+    perm = torch.empty(num_slots, dtype=torch.int32, device=device)
+    expert_start = torch.empty(num_experts + 1, dtype=torch.int32, device=device)
+    if num_slots <= _ROUTE_QUADRATIC_MAX_SLOTS:
+        _route_kernel[(triton.cdiv(num_slots, _ROUTE_BLOCK) + triton.cdiv(num_experts + 1, _ROUTE_BLOCK),)](
+            top_k_index, perm, expert_start, num_slots,
+            NUM_EXPERTS=num_experts, BLOCK=_ROUTE_BLOCK, CHUNK=_ROUTE_CHUNK, num_warps=4,
+        )  # fmt: skip
+        return perm, expert_start
+    count = torch.zeros(num_experts, dtype=torch.int32, device=device)
+    cursor = torch.empty(num_experts, dtype=torch.int32, device=device)
+    grid = (triton.cdiv(num_slots, _ROUTE_ATOMIC_BLOCK),)
+    _route_count_kernel[grid](
+        top_k_index, count, num_slots, NUM_EXPERTS=num_experts, BLOCK=_ROUTE_ATOMIC_BLOCK, num_warps=4
+    )
+    _route_offsets_kernel[(1,)](
+        count, expert_start, cursor, NUM_EXPERTS=num_experts, PADDED=triton.next_power_of_2(num_experts), num_warps=4
+    )
+    _route_scatter_kernel[grid](
+        top_k_index, perm, cursor, num_slots, NUM_EXPERTS=num_experts, BLOCK=_ROUTE_ATOMIC_BLOCK, num_warps=4
+    )
     return perm, expert_start
 
 
 def decode_gate_up(hidden_states, perm, expert_start, gate_up, gate_up_scale, num_top_k, config, prequant=False):
-    """`(inter, inter_scale)`: SiLU(gate) * up of every routed row, e4m3 with one fp32 scale per 128 columns."""
-    block_m, block_n, num_warps, num_stages, fold = (*config, False)[:5]
+    """`(inter, inter_scale)`: SiLU(gate) * up of every routed row, e4m3 with one fp32 scale per 128 columns.
+    `config` is (BLOCK_M, BLOCK_N, num_warps, num_stages). With an N tile narrower than the 128-wide scale block the
+    kernel stores fp32 and the requant is one more small launch."""
+    block_m, block_n, num_warps, num_stages, variant = (*config, "tma")[:5]
+    if variant == "fold":
+        num_experts, two_i, hidden = gate_up.shape
+        inter = two_i // 2
+        assert block_n == 128 and hidden % 128 == 0 and inter % 128 == 0 and hidden_states.stride(1) == 1
+        inter_q = torch.empty(perm.numel(), inter, dtype=FP8, device=gate_up.device)
+        inter_s = torch.empty(perm.numel(), inter // 128, dtype=torch.float32, device=gate_up.device)
+        _, x_s = act_quant(hidden_states)
+        _decode_gate_up_fold_kernel[(num_experts, inter // 128)](
+            hidden_states, x_s, perm, expert_start,
+            TensorDescriptor.from_tensor(gate_up.view(num_experts * two_i, hidden), [128, 128]), gate_up_scale,
+            inter_q, inter_s, hidden_states.stride(0), hidden // 128, gate_up_scale.stride(0), gate_up_scale.stride(1),
+            NUM_TOP_K=num_top_k, HIDDEN_DIM=hidden, INTERMEDIATE_DIM=inter, BLOCK_M=block_m,
+            K_BLOCKS_PADDED=triton.next_power_of_2(hidden // 128), num_warps=num_warps, num_stages=num_stages,
+        )  # fmt: skip
+        return inter_q, inter_s
+    weights_first = variant != "rows"
+    prequant = prequant or weights_first
     num_experts, two_i, hidden = gate_up.shape
     inter = two_i // 2
     num_slots = perm.numel()
     device = hidden_states.device
-    assert hidden % 128 == 0 and inter % block_n == 0 and block_n % 128 == 0 and (block_n == 128 or not fold)
-    inter_q = torch.empty(num_slots, inter, dtype=FP8, device=device)
-    inter_s = torch.empty(num_slots, inter // 128, dtype=torch.float32, device=device)
+    raw_out = block_n < 128
+    assert hidden % 128 == 0 and inter % 128 == 0 and 128 % block_n == 0
+    if raw_out:
+        inter_q = torch.empty(num_slots, inter, dtype=torch.float32, device=device)
+        inter_s = inter_q
+    else:
+        inter_q = torch.empty(num_slots, inter, dtype=FP8, device=device)
+        inter_s = torch.empty(num_slots, inter // 128, dtype=torch.float32, device=device)
     if prequant:
         x, x_s = act_quant(hidden_states)
         stride_x, stride_xs = hidden, hidden // 128
     else:
         x, x_s = hidden_states, hidden_states
         stride_x, stride_xs = hidden_states.stride(0), 0
-    _decode_gate_up_kernel[(num_experts, inter // block_n)](
+    args = (
         x, x_s, perm, expert_start, gate_up, gate_up_scale, inter_q, inter_s,
         stride_x, stride_xs, gate_up.stride(0), gate_up.stride(1), gate_up_scale.stride(0), gate_up_scale.stride(1),
-        NUM_TOP_K=num_top_k, HIDDEN_DIM=hidden, INTERMEDIATE_DIM=inter, BLOCK_M=block_m, BLOCK_N=block_n,
-        PREQUANT=prequant, FOLD=fold, SHIFT=_FOLD_SHIFT, num_warps=num_warps, num_stages=num_stages,
     )  # fmt: skip
+    meta = {
+        "NUM_TOP_K": num_top_k, "HIDDEN_DIM": hidden, "INTERMEDIATE_DIM": inter, "BLOCK_M": block_m,
+        "BLOCK_N": block_n, "PREQUANT": prequant, "RAW_OUT": raw_out, "num_warps": num_warps, "num_stages": num_stages,
+    }  # fmt: skip
+    if weights_first:
+        tiles = gate_up
+        if variant == "tma":
+            tiles = TensorDescriptor.from_tensor(gate_up.view(num_experts * two_i, hidden), [block_n, 128])
+        _decode_gate_up_kernel[(num_experts, inter // block_n)](
+            *args[:5], tiles, *args[5:], **meta, TMA=variant == "tma"
+        )
+    else:
+        _decode_gate_up_rows_m_kernel[(num_experts, inter // block_n)](*args, **meta)
+    if raw_out:
+        return act_quant(inter_q)
     return inter_q, inter_s
 
 
 def decode_down(inter_q, inter_s, perm, expert_start, down, down_scale, top_k_weights, out_dtype, config):
     """`(S, hidden)`: every routed row's weighted expert output, in flat (token, slot) order."""
-    block_m, block_n, num_warps, num_stages, fold = (*config, False)[:5]
+    block_m, block_n, num_warps, num_stages, variant = (*config, "tma")[:5]
     num_experts, hidden, inter = down.shape
-    assert hidden % block_n == 0 and block_n % 128 == 0 and inter % 128 == 0 and (block_n == 128 or not fold)
+    assert hidden % block_n == 0 and inter % 128 == 0 and (block_n % 128 == 0 or 128 % block_n == 0)
     slots_out = torch.empty(perm.numel(), hidden, dtype=out_dtype, device=down.device)
-    _decode_down_kernel[(num_experts, hidden // block_n)](
+    args = (
         inter_q, inter_s, perm, expert_start, down, down_scale, top_k_weights, slots_out,
         down.stride(0), down.stride(1), down_scale.stride(0), down_scale.stride(1),
-        HIDDEN_DIM=hidden, INTERMEDIATE_DIM=inter, BLOCK_M=block_m, BLOCK_N=block_n,
-        FOLD=fold, SHIFT=_FOLD_SHIFT, num_warps=num_warps, num_stages=num_stages,
     )  # fmt: skip
+    meta = {
+        "HIDDEN_DIM": hidden, "INTERMEDIATE_DIM": inter, "BLOCK_M": block_m, "BLOCK_N": block_n,
+        "num_warps": num_warps, "num_stages": num_stages,
+    }  # fmt: skip
+    if variant != "rows":
+        tiles = down
+        if variant == "tma":
+            tiles = TensorDescriptor.from_tensor(down.view(num_experts * hidden, inter), [block_n, 128])
+        _decode_down_kernel[(num_experts, hidden // block_n)](*args[:5], tiles, *args[5:], **meta, TMA=variant == "tma")
+    else:
+        _decode_down_rows_m_kernel[(num_experts, hidden // block_n)](*args, **meta)
     return slots_out
 
 
@@ -451,9 +741,10 @@ def decode_experts_forward(
     down_scale,
     gate_up_config=None,
     down_config=None,
-    prequant: bool = False,
+    prequant: bool = True,
 ):
-    """Block-FP8 routed experts in 4 launches (5 with `prequant`). Returns `(num_tokens, hidden)` in the input dtype."""
+    """Block-FP8 routed experts: route, activation quant, gate_up, (requant for narrow tiles), down, top-k sum.
+    Returns `(num_tokens, hidden)` in the input dtype."""
     CALLS["decode"] += 1
     num_experts = gate_up.shape[0]
     num_top_k = top_k_index.shape[-1]
