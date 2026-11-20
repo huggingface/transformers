@@ -376,23 +376,24 @@ class ModelRunner:
         self, model: nn.Module, num_requests: int, num_q_tokens: int, past_length: int
     ) -> tuple[int, int, int]:
         """Runs one eager varlen step on fake requests (`num_requests` requests of `num_q_tokens` query tokens, each with
-        `past_length` tokens already in cache) and measures the memory it allocates, relative to what was allocated
-        before the step. Returns:
-            - the peak in the decoder, ie. until the LM head starts
-            - the peak from the LM head onwards (LM head, logits processing and sampling)
-            - the memory still allocated when the LM head starts
-        If the model has no output embeddings to split the step on, both peaks are the peak of the whole step and the LM
-        head is considered to start with the step. Errors are not caught."""
+        `past_length` tokens already in cache) and measures the memory it allocates. The step is split in two parts at
+        the LM head: the decoder, and the LM head onwards (LM head, logits processing and sampling). Returns, in bytes and
+        relative to the memory allocated before the step:
+            - `decoder_peak`: the peak of the decoder part, preparation of the batch inputs included
+            - `lm_head_peak`: the peak of the LM head onwards part
+            - `allocated_at_lm_head`: the memory still allocated when the LM head starts, eg. the hidden states left by
+              the decoder. The LM head onwards part allocates `lm_head_peak - allocated_at_lm_head` by itself.
+        If the model has no output embeddings to split the step on, both peaks are the peak of the whole step and
+        `allocated_at_lm_head` is 0. Errors are not caught."""
         device = torch.device(self.cache.device)
-        device_module = torch.get_device_module(device)
 
         # Right before the LM head, the decoder peak is read and the peak tracking restarts for the rest of the step
-        lm_head_memory = []  # (allocated, peak) when the LM head starts
+        memory_at_lm_head = []  # (allocated, peak since the step started) when the LM head starts
 
         def split_at_lm_head(module: nn.Module, args: Any) -> None:
             """Hook to read the memory when the LM head starts."""
-            if not lm_head_memory:
-                lm_head_memory.append(read_memory(device))
+            if not memory_at_lm_head:
+                memory_at_lm_head.append(read_memory(device))
 
         output_embeddings = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
         hook = None if output_embeddings is None else output_embeddings.register_forward_pre_hook(split_at_lm_head)
@@ -406,7 +407,7 @@ class ModelRunner:
                     )
 
                 # Wait for the previous step to be done with the inputs before overwriting them
-                device_module.synchronize(device)
+                synchronize_device(device)
 
                 # Measure the memory allocated before the batch is prepared, as it can create large temporary tensors
                 allocated_before, _ = read_memory(device)
@@ -423,11 +424,11 @@ class ModelRunner:
                     batch_data["logits_to_keep"] = batch_data["logits_indices"]
 
                 # The inputs are written on the default stream, so the forward on the compute stream must wait for them
-                device_module.synchronize(device)
+                synchronize_device(device)
                 with stream_context(self.inputs_and_outputs.compute_stream):
                     self._forward_process_and_sample(model, batch_data, *self.inputs_and_outputs.get_cb_kwargs())
-                device_module.synchronize(device)
-                _, last_peak = read_memory(device)
+                synchronize_device(device)
+                _, final_peak = read_memory(device)  # peak since the LM head started, or since the step started
 
         # In all cases, un-hook the model if it was hooked
         finally:
@@ -435,12 +436,13 @@ class ModelRunner:
                 hook.remove()
 
         # If the model can't be split at the LM head, use the whole step peak as peak of the decoder and of the LM head
-        if not lm_head_memory:
-            step_peak = last_peak - allocated_before
+        if not memory_at_lm_head:
+            step_peak = final_peak - allocated_before
             return step_peak, step_peak, 0
-        # Otherwise, break down the values and offfset them by the memory allocated before the step
-        lm_head_allocated, decoder_peak = lm_head_memory[0]
-        return decoder_peak - allocated_before, last_peak - allocated_before, lm_head_allocated - allocated_before
+        # Otherwise, offset the values read during the step by the memory allocated before it
+        allocated_at_lm_head, decoder_peak = (memory - allocated_before for memory in memory_at_lm_head[0])
+        lm_head_peak = final_peak - allocated_before
+        return decoder_peak, lm_head_peak, allocated_at_lm_head
 
     @classmethod
     def infer_probe_num_blocks(cls, cb_config: ContinuousBatchingConfig) -> int:
@@ -465,16 +467,19 @@ class ModelRunner:
         read_tokens = max(max_batch_tokens, self._probe_read_tokens)
 
         # Peaks of a batch made of a single request with all the batch tokens
-        decoder_peak, post_peak, _ = self.measure_peak_memory(model, 1, max_batch_tokens, 0)
+        decoder_peak, lm_head_peak, _ = self.measure_peak_memory(model, 1, max_batch_tokens, 0)
         # The peak of the LM head onwards grows with the number of logit rows: we extrapolate it linearly. The cost of a
         # row is measured on one-token requests, so the decoder leaves almost nothing allocated when the LM head starts:
         # in a large batch, the hidden states still allocated then can hide that cost behind them.
         if probed_rows > 1:
             half_rows = probed_rows // 2
-            _, half_peak, half_start = self.measure_peak_memory(model, half_rows, 1, 0)
-            _, full_peak, full_start = self.measure_peak_memory(model, probed_rows, 1, 0)
-            row_cost = max(0, (full_peak - full_start) - (half_peak - half_start)) / (probed_rows - half_rows)
-            post_peak += row_cost * (num_rows - 1)
+            _, half_lm_head_peak, half_allocated_at_lm_head = self.measure_peak_memory(model, half_rows, 1, 0)
+            _, full_lm_head_peak, full_allocated_at_lm_head = self.measure_peak_memory(model, probed_rows, 1, 0)
+            # What the LM head onwards allocates by itself, on top of what the decoder left allocated
+            half_rows_cost = half_lm_head_peak - half_allocated_at_lm_head
+            full_rows_cost = full_lm_head_peak - full_allocated_at_lm_head
+            row_cost = max(0, full_rows_cost - half_rows_cost) / (probed_rows - half_rows)
+            lm_head_peak += row_cost * (num_rows - 1)
 
         # The decoder peak grows with the cache tokens read, but it is a max over layers: in a large batch, that growth
         # can hide behind MLP activations or token-independent buffers. So it is measured on a few query tokens, where
@@ -483,11 +488,11 @@ class ModelRunner:
         query_lengths = sorted({min(q, max_batch_tokens) for q in self._probe_query_tokens})
         read_costs = []
         for num_q_tokens in query_lengths:
-            no_read_peak, _, _ = self.measure_peak_memory(model, 1, num_q_tokens, 0)
-            read_peak, _, _ = self.measure_peak_memory(model, 1, num_q_tokens, read_tokens)
-            read_costs.append(max(0, read_peak - no_read_peak) / read_tokens)
+            no_read_decoder_peak, _, _ = self.measure_peak_memory(model, 1, num_q_tokens, 0)
+            read_decoder_peak, _, _ = self.measure_peak_memory(model, 1, num_q_tokens, read_tokens)
+            read_costs.append(max(0, read_decoder_peak - no_read_decoder_peak) / read_tokens)
         read_cost = read_costs[0]
         if len(read_costs) > 1:
             per_query_token = max(0.0, (read_costs[1] - read_costs[0]) / (query_lengths[1] - query_lengths[0]))
             read_cost += per_query_token * (max_batch_tokens - query_lengths[0])
-        return decoder_peak, read_cost, post_peak
+        return decoder_peak, read_cost, lm_head_peak
