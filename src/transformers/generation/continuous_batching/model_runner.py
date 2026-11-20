@@ -38,6 +38,10 @@ from .utils import (
 import os as _glue_os
 
 _GLUE_SAMPLE = _glue_os.environ.get("GLUE_SAMPLE", "0") == "1"
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_CAPTURE_THEN_REPLAY=1: a decode batch whose
+# padded request count already ran once eagerly (every kernel it uses is compiled and tuned) captures its graph first
+# and replays the capture to produce the step's result, instead of an eager forward followed by a capture pass.
+_PROTO_CAPTURE_THEN_REPLAY = os.environ.get("CB_PROTO_CAPTURE_THEN_REPLAY", "0") == "1"
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -78,6 +82,7 @@ class ModelRunner:
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
+        self._proto_eager_seen: set[tuple[bool, int]] = set()  # (decode path, padded query tokens) that ran eagerly
 
         # Padding only happen when CUDA graphs or compile is used
         cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
@@ -174,6 +179,18 @@ class ModelRunner:
 
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
+        io = self.inputs_and_outputs
+        device_io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+        seen_key = (device_io.use_block_table, device_io.num_q_tokens)
+        if _PROTO_CAPTURE_THEN_REPLAY and device_io.use_block_table and seen_key in self._proto_eager_seen:
+            graph = create_accelerator_graph()
+            with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
+                forward_fn(*args)
+            self.inputs_and_outputs.set_graph(graph)
+            with stream_context(compute_stream):
+                graph.replay()
+            return
+        self._proto_eager_seen.add(seen_key)
         # Warmup (ensures the right result is computed before capturing the graph)
         with stream_context(compute_stream), memory_pool_context(self.mem_pool):
             forward_fn(*args)

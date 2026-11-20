@@ -528,7 +528,8 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
 
     batch_size, num_heads, seq_length, _ = q_pass.shape  # batch_size is 1 under CB
     if module.indexer is not None:
-        if _PROTO_PER_QUERY_INDEXER and seq_length <= 512:
+        # engine WP: without a mask (CB_PROTO_NO_MASK=1) every batch size takes the per-request indexer
+        if _PROTO_PER_QUERY_INDEXER and (seq_length <= 512 or attention_mask is None):
             cu_q = kwargs["cu_seq_lens_q"]
             cu_k = kwargs["cu_seq_lens_k"][allocator.layer_type]
             max_k = kwargs["max_length_k"][allocator.layer_type]

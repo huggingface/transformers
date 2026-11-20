@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import queue
 import re
 import threading
@@ -84,8 +85,21 @@ class ThreadLocalCounter(threading.local):
         self.value = 0
 
 
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_NO_MASK=1: no attention mask is allocated,
+# budgeted or passed for MLA models. Only valid when no batch reads the mask: the block table decode path plus a
+# per-request indexer on every varlen batch (the GLM prototype with PROTO_PER_QUERY_INDEXER=1).
+_PROTO_NO_MASK = os.environ.get("CB_PROTO_NO_MASK", "0") == "1"
+
+
+def proto_no_mask(config: PreTrainedConfig) -> bool:
+    """PROTOTYPE: True when CB_PROTO_NO_MASK=1 and the model caches MLA latents."""
+    return _PROTO_NO_MASK and getattr(config, "kv_lora_rank", None) is not None
+
+
 def attn_mask_is_needed(config: PreTrainedConfig) -> bool:
     """Checks if attention mask is needed for the given (config)."""
+    if proto_no_mask(config):
+        return False
     return config._attn_implementation in ["paged|eager", "sdpa"]
 
 

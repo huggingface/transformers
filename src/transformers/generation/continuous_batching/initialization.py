@@ -27,7 +27,7 @@ from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
 from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE
-from .utils import WorkloadHints, get_accelerator_graph_name, logger
+from .utils import WorkloadHints, get_accelerator_graph_name, logger, proto_no_mask
 
 
 FALLBACK_DEFAULTS = {
@@ -81,7 +81,7 @@ def resolve_continuous_batching_config(
     )
 
     # Decide if CUDA graphs should be used. Should happen after compile configs are decided.
-    is_attn_mask_needed = not is_flash_attention_requested(config)
+    is_attn_mask_needed = not is_flash_attention_requested(config) and not proto_no_mask(config)
     decide_use_cuda_graphs(
         cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, cuda_graph_requested=cuda_graph_requested
     )
