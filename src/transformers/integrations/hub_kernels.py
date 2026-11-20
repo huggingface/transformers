@@ -168,8 +168,6 @@ if is_kernels_available():
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
                     revision="531ae679ab5c13a3bf49607e1b6e6459300772e9",
-                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
-                    trust_remote_code=True,
                 ),
                 # AMD Strix Halo (gfx1151, capability 11.5), ROCm build of the same layer
                 Device(
@@ -179,8 +177,6 @@ if is_kernels_available():
                     repo_id="Atlas-Inference/gdn",
                     layer_name="Qwen3_5GatedDeltaNet",
                     revision="13462bf5e936315f341204ae06bf09068392d227",
-                    # TODO: drop once Atlas-Inference is an allow-listed trusted publisher
-                    trust_remote_code=True,
                 ),
             },
             "causal_conv1d_fn": {
@@ -415,7 +411,6 @@ if is_kernels_available():
                         repo_id="biohub/esmfold2-trimul",
                         layer_name="ESMFold2TriangleMultiplication",
                         revision="9bcafd5b29a6c81645ae299d5364f5b9e503aca8",
-                        trust_remote_code=True,
                     ),
                 },
             },
@@ -950,6 +945,17 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
+def _is_trust_remote_code_error(error: ValueError) -> bool:
+    """Whether `error` is a `kernels` publisher-trust rejection.
+
+    The `kernels` library raises a plain `ValueError` (no dedicated type) when a kernel
+    repository's publisher is not allow-listed as a trusted kernel publisher, or when
+    publisher trust cannot be verified. Both messages point at `trust_remote_code`,
+    which no other `ValueError` raised during kernelization mentions.
+    """
+    return "trust_remote_code" in str(error)
+
+
 def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
     if not is_kernels_available():
@@ -960,12 +966,26 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 
-    if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
-        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+    try:
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
+        else:
             _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
-    else:
-        _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
+    except ValueError as e:
+        if not _is_trust_remote_code_error(e):
+            raise
+        # The `kernels` library only treats `FileNotFoundError` as a load failure worth
+        # falling back from; a publisher-trust rejection raises `ValueError` instead.
+        # A rejected kernel must never load, but it must not break model loading either:
+        # keep the original forward for the affected layer(s) and let the user opt in
+        # explicitly if they want the kernel.
+        logger.warning_once(
+            f"Skipping hub kernel(s) from untrusted publisher(s): {e} "
+            "The affected layer(s) keep their original implementation. To load the kernel, "
+            "opt in explicitly (e.g. a KernelConfig entry with trust_remote_code=True)."
+        )
 
     model._use_kernels = True
 

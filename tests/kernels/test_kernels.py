@@ -474,6 +474,66 @@ class TestKernelsEnv(TestCasePlus):
 
 @require_kernels
 class TestKernelUtilities(TestCasePlus):
+    def test_default_kernel_mapping_does_not_hardcode_trust_remote_code(self):
+        """
+        Regression test for #51007: the built-in kernel mapping must never hard-code
+        `trust_remote_code=True`. Kernels from publishers that are not allow-listed as
+        trusted kernel publishers must require the user's explicit opt-in (or the
+        publisher becoming allow-listed) — the library must not trust them on its own.
+        """
+        mapping = hub_kernels_pkg.get_kernel_mapping_transformers()
+
+        def iter_repositories(node):
+            if isinstance(node, LayerRepository):
+                yield node
+            elif isinstance(node, dict):
+                for value in node.values():
+                    yield from iter_repositories(value)
+
+        trusted_by_default = [
+            repo
+            for layer_mapping in mapping.values()
+            for repo in iter_repositories(layer_mapping)
+            if repo._trust_remote_code
+        ]
+        self.assertEqual(
+            trusted_by_default,
+            [],
+            "Built-in kernel mapping hard-codes trust_remote_code=True for: "
+            + ", ".join(str(repo) for repo in trusted_by_default),
+        )
+
+    def test_kernelize_skips_untrusted_kernel(self):
+        """
+        Regression test for #51007: when the `kernels` library rejects a kernel
+        because its publisher is not trusted, kernelization must keep the
+        original forward instead of raising — the rejection must never load the
+        code, but it must not break model loading either.
+        """
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
+        model = LlamaModel(copy.deepcopy(config))
+        rms_norm = next(m for m in model.modules() if type(m).__name__ == "LlamaRMSNorm")
+        self.assertTrue(hasattr(type(rms_norm), "kernel_layer_name"))
+
+        repo = LayerRepository(repo_id="untrusted/rmsnorm", layer_name="LlamaRMSNorm", revision="main")
+        trust_error = ValueError(
+            "Kernel repository 'untrusted/rmsnorm' is not from a trusted publisher. "
+            "Set trust_remote_code=True or add the repository ID to the trust_remote_code allowlist "
+            "to allow loading kernels from untrusted sources."
+        )
+        with (
+            use_kernel_mapping({"RMSNorm": {"cpu": repo}}, inherit_mapping=False),
+            patch.object(LayerRepository, "load", side_effect=trust_error) as mock_load,
+        ):
+            # Must not raise: the rejected kernel is skipped, the layer keeps its forward.
+            hub_kernels_pkg.kernelize(model, mode=Mode.INFERENCE)
+
+        self.assertTrue(mock_load.called, "The untrusted kernel was never even attempted to load")
+        self.assertTrue(model._use_kernels)
+        self.assertIs(rms_norm.forward.__func__, type(rms_norm).forward)  # not exchanged
+
     def test_is_kernel_regex(self):
         valid = [
             "org/model",
