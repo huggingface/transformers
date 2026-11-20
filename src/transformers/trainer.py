@@ -762,6 +762,8 @@ class Trainer:
             ddp_kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
         if self.args.ddp_static_graph is not None:
             ddp_kwargs["static_graph"] = self.args.ddp_static_graph
+        if self.args.ddp_gradient_as_bucket_view:
+            ddp_kwargs["gradient_as_bucket_view"] = self.args.ddp_gradient_as_bucket_view
 
         args["kwargs_handlers"] = [DistributedDataParallelKwargs(**ddp_kwargs)]
 

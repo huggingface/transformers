@@ -666,6 +666,11 @@ class TrainingArguments:
         ddp_static_graph (`bool`, *optional*):
             When using distributed training, the value of the flag `static_graph` passed to
             `DistributedDataParallel`.
+        ddp_gradient_as_bucket_view (`bool`, *optional*, defaults to `False`):
+            When using distributed training, whether to set the flag `gradient_as_bucket_view` passed to
+            `DistributedDataParallel`. Gradients then alias the allreduce communication buckets instead of living in
+            separate tensors, which lowers peak memory usage by roughly the total gradient size. Gradients only become
+            views after the first iteration, and `detach_()` cannot be called on them.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"xccl"`, `"gloo"`, `"hccl"`.
         ddp_timeout (`int`, *optional*, defaults to 1800):
@@ -1425,6 +1430,16 @@ class TrainingArguments:
             "help": (
                 "When using distributed training, the value of the flag `static_graph` passed to "
                 "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_gradient_as_bucket_view: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "When using distributed training, whether to set the flag `gradient_as_bucket_view` passed to "
+                "`DistributedDataParallel`. This makes gradients alias the allreduce communication buckets instead "
+                "of separate tensors, lowering peak memory usage by roughly the total gradient size."
             )
         },
     )
