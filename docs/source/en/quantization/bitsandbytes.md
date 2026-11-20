@@ -253,6 +253,28 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+### Energy efficiency considerations
+
+When deploying quantized models, it's worth understanding the energy implications of different quantization configurations. The figures below are measured, not estimated (NVIDIA T4, RTX 4090, RTX 5090, A800); see the [EcoCompute benchmark dataset](https://github.com/hongping-zh/ecocompute-mlcube) for methodology and raw data.
+
+**INT8 mixed-precision trade-offs**
+
+The default `llm_int8_threshold=6.0` preserves accuracy, but relative to FP16 it can *increase* energy consumption: +17-147% across a broad test set, and +50-242% in an RTX 4090 deep dive (n=1). The root cause is mixed-precision decomposition — INT8<->FP16 conversion around outlier columns — not INT8 compute itself.
+
+**Threshold configuration**
+
+`llm_int8_threshold=0.0` skips the outlier path and avoids that decomposition overhead: measured +79% throughput and -36% energy on average vs the default. The outlier path exists to protect accuracy on models with large activation outliers, so benchmark quality on your own workload before adopting it wholesale.
+
+**Model size considerations**
+
+The NF4 break-even is a property of the card + software stack, not a universal constant. Measured break-even points: ~2.1B parameters (Tesla T4), ~3.7B (RTX 4090), ~4.8B (RTX 5090 on the v1.1.0 stack; a September 2026 re-run on a newer stack measured ~1.8B). Below the break-even NF4 costs energy (e.g. +46% at 0.5B on RTX 4090); above it NF4 saves (-28% at 7B on RTX 4090).
+
+**Batch size impact**
+
+Batch size is the largest single lever. Going from `batch_size=1` to `batch_size=64` reduced energy per request by 95.7% (measured on an A800, with 55.5x throughput scaling), making batching a critical optimization for production deployments.
+
+For detailed benchmarking data and methodology, see the [EcoCompute benchmark repository](https://github.com/hongping-zh/ecocompute-mlcube).
+
 ### Skip module conversion
 
 For some models, like Jukebox, you don't need to quantize every module to 8-bit because it can actually cause instability. With Jukebox, there are several `lm_head` modules that should be skipped using the `llm_int8_skip_modules` parameter in [`BitsAndBytesConfig`].
