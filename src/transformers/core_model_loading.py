@@ -1717,6 +1717,8 @@ def convert_and_load_state_dict_in_model(
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+    # Experts streamed from the checkpoint (`distributed/offload.py`): only their slices are recorded
+    experts_offload = getattr(model, "_experts_offload", None)
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
@@ -1759,6 +1761,10 @@ def convert_and_load_state_dict_in_model(
                 _dtype = empty_param.dtype
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
+
+            if experts_offload is not None and experts_offload.owns(renamed_key):
+                mapping.add_tensor(renamed_key, original_key, source_pattern, (tensor, _dtype))
+                continue
 
             # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in
             # the list lets the sharding op tell which slice of the param each one is
@@ -1805,6 +1811,10 @@ def convert_and_load_state_dict_in_model(
 
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
+            if experts_offload is not None and experts_offload.owns(first_param_name):
+                experts_offload.add_reader(first_param_name, mapping, mapping.collected_tensors)
+                loading_info.missing_keys.difference_update({first_param_name, *mapping.layer_targets})
+                continue
             try:
                 realized_value = mapping.convert(
                     first_param_name,
