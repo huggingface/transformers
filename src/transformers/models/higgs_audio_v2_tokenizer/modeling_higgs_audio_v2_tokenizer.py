@@ -21,7 +21,6 @@
 
 import math
 from dataclasses import dataclass
-from functools import lru_cache
 
 import torch
 import torch.nn as nn
@@ -123,7 +122,6 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
                 if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
                     torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
 
-    @lru_cache
     def _get_conv1d_layers(self, module):
         """
         Recursively iterate to fetch all Conv1d layers.
