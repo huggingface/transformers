@@ -418,8 +418,8 @@ class TrainingArguments:
             The Hugging Face Space ID to use for static Space created after training is complete. Should be a full
             Space name like `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` (the Space is created in
             the currently logged-in user's namespace). If False, no static Space will be created. If None, and model is pushed to the Hub,
-            a static Space will be created with a default name and this will be linked from the model card. The Space will be public
-            unless you set `hub_private_repo=True` or your organization's default is to create private Spaces.
+            a static Space will be created with a default name and this will be linked from the model card. Static Spaces are
+            always public, so none is created when `hub_private_repo=True`.
 
         > Evaluation
 
@@ -1097,7 +1097,7 @@ class TrainingArguments:
                 "Static read-only Trackio Space over the Bucket (stable model-card links). False: no static sync on Hub "
                 "push and no freeze after training. None/str: allow static Space; for local-only logging, Hub push runs "
                 "sync(static); after training, freeze runs only if trackio_space_id was set (Gradio Space). str sets "
-                "explicit static Space id. Public unless hub_private_repo=True or org default."
+                "explicit static Space id. Static Spaces are public, so none is created when hub_private_repo=True."
             )
         },
     )

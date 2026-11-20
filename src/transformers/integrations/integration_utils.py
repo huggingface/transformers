@@ -1038,8 +1038,9 @@ class TrackioCallback(TrainerCallback):
     def _freeze_space(self, args: TrainingArguments, model):
         """
         Freezes the Gradio Space after training is complete, if `trackio_static_space_id` is set to a `str` or `None`.
+        Private runs (`hub_private_repo=True`) are not frozen: a static Trackio Space serves its data publicly.
         """
-        if args.trackio_static_space_id is False:
+        if args.trackio_static_space_id is False or args.hub_private_repo:
             return
         if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(
             self.MIN_TRACKIO_VERSION_FOR_FREEZE
@@ -1058,7 +1059,6 @@ class TrackioCallback(TrainerCallback):
             space_id=self._space_id,
             project=args.project,
             new_space_id=static_space_id,
-            private=args.hub_private_repo,
         )
         self._point_model_card_at_space(model)
 
@@ -1112,9 +1112,10 @@ class TrackioCallback(TrainerCallback):
             return
         if (current_project := self._trackio.context_vars.current_project.get()) is None:
             return
-        if self._space_id or args.trackio_static_space_id is False:
+        if self._space_id or args.trackio_static_space_id is False or args.hub_private_repo:
             # If there's a Gradio space, it will be frozen after training is complete, so we don't need to sync it here.
             # If a user has explicitly set trackio_static_space_id to False, we also don't sync their logs.
+            # A static Space serves its data publicly, so private runs (hub_private_repo=True) aren't synced either.
             return
         static_space_id = (
             self._static_space_id or args.trackio_static_space_id or self._space_repo_name_from_project(args.project)
@@ -1123,7 +1124,6 @@ class TrackioCallback(TrainerCallback):
             project=current_project,
             sdk="static",
             space_id=static_space_id,
-            private=args.hub_private_repo,
             bucket_id=args.trackio_bucket_id,
             force=True,
         )
