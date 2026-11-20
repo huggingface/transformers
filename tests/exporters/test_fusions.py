@@ -37,13 +37,14 @@ from tests.models.qwen3.test_modeling_qwen3 import Qwen3ModelTester
 from tests.models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
 from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import AutoModelForCausalLM, GenerationConfig, set_seed
-from transformers.exporters import OnnxConfig, OnnxExporter, OpenVINOConfig, OpenVINOExporter
+from transformers.exporters import OnnxConfig, OnnxExporter, OpenVINOConfig, OpenVINOExporter, OrtFusionConfig
 from transformers.testing_utils import (
     require_nncf,
     require_onnxruntime,
     require_onnxscript,
     require_openvino,
     require_torch,
+    require_torch_gpu,
     slow,
 )
 
@@ -85,10 +86,11 @@ ORT_FUSIONS = {
     # DirectML's `GroupQueryAttention` reads neither rotary, the mask, nor packed q/k/v: `MultiHeadAttention` stays.
     "dml": {"MultiHeadAttention": 1, "GroupQueryAttention": 0, "MoE": 0, "RotaryEmbedding": 2, **ORT_UNFUSED},
 }
-# Only CUDA has `MoE`: elsewhere the router keeps its softmax (microsoft/onnxruntime#33866).
+# Only CUDA has `MoE`, opted into (`test_cuda_mixture_of_experts_fuses_when_picked`): the router keeps its softmax
+# (microsoft/onnxruntime#33866).
 ORT_MOE_FUSIONS = {
     "cpu": {**ORT_FUSIONS["cpu"], "Softmax": 1},
-    "cuda": {**ORT_FUSIONS["cuda"], "MoE": 1},
+    "cuda": {**ORT_FUSIONS["cuda"], "MoE": 0, "Softmax": 1},
     "webgpu": {**ORT_FUSIONS["webgpu"], "Softmax": 1},
     "dml": {**ORT_FUSIONS["dml"], "Softmax": 1},
 }
@@ -141,11 +143,12 @@ def _decode_feeds(program, vocab_size):
     """Inputs for one new token after a random past cache."""
     generator = np.random.default_rng(0)
     inputs = {value.name: [int(dim) for dim in value.shape] for value in program.graph.inputs}
+    dtypes = {value.name: value.dtype.numpy() for value in program.graph.inputs}
     past_length = next(shape[2] for name, shape in inputs.items() if "cache" in name)
     feeds = {}
     for name, shape in inputs.items():
         if "cache" in name:
-            feeds[name] = generator.standard_normal(shape).astype(np.float32)
+            feeds[name] = generator.standard_normal(shape).astype(dtypes[name])
         elif "mask" in name:
             feeds[name] = np.ones(shape, dtype=np.int64)
         elif "position" in name:
@@ -155,11 +158,11 @@ def _decode_feeds(program, vocab_size):
     return feeds
 
 
-def _run(program, feeds):
+def _run(program, feeds, provider="CPUExecutionProvider"):
     import onnx_ir as ir
     import onnxruntime as ort
 
-    session = ort.InferenceSession(ir.to_proto(program).SerializeToString(), providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(ir.to_proto(program).SerializeToString(), providers=[provider])
     return session.run(None, {item.name: feeds[item.name] for item in session.get_inputs()})
 
 
@@ -207,6 +210,18 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         for fused_output, plain_output in zip(_run(fused, feeds), _run(plain, feeds)):
             np.testing.assert_allclose(fused_output, plain_output, atol=1e-4, rtol=1e-4)
 
+    @require_torch_gpu
+    def test_cuda_decode_matches_plain_export(self):
+        # The CUDA fusions' kernels run on CUDA only.
+        model = _ort_model(ort_fusions="cuda")
+        inputs = _padded_inputs(model)
+        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cuda", None))
+        self.assert_fused(model, fused, ORT_FUSIONS["cuda"])
+        feeds = _decode_feeds(plain, model.config.vocab_size)
+        outputs = (_run(program, feeds, "CUDAExecutionProvider") for program in (fused, plain))
+        for fused_output, plain_output in zip(*outputs):
+            np.testing.assert_allclose(fused_output.astype(np.float32), plain_output, atol=2e-2, rtol=2e-2)
+
     def test_decode_group_query_attention_rotates_and_reads_packed_projection(self):
         model = _ort_model()
         attentions = _group_query_attentions(_export_for_ort(model, "cpu")["decode"])
@@ -219,6 +234,25 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         for component, program in _export_for_ort(model, "webgpu").items():
             attentions = _group_query_attentions(program)
             self.assertFalse(any(node.attributes.get_int("do_rotary", 0) for node in attentions), component)
+
+    def test_cuda_mixture_of_experts_fuses_when_picked(self):
+        # Opt-in: ONNX Runtime's CUDA `MoE` runs on Hopper or newer only.
+        model = _ort_model("qwen3_moe", "cuda")
+        fusions = OrtFusionConfig(provider="cuda", mixture_of_experts=True)
+        for component, program in _export_for_ort(model, fusions).items():
+            self.assert_fused(model, program, {"MoE": 1, "Softmax": 0}, component)
+
+    @parameterized.expand([("rotary_embeddings", "RotaryEmbedding"), ("group_query_attention", "GroupQueryAttention")])
+    def test_fusion_left_out(self, toggle, op):
+        model = _ort_model()
+        for component, program in _export_for_ort(model, OrtFusionConfig(provider="cpu", **{toggle: False})).items():
+            self.assert_fused(model, program, {op: 0}, component)
+
+    def test_projections_left_unpacked(self):
+        model = _ort_model()
+        fusions = OrtFusionConfig(provider="cpu", packed_projections=False)
+        attentions = _group_query_attentions(_export_for_ort(model, fusions)["decode"])
+        self.assertTrue(attentions and all(node.inputs[1] is not None for node in attentions))
 
 
 # The fused kernels OpenVINO's CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls
@@ -261,11 +295,11 @@ class OpenVINOFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def assert_decode_fused(self, model, decode, fusions):
         num_layers = model.config.num_hidden_layers
         # The cache update feeds its state as is: anything between them keeps the plugin from fusing the cache into
-        # its attention.
+        # its attention. Only the keys' and values' states: a sliding-window layer keeps its window as one too.
         assign_sources = [
             op.input_value(0).get_node().get_type_name()
             for op in decode.get_ordered_ops()
-            if op.get_type_name() == "Assign"
+            if op.get_type_name() == "Assign" and op.get_variable_id().split(".")[-1].startswith(("keys", "values"))
         ]
         self.assertEqual(assign_sources, ["Concat"] * 2 * num_layers)
         layers = collections.Counter(layer for layer, _ in _compiled_ops(decode))

@@ -360,6 +360,25 @@ class ExportedModelTest(unittest.TestCase):
     @require_onnxruntime
     @require_torch_gpu
     @pytest.mark.onnx_export_test
+    def test_onnx_cuda_follows_torch_float32_matmul_precision(self):
+        """ONNX Runtime's CUDA provider uses TF32 for float32 matmuls only when torch does, so its outputs match."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        model, inputs = self._model_and_inputs()
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=True))
+        precision = torch.get_float32_matmul_precision()
+        try:
+            for torch_precision, use_tf32 in (("highest", "0"), ("high", "1")):
+                torch.set_float32_matmul_precision(torch_precision)
+                session = exported.to("cuda").runners["model"].session
+                self.assertEqual(session.get_provider_options()["CUDAExecutionProvider"]["use_tf32"], use_tf32)
+        finally:
+            torch.set_float32_matmul_precision(precision)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
     def test_onnx_cuda_graph(self):
         """A static export run with `enable_cuda_graph` replays a CUDA graph: each call's inputs are copied into the
         buffers it was captured with, and its outputs copied out, so an earlier call's outputs survive the next."""
@@ -384,6 +403,51 @@ class ExportedModelTest(unittest.TestCase):
         self.assertIsNotNone(runner.cuda_graph)
         with self.assertRaisesRegex(ValueError, "captured with"):
             exported(**{name: tensor[:1] for name, tensor in calls[0].items()})
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_cuda_graph_skips_data_dependent_outputs(self):
+        """A static export whose output size depends on the data never replays a CUDA graph, which would bind the
+        outputs at the captured size."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        class Positives(torch.nn.Module):
+            def forward(self, x):
+                return x[x > 0]
+
+        x = torch.tensor([1.0, -1.0, 2.0, -2.0], device="cuda")
+        exported = OnnxExporter().export(Positives(), {"x": x}, OnnxConfig())
+        exported.to(providers=[("CUDAExecutionProvider", {"device_id": 0, "enable_cuda_graph": "1"})])
+        self.assertFalse(exported.runners["model"].replays_cuda_graph)
+        for inputs in (x, -x, torch.ones_like(x)):
+            torch.testing.assert_close(exported(x=inputs), inputs[inputs > 0])
+
+    @require_onnxscript
+    @require_onnxruntime
+    @require_torch_gpu
+    @pytest.mark.onnx_export_test
+    def test_onnx_cuda_graph_skips_constant_outputs(self):
+        """A static export returning a constant (a sliding-window cache's window) never replays a CUDA graph: ONNX
+        Runtime copies the constant out on every run, which the capture refuses."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        class WithConstant(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.register_buffer("window", torch.tensor(4096))
+
+            def forward(self, x):
+                return x * 2, self.window
+
+        x = torch.ones(4, device="cuda")
+        exported = OnnxExporter().export(WithConstant().to("cuda"), {"x": x}, OnnxConfig())
+        exported.to(providers=[("CUDAExecutionProvider", {"device_id": 0, "enable_cuda_graph": "1"})])
+        self.assertFalse(exported.runners["model"].replays_cuda_graph)
+        doubled, window = exported(x=x)
+        torch.testing.assert_close(doubled, x * 2)
+        self.assertEqual(int(window), 4096)
 
     @require_openvino
     @pytest.mark.openvino_export_test
