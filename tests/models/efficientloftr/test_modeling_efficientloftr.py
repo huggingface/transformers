@@ -399,6 +399,35 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
                     model_row_output[key] = model_row_output[key][1:]
                 recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
+    def test_batching_independence(self):
+        config = self.model_tester.get_config()
+        model = EfficientLoFTRForKeypointMatching(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        torch.manual_seed(42)
+        pair_a = floats_tensor([1, 2, 3, self.model_tester.image_height, self.model_tester.image_width]).to(
+            torch_device
+        )
+        pair_b = floats_tensor([1, 2, 3, self.model_tester.image_height, self.model_tester.image_width]).to(
+            torch_device
+        )
+
+        with torch.no_grad():
+            out_a = model(pixel_values=pair_a)
+            out_b = model(pixel_values=pair_b)
+            out_batched = model(pixel_values=torch.cat([pair_a, pair_b], dim=0))
+
+        # Matches and scores for each pair must not depend on other pairs in the batch (#50743)
+        self.assertTrue(torch.equal(out_a.matches[0], out_batched.matches[0]))
+        self.assertTrue(torch.equal(out_b.matches[0], out_batched.matches[1]))
+        torch.testing.assert_close(out_a.matching_scores[0], out_batched.matching_scores[0], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(out_b.matching_scores[0], out_batched.matching_scores[1], rtol=1e-5, atol=1e-5)
+
+        # Refined keypoints must be identical whether processed individually or in a batch (#50744)
+        torch.testing.assert_close(out_a.keypoints[0], out_batched.keypoints[0], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(out_b.keypoints[0], out_batched.keypoints[1], rtol=1e-5, atol=1e-5)
+
 
 def prepare_imgs():
     dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
