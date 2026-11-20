@@ -644,6 +644,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("wavlm", "WavLMModel"),
         ("wavtokenizer", "WavTokenizerModel"),
         ("wavtokenizer_encoder", "WavTokenizerEncoderModel"),
+        ("weathernext2", "WeatherNext2Model"),
         ("whisper", "WhisperModel"),
         ("xclip", "XCLIPModel"),
         ("xcodec", "XcodecModel"),

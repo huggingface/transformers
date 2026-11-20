@@ -561,6 +561,7 @@ if TYPE_CHECKING:
     from .wav2vec2_with_lm import *
     from .wavlm import *
     from .wavtokenizer import *
+    from .weathernext2 import *
     from .whisper import *
     from .x_clip import *
     from .xcodec import *

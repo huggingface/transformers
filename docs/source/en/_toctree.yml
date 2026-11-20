@@ -1671,6 +1671,8 @@
         title: TimesFM
       - local: model_doc/timesfm2_5
         title: TimesFM2.5
+      - local: model_doc/weathernext2
+        title: WeatherNext 2
       title: Time series models
     title: Models
   - sections:

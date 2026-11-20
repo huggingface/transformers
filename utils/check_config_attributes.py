@@ -338,6 +338,23 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     # Consumed by cache_utils to select indexed-attention cache layers.
     "HYV4VLTextConfig": ["layer_types"],
+    # Geometry metadata, variables used by channel-layout properties, and loss settings read by `loss_weathernext2`.
+    "WeatherNext2Config": [
+        "attention_k_hop",
+        "loss_weights",
+        "vars_with_nan_targets",
+        "ball_query_radius_fraction",
+        "mesh_splits",
+        "atmospheric_variables",
+        "forcing_variables",
+        "global_variables",
+        "input_variables",
+        "num_input_timesteps",
+        "pressure_levels",
+        "static_variables",
+        "target_variables",
+        "time_step_hours",
+    ],
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
     # Use the DeepseekV3 implementation, which the auto mappings point to
     "SarvamMLAConfig": True,

@@ -29,6 +29,7 @@ from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
+from .loss_weathernext2 import WeatherNext2ForWeatherForecastingLoss
 
 
 def fixed_cross_entropy(
@@ -203,4 +204,5 @@ LOSS_MAPPING = {
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
+    "WeatherNext2ForWeatherForecasting": WeatherNext2ForWeatherForecastingLoss,
 }
