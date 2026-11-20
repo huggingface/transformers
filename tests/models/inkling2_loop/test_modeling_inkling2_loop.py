@@ -287,6 +287,7 @@ class Inkling2LoopSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCas
 
         EXPECTED_LOGITS = Expectations(
             {
+                ("cuda", 8): [1.9270305633544922, 0.287100613117218, 3.4533743858337402, 2.711331605911255, 0.878654956817627],
                 ("cuda", 10): [1.9970425367355347, 0.26171210408210754, 3.4687917232513428, 2.6803338527679443, 0.9059745073318481],
             }
         )  # fmt: skip
@@ -295,6 +296,7 @@ class Inkling2LoopSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCas
 
         EXPECTED_COMPLETION = Expectations(
             {
+                ("cuda", 8): "floursigne턽 перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек",
                 ("cuda", 10): "floursigne턽 перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек перек",
             }
         )  # fmt: skip
@@ -316,6 +318,7 @@ class Inkling2LoopSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCas
 
         EXPECTED_LOGITS = Expectations(
             {
+                ("cuda", 8): [0.4433271288871765, -1.3506488800048828, 3.853593111038208, 0.593672513961792, 1.5766711235046387],
                 ("cuda", 10): [0.4452798366546631, -1.3506488800048828, 3.8689591884613037, 0.6053866147994995, 1.5688800811767578],
             }
         )  # fmt: skip
@@ -324,6 +327,7 @@ class Inkling2LoopSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCas
 
         EXPECTED_COMPLETION = Expectations(
             {
+                ("cuda", 8): " Studyпсихијатventovécudostępучитель�SenStudieпсихијатventoperdere● Studyпсихијатventoperdere",
                 ("cuda", 10): " Studyпсихијатventovécudostępучитель�SenStudieпсихијатventoperdere● Studyпсихијатventoperdere",
             }
         )  # fmt: skip
