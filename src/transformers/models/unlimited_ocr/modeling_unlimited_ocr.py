@@ -1613,10 +1613,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             return False
         return self.prefill_max_cache_len <= self.prefill_length
 
-    # We never want to set it, but this is needed as the parent tries it - so just do nothing
-    @is_croppable.setter
-    def is_croppable(self, x): ...
-
 
 class UnlimitedOcrTextRotaryEmbedding(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
