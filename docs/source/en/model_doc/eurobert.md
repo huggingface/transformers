@@ -80,6 +80,31 @@ print(f"The predicted token is: {predicted_token}")
 </hfoption>
 </hfoptions>
 
+## Convert NeoBERT checkpoints
+
+[NeoBERT](https://huggingface.co/chandar-lab/NeoBERT) uses the same backbone as EuroBERT. Convert the original masked language model checkpoint to load it with the native EuroBERT implementation, following the [maintainer recommendation](https://github.com/huggingface/transformers/issues/37015#issuecomment-5986643752):
+
+```bash
+python src/transformers/models/eurobert/convert_neobert_to_eurobert.py \
+    --checkpoint_path chandar-lab/NeoBERT \
+    --output_dir ./neobert-eurobert
+```
+
+Run this command from a Transformers source checkout. `--checkpoint_path` also accepts a local directory containing the original `config.json`, `model.safetensors`, and tokenizer files. Use `--revision` to select a Hub revision.
+
+The converter splits the fused QKV and SwiGLU projections, permutes the query and key weights for EuroBERT's rotary embeddings, and preserves the language modeling head bias. The output has `model_type="eurobert"` and loads without remote modeling code or xFormers:
+
+```python
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("./neobert-eurobert")
+model = AutoModelForMaskedLM.from_pretrained("./neobert-eurobert")
+inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
+logits = model(**inputs).logits
+```
+
+This converter supports the original `NeoBERTLMHead` checkpoint. Fine-tuned classification checkpoints have different task heads and are not supported by this conversion.
+
 ## EuroBertConfig
 
 [[autodoc]] EuroBertConfig
