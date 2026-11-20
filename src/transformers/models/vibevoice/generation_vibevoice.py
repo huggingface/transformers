@@ -367,7 +367,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             or getattr(self, "_last_negative_compile_config", None) != compile_config
         ):
             self._last_negative_compile_config = compile_config
-            self._negative_compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
+            self._negative_compiled_call = torch.compile(self.__call__, **compile_config.to_compile_kwargs())
         return self._negative_compiled_call
 
     def _reset_negative_cache_for_audio_start(

@@ -1267,7 +1267,7 @@ class GenerationConfig(PushToHubMixin):
         config_dict = convert_keys_to_string(config_dict)
         config_dict = convert_dataclass_to_dict(config_dict)
 
-        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+        return json.dumps(config_dict, indent=2, sort_keys=True, default=_callable_name) + "\n"
 
     def to_json_file(
         self, json_file_path: str | os.PathLike, use_diff: bool = True, keys_to_pop: list[str] | None = None
@@ -1628,6 +1628,13 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
         )
 
 
+def _callable_name(obj: Any) -> str:
+    """JSON fallback for the callables a `CompileConfig` can hold (a `backend`, a `guard_filter_fn`)."""
+    if not callable(obj):
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+    return f"{getattr(obj, '__module__', '')}.{getattr(obj, '__qualname__', type(obj).__qualname__)}"
+
+
 @dataclass
 class CompileConfig:
     """
@@ -1647,6 +1654,12 @@ class CompileConfig:
             Controls balance between performance and overhead.
         options (`dict`, *optional*):
             A dictionary of options to pass to the backend.
+        guard_filter_fn (`Callable`, *optional*):
+            Filters the guards torch.compile checks before running a compiled graph, e.g.
+            `torch.compiler.skip_guard_on_inbuilt_nn_modules_unsafe`. Guard checks run on the CPU before every
+            compiled forward: with many modules (tensor parallelism shards every linear layer) they can cost
+            milliseconds per decoding step. Skipping guards is unsafe: a change the skipped guards would have
+            caught, such as replacing a module or a parameter after compiling, then silently runs the stale graph.
 
     Examples:
     ```python
@@ -1672,12 +1685,30 @@ class CompileConfig:
     backend: str | Callable = "inductor"
     mode: str = "reduce-overhead"
     options: dict | None = None
+    guard_filter_fn: Callable | None = None
     # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
     _compile_all_devices = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
         return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
+
+    def to_compile_kwargs(self) -> dict[str, Any]:
+        """The keyword arguments for `torch.compile`. It takes `guard_filter_fn` in `options`, and `mode` and
+        `options` are exclusive: the mode is then expanded into its inductor options."""
+        kwargs = self.to_dict()
+        guard_filter_fn = kwargs.pop("guard_filter_fn", None)
+        if guard_filter_fn is not None:
+            options = kwargs.pop("options", None) or {}
+            mode = kwargs.pop("mode", None)
+            if mode is not None and mode != "default":
+                if kwargs.get("backend") != "inductor":
+                    raise ValueError(f"`guard_filter_fn` with `mode={mode!r}` needs the inductor backend")
+                import torch._inductor
+
+                options = {**torch._inductor.list_mode_options(mode, kwargs.get("dynamic")), **options}
+            kwargs["options"] = {**options, "guard_filter_fn": guard_filter_fn}
+        return kwargs
 
 
 # TODO: add the @strict decorator to prevent attributes passed as args rather than kwargs

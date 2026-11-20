@@ -32,6 +32,7 @@ if is_torch_available():
 
 from transformers.generation import (
     ClassifierFreeGuidanceLogitsProcessor,
+    CompileConfig,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
@@ -437,6 +438,38 @@ class GenerationConfigTest(unittest.TestCase):
 
 
 class GenerationConfigSerializationTest(unittest.TestCase):
+    def test_compile_config_guard_filter_fn(self):
+        def guard_filter_fn(guard_entries):
+            calls.append(len(guard_entries))
+            return [True] * len(guard_entries)
+
+        calls = []
+        compile_config = CompileConfig(fullgraph=True, guard_filter_fn=guard_filter_fn)
+
+        # torch.compile takes the filter in `options`, which excludes `mode`: reduce-overhead becomes CUDA graphs
+        kwargs = compile_config.to_compile_kwargs()
+        self.assertNotIn("mode", kwargs)
+        self.assertNotIn("guard_filter_fn", kwargs)
+        self.assertIs(kwargs["options"]["guard_filter_fn"], guard_filter_fn)
+        self.assertTrue(kwargs["options"]["triton.cudagraphs"])
+        self.assertEqual(CompileConfig().to_compile_kwargs()["mode"], "reduce-overhead")
+        self.assertNotIn("guard_filter_fn", CompileConfig().to_compile_kwargs())
+
+        # The generation config still prints and saves (the filter by name)
+        generation_config = GenerationConfig(compile_config=compile_config)
+        self.assertIn("guard_filter_fn", generation_config.to_json_string())
+        self.assertIn("guard_filter_fn", repr(generation_config))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+
+        # torch.compile runs the filter
+        compiled = torch.compile(
+            lambda x: x + 1,
+            **CompileConfig(backend="eager", mode=None, guard_filter_fn=guard_filter_fn).to_compile_kwargs(),
+        )
+        torch.testing.assert_close(compiled(torch.ones(2)), torch.full((2,), 2.0))
+        self.assertTrue(calls)
+
     def test_serialize_generation_sequence_bias(self):
         """Tests that GenerationConfig is serialized and SequenceBiasLogitsProcessor is initialized with sequence_bias parameter"""
         generation_config = GenerationConfig()

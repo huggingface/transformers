@@ -93,6 +93,39 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
+# (module class, wraps an instance forward) -> its tensor-parallel subclass, see `TensorParallelLayer.install_forward`
+_TP_CLASSES: dict[tuple[type[nn.Module], bool], type[nn.Module]] = {}
+
+
+def _tp_class(base: type[nn.Module], wraps_instance_forward: bool) -> type[nn.Module]:
+    """Subclass of `base` whose forward runs the module's TP style around `base.forward`, or around the forward that
+    was set on the instance (`module._tp_inner_forward`) when `wraps_instance_forward`."""
+    key = (base, wraps_instance_forward)
+    if key not in _TP_CLASSES:
+
+        def forward(self, *args, **kwargs):
+            style, mesh = self._tp_style, self._tp_mesh
+            args, kwargs = style.transform_inputs_pre_forward(self, args, kwargs, mesh)
+            with style.context_around_forward(self, mesh):
+                if wraps_instance_forward:
+                    output = self._tp_inner_forward(*args, **kwargs)
+                else:
+                    output = base.forward(self, *args, **kwargs)
+            return style.transform_output_post_forward(self, output, mesh)
+
+        # Same name, module and qualname as `base`: modules are looked up by class name (`_no_split_modules`, FSDP
+        # auto-wrap), and torch.compile treats a module as built-in (e.g. for `guard_filter_fn`s that skip built-in
+        # module guards) when its class module is in `torch.nn.modules`. `_tp_base_class` tells the classes apart.
+        attrs = {
+            "forward": forward,
+            "_tp_base_class": base,
+            "__module__": base.__module__,
+            "__qualname__": base.__qualname__,
+        }
+        _TP_CLASSES[key] = type(base)(base.__name__, (base,), attrs)
+    return _TP_CLASSES[key]
+
+
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
@@ -127,16 +160,22 @@ class TensorParallelLayer:
         )
 
     def install_forward(self, module, mesh):
-        """Install pre / around / post transforms by replacing module.forward."""
-        original_forward = module.forward
+        """Install pre / around / post transforms around module.forward.
 
-        def tp_forward(*args, **kwargs):
-            args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
-            with self.context_around_forward(module, mesh):
-                output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh)
-
-        module.forward = tp_forward
+        This is a torch.compile workaround. A forward closure set on each module would work, but Dynamo guards every
+        instance-level forward before each call: about 1 ms per decoding step for a 7B model on 2 GPUs. Instead, the
+        module's class is swapped for a subclass shared by all the modules of that class (`isinstance` checks and the
+        class name are unchanged), whose forward reads the style and mesh stored on the module. A forward already set
+        on the instance is kept and wrapped. Installing again replaces the style and mesh: wrappers never nest."""
+        base = getattr(type(module), "_tp_base_class", type(module))
+        wraps_instance_forward = "forward" in module.__dict__
+        if wraps_instance_forward:
+            module._tp_inner_forward = module.__dict__.pop("forward")
+        else:
+            wraps_instance_forward = "_tp_inner_forward" in module.__dict__
+        module._tp_style = self
+        module._tp_mesh = mesh
+        module.__class__ = _tp_class(base, wraps_instance_forward)
         return module
 
 

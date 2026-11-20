@@ -88,14 +88,14 @@ class ModelRunner:
         self._compiled_varlen = None
         if self.cb_config.varlen_compile_config is not None:
             self._compiled_varlen = torch.compile(
-                self._forward_process_and_sample, **self.cb_config.varlen_compile_config.to_dict()
+                self._forward_process_and_sample, **self.cb_config.varlen_compile_config.to_compile_kwargs()
             )
 
         # Set up compiled version of the forward pass for the decode path
         self._compiled_decode = None
         if self.cb_config.decode_compile_config is not None:
             self._compiled_decode = torch.compile(
-                self._forward_process_and_sample, **self.cb_config.decode_compile_config.to_dict()
+                self._forward_process_and_sample, **self.cb_config.decode_compile_config.to_compile_kwargs()
             )
 
     def maybe_pad_inputs(self, num_q_tokens: int, max_kv_read: int, use_decode_fast_path: bool) -> tuple[int, int]:
