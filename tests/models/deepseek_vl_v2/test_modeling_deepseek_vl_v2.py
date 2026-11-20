@@ -15,8 +15,8 @@
 
 import unittest
 
-from transformers import DeepseekVLV2Config, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoProcessor, DeepseekVLV2Config, is_torch_available, is_vision_available
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -26,6 +26,9 @@ if is_torch_available():
     import torch
 
     from transformers import DeepseekVLV2ForConditionalGeneration, DeepseekVLV2Model
+
+if is_vision_available():
+    from transformers.image_utils import load_image
 
 
 class DeepseekVLV2VisionText2TextModelTester(VLMModelTester):
@@ -109,3 +112,38 @@ class DeepseekVLV2ModelTest(VLMModelTest, unittest.TestCase):
         # Row ends are the learned newline vector; the token after the global view is the view separator.
         torch.testing.assert_close(features[0][side], model.image_newline.to(features[0].dtype))
         torch.testing.assert_close(features[0][side * (side + 1)], model.view_separator.to(features[0].dtype))
+
+
+@slow
+@require_torch
+class DeepseekVLV2IntegrationTest(unittest.TestCase):
+    model_id = "deepseek-community/deepseek-vl2-tiny"
+    # DeepSeek's own demo image from github.com/deepseek-ai/DeepSeek-VL2 (images/monday.jpg).
+    image_url = "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-VL2/main/images/monday.jpg"
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_tiny_matches_the_original_implementation(self):
+        processor = AutoProcessor.from_pretrained(self.model_id)
+        model = DeepseekVLV2ForConditionalGeneration.from_pretrained(
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image"}, {"type": "text", "text": "Describe this image in one sentence."}],
+            }
+        ]
+        prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        inputs = processor(
+            text=prompt, images=[load_image(self.image_url)], add_special_tokens=False, return_tensors="pt"
+        ).to(model.device, dtype=model.dtype)
+
+        generated = model.generate(**inputs, max_new_tokens=24, do_sample=False)
+        text = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        # Greedy output of the original deepseek-ai/DeepSeek-VL2 code on the same inputs (bf16, CPU).
+        expected = (
+            'A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'
+        )
+        self.assertEqual(text, expected)
