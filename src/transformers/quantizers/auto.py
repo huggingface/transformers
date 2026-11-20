@@ -24,6 +24,7 @@ from ..utils.quantization_config import (
     BitsAndBytesConfig,
     CompressedTensorsConfig,
     EetqConfig,
+    EntroPackConfig,
     FbgemmFp8Config,
     FineGrainedFP8Config,
     FourOverSixConfig,
@@ -54,6 +55,7 @@ from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
+from .quantizer_entropack import EntroPackHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
@@ -105,6 +107,7 @@ AUTO_QUANTIZER_MAPPING = {
     "metal": MetalHfQuantizer,
     "sinq": SinqHfQuantizer,
     "gemma": GemmaQuantizer,
+    "entropack": EntroPackHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -135,6 +138,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "metal": MetalConfig,
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
+    "entropack": EntroPackConfig,
 }
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (

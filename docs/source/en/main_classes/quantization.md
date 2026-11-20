@@ -125,3 +125,7 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 ## GgufConfig
 
 [[autodoc]] GgufConfig
+
+## EntroPackConfig
+
+[[autodoc]] EntroPackConfig

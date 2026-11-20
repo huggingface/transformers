@@ -46,6 +46,7 @@ Each row recommends a first method to try. Check the full comparison table befor
 | [bitsandbytes](./bitsandbytes) | `bitsandbytes` | While loading | 4, 8 | CUDA, XPU, HPU, CPU | ✅ | ✅ | ❌ |
 | [compressed-tensors](./compressed_tensors) | `compressed-tensors` | Pre-quantized only | Set by checkpoint | CUDA, XPU, MPS, CPU | ✅ | ✅ except with FP8 kernels | ✅ |
 | [EETQ](./eetq) | `eetq` | While loading | 8 | CUDA | ✅ | ✅ | ❌ |
+| [EntroPack](./entropack) | `entropack` | While loading | 0.001–11 | CUDA | ✅ | ✅ | ❌ |
 | [FBGEMM FP8](./fbgemm_fp8) | `fbgemm_fp8` | While loading | 8 | CUDA (compute capability 9.0+), XPU | ✅ | ❌ | ❌ |
 | [Fine-grained FP8](./finegrained_fp8) | `fp8`, `mxfp8` | While loading | 8 | CUDA (compute capability 8.9+), XPU | ✅ | ❌ | ✅ |
 | [Four Over Six](./fouroversix) | `fouroversix` | While loading | 4 | CUDA (fastest on Blackwell), CPU | ✅ | Only with `keep_master_weights=True` | ❌ |
