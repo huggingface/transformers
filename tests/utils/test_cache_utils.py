@@ -88,6 +88,8 @@ if is_torch_available():
         Fp8QuantizedLayer,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
+        LinearAttentionAndStaticFullAttentionLayer,
+        LinearAttentionAndStaticSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticLayer,
@@ -1107,6 +1109,29 @@ class CacheIntegrationTest(unittest.TestCase):
         gen_out = self.model.generate(**inputs_expanded, **generation_kwargs)
         decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
+
+    def test_is_linear_property(self):
+        """Test that hybrid linear + attention layers report `is_linear=False` correctly."""
+        layer_classes = [
+            LinearAttentionLayer,
+            LinearAttentionAndFullAttentionLayer,
+            LinearAttentionAndSlidingWindowAttentionLayer,
+            LinearAttentionAndStaticFullAttentionLayer,
+            LinearAttentionAndStaticSlidingWindowAttentionLayer,
+        ]
+        is_expected_linear = [True, False, False, False, False]
+        init_kwargs = [
+            {},
+            {},
+            {"sliding_window": 5},
+            {"max_cache_len": 20},
+            {"max_cache_len": 20, "sliding_window": 5},
+        ]
+
+        for layer_cls, expected_result, kwargs in zip(layer_classes, is_expected_linear, init_kwargs):
+            cache = Cache(layers=[layer_cls(**kwargs)])
+            # The is_linear property is only based on the type of the layer, so check that the types do not derive
+            self.assertEqual(cache.is_linear, [expected_result])
 
 
 @require_torch_accelerator
