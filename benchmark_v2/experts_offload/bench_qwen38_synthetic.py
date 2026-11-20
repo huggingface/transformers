@@ -13,14 +13,14 @@ import sys
 import time
 
 import torch
-from dense_quant import quantize_dense
+from dense_quant import quantizable, quantize_dense
 from safetensors.torch import load_file, save_file
 
 from transformers import AutoConfig, AutoModelForCausalLM, CompileConfig
 from transformers.integrations.metal_quantization import MetalExperts, MetalLinear
 
 
-WEIGHTS = os.path.expanduser("~/.cache/qwen38-synthetic-{}e.safetensors")
+WEIGHTS = os.path.expanduser("~/.cache/qwen38-synthetic-{}e-all4bit.safetensors")
 
 
 def skeleton(num_experts, linears=True):
@@ -38,9 +38,7 @@ def skeleton(num_experts, linears=True):
             for child_name, child in list(module.named_children()):
                 if f"{name}.{child_name}".endswith("mlp.experts"):
                     module.register_module(child_name, MetalExperts(child, bits=4, group_size=64))
-                elif (
-                    linears and type(child) is torch.nn.Linear and child_name != "gate" and child.in_features % 32 == 0
-                ):
+                elif linears and quantizable(child_name, child):
                     bias = child.bias is not None
                     module.register_module(
                         child_name,
@@ -95,7 +93,9 @@ if __name__ == "__main__":
         "self_attn": (m.Qwen4ExpTextAttention, lambda self, h, *a, **k: (h, None)),
         "hyper": (
             m.Qwen4ExpTextGatedResidual,
-            lambda self, h: (h.unflatten(-1, (hc, hidden)).mean(-2), h, h.new_ones(*h.shape[:-1], hc)),
+            lambda self, h: (h.unflatten(-1, (hc, hidden)).mean(-2), h, h.new_ones(*h.shape[:-1], hc))
+            if self.block_inject_weight is not None
+            else h.unflatten(-1, (hc, hidden)).mean(-2),
         ),
     }
     for arg in sys.argv:
@@ -136,6 +136,12 @@ if __name__ == "__main__":
         from torch._dynamo.utils import counters
 
         print("graph breaks:", dict(counters["graph_break"]) or 0, flush=True)
-        with torch.inference_mode(), torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU]) as prof:
-            model.generate(ids, max_new_tokens=8, min_new_tokens=8, **kwargs)
-        print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=25), flush=True)
+        # Each Metal command waits for completion, so an op's CPU time ~ its GPU time (+ a fixed commit cost)
+        with (
+            torch.inference_mode(),
+            torch.mps.profiler.profile(mode="interval", wait_until_completed=True),
+            torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU], record_shapes=True) as prof,
+        ):
+            model.generate(ids, max_new_tokens=9, min_new_tokens=9, **kwargs)
+        table = prof.key_averages(group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=40)
+        print(table, flush=True)

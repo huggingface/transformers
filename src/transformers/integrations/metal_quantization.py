@@ -145,6 +145,13 @@ class MetalLinear(nn.Linear):
         if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
 
+        if self.bits == 4 and self.out_features <= 1024 and input.numel() == self.in_features:
+            # One token through a thin matrix (few output rows, long input): MLX's qmv leaves the GPU idle there
+            from .metal_qmv import qmv4
+
+            output = qmv4(input, self.weight, self.scales, self.qbiases, self.group_size)
+            return output if self.bias is None else output + self.bias
+
         kernel = _get_metal_kernel()
 
         output = kernel.affine_qmm_t(

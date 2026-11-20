@@ -30,6 +30,11 @@ def _clipped_affine(weight, group_size, bits, shrinks=(1.0, 0.95, 0.9, 0.85, 0.8
     return _affine_quantize_tensor(clipped, group_size, bits)
 
 
+def quantizable(name, linear, group_size=32):
+    """The `nn.Linear`s 4-bit on Metal: all but the MoE router (and inputs not a multiple of the group)."""
+    return type(linear) is torch.nn.Linear and name != "gate" and linear.in_features % group_size == 0
+
+
 def quantize_dense(model, spec):
     """Replace the bf16 `nn.Linear`s (not the MoE router) with Metal affine `MetalLinear`.
     `spec`: "<bits>[g<group>][c][:<lm_head bits>]", e.g. "4", "4g32", "4c" (clipping search), "8:4"."""
@@ -43,7 +48,7 @@ def quantize_dense(model, spec):
     count = 0
     for _, module in list(model.named_modules()):
         for child_name, child in list(module.named_children()):
-            if type(child) is not torch.nn.Linear or child_name == "gate" or child.in_features % group_size:
+            if not quantizable(child_name, child, group_size):
                 continue
             b = head_bits if child_name == "lm_head" else bits
             q = MetalLinear(
