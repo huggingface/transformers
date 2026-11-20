@@ -411,6 +411,7 @@ def _upad_input(
     attention_mask: torch.Tensor,
     query_length: int,
     unpad_input_func,
+    is_causal: bool = True,
 ):
     """
     Unpads query, key, and values tensors, using a single dimension for all tokens even though they belong to different batches.
@@ -428,6 +429,9 @@ def _upad_input(
             Boolean or int tensor of shape (batch_size, sequence_length), 1 means valid and 0 means not valid.
         query_length (`int`):
             Target length.
+        is_causal (`bool`, *optional*, defaults to `True`):
+            Whether the attention is causal. For non-causal attention whose queries are not the last `query_length`
+            positions of the keys (e.g. cross-attention over padded keys), every query is kept.
         unpad_input_func:
             The function to use for unpadding the input tensors.
 
@@ -468,6 +472,15 @@ def _upad_input(
         )  # There is a memcpy here, that is very bad.
         indices_q = cu_seqlens_q[:-1]
         query_layer = query_layer.squeeze(1)
+    elif not is_causal:
+        # Non-causal attention with a different number of queries and keys, e.g. cross-attention: the mask is over the
+        # keys and says nothing about the queries, so keep them all (padded queries only produce outputs nobody reads).
+        query_layer = query_layer.reshape(batch_size * query_length, *query_layer.shape[2:])
+        indices_q = torch.arange(batch_size * query_length, device=query_layer.device)
+        cu_seqlens_q = torch.arange(
+            0, (batch_size + 1) * query_length, query_length, dtype=torch.int32, device=query_layer.device
+        )
+        max_seqlen_in_batch_q = query_length
     else:
         # The -q_len: slice assumes left padding.
         attention_mask = attention_mask[:, -query_length:]
@@ -836,7 +849,7 @@ def _flash_attention_forward(
     # Contains at least one padding token in the sequence: unpad compute cu_seqlen and max_length from attention mask
     if attention_mask is not None:
         q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
-            query_states, key_states, value_states, attention_mask, query_length, unpad_fn
+            query_states, key_states, value_states, attention_mask, query_length, unpad_fn, is_causal=is_causal
         )
         flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
