@@ -56,7 +56,7 @@ class DoryL2Norm(Llama4TextL2Norm):
     """Projects onto the unit sphere: nGPT keeps every hidden state at norm 1, not RMS 1."""
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + self.variance_epsilon)
 
 
 class DoryRotaryEmbedding(Gemma3RotaryEmbedding):
