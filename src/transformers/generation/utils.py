@@ -486,7 +486,12 @@ class DeferredStopCheck(StopCheck):
             self.cache.crop(-steps_to_undo)
             # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
             # memory spike on the next prefill
-            for layer in self.cache.layers:
+            layers = (
+                self.cache.self_attention_cache.layers
+                if isinstance(self.cache, EncoderDecoderCache)
+                else self.cache.layers
+            )
+            for layer in layers:
                 if hasattr(layer, "record_past"):
                     layer.record_past = False
         return steps_to_undo
