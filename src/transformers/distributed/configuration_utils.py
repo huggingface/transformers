@@ -62,7 +62,7 @@ class DistributedConfig:
         sp_size (`int`, *optional*):
             Number of devices that split each sequence (sequence parallelism). The ranks of an `sp` group get the
             same batch, and each runs on a contiguous slice of every sequence, padded at its end to a multiple of
-            `sp_size`. Requires `torch>=2.9`.
+            `sp_size`. Requires `torch>=2.9`, and `torch>=2.10` with `fsdp_size > 1`.
         sp_plan (`dict[str, str]`, *optional*):
             Sequence parallel plan. Leave as `None` to use the model's predefined `base_model_sp_plan` and class-level
             `_sp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept. Applied only when
@@ -204,11 +204,14 @@ class DistributedConfig:
         if self.sp_size > 1:
             if not is_torch_greater_or_equal("2.9"):
                 raise OSError("Sequence parallelism requires `torch>=2.9`.")
-            unsupported = [name for name in ("pp_size", "fsdp_size", "tp_size", "ep_size") if getattr(self, name) > 1]
-            if unsupported:
+            if self.fsdp_size > 1 and not is_torch_greater_or_equal("2.10"):
+                raise OSError(
+                    "Sequence parallelism with `fsdp_size > 1` requires `torch>=2.10` (`DeviceMesh._unflatten`)."
+                )
+            if unsupported := [name for name in ("pp_size", "tp_size", "ep_size") if getattr(self, name) > 1]:
                 raise ValueError(
                     f"Sequence parallelism (`sp_size={self.sp_size}`) is not supported yet with `{unsupported[0]}`. "
-                    "Use `DistributedConfig(sp_size=N)`."
+                    "Use `DistributedConfig(fsdp_size=N, sp_size=M)`."
                 )
 
         if self.dp_size > 1 and self.pp_size > 1:

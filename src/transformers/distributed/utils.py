@@ -175,8 +175,9 @@ class TransformersDeviceMesh:
 
     dense layers and experts are sharded differently, so they need different views of the same ranks.
 
-        dense  : (pp, dp_replicate, fsdp, sp, tp)  attention, dense MLPs, embeddings, lm_heads
-        expert : (pp, dp_replicate, efsdp, ep)     experts
+        dense   : (pp, dp_replicate, fsdp, sp, tp)  attention, dense MLPs, embeddings, lm_heads
+        expert  : (pp, dp_replicate, efsdp, ep)     experts
+        fsdp_sp : (pp, dp_replicate, fsdp_sp, tp)   FSDP2 when `fsdp` and `sp` are both > 1, `dense` is a view of it
 
     Both views cover the same world, so pp * dp_replicate * fsdp * sp * tp == pp * dp_replicate * efsdp * ep.
     efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
@@ -201,18 +202,25 @@ class TransformersDeviceMesh:
     i.e: 2 nodes x 8 GPUs -> efsdp = 16 / 8 = 2, one EP group per node, two copies, sharded over efsdp.
 
     Sequence parallelism adds the `sp` axis, which splits each sequence instead of the batch. The ranks of an `sp`
-    group hold parts of the same batch, so FSDP2 shards over `sp`.
+    group hold parts of the same batch, so FSDP2 shards over `fsdp` and `sp` together. That needs one mesh dim
+    covering both, `fsdp_sp`, which also has to be sliceable together with `dp_replicate` for HSDP. Torch is
+    deprecating slicing a flattened dim from the root mesh, so `fsdp_sp` is a dim of the root mesh, and `dense` is
+    built by unflattening it into `fsdp` and `sp`.
     """
 
-    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
+    def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh, fsdp_sp_mesh: DeviceMesh | None = None):
         self._dense_mesh = dense_mesh
         self._expert_mesh = expert_mesh
+        self._fsdp_sp_mesh = fsdp_sp_mesh
 
     def get_mesh(self, dims: str | tuple[str, ...]) -> DeviceMesh:
-        """Select expert axes for `ep`/`efsdp`, otherwise dense axes; DeviceMesh handles slicing."""
+        """Select expert axes for `ep`/`efsdp`, the `fsdp_sp` mesh for `fsdp_sp`, otherwise dense axes."""
         dims = (dims,) if isinstance(dims, str) else dims
-        mesh = self._expert_mesh if "ep" in dims or "efsdp" in dims else self._dense_mesh
-        return mesh[dims]
+        if "ep" in dims or "efsdp" in dims:
+            return self._expert_mesh[dims]
+        if "fsdp_sp" in dims:
+            return self._fsdp_sp_mesh[dims]
+        return self._dense_mesh[dims]
 
 
 # Retained for the legacy transformers.integrations.tensor_parallel API.
@@ -322,11 +330,17 @@ def initialize_distributed_mesh(
 
     device_map = _bind_local_device(device_type, int(os.environ.get("LOCAL_RANK", 0)))
 
-    dense_mesh = torch.distributed.init_device_mesh(
-        device_type,
-        mesh_shape,
-        mesh_dim_names=("pp", "dp_replicate", "fsdp", "sp", "tp"),
-    )
+    pp, dp_replicate, fsdp, sp, tp = mesh_shape
+    if fsdp > 1 and sp > 1:
+        fsdp_sp_mesh = torch.distributed.init_device_mesh(
+            device_type, (pp, dp_replicate, fsdp * sp, tp), mesh_dim_names=("pp", "dp_replicate", "fsdp_sp", "tp")
+        )
+        dense_mesh = fsdp_sp_mesh._unflatten("fsdp_sp", (fsdp, sp), ("fsdp", "sp"))
+    else:
+        fsdp_sp_mesh = None
+        dense_mesh = torch.distributed.init_device_mesh(
+            device_type, mesh_shape, mesh_dim_names=("pp", "dp_replicate", "fsdp", "sp", "tp")
+        )
     expert_mesh = torch.distributed.init_device_mesh(
         device_type,
         (
@@ -337,7 +351,7 @@ def initialize_distributed_mesh(
         ),
         mesh_dim_names=("pp", "dp_replicate", "efsdp", "ep"),
     )
-    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh)
+    return device_map, TransformersDeviceMesh(dense_mesh, expert_mesh, fsdp_sp_mesh)
 
 
 def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
