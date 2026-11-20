@@ -166,7 +166,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
         if audio is not None:
             # tokenize audio
             audio_input_ids_list = []
-            audio_labels_list = []
             for audio_el in audio:
                 # TODO: @eustlb, this should be batched !!!
                 audio_inputs = self.feature_extractor(audio_el, **audio_kwargs)
@@ -180,12 +179,6 @@ class HiggsAudioV2Processor(ProcessorMixin):
                 bos_codes = audio_input_ids.new_full((*audio_input_ids.shape[:2], 1), self.audio_stream_bos_id)
                 eos_codes = audio_input_ids.new_full((*audio_input_ids.shape[:2], 1), self.audio_stream_eos_id)
                 audio_input_ids = torch.cat([bos_codes, audio_input_ids, eos_codes], dim=2)
-
-                if output_labels:
-                    audio_labels = audio_input_ids.clone()
-                    audio_labels[:, :, 0] = -100
-                    audio_labels = self.build_delay_pattern(audio_labels, pad_token_id=-100)
-                    audio_labels_list.append(audio_labels[0].transpose(0, 1))
 
                 audio_input_ids = self.build_delay_pattern(audio_input_ids)
                 audio_input_ids_list.append(audio_input_ids[0].transpose(0, 1))
@@ -232,11 +225,10 @@ class HiggsAudioV2Processor(ProcessorMixin):
             data["labels"] = labels
 
             if audio is not None:
-                audio_labels_iter = iter(audio_labels_list)
-                audio_labels_list = [torch.cat(list(islice(audio_labels_iter, n)), dim=0) for n in n_audio_in_text]
-                audio_labels = torch.stack(
-                    [F.pad(ids, (0, 0, 0, max_length - ids.shape[0]), value=-100) for ids in audio_labels_list]
-                )
+                audio_labels = audio_input_ids.clone()
+                audio_labels[audio_labels == self.audio_stream_bos_id] = -100
+                eos_mask = audio_input_ids == self.audio_stream_eos_id
+                audio_labels[:, 1:].masked_fill_(eos_mask[:, 1:] & eos_mask[:, :-1], -100)
                 data.update({"audio_labels": audio_labels})
 
         return BatchFeature(data=data, tensor_type="pt")
@@ -297,7 +289,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
 
         return self.batch_decode(audio_input_ids)[0]
 
-    def build_delay_pattern(self, input_ids, pad_token_id=None):
+    def build_delay_pattern(self, input_ids):
         bsz, num_codebooks, seq_len = input_ids.shape
         new_seq_len = seq_len + num_codebooks - 1
 
@@ -310,9 +302,9 @@ class HiggsAudioV2Processor(ProcessorMixin):
         data_mask = ~(bos_mask | eos_mask)
 
         # Fill the tensor
-        output[bos_mask] = self.audio_stream_bos_id if pad_token_id is None else pad_token_id
+        output[bos_mask] = self.audio_stream_bos_id
         output[data_mask] = input_ids.reshape(-1)
-        output[eos_mask] = self.audio_stream_eos_id if pad_token_id is None else pad_token_id
+        output[eos_mask] = self.audio_stream_eos_id
 
         return output
 
