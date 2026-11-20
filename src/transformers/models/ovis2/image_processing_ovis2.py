@@ -171,6 +171,61 @@ class Ovis2ImageProcessor(TorchvisionBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Ovis2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
+    def _get_tile_grid(
+        self,
+        height: int,
+        width: int,
+        patch_size_height: int,
+        patch_size_width: int,
+        min_patches: int,
+        max_patches: int,
+        use_covering_area_grid: bool = True,
+        covering_threshold: float = 0.9,
+    ) -> tuple[int, int]:
+        """Returns the `(num_columns, num_rows)` tile grid used to crop an image of the given size."""
+        if use_covering_area_grid:
+            # Use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90% of the image area
+            return get_min_tile_covering_grid(
+                (height, width),
+                target_patch_size=patch_size_height,  # square patch size
+                max_image_tiles=max_patches,
+                covering_threshold=covering_threshold,
+            )
+        # find the closest aspect ratio to the target
+        return get_optimal_tiled_canvas(
+            (height, width), (patch_size_height, patch_size_width), min_patches, max_patches
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        images_kwargs = images_kwargs or {}
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        use_covering_area_grid = images_kwargs.get("use_covering_area_grid", self.use_covering_area_grid)
+        size = images_kwargs.get("size", self.size)
+
+        if not crop_to_patches or max_patches <= 1:
+            return 1
+        num_columns, num_rows = self._get_tile_grid(
+            height, width, size["height"], size["width"], min_patches, max_patches, use_covering_area_grid
+        )
+        num_blocks = num_columns * num_rows
+        # A thumbnail of the whole image is prepended when there is more than one block
+        return num_blocks + 1 if num_blocks > 1 else 1
+
     def crop_image_to_patches(
         self,
         images: "torch.Tensor",
@@ -211,19 +266,16 @@ class Ovis2ImageProcessor(TorchvisionBackend):
         patch_size_height, patch_size_width = patch_size.height, patch_size.width
         original_height, original_width = images.shape[-2:]
 
-        if use_covering_area_grid:
-            # Use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90% of the image area
-            num_columns, num_rows = get_min_tile_covering_grid(
-                (original_height, original_width),
-                target_patch_size=patch_size_height,  # square patch size
-                max_image_tiles=max_patches,
-                covering_threshold=covering_threshold,
-            )
-        else:
-            # find the closest aspect ratio to the target
-            num_columns, num_rows = get_optimal_tiled_canvas(
-                (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
-            )
+        num_columns, num_rows = self._get_tile_grid(
+            original_height,
+            original_width,
+            patch_size_height,
+            patch_size_width,
+            min_patches,
+            max_patches,
+            use_covering_area_grid,
+            covering_threshold,
+        )
 
         # calculate the target width and height
         target_width = patch_size_width * num_columns

@@ -20,6 +20,7 @@ import random
 import shutil
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import is_typeddict
 from unittest.mock import patch
@@ -27,6 +28,7 @@ from unittest.mock import patch
 import numpy as np
 from parameterized import parameterized
 
+from transformers import AutoImageProcessor
 from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
     AudioKwargs,
@@ -170,6 +172,9 @@ class ProcessorTesterMixin:
 
     # Max-length value used in chat template tests. Override in subclasses if needed.
     chat_template_max_length = 100  # max_length in test_apply_chat_template_*
+
+    # Images kwargs used in the image token count test, e.g. to enable tiling. Override in subclasses if needed.
+    num_image_tokens_images_kwargs = {}
 
     # Role used in chat template tests. Override in subclasses whose template expects another role.
     chat_template_user_role = "user"
@@ -1792,14 +1797,29 @@ class ProcessorTesterMixin:
         result_none = processor.apply_chat_template(messages_with_none, tokenize=True)
         self.assertIsInstance(result_none, list)
 
+    def _count_embed_tokens(self, processor, inputs, modality):
+        """Counts the tokens holding the embeddings in each item's replacement, as vLLM does."""
+        if "text_replacement_offsets" not in inputs:
+            self.skipTest("Processor doesn't support `text_replacement_offsets`")
+        entries = [entry for row in inputs["text_replacement_offsets"] for entry in row if entry["type"] == modality]
+        replacement_ids = [processor.tokenizer.encode(e["replacement"], add_special_tokens=False) for e in entries]
+        # The token repeated the most is the one holding the embeddings
+        return [max(Counter(ids).values(), default=0) for ids in replacement_ids]
+
     def test_get_num_multimodal_tokens_matches_processor_call(self):
-        "Tests that the helper used internally in vLLM works correctly"
+        "Tests that the helper used internally in vLLM works correctly with every image processor backend"
 
-        processor = self.get_processor()
-
-        if not hasattr(processor, "_get_num_multimodal_tokens"):
+        if not hasattr(self.processor_class, "_get_num_multimodal_tokens"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
 
+        for backend in ("torchvision", "pil"):
+            with self.subTest(backend=backend):
+                # Only image processors have both backends, so don't apply it to the other components
+                image_processor = AutoImageProcessor.from_pretrained(self.tmpdirname, backend=backend)
+                processor = self.processor_class.from_pretrained(self.tmpdirname, image_processor=image_processor)
+                self._check_num_image_tokens_match_processor_call(processor)
+
+    def _check_num_image_tokens_match_processor_call(self, processor):
         if processor.tokenizer.pad_token_id is None:
             processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
 
@@ -1811,14 +1831,18 @@ class ProcessorTesterMixin:
         image_token = getattr(self, "image_token", "")
         text = [f"This is an image {image_token}"] * len(image_inputs)
         inputs = processor(
-            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+            text=text,
+            images=image_inputs,
+            **self.num_image_tokens_images_kwargs,
+            padding=True,
+            return_text_replacement_offsets=True,
+            return_tensors="pt",
         )
 
-        if "mm_token_type_ids" not in inputs:
-            self.skipTest("Processor doesn't support `mm_token_type_ids`")
-
-        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
-        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
+            image_sizes=image_sizes, **self.num_image_tokens_images_kwargs
+        )
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
         # Test with two images per single text
@@ -1826,14 +1850,17 @@ class ProcessorTesterMixin:
         inputs = processor(
             text=text,
             images=image_inputs * 2,
+            **self.num_image_tokens_images_kwargs,
             padding=True,
-            return_mm_token_type_ids=True,
+            return_text_replacement_offsets=True,
             return_tensors="pt",
         )
 
-        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
-        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
-        self.assertEqual(sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"]))
+        num_image_tokens_from_call = self._count_embed_tokens(processor, inputs, "image")
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(
+            image_sizes=image_sizes * 2, **self.num_image_tokens_images_kwargs
+        )
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def test_get_num_multimodal_tokens_matches_processor_call_video(self):
         "Tests that the helper used internally in vLLM works correctly"
@@ -1871,14 +1898,11 @@ class ProcessorTesterMixin:
             videos=video_inputs,
             padding=True,
             do_sample_frames=False,
-            return_mm_token_type_ids=True,
+            return_text_replacement_offsets=True,
             return_tensors="pt",
         )
 
-        if "mm_token_type_ids" not in inputs:
-            self.skipTest("Processor doesn't support `mm_token_type_ids`")
-
-        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        num_video_tokens_from_call = self._count_embed_tokens(processor, inputs, "video")
         self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
 
         # Test with two videos per single text
@@ -1888,13 +1912,13 @@ class ProcessorTesterMixin:
             videos=video_inputs * 2,
             padding=True,
             do_sample_frames=False,
-            return_mm_token_type_ids=True,
+            return_text_replacement_offsets=True,
             return_tensors="pt",
         )
 
-        num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
+        num_video_tokens_from_call = self._count_embed_tokens(processor, inputs, "video")
         num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
-        self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
+        self.assertListEqual(num_video_tokens_from_call, num_video_tokens_from_helper["num_video_tokens"])
 
     def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
         "Tests that the helper used internally in vLLM works correctly"
@@ -1923,24 +1947,21 @@ class ProcessorTesterMixin:
         audio_token = getattr(self, "audio_token", "")
         text = [f"This is an audio {audio_token}"] * len(audio_inputs)
         inputs = processor(
-            text=text, audio=audio_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+            text=text, audio=audio_inputs, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
         )
 
-        if "mm_token_type_ids" not in inputs:
-            self.skipTest("Processor doesn't support `mm_token_type_ids`")
-
-        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        num_audio_tokens_from_call = self._count_embed_tokens(processor, inputs, "audio")
         self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
         # Test with two audios per single text
         text = [f"These are two audios {audio_token}{audio_token}"] * len(audio_inputs)
         inputs = processor(
-            text=text, audio=audio_inputs * 2, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+            text=text, audio=audio_inputs * 2, padding=True, return_text_replacement_offsets=True, return_tensors="pt"
         )
 
-        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        num_audio_tokens_from_call = self._count_embed_tokens(processor, inputs, "audio")
         num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths * 2)
-        self.assertEqual(sum(num_audio_tokens_from_call), sum(num_audio_tokens_from_helper["num_audio_tokens"]))
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):
